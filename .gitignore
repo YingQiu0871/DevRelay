@@ -14,6 +14,9 @@ venv/
 # DevRelay runtime state (never commit orchestrator state of target workspaces)
 .devrelay/
 
+# Local dsh-memoir notes (keep machine-local)
+PROJECT_MEMORY.md
+
 # Secrets — never commit
 .env
 .env.*
