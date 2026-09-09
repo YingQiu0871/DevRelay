@@ -1,0 +1,35 @@
+# DevRelay bundled default profile (installed by `devrelay init`).
+# See profiles/default.yaml at the repository root (identical copy).
+
+pipeline:
+  max_fix_iterations: 3
+  auto_fix_tests: false
+
+review:
+  provider: manual
+  blocking_severities: [P0, P1, P2]
+  retries: 1
+  max_diff_bytes: 300000
+  timeout_seconds: 120
+
+tests:
+  targeted: []
+  full: []
+  full_regression: release_only
+  timeout_seconds: 900
+
+scope:
+  reuse_approved_scope: true
+  current_delta_first: true
+
+git:
+  allow_commit: false
+  allow_push: false
+  allow_tag: false
+  allow_reset_hard: false
+
+codex:
+  executable: codex
+  args: ["exec", "--full-auto"]
+  prompt_mode: stdin
+  timeout_seconds: 1800
