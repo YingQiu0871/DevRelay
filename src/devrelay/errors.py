@@ -49,3 +49,30 @@ class ReviewFormatError(ProviderError):
 
 class StateConflictError(DevRelayError):
     """An operation is not allowed in the current task state."""
+
+
+class BaselineError(DevRelayError):
+    """Task workspace baseline could not be captured, stored or used."""
+
+
+class BaselineUnavailableError(BaselineError):
+    """The task has no usable baseline (legacy task or missing capture)."""
+
+
+class BaselineCorruptError(BaselineError):
+    """Persisted baseline artifacts are missing/inconsistent - no guessing."""
+
+
+class BaselineSizeError(BaselineError):
+    """A pre-existing file exceeds the configured baseline snapshot limit."""
+
+    def __init__(self, path: str, size: int, limit: int) -> None:
+        self.path = path
+        self.size = size
+        self.limit = limit
+        super().__init__(
+            f"cannot snapshot pre-existing file {path!r}: size {size} bytes "
+            f"exceeds baseline.max_untracked_file_bytes ({limit}). "
+            "No task was created; adjust the limit in .devrelay/config.yaml "
+            "if you really want to snapshot this file."
+        )

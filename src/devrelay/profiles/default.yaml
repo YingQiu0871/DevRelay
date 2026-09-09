@@ -12,6 +12,9 @@ review:
   max_diff_bytes: 300000
   timeout_seconds: 120
 
+baseline:
+  max_untracked_file_bytes: 52428800
+
 tests:
   targeted: []
   full: []
@@ -27,9 +30,11 @@ git:
   allow_push: false
   allow_tag: false
   allow_reset_hard: false
+  allow_index_mutation: false
 
 codex:
   executable: codex
-  args: ["exec", "--full-auto"]
+  # Verified against `codex exec --help` (codex-cli 0.150.1): no --full-auto.
+  args: ["exec", "--sandbox", "workspace-write"]
   prompt_mode: stdin
   timeout_seconds: 1800

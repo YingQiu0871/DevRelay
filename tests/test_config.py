@@ -24,7 +24,7 @@ def test_default_config_values():
     assert config.scope.reuse_approved_scope is True
     assert config.scope.current_delta_first is True
     assert config.codex.executable == "codex"
-    assert config.codex.args == ["exec", "--full-auto"]
+    assert config.codex.args == ["exec", "--sandbox", "workspace-write"]
     assert config.codex.prompt_mode == "stdin"
     assert config.codex.timeout_seconds == 1800
     assert config.git.allow_commit is False

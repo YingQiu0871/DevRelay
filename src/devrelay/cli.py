@@ -16,12 +16,14 @@ from pydantic import ValidationError
 
 from devrelay import __version__
 from devrelay.artifacts.store import ArtifactStore
+from devrelay.baseline.service import BaselineService
 from devrelay.config import (
     DevRelayConfig,
     install_default_config,
     load_config,
 )
 from devrelay.errors import (
+    BaselineError,
     ConfigError,
     DevRelayError,
     ProviderUnavailableError,
@@ -114,6 +116,7 @@ def _engine(
             reviewer = ManualReviewer()
     else:
         reviewer = ManualReviewer()
+    baseline_service = BaselineService(root, runner, store, config)
     return DevRelayEngine(
         config,
         store,
@@ -121,6 +124,7 @@ def _engine(
         implementer=implementer,
         reviewer=reviewer,
         runner=runner,
+        baselines=baseline_service,
     )
 
 
@@ -195,6 +199,12 @@ def doctor() -> None:
     codex = CodexCLIProvider(config.codex, CommandRunner(), workspace_root=root)
     ok, diagnostic = codex.availability()
     typer.echo(f"Codex CLI: {'OK' if ok else 'MISSING'} — {diagnostic}")
+    typer.echo(
+        f"  Args: {' '.join(config.codex.args)} "
+        f"(prompt transport: {config.codex.prompt_mode})"
+    )
+    for warning in codex.unknown_arg_warnings():
+        typer.echo(f"  Warning: {warning}")
     typer.echo(f"Reviewer provider: {config.review.provider}")
     if config.review.provider == "openai_compatible":
         from devrelay.providers.openai_compatible import (
@@ -221,7 +231,10 @@ def start(title: str = typer.Argument(..., help="Short task title")) -> None:
             "(run 'git init' first)."
         )
     engine = _engine(root, store, config)
-    task = engine.create_task(title)
+    try:
+        task = engine.create_task(title)
+    except BaselineError as exc:
+        _fail(str(exc))
     typer.echo(f"Created task {task.task_id}: {task.title}")
     typer.echo(f"State: {task.state.value}")
     typer.echo(f"Task dir: {store.task_dir(task.task_id)}")
@@ -256,6 +269,7 @@ def status(
         ("Tests", "tests"),
         ("Reviewer", "reviewer"),
         ("Final Gate", "final_gate"),
+        ("Baseline", "baseline"),
     ):
         typer.echo(f"{label:<12} {block[key]}")
     if block["blocked"]:
@@ -347,28 +361,34 @@ def continue_task(
 
 @app.command()
 def diff(
-    stat: bool = typer.Option(False, "--stat", help="git diff --stat only"),
+    stat: bool = typer.Option(False, "--stat", help="show diffstat only"),
+    binary: bool = typer.Option(
+        False, "--binary", help="emit the binary-safe task patch instead"
+    ),
+    out: Optional[Path] = typer.Option(
+        None, "--out", help="write the (binary) task patch to a file"
+    ),
     task: Optional[str] = typer.Option(None, "--task"),
 ) -> None:
-    """Show the task workspace diff (working tree vs initial HEAD)."""
+    """Show the TASK-RELATIVE diff (task baseline -> current workspace)."""
     root = _resolve_root()
-    store, _config = _load_store_config(root)
+    store, config = _load_store_config(root)
     task_id = _task_id(store, task)
+    engine = _engine(root, store, config)
     try:
-        run = store.read_task(task_id)
-    except TaskNotFoundError as exc:
+        if binary:
+            content = engine.task_binary_diff(task_id)
+            if out is not None:
+                store.write_text(out, content)
+                typer.echo(f"Binary task patch written: {out}")
+                return
+        elif out is not None:
+            _fail("--out requires --binary")
+        else:
+            content = engine.task_diff_text(task_id, stat=stat)
+    except BaselineError as exc:
         _fail(str(exc))
-    ws = GitWorkspace(root)
-    if not ws.detect_repo():
-        _fail(f"{root} is not a git repository")
-    typer.echo(ws.diff(stat=stat))
-    if run.initial_snapshot and run.initial_snapshot.dirty_files:
-        typer.echo(
-            "\n# PREEXISTING_DIRTY_FILES (present when the task started — "
-            "not agent changes):"
-        )
-        for name in run.initial_snapshot.dirty_files:
-            typer.echo(f"#   {name}")
+    typer.echo(content)
 
 
 @app.command()

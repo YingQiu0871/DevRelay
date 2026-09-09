@@ -12,14 +12,20 @@ from devrelay.config import DevRelayConfig, load_config
 from devrelay.models import (
     CommandResult,
     Finding,
+    NameStatusEntry,
     ProviderExecutionResult,
+    RepoSnapshot,
     ReviewResult,
     Severity,
+    TaskDelta,
     TaskPacket,
+    TaskRun,
+    WorkspaceBaseline,
     WorkspaceSnapshot,
 )
 from devrelay.pipeline.engine import DevRelayEngine
 from devrelay.providers.base import ImplementerProvider, ReviewerProvider
+from devrelay.workspace.git import GitWorkspace
 from devrelay.workspace.runner import CommandRunner
 
 
@@ -292,6 +298,66 @@ def default_config() -> DevRelayConfig:
     return load_config(None)
 
 
+class FakeBaselineService:
+    """In-memory baseline/guard double for engine tests (no real git)."""
+
+    def __init__(
+        self,
+        *,
+        delta_text: str = "diff --git a/src/x.py b/src/x.py\n+agent line\n",
+        violation_queues: Optional[list[list]] = None,
+        fail_delta: bool = False,
+    ) -> None:
+        self._delta_text = delta_text
+        self._violation_queues = list(violation_queues or [])
+        self.fail_delta = fail_delta
+        self.captures: list[str] = []
+        self.pre_snapshots = 0
+        self.post_snapshots = 0
+
+    def capture(self, task_id: str) -> WorkspaceBaseline:
+        self.captures.append(task_id)
+        return WorkspaceBaseline(
+            task_id=task_id,
+            head_sha="abc123",
+            branch="main",
+            baseline_worktree_tree_sha="b" * 40,
+            baseline_complete=True,
+            baseline_storage_path=f"tasks/{task_id}/baseline",
+        )
+
+    def pre_snapshot(self) -> RepoSnapshot:
+        self.pre_snapshots += 1
+        return RepoSnapshot(head_sha="abc123", branch="main", index_tree_sha="i" * 40)
+
+    def post_snapshot(self) -> RepoSnapshot:
+        self.post_snapshots += 1
+        return RepoSnapshot(head_sha="abc123", branch="main", index_tree_sha="i" * 40)
+
+    def check_policy(self, before, after) -> list:
+        if self._violation_queues:
+            return self._violation_queues.pop(0)
+        return []
+
+    def task_delta(self, task: TaskRun) -> TaskDelta:
+        if self.fail_delta:
+            from devrelay.errors import BaselineUnavailableError
+
+            raise BaselineUnavailableError(
+                f"task {task.task_id} has no task baseline (legacy task)"
+            )
+        return TaskDelta(
+            text_diff=self._delta_text,
+            stat_text=" 1 file changed, 1 insertion(+)",
+            changed_files=["src/x.py"],
+            name_status=[NameStatusEntry(status="M", new_path="src/x.py")],
+            method="fake",
+        )
+
+    def binary_task_diff(self, task: TaskRun) -> str:
+        return "GIT binary patch (fake)"
+
+
 def build_engine(
     tmp_path: Path,
     *,
@@ -301,6 +367,7 @@ def build_engine(
     workspace=None,
     runner=None,
     use_real_git: bool = False,
+    baseline_service=None,
 ):
     """Return (root, store, engine). Root contains a .devrelay store."""
     root = tmp_path / "ws"
@@ -310,7 +377,20 @@ def build_engine(
     store = ArtifactStore(root)
     store.ensure_initialized()
     cfg = config or default_config()
-    ws = workspace or FakeWorkspace(root)
+    if workspace is None:
+        ws: object = GitWorkspace(root) if use_real_git else FakeWorkspace(root)
+    else:
+        ws = workspace
+    if baseline_service is None:
+        if use_real_git:
+            from devrelay.baseline.service import BaselineService
+            from devrelay.workspace.runner import CommandRunner as CR
+
+            baseline_service = BaselineService(
+                root, CR(), store, cfg
+            )
+        else:
+            baseline_service = FakeBaselineService()
     eng = DevRelayEngine(
         cfg,
         store,
@@ -318,6 +398,7 @@ def build_engine(
         implementer=implementer or FakeImplementer(),
         reviewer=reviewer or ManualReviewerProxy(),
         runner=runner or FakeCommandRunner(),
+        baselines=baseline_service,
     )
     return root, store, eng
 

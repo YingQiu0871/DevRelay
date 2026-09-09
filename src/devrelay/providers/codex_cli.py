@@ -14,6 +14,7 @@ Security contract (enforced here):
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 from typing import Optional
 
@@ -22,6 +23,8 @@ from devrelay.errors import ProviderUnavailableError
 from devrelay.models import ProviderExecutionResult, TaskPacket
 from devrelay.providers.base import ImplementerContext, ImplementerProvider
 from devrelay.workspace.runner import CommandRunner
+
+_FLAG_RE = re.compile(r"^\s+--([a-z0-9-]+)", re.IGNORECASE)
 
 
 def build_implementation_prompt(context: ImplementerContext) -> str:
@@ -109,6 +112,7 @@ class CodexCLIProvider(ImplementerProvider):
         self.runner = runner or CommandRunner()
         self.workspace_root = str(Path(workspace_root).resolve()) if workspace_root else None
         self._availability: tuple[bool, str] | None = None
+        self._help_flags: set[str] | None = None
 
     def availability(self) -> tuple[bool, str]:
         if self._availability is not None:
@@ -132,6 +136,43 @@ class CodexCLIProvider(ImplementerProvider):
             )
         return self._availability
 
+    # -- CLI help verification (never invokes a model) -----------------
+    def _exec_help_flags(self) -> set[str]:
+        if self._help_flags is not None:
+            return self._help_flags
+        probe = self.runner.run(
+            [self.config.executable, "exec", "--help"], timeout_seconds=60
+        )
+        flags: set[str] = set()
+        if probe.success:
+            for line in probe.stdout.splitlines():
+                for match in re.finditer(
+                    r"(?<![A-Za-z0-9])--([a-z0-9-]+)", line, re.IGNORECASE
+                ):
+                    flags.add("--" + match.group(1).lower())
+        self._help_flags = flags
+        return flags
+
+    def unknown_arg_warnings(self) -> list[str]:
+        """Flags configured in ``codex.args`` missing from ``codex exec --help``."""
+        if not self.runner.which(self.config.executable):
+            return []
+        available = self._exec_help_flags()
+        if not available:
+            return []
+        warnings: list[str] = []
+        for token in self.config.args:
+            if not token.startswith("--"):
+                continue
+            name = token.split("=", 1)[0].lower()
+            if name not in available:
+                warnings.append(
+                    f"configured codex arg '{name}' is not present in the "
+                    "installed CLI's `codex exec --help`; the run will be "
+                    "rejected before starting."
+                )
+        return warnings
+
     def run(self, context: ImplementerContext) -> ProviderExecutionResult:
         available, diagnostic = self.availability()
         if not available:
@@ -139,6 +180,15 @@ class CodexCLIProvider(ImplementerProvider):
                 exit_code=None,
                 stderr=diagnostic,
                 error=diagnostic,
+            )
+        unknown = self.unknown_arg_warnings()
+        if unknown:
+            message = (
+                "Codex CLI invocation rejected before start: "
+                + " ".join(unknown)
+            )
+            return ProviderExecutionResult(
+                exit_code=None, stderr=message, error=message
             )
         prompt = build_implementation_prompt(context)
         argv = [self.config.executable, *self.config.args]

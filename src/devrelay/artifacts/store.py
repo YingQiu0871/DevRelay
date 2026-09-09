@@ -108,11 +108,24 @@ class ArtifactStore:
     def final_dir(self, task_id: str) -> Path:
         return self._sub(task_id, "final")
 
+    def baseline_dir(self, task_id: str) -> Path:
+        return self._sub(task_id, "baseline")
+
+    def policy_dir(self, task_id: str) -> Path:
+        return self._sub(task_id, "policy")
+
     # -- task persistence -------------------------------------------------
     def write_task(self, task: TaskRun) -> None:
         path = self.state_path(task.task_id)
         path.parent.mkdir(parents=True, exist_ok=True)
-        for sub in ("implementation", "reviews", "logs", "final"):
+        for sub in (
+            "implementation",
+            "reviews",
+            "logs",
+            "final",
+            "baseline",
+            "policy",
+        ):
             (path.parent / sub).mkdir(parents=True, exist_ok=True)
         _atomic_write_text(
             path, json.dumps(task.model_dump(mode="json"), indent=2, ensure_ascii=False)
@@ -154,6 +167,17 @@ class ArtifactStore:
         full = Path(path)
         _atomic_write_text(full, text)
         return full
+
+    def write_bytes(self, path: str | Path, data: bytes) -> Path:
+        full = Path(path)
+        full.parent.mkdir(parents=True, exist_ok=True)
+        tmp = full.with_name(f".{full.name}.tmp")
+        tmp.write_bytes(data)
+        os.replace(tmp, full)
+        return full
+
+    def read_bytes(self, path: str | Path) -> bytes:
+        return Path(path).read_bytes()
 
     def write_json(self, path: str | Path, data: Any) -> Path:
         full = Path(path)

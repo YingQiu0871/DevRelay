@@ -320,6 +320,9 @@ def render_review_request_md(bundle: ReviewBundle, review_number: int) -> str:
     return (
         f"# Manual review request #{review_number} — {bundle.task_id}\n\n"
         f"This review is **read-only**. Do not modify code.\n\n"
+        "**Diff scope: task baseline -> current workspace.** The diff and "
+        "changed-file list below are TASK-RELATIVE. Pre-existing user changes "
+        "are excluded from the diff and only listed by name for context.\n\n"
         "Produce a review JSON file with this shape and import it with:\n"
         "    devrelay review import <file>.json\n\n"
         "```json\n"
@@ -352,13 +355,16 @@ def render_review_request_md(bundle: ReviewBundle, review_number: int) -> str:
 
 def render_final_report(
     task: TaskRun,
-    changed_files: list[str],
-    diff_stat_text: str,
+    *,
+    preexisting_changes: list[str],
+    task_changed_files: list[str],
+    task_diff_stat_text: str,
     head_now: str | None,
-    dirty_now: list[str],
     note: str = "",
+    policy_notes: list[str] | None = None,
 ) -> str:
     packet = task.packet
+    baseline = task.baseline
     lines = [
         f"# Final report — {task.task_id}",
         "",
@@ -375,18 +381,34 @@ def render_final_report(
             "",
         ]
         if packet.acceptance_criteria:
-            lines += ["- Acceptance criteria:"] + [f"    - {c}" for c in packet.acceptance_criteria] + [""]
+            lines += ["- Acceptance criteria:"] + [
+                f"    - {c}" for c in packet.acceptance_criteria
+            ] + [""]
     lines += [
-        f"- Initial HEAD: {task.initial_snapshot.head_sha if task.initial_snapshot else None}",
+        f"- Initial HEAD: {baseline.head_sha if baseline else (task.initial_snapshot.head_sha if task.initial_snapshot else None)}",
         f"- Final HEAD: {head_now or '(working tree not committed by DevRelay)'}",
-        f"- Working tree dirty: {len(dirty_now)} file(s) — DevRelay never commits",
+        f"- Initial branch: {baseline.branch if baseline else (task.initial_snapshot.branch if task.initial_snapshot else '-')}",
+        f"- Baseline status: "
+        + (
+            f"COMPLETE (tree {baseline.baseline_worktree_tree_sha})"
+            if baseline and baseline.baseline_complete
+            else "NONE - legacy task (precise task delta unavailable)"
+        ),
         f"- Implementation passes: {task.implementation_passes}",
         f"- Fix iterations used: {task.fix_iterations_used}",
         "",
-        "## Changed Files (working tree vs initial HEAD)",
+        "## Pre-existing Workspace Changes (excluded from the task delta)",
         "",
     ]
-    lines += [f"- {f}" for f in changed_files] or ["- (none)"]
+    lines += [f"- {name}" for name in preexisting_changes] or ["- (none)"]
+    lines.append("")
+    lines.append("## Task Changed Files (task baseline -> current workspace)")
+    lines.append("")
+    lines += [f"- {name}" for name in task_changed_files] or ["- (none)"]
+    lines.append("")
+    lines.append("## Task-relative Diff Summary")
+    lines.append("")
+    lines.append(f"```\n{task_diff_stat_text or '(no changes)'}\n```")
     lines.append("")
     lines.append("## Implementation Summary")
     lines.append("")
@@ -396,6 +418,25 @@ def render_final_report(
     else:
         lines.append("- (no implementation reports)")
     lines.append("")
+    lines.append("## Repository Policy Checks")
+    lines.append("")
+    if task.policy_violations:
+        lines.append(f"- Violations: {len(task.policy_violations)}")
+        for violation in task.policy_violations:
+            lines.append(
+                f"    - [{violation.id}] {violation.type.value}: "
+                f"{violation.description}"
+            )
+    else:
+        lines.append("- No policy violations recorded for any provider run.")
+    lines.append("")
+    lines.append("## Policy Violations History")
+    lines.append("")
+    if policy_notes:
+        lines += [f"- {item}" for item in policy_notes]
+    else:
+        lines.append("- (none)")
+    lines.append("")
     lines.append("## Test Evidence")
     lines.append("")
     lines += [f"- {line}" for line in task.test_evidence] or ["- (none)"]
@@ -404,7 +445,10 @@ def render_final_report(
     lines.append("")
     if task.review_history:
         for i, review in enumerate(task.review_history, start=1):
-            lines.append(f"- review #{i}: decision={review.decision.value}, findings={len(review.findings)}")
+            lines.append(
+                f"- review #{i}: decision={review.decision.value}, "
+                f"findings={len(review.findings)}"
+            )
             for finding in review.findings:
                 lines.append(f"    - [{finding.severity.value}] {finding.title}")
     else:
@@ -435,7 +479,16 @@ def render_final_report(
     if note:
         lines += ["", f"Gate note: {note}"]
     lines.append("")
-    lines.append("## Diff stat (git diff --stat HEAD)")
+    lines.append("## Known Limitations")
     lines.append("")
-    lines.append(f"```\n{diff_stat_text}\n```")
+    lines.append(
+        "- Push prohibition is BEST-EFFORT / PROVIDER-LIMITED: a local "
+        "postcondition check cannot mathematically prove that no `git push` "
+        "occurred. Codex runs under the sandbox configured in `codex.args` "
+        "when the provider supports it."
+    )
+    lines.append(
+        "- Pre-existing user changes are excluded from the task delta, but "
+        "files touched by both user and agent are listed under both sections."
+    )
     return "\n".join(lines)

@@ -28,6 +28,11 @@ review:
   max_diff_bytes: 300000
   timeout_seconds: 120
 
+baseline:
+  # Per-file cap for pre-existing untracked files copied into the baseline.
+  # Files above this limit fail task creation with an explicit error.
+  max_untracked_file_bytes: 52428800
+
 tests:
   targeted: []
   full: []
@@ -43,10 +48,15 @@ git:
   allow_push: false
   allow_tag: false
   allow_reset_hard: false
+  allow_index_mutation: false
 
 codex:
   executable: codex
-  args: ["exec", "--full-auto"]
+  # Verified against `codex exec --help` (codex-cli 0.150.1): this CLI does not
+  # offer --full-auto; the documented sandbox flag is used instead.  The
+  # implementation prompt is streamed on stdin (canonical transport); argv is
+  # kept only as an explicit compatibility fallback.
+  args: ["exec", "--sandbox", "workspace-write"]
   prompt_mode: stdin
   timeout_seconds: 1800
 """
@@ -87,6 +97,12 @@ class ScopeConfig(BaseModel):
     current_delta_first: bool = True
 
 
+class BaselineConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    max_untracked_file_bytes: int = Field(default=50 * 1024 * 1024, ge=1024)
+
+
 class GitPolicyConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -94,13 +110,19 @@ class GitPolicyConfig(BaseModel):
     allow_push: bool = False
     allow_tag: bool = False
     allow_reset_hard: bool = False
+    allow_index_mutation: bool = False
 
 
 class CodexConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     executable: str = "codex"
-    args: list[str] = Field(default_factory=lambda: ["exec", "--full-auto"])
+    # Defaults verified against codex-cli 0.150.1 `codex exec --help`:
+    # prompts travel on stdin (canonical); --full-auto is NOT offered by this
+    # CLI version, so the shipped default uses the documented sandbox flag.
+    args: list[str] = Field(
+        default_factory=lambda: ["exec", "--sandbox", "workspace-write"]
+    )
     prompt_mode: Literal["stdin", "argv"] = "stdin"
     timeout_seconds: float = Field(default=1800.0, gt=0)
 
@@ -115,6 +137,7 @@ class DevRelayConfig(BaseModel):
     tests: TestsConfig = Field(default_factory=TestsConfig)
     scope: ScopeConfig = Field(default_factory=ScopeConfig)
     git: GitPolicyConfig = Field(default_factory=GitPolicyConfig)
+    baseline: BaselineConfig = Field(default_factory=BaselineConfig)
     codex: CodexConfig = Field(default_factory=CodexConfig)
 
     @model_validator(mode="after")
@@ -124,6 +147,7 @@ class DevRelayConfig(BaseModel):
             "allow_push": self.git.allow_push,
             "allow_tag": self.git.allow_tag,
             "allow_reset_hard": self.git.allow_reset_hard,
+            "allow_index_mutation": self.git.allow_index_mutation,
         }
         enabled = [name for name, value in allowed.items() if value]
         if enabled:

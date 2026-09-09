@@ -9,6 +9,7 @@ from devrelay.pipeline.states import PipelineState
 from devrelay.providers.base import ReviewerProvider
 
 from helpers import (
+    FakeBaselineService,
     FakeCommandRunner,
     FakeImplementer,
     FakeWorkspace,
@@ -89,13 +90,10 @@ def test_state_survives_engine_recreation(tmp_path):
     assert store1.read_task("DR-0001").state == S.PLAN_READY
 
     store2 = ArtifactStore(root)
-    engine2 = FakeWorkspace(root)
     ws = FakeWorkspace(root)
-    eng2 = build_engine(tmp_path)
-    # build a *new* engine bound to a fresh store instance
-    from devrelay.pipeline.engine import DevRelayEngine
+    # build a *new* engine bound to a fresh store instance (process restart)
     from devrelay.config import load_config as lc
-
+    from devrelay.pipeline.engine import DevRelayEngine
     from devrelay.providers.manual import ManualReviewer
 
     engine2 = DevRelayEngine(
@@ -105,6 +103,7 @@ def test_state_survives_engine_recreation(tmp_path):
         implementer=FakeImplementer(),
         reviewer=ManualReviewer(),
         runner=FakeCommandRunner(),
+        baselines=FakeBaselineService(),
     )
     _to_reviewing(engine2, store2, "DR-0001")
     assert store2.read_task("DR-0001").state == S.REVIEWING
@@ -334,23 +333,30 @@ def test_dirty_workspace_is_captured_not_blamed(tmp_path):
     store = ArtifactStore(repo)
     store.ensure_initialized()
     ws = GitWorkspace(repo, CommandRunner())
+    from devrelay.baseline.service import BaselineService
     from devrelay.pipeline.engine import DevRelayEngine
 
     from devrelay.providers.manual import ManualReviewer
 
+    config = load_config(None)
+    runner = CommandRunner()
     engine = DevRelayEngine(
-        load_config(None),
+        config,
         store,
         ws,
         implementer=FakeImplementer(),
         reviewer=ManualReviewer(),
-        runner=CommandRunner(),
+        runner=runner,
+        baselines=BaselineService(repo, runner, store, config),
     )
     engine.create_task("t")
     task = store.read_task("DR-0001")
     assert task.initial_snapshot is not None
     assert "a.txt" in task.initial_snapshot.dirty_files
     assert task.initial_snapshot.is_dirty
+    assert task.baseline is not None
+    assert task.baseline.baseline_complete
+    assert "a.txt" in task.baseline.preexisting_dirty_files
 
 
 def test_review_history_and_p3_survive(tmp_path):

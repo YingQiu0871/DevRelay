@@ -23,6 +23,12 @@ review:
   max_diff_bytes: 300000
   timeout_seconds: 120
 
+baseline:
+  # Per-file cap (bytes) for pre-existing untracked files copied into the
+  # durable task baseline. Files above this limit fail task creation with an
+  # explicit error naming the file, its size and this knob.
+  max_untracked_file_bytes: 52428800
+
 tests:
   # Command lines run by the test runner (shell=False, split on whitespace).
   # Project-specific: set these in the workspace profile.
@@ -38,18 +44,21 @@ scope:
   current_delta_first: true
 
 git:
-  # DevRelay v0.1 hard-disables every destructive/remote git action.
-  # These must remain false; setting any of them to true is a config error.
+  # DevRelay v0.1 hard-disables every destructive/remote git action and any
+  # mutation of the user's real git index. These must remain false; setting
+  # any of them to true is a config error.
   allow_commit: false
   allow_push: false
   allow_tag: false
   allow_reset_hard: false
+  allow_index_mutation: false
 
 codex:
   executable: codex
-  # Official Codex CLI arguments. Executed with shell=False inside the
-  # workspace; the implementation prompt is streamed on stdin (see prompt_mode).
-  args: ["exec", "--full-auto"]
-  # stdin | argv  (argv appends the prompt as the last argument)
+  # Verified against `codex exec --help` (codex-cli 0.150.1): this CLI does not
+  # offer --full-auto; the documented sandbox flag is used instead. The
+  # implementation prompt is streamed on stdin (canonical transport); argv is
+  # kept only as an explicit compatibility fallback.
+  args: ["exec", "--sandbox", "workspace-write"]
   prompt_mode: stdin
   timeout_seconds: 1800

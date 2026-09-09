@@ -247,6 +247,124 @@ class FinalGateRecord(BaseModel):
     note: str = ""
 
 
+# ---------------------------------------------------------------------------
+# v0.1 RC hardening: baseline / policy guard / task-delta models
+# ---------------------------------------------------------------------------
+
+class PolicyViolationType(str, Enum):
+    UNEXPECTED_HEAD_CHANGE = "UNEXPECTED_HEAD_CHANGE"
+    UNEXPECTED_BRANCH_CHANGE = "UNEXPECTED_BRANCH_CHANGE"
+    UNEXPECTED_TAG_CHANGE = "UNEXPECTED_TAG_CHANGE"
+    UNEXPECTED_REF_CHANGE = "UNEXPECTED_REF_CHANGE"
+    UNEXPECTED_INDEX_MUTATION = "UNEXPECTED_INDEX_MUTATION"
+
+
+class PolicyViolation(BaseModel):
+    """A structured repository-policy violation detected after a provider run."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    id: str
+    type: PolicyViolationType
+    severity: Severity = Severity.P0
+    detected_at: str = Field(default_factory=utcnow_iso)
+    before: dict[str, str | None] = Field(default_factory=dict)
+    after: dict[str, str | None] = Field(default_factory=dict)
+    description: str = ""
+    blocking: bool = True
+
+
+class RepoSnapshot(BaseModel):
+    """Point-in-time read-only snapshot of repository control state."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    captured_at: str = Field(default_factory=utcnow_iso)
+    head_sha: str | None = None
+    branch: str | None = None
+    index_tree_sha: str | None = None
+    # sorted "refname objectname" lines for local refs (tags excluded here)
+    local_refs: list[str] = Field(default_factory=list)
+    # sorted "tagname objectname" lines
+    tags: list[str] = Field(default_factory=list)
+    note: str = ""
+
+
+class BaselineUntrackedEntry(BaseModel):
+    """One pre-existing untracked (non-ignored) file captured at task start."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    rel_path: str
+    storage_name: str
+    size: int
+    mode: str = "100644"          # git index mode (100644/100755/120000)
+    is_symlink: bool = False
+    sha256: str = ""
+
+
+class WorkspaceBaseline(BaseModel):
+    """Persisted task-start workspace baseline (baseline/baseline.json)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    task_id: str
+    captured_at: str = Field(default_factory=utcnow_iso)
+    baseline_schema_version: int = 1
+    head_sha: str | None = None
+    branch: str | None = None
+    status_porcelain_v2: str = ""
+    preexisting_dirty_files: list[str] = Field(default_factory=list)
+    preexisting_untracked_files: list[str] = Field(default_factory=list)
+    index_tree_sha: str | None = None       # real .git/index tree at capture
+    baseline_worktree_tree_sha: str | None = None  # temporary-index tree
+    baseline_manifest_version: int = 1
+    baseline_storage_path: str = ""
+    baseline_complete: bool = False
+    untracked_entries: list[BaselineUntrackedEntry] = Field(default_factory=list)
+    notes: str = ""
+
+    @property
+    def has_baseline_tree(self) -> bool:
+        return bool(self.baseline_worktree_tree_sha)
+
+
+class NameStatusEntry(BaseModel):
+    """One parsed name-status record (rename-aware)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    status: str            # e.g. A/M/D/R/T/U + optional similarity e.g. "R100"
+    old_path: str | None = None
+    new_path: str = ""
+
+    @property
+    def display(self) -> str:
+        if self.old_path and self.old_path != self.new_path:
+            return f"{self.status} {self.old_path} -> {self.new_path}"
+        return f"{self.status} {self.new_path}"
+
+
+class TaskDelta(BaseModel):
+    """True task-relative delta: task-start baseline -> current workspace."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    text_diff: str = ""
+    stat_text: str = ""
+    changed_files: list[str] = Field(default_factory=list)
+    name_status: list[NameStatusEntry] = Field(default_factory=list)
+    binary_files: list[str] = Field(default_factory=list)
+    from_tree: str | None = None
+    to_tree: str | None = None
+    method: str = "trees"       # trees | reconstructed | stored
+    generated_at: str = Field(default_factory=utcnow_iso)
+
+    @property
+    def has_changes(self) -> bool:
+        return bool(self.changed_files)
+
+
 class TaskRun(BaseModel):
     """Persisted per-task runtime state (tasks/<id>/state.json)."""
 
@@ -254,11 +372,15 @@ class TaskRun(BaseModel):
 
     task_id: str
     title: str
+    state_schema_version: int = 2
     packet: TaskPacket | None = None
     state: PipelineState = PipelineState.NEW
     plan_ready: bool = False
     created_at: str = Field(default_factory=utcnow_iso)
     updated_at: str = Field(default_factory=utcnow_iso)
+
+    # Task-start workspace baseline (v1.0-RC; None = legacy pre-baseline task).
+    baseline: WorkspaceBaseline | None = None
 
     # Counters (machine truth, not display strings).
     implementation_passes: int = 0
@@ -280,6 +402,7 @@ class TaskRun(BaseModel):
 
     final_gate: FinalGateRecord | None = None
     audit: list[TransitionEvent] = Field(default_factory=list)
+    policy_violations: list[PolicyViolation] = Field(default_factory=list)
 
     @property
     def next_attempt(self) -> int:

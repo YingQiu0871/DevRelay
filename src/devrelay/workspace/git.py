@@ -73,7 +73,7 @@ class GitWorkspace:
             return None
 
     def status(self) -> str:
-        return self._git("status", "--porcelain=v1")
+        return self._git("--no-optional-locks", "status", "--porcelain=v1")
 
     def is_dirty(self) -> bool:
         return bool(self.status().strip())

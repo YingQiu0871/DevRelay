@@ -9,6 +9,7 @@ the :mod:`devrelay.workspace.runner` module (shell=False everywhere).
 
 from __future__ import annotations
 
+import json
 import shlex
 from pathlib import Path
 from typing import Optional
@@ -23,6 +24,8 @@ from devrelay.artifacts.renderer import (
 from devrelay.artifacts.store import ArtifactStore
 from devrelay.config import DevRelayConfig, dump_config_yaml
 from devrelay.errors import (
+    BaselineError,
+    BaselineUnavailableError,
     DevRelayError,
     ProviderError,
     ReviewFormatError,
@@ -32,12 +35,16 @@ from devrelay.errors import (
 from devrelay.models import (
     Finding,
     FinalGateRecord,
+    PolicyViolation,
     ProviderExecutionResult,
+    RepoSnapshot,
     ReviewDecision,
     ReviewResult,
+    TaskDelta,
     TaskPacket,
     TaskRun,
     TransitionEvent,
+    WorkspaceSnapshot,
     utcnow_iso,
 )
 from devrelay.pipeline.policy import PipelinePolicy
@@ -60,6 +67,9 @@ _UNBLOCK_DEFAULT_TARGET = {
     "reviewer_blocked": "review",
     "review_provider": "review",
     "implementer_failed": "plan",
+    "policy_violation": "plan",
+    "policy_guard_error": "plan",
+    "baseline_error": "plan",
     "internal": "plan",
 }
 
@@ -80,6 +90,7 @@ class DevRelayEngine:
         implementer: ImplementerProvider,
         reviewer: ReviewerProvider,
         runner=None,
+        baselines=None,
     ) -> None:
         self.config = config
         self.policy = PipelinePolicy(config)
@@ -88,6 +99,15 @@ class DevRelayEngine:
         self.implementer = implementer
         self.reviewer = reviewer
         self.runner = runner
+        self.baselines = baselines
+
+    def _baseline_service(self):
+        if self.baselines is None:
+            raise DevRelayError(
+                "engine was constructed without a baseline service; "
+                "task baselines are mandatory in v0.1-RC"
+            )
+        return self.baselines
 
     # ------------------------------------------------------------------ #
     # persistence helpers
@@ -126,11 +146,95 @@ class DevRelayEngine:
         self._persist(task)
 
     # ------------------------------------------------------------------ #
+    # policy guard helpers
+    # ------------------------------------------------------------------ #
+    def _persist_policy_run(
+        self,
+        task_id: str,
+        attempt: int,
+        pre: RepoSnapshot,
+        post: RepoSnapshot,
+        violations: list[PolicyViolation],
+    ) -> None:
+        policy_dir = self.store.policy_dir(task_id)
+        self.store.write_text(
+            policy_dir / f"pre-run-{attempt:02d}.json", _json_pretty(pre)
+        )
+        self.store.write_text(
+            policy_dir / f"post-run-{attempt:02d}.json", _json_pretty(post)
+        )
+        self.store.write_text(
+            policy_dir / f"violations-{attempt:02d}.json",
+            json.dumps(
+                [v.model_dump(mode="json") for v in violations],
+                indent=2,
+                ensure_ascii=False,
+            ),
+        )
+
+    def _record_policy_violations(
+        self,
+        task: TaskRun,
+        violations: list[PolicyViolation],
+        attempt: int,
+    ) -> None:
+        seq = len(task.policy_violations)
+        for index, violation in enumerate(violations, start=1):
+            seq += 1
+            violation = violation.model_copy(
+                update={"id": f"PV-{attempt:02d}-{index:02d}"}
+            )
+            task.policy_violations.append(violation)
+
+    def _policy_guard_after_run(
+        self,
+        task: TaskRun,
+        attempt: int,
+        pre: RepoSnapshot,
+        events: list[str],
+    ) -> bool:
+        """Post-run repository policy verification. Returns True when the
+        pipeline must stop (task already moved to BLOCKED)."""
+        service = self._baseline_service()
+        try:
+            post = service.post_snapshot()
+            violations = service.check_policy(pre, post)
+        except BaselineError as exc:
+            current = self._load(task.task_id)
+            self._block(
+                current,
+                "policy_guard_error",
+                f"post-run repository verification failed: {exc}",
+            )
+            events.append(
+                f"[{task.task_id}] BLOCKED: policy guard could not verify "
+                "repository state"
+            )
+            return True
+        if not violations:
+            return False
+        self._persist_policy_run(task.task_id, attempt, pre, post, violations)
+        current = self._load(task.task_id)
+        self._record_policy_violations(current, violations, attempt)
+        first = violations[0]
+        self._block(
+            current,
+            "policy_violation",
+            f"[{first.type.value}] {first.description} "
+            "(policy/violations-*.json has full details)",
+        )
+        events.append(
+            f"[{task.task_id}] BLOCKED: policy violation "
+            f"{first.type.value} ({len(violations)} violation(s))"
+        )
+        return True
+
+    # ------------------------------------------------------------------ #
     # lifecycle
     # ------------------------------------------------------------------ #
     def create_task(self, title: str) -> TaskRun:
-        snapshot = self.workspace.snapshot()
-        if not snapshot.has_git:
+        # Read-only repo check first (never refreshes the real index).
+        if not getattr(self.workspace, "detect_repo", lambda: False)():
             raise WorkspaceError(
                 "DevRelay tasks require a git repository workspace "
                 f"({self.workspace.root}). Run 'git init' first."
@@ -140,12 +244,39 @@ class DevRelayEngine:
             task_id=task_id,
             title=title.strip() or "(untitled)",
             packet=TaskPacket(task_id=task_id, title=title.strip() or "(untitled)"),
-            initial_snapshot=snapshot,
         )
         task_dir = self.store.task_dir(task_id)
         task_dir.mkdir(parents=True, exist_ok=True)
-        for sub in ("implementation", "reviews", "logs", "final"):
+        for sub in (
+            "implementation",
+            "reviews",
+            "logs",
+            "final",
+            "baseline",
+            "policy",
+        ):
             (task_dir / sub).mkdir(parents=True, exist_ok=True)
+        # Capture the durable task-start workspace baseline BEFORE any
+        # provider work.  Uses a temporary GIT_INDEX_FILE; the user's real
+        # index is never modified.
+        try:
+            baseline = self._baseline_service().capture(task_id)
+        except BaselineError as exc:
+            import shutil
+
+            shutil.rmtree(task_dir, ignore_errors=True)
+            raise
+        task.baseline = baseline
+        task.initial_snapshot = WorkspaceSnapshot(
+            repo_root=str(self.workspace.root),
+            head_sha=baseline.head_sha,
+            branch=baseline.branch,
+            dirty_files=(
+                list(baseline.preexisting_dirty_files)
+                + list(baseline.preexisting_untracked_files)
+            ),
+            has_git=True,
+        )
         self.store.write_text(
             task_dir / "task.json",
             _json_pretty(task.packet),
@@ -287,6 +418,21 @@ class DevRelayEngine:
             f"[{task.task_id}] implementing (attempt {attempt}, "
             f"{'fix' if is_fix else 'initial'} pass)"
         )
+        service = self._baseline_service()
+        try:
+            pre_snapshot = service.pre_snapshot()
+        except BaselineError as exc:
+            current = self._load(task.task_id)
+            self._block(
+                current,
+                "policy_guard_error",
+                f"pre-run repository verification failed: {exc}",
+            )
+            events.append(
+                f"[{task.task_id}] BLOCKED: policy guard could not verify "
+                "repository state before the provider run"
+            )
+            return False
         result: ProviderExecutionResult = self.implementer.run(context)
 
         log_dir = self.store.logs_dir(task.task_id)
@@ -302,6 +448,11 @@ class DevRelayEngine:
             f"[{task.task_id}] implementer logs: "
             f"{self.store.rel_path(stdout_file)}, {self.store.rel_path(stderr_file)}"
         )
+
+        provider_ran = not (result.error and result.exit_code is None)
+        if provider_ran:
+            if self._policy_guard_after_run(task, attempt, pre_snapshot, events):
+                return False
 
         if result.error and result.exit_code is None:
             # Provider unavailable (e.g. Codex CLI missing): no state change,
@@ -436,13 +587,24 @@ class DevRelayEngine:
     # ------------------------------------------------------------------ #
     # review stage
     # ------------------------------------------------------------------ #
+    def _require_task_delta(self, task: TaskRun) -> TaskDelta:
+        """Task-relative delta (baseline -> current). Raises BaselineError."""
+        if task.baseline is None:
+            raise BaselineUnavailableError(
+                f"task {task.task_id} has no task baseline (legacy task); "
+                "precise task-relative deltas require a v0.1-RC task with a "
+                "captured baseline. Create a new task instead of guessing."
+            )
+        return self._baseline_service().task_delta(task)
+
     def _build_review_bundle(self, task: TaskRun) -> ReviewBundle:
-        diff = self.workspace.diff()
+        delta = self._require_task_delta(task)
+        diff = delta.text_diff
         diff_limit = self.config.review.max_diff_bytes
         diff_truncated = len(diff) > diff_limit
         if diff_truncated:
             diff = truncate(diff, diff_limit)
-        changed = self.workspace.changed_name_only()
+        changed = delta.changed_files
         last_report = ""
         if task.implementation_report_paths:
             try:
@@ -451,11 +613,14 @@ class DevRelayEngine:
                 )
             except OSError:
                 last_report = ""
-        preexisting = (
-            list(task.initial_snapshot.dirty_files)
-            if task.initial_snapshot
-            else []
-        )
+        preexisting: list[str] = []
+        if task.baseline is not None:
+            preexisting = (
+                list(task.baseline.preexisting_dirty_files)
+                + list(task.baseline.preexisting_untracked_files)
+            )
+        elif task.initial_snapshot is not None:
+            preexisting = list(task.initial_snapshot.dirty_files)
         return ReviewBundle(
             task_id=task.task_id,
             packet=task.packet or TaskPacket(task_id=task.task_id, title=task.title),
@@ -479,7 +644,15 @@ class DevRelayEngine:
         pipeline should keep moving automatically (auto reviewer, fix needed)."""
         if task.state != PipelineState.REVIEWING:
             raise StateConflictError(f"cannot review from state {task.state.value}")
-        bundle = self._build_review_bundle(task)
+        try:
+            bundle = self._build_review_bundle(task)
+        except BaselineError as exc:
+            current = self._load(task.task_id)
+            self._block(current, "baseline_error", str(exc))
+            events.append(
+                f"[{task.task_id}] BLOCKED: baseline error - {str(exc)[:300]}"
+            )
+            return False
         if not self.reviewer.automatic:
             return self._export_manual_request(task, bundle, events)
         try:
@@ -604,7 +777,12 @@ class DevRelayEngine:
                 "the configured reviewer is automatic; manual review export "
                 "is not applicable"
             )
-        bundle = self._build_review_bundle(task)
+        try:
+            bundle = self._build_review_bundle(task)
+        except BaselineError as exc:
+            current = self._load(task_id)
+            self._block(current, "baseline_error", str(exc))
+            raise
         review_number = len(task.review_history) + 1
         content = self.reviewer.prepare_request(bundle, review_number) or ""
         reviews_dir = self.store.reviews_dir(task.task_id)
@@ -636,15 +814,22 @@ class DevRelayEngine:
                 f"task is in state {task.state.value}; final export requires "
                 "FINAL_GATE_REQUIRED (review must pass first)"
             )
-        bundle = self._build_review_bundle(task)
+        try:
+            bundle = self._build_review_bundle(task)
+        except BaselineError as exc:
+            current = self._load(task_id)
+            self._block(current, "baseline_error", str(exc))
+            raise
         content = (
             "# Final gate review request\n\n"
             "Manual final gate: verify the acceptance criteria below against "
-            "the final delta. Approve with `devrelay final approve` or request "
-            "changes via a normal review import.\n\n"
+            "the final TASK-RELATIVE delta. Approve with `devrelay final "
+            "approve` or request changes via a normal review import.\n\n"
             f"**Task:** {task.task_id} — {task.title}\n"
             f"**Initial HEAD:** "
-            f"{task.initial_snapshot.head_sha if task.initial_snapshot else '-'}\n\n"
+            f"{task.baseline.head_sha if task.baseline else (task.initial_snapshot.head_sha if task.initial_snapshot else '-')}\n"
+            "**Diff scope:** task baseline -> current workspace "
+            "(pre-existing user changes excluded)\n\n"
             "---\n\n" + render_review_request_md(bundle, review_number=0)
         )
         final_dir = self.store.final_dir(task.task_id)
@@ -660,17 +845,33 @@ class DevRelayEngine:
                 f"task is in state {task.state.value}; final approval requires "
                 "FINAL_GATE_REQUIRED"
             )
+        try:
+            delta = self._require_task_delta(task)
+        except BaselineError as exc:
+            current = self._load(task_id)
+            self._block(current, "baseline_error", str(exc))
+            raise
         task.final_gate = FinalGateRecord(note=note.strip())
-        changed = self.workspace.changed_name_only()
-        dirty_now = list(changed)
-        diff_stat = self.workspace.diff(stat=True)
+        preexisting: list[str] = []
+        if task.baseline is not None:
+            preexisting = (
+                list(task.baseline.preexisting_dirty_files)
+                + list(task.baseline.preexisting_untracked_files)
+            )
+        elif task.initial_snapshot is not None:
+            preexisting = list(task.initial_snapshot.dirty_files)
+        policy_notes = [
+            f"[{v.id}] {v.type.value}: {v.description}"
+            for v in task.policy_violations
+        ]
         report = render_final_report(
             task,
-            changed_files=changed,
-            diff_stat_text=diff_stat,
+            preexisting_changes=preexisting,
+            task_changed_files=delta.changed_files,
+            task_diff_stat_text=delta.stat_text,
             head_now=self.workspace.head_sha(),
-            dirty_now=dirty_now,
             note=note,
+            policy_notes=policy_notes,
         )
         final_dir = self.store.final_dir(task.task_id)
         self.store.write_text(final_dir / "report.md", report)
@@ -705,6 +906,23 @@ class DevRelayEngine:
         task.blocked_reason = None
         self._persist(task)
         return task
+
+    # ------------------------------------------------------------------ #
+    # CLI-facing task-relative diff helpers
+    # ------------------------------------------------------------------ #
+    def task_diff_text(self, task_id: str, *, stat: bool = False) -> str:
+        task = self._load(task_id)
+        delta = self._require_task_delta(task)
+        return delta.stat_text if stat else delta.text_diff
+
+    def task_binary_diff(self, task_id: str) -> str:
+        task = self._load(task_id)
+        if task.baseline is None:
+            raise BaselineUnavailableError(
+                f"task {task_id} has no task baseline (legacy task); "
+                "binary task diffs are unavailable"
+            )
+        return self._baseline_service().binary_task_diff(task)
 
     # ------------------------------------------------------------------ #
     # status / diagnostics
@@ -754,6 +972,11 @@ class DevRelayEngine:
             "tests": tests,
             "reviewer": reviewer,
             "final_gate": gate,
+            "baseline": (
+                "OK"
+                if task.baseline and task.baseline.baseline_complete
+                else "NONE (legacy task)"
+            ),
             "blocked": task.blocked_code or "",
         }
 
