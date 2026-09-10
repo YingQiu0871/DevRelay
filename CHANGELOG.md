@@ -4,12 +4,65 @@ All notable changes to DevRelay are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## Unreleased - v0.2-A candidate (independent review pending)
+## Unreleased - v0.2-A candidate (audit remediation, closure audit pending)
 
-Automatic review loop with an enforced execution budget. **Not released**: the
-package version stays `0.1.0`, nothing is pushed or published, and the
-behaviour below was validated with fake providers only (no real Codex
-invocation and no real reviewer endpoint were used).
+Automatic review loop with an enforced execution budget, plus the remediation of
+the independent audit of commit `fe4b044` (one P1, three P2, six P3 findings).
+**Not released**: the package version stays `0.1.0`, nothing is pushed, merged,
+tagged or published, and the behaviour below was validated with fake providers
+only (no real Codex invocation and no real reviewer endpoint were used).
+
+### Fixed (audit remediation)
+
+- **P1-01** - the crash window between persisting a reviewer result and applying
+  it can no longer cost a second paid reviewer call. A persisted, schema-valid,
+  sanitized result is now an authoritative, replayable result: the next
+  `continue` replays it locally with **0 external calls** and enters the
+  policy-defined state (`FIX_REQUIRED` / `FINAL_GATE_REQUIRED` / `BLOCKED`).
+  An *uncertain* call still fails closed - DevRelay never invents a result.
+- **P1-01 (idempotency)** - the whole semantic application (history, seen
+  counters, findings, applied marker, transition, audit) lands in **one atomic
+  state write**, guarded by a stable result identity plus an
+  `AppliedReviewRecord`. Restart replays therefore never duplicate history,
+  counters, transitions or audit events; content equality alone is not treated
+  as proof (two legitimately identical rounds still apply separately), and a
+  missing terminal transition is completed locally only with proof that nothing
+  happened since.
+- **P2-01 / P2-02** - one durable, task-scoped identity system replaces
+  process-local counters and success-derived numbering: call ids
+  (`DR-0001-C0007`), implementer attempts (`DR-0001-A0002`) and review attempts
+  (`DR-0001-R0002`) are allocated from persisted monotonic sequences before the
+  invocation, never reused after a failure, and never reset by `unblock` or a
+  policy refresh. Calls link to attempts (`parent_attempt_id`, `call_ids`).
+- **P2-01 / P2-02 (evidence)** - immutable evidence is keyed by those identities
+  (`policy/calls/<call-id>.json`, `policy/attempts/<attempt-id>.json`,
+  `policy/runs/<attempt-id>-*.json`, `logs/<attempt-id>.*`,
+  `reviews/review-NN-<attempt-id>-meta.json`); a retry can no longer overwrite a
+  failed attempt's or another call's evidence. The legacy `NN`-named artifacts
+  remain as documented "latest view" convenience copies.
+- **P2-03** - `unblock --refresh-policy` preserves the previous policy:
+  `PolicyRefreshRecord` plus `policy/policy-refresh-NN-{before,after}.yaml` and
+  `-NN.json` (before/after SHA-256, actor, reason). Usage is never reset,
+  deleted or renumbered, and existing calls count against the new limits.
+- **P3-01** - `max_response_chars` is documented (config, README, error message)
+  as a parsing/persistence cap; the HTTP client may buffer the body first, so it
+  is not a network-level memory limit.
+- **P3-02** - retry phase labels follow the failure cause; a mixed
+  format/transport/format sequence no longer mislabels a transport retry as
+  `REVIEW_FORMAT_RETRY`.
+- **P3-03** - finding fingerprints normalize path separators and file order but
+  never case-fold paths (POSIX repositories may contain both `A.py` and `a.py`).
+- **P3-04** - `policy_source` is persisted as `snapshot` at task creation;
+  `status`/`usage` resolve it read-only and never rewrite task state (legacy
+  tasks keep reporting `live-fallback` unmodified).
+- **P3-05** - AUD-09 stays open as a backlog item; `unblock` still clears the
+  block record but now preserves it verbatim in the audit trail and deletes no
+  evidence (calls, attempts, review attempts, policy refreshes).
+- **P3-06** - review-history growth was analysed and proven linear/non-nested
+  (one summary line per previous round, bounded by `max_reviewer_calls`); prompt
+  compaction stays deferred.
+- State schema bumped to **4** with public v0.1 state compatibility and a
+  `finish_only` recovery path for private `fe4b044` state.
 
 ### Added
 
@@ -35,8 +88,9 @@ invocation and no real reviewer endpoint were used).
   `INTERRUPTED` without deleting its call evidence, and the retried round gets
   a unique attempt identity.
 - Transport vs format failure separation (`transport_retries` default 0 is
-  opt-in; every retry is a counted call) and a `max_response_chars` hard cap -
-  oversized answers are refused with an explicit error, never silently cut.
+  opt-in; every retry is a counted call) and a `max_response_chars`
+  parsing/persistence cap - oversized answers are refused with an explicit
+  error, never silently cut or guessed.
 - Sanitized HTTP error bodies and model output (same redaction boundary as
   reviewer input) before persistence.
 - Finding fingerprints
@@ -72,11 +126,15 @@ invocation and no real reviewer endpoint were used).
 
 ### Tests
 
-- 197 tests, fully offline (fake providers, `httpx.MockTransport`, real tiny
-  git repositories). 38 of them are new v0.2-A tests covering budget
-  pre-flight, exact call accounting, format/transport separation, crash
-  recovery, policy authority, fingerprints, snapshot/refresh-policy, CLI
-  visibility and a fake-provider engine-level end-to-end loop.
+- 219 tests, fully offline (fake providers, `httpx.MockTransport`, real tiny
+  git repositories): 38 v0.2-A tests covering budget pre-flight, exact call
+  accounting, format/transport separation, crash recovery, policy authority,
+  fingerprints, snapshot/refresh-policy, CLI visibility and a fake-provider
+  engine-level end-to-end loop, plus 22 audit-remediation tests covering the
+  required crash/identity/policy matrix (persisted-result replay with zero
+  calls, single application, immutable evidence, durable ids, policy-refresh
+  evidence, retry labelling, fingerprint normalization, read-only legacy
+  status/usage, budget regressions).
 
 ## 0.1.0 - 2026-09-10
 

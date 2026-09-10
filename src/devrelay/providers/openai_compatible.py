@@ -132,7 +132,6 @@ class OpenAICompatibleReviewer(ReviewerProvider):
         self.transport_retries = max(0, transport_retries)
         self.max_response_chars = max(1_000, int(max_response_chars))
         self._sink: CallSink = call_sink or NullCallSink()
-        self._call_sequence = 0
         headers = (
             {"Authorization": f"Bearer {endpoint.api_key}"} if endpoint.api_key else {}
         )
@@ -168,13 +167,12 @@ class OpenAICompatibleReviewer(ReviewerProvider):
 
     # ------------------------------------------------------------------
     def _new_record(self, phase: ProviderCallPhase) -> ProviderCallRecord:
-        self._call_sequence += 1
+        """Build a call *intent*; identity is assigned by the sink (durable)."""
         return ProviderCallRecord(
-            call_id=f"{self.name}-call-{self._call_sequence:03d}",
+            call_id="",
             provider_kind=ProviderKind.REVIEWER,
             provider_name=self.name,
             phase=phase,
-            attempt_number=self._call_sequence,
             external_call_count=1,  # a real external call is being attempted
             model=self.endpoint.model,
             endpoint_host=self.endpoint_host,
@@ -234,17 +232,21 @@ class OpenAICompatibleReviewer(ReviewerProvider):
 
         format_attempts = 0
         transport_retries_used = 0
+        # Phase name reflects the *reason* this attempt is being made, so a
+        # transport retry is never mislabeled as a format retry (and vice versa)
+        # even in mixed failure sequences.
+        retry_reason: CallErrorType | None = None
         while True:
-            if transport_retries_used and format_attempts == 0:
+            if retry_reason in (CallErrorType.TRANSPORT, CallErrorType.TIMEOUT):
                 phase = ProviderCallPhase.REVIEW_TRANSPORT_RETRY
-            elif format_attempts == 0:
-                phase = ProviderCallPhase.REVIEW
-            else:
+            elif format_attempts or transport_retries_used:
                 phase = ProviderCallPhase.REVIEW_FORMAT_RETRY
+            else:
+                phase = ProviderCallPhase.REVIEW
             record = self._new_record(phase)
             # Budget gate BEFORE anything leaves the machine.
             self._sink.preflight(ProviderKind.REVIEWER, phase)
-            self._sink.start(record)
+            record = self._sink.start(record)  # durable identity assigned here
             started = time.monotonic()
 
             try:
@@ -256,6 +258,7 @@ class OpenAICompatibleReviewer(ReviewerProvider):
                 self._settle(record, started, success=False, error_type=CallErrorType.TIMEOUT, error=detail)
                 if transport_retries_used < policy.transport_retries:
                     transport_retries_used += 1
+                    retry_reason = CallErrorType.TIMEOUT
                     continue
                 raise ProviderError(
                     "reviewer request timed out after "
@@ -266,6 +269,7 @@ class OpenAICompatibleReviewer(ReviewerProvider):
                 self._settle(record, started, success=False, error_type=CallErrorType.TRANSPORT, error=detail)
                 if transport_retries_used < policy.transport_retries:
                     transport_retries_used += 1
+                    retry_reason = CallErrorType.TRANSPORT
                     continue
                 raise ProviderError(
                     "reviewer HTTP request failed "
@@ -275,9 +279,10 @@ class OpenAICompatibleReviewer(ReviewerProvider):
             body_text = response.text or ""
             if len(body_text) > policy.max_response_chars:
                 message = (
-                    "reviewer response exceeded the configured limit "
-                    f"({len(body_text)} > {policy.max_response_chars} chars); "
-                    "DevRelay refuses to truncate and guess - the task is BLOCKED."
+                    "reviewer response exceeded the configured parsing/persistence "
+                    f"limit ({len(body_text)} > {policy.max_response_chars} chars); "
+                    "DevRelay refuses to parse, truncate and guess - the task is "
+                    "BLOCKED."
                 )
                 self._settle(
                     record,
@@ -317,6 +322,7 @@ class OpenAICompatibleReviewer(ReviewerProvider):
                     error=str(exc),
                 )
                 format_attempts += 1
+                retry_reason = CallErrorType.FORMAT
                 if format_attempts > policy.format_retries:
                     raise ReviewFormatError(
                         "reviewer returned invalid/non-JSON output after "
@@ -335,6 +341,7 @@ class OpenAICompatibleReviewer(ReviewerProvider):
                     error=f"{type(exc).__name__}: {exc}",
                 )
                 format_attempts += 1
+                retry_reason = CallErrorType.FORMAT
                 if format_attempts > policy.format_retries:
                     raise ReviewFormatError(
                         "reviewer response did not contain a usable chat "

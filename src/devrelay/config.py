@@ -39,7 +39,9 @@ review:
   # Transport retries: network/HTTP failures. Default 0 so a flaky endpoint
   # never silently spends reviewer calls.
   transport_retries: 0
-  # Hard cap on a reviewer HTTP response body; larger responses fail closed.
+  # Reviewer response *parsing/persistence* cap: a larger response is refused
+  # (fail closed, never truncated-and-guessed). The HTTP client may buffer the
+  # body before this cap is applied - it is NOT a network-level memory limit.
   max_response_chars: 200000
   max_diff_bytes: 300000
   timeout_seconds: 120
@@ -109,7 +111,9 @@ class ReviewConfig(BaseModel):
     retries: int = Field(default=1, ge=0, le=5)
     # Transport retries (network/HTTP failures); separate on purpose.
     transport_retries: int = Field(default=0, ge=0, le=5)
-    # Hard cap on the reviewer response body (fail closed, never truncate+guess).
+    # Parsing/persistence cap on the reviewer response body (fail closed, never
+    # truncate-and-guess). The HTTP client may buffer the body first: this is not
+    # a network-level memory limit.
     max_response_chars: int = Field(default=200_000, ge=1_000)
     max_diff_bytes: int = Field(default=300_000, ge=1_000)
     timeout_seconds: float = Field(default=120.0, gt=0)

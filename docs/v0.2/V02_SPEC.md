@@ -5,7 +5,8 @@ pipeline. **Only stage A is implemented in this branch.**
 
 | Stage | Scope | Status |
 | --- | --- | --- |
-| **A** | Automatic review loop (budget, review lifecycle, reviewer evidence, CLI visibility) | **CURRENT — this branch** |
+| **A** | Automatic review loop (budget, review lifecycle, reviewer evidence, CLI visibility) | **CURRENT — candidate, not reviewed-closed** |
+| **A.1** | Audit remediation of the `fe4b044` candidate (P1-01, P2-01..03, P3-01..06) | **CURRENT — awaiting closure audit** |
 | B | Project profiles | NOT STARTED |
 | C | Structured Codex runtime (`codex exec --json` parsing, structured events) | NOT STARTED |
 | D | General release pipeline (generalized tag validation, provenance, release automation) | NOT STARTED |
@@ -81,6 +82,128 @@ Requirements:
     error bodies, model output and exceptions are sanitized before they reach
     state, artifacts or logs. Durable baseline artifacts remain byte-exact and
     are never redacted.
+
+## A.1 Audit remediation (v0.2-A candidate, unresolved until closure audit)
+
+An independent audit of the `fe4b044` candidate returned `REQUEST_CHANGES` with
+one P1, three P2 and six P3 findings. This section specifies the remediation. It
+does **not** promote stage A to DONE: A remains CURRENT / CANDIDATE.
+
+### A.1.1 Review result lifecycle (P1-01)
+
+Three distinct, durable milestones replace the implicit "finalize then hope":
+
+| Milestone | Evidence | Meaning |
+| --- | --- | --- |
+| CALL COMPLETED | `ReviewAttempt.status == COMPLETED` | a call finished |
+| RESULT PERSISTED | `result_persisted`, `result_hash` | sanitized, schema-valid, **authoritative** result |
+| RESULT APPLIED | `result_applied`, `applied_at`, `applied_state` | reached `review_history` exactly once |
+
+Restart rules, in this order:
+
+1. **Uncertain external call** (`review_call_in_flight`, or an attempt that never
+   finalized, or an attempt with no persisted result) -> fail closed
+   (`interrupted_reviewer_attempt`). DevRelay never invents a result.
+2. **Known completed result** (attempt `COMPLETED` + persisted result, not yet
+   applied) -> replay `_apply_review` **locally with zero external calls**, and
+   enter the state the policy dictates (blocking -> `FIX_REQUIRED`, policy PASS
+   -> `FINAL_GATE_REQUIRED`, `BLOCKED` -> policy-defined BLOCKED).
+3. **Applied but the terminal transition never landed** -> complete the
+   transition locally, but only with proof that nothing happened since
+   (same round, same fix/implementation counters). A task that ran a fix and
+   came back to `REVIEWING` starts a normal new round.
+
+### A.1.2 Idempotent application (P1-01, §3)
+
+The whole semantic application of one result - history append, seen counters,
+findings, applied marker, terminal state, audit note - lands in **one atomic
+`state.json` write**, so a crash lands either before it (result is replayed) or
+after it (identity match -> no-op). Replays never duplicate history, counters,
+transitions or audit events and never cost an external call. Whether a result is
+already applied is decided by durable identity:
+`sha256` of the canonical, fingerprint-stripped result, recorded as an
+`AppliedReviewRecord` **plus** the attempt's own `result_applied` marker - never
+by a bare `if review_history:` check. Content equality alone is explicitly *not*
+proof of application, because two rounds may legitimately return identical
+reviews (that is the repeated-blocker case the stagnation guard exists for).
+
+### A.1.3 Durable identity (P2-01, P2-02)
+
+Identities come from persisted, task-scoped, monotonic sequences - never from
+process-local counters or success counters:
+
+| Object | Identity | Allocated |
+| --- | --- | --- |
+| Provider call | `DR-0001-C0007` | persisted *before* the invocation |
+| Implementer attempt | `DR-0001-A0002` | persisted before the invocation |
+| Review attempt | `DR-0001-R0002` | persisted before the first call |
+
+`TaskRun.next_provider_call_sequence`, `next_provider_attempt_sequence` and
+`next_review_attempt_sequence` are never decremented, never reused after a
+failure, and never reset by `unblock` or a policy refresh. `review_number`
+(the semantic round) stays distinct from the review *attempt* identity: one
+round may have several attempts. Calls link back through
+`ProviderCallRecord.parent_attempt_id` and `ReviewAttempt.call_ids` /
+`ProviderAttempt.call_ids`.
+
+### A.1.4 Immutable evidence (P2-01, P2-02)
+
+| Artifact | Kind |
+| --- | --- |
+| `policy/calls/<call-id>.json` | immutable per-call evidence |
+| `policy/attempts/<attempt-id>.json` | immutable per-attempt evidence |
+| `policy/runs/<attempt-id>-{pre,post,violations}.json` | immutable per-run snapshots |
+| `logs/<attempt-id>.{stdout,stderr}.log` | immutable per-attempt logs |
+| `reviews/review-NN-<attempt-id>-meta.json` | immutable per-review-attempt meta |
+| `policy/attempt-NN.json`, `pre-run-NN.json`, `post-run-NN.json`, `violations-NN.json`, `logs/codex-NN.*`, `reviews/review-NN-meta.json`, `reviews/review-NN-call-MM-meta.json` | mutable "latest view" convenience copies (documented as such) |
+
+A retry may rewrite a convenience copy; it can never overwrite another call's or
+another attempt's keyed evidence.
+
+### A.1.5 Policy refresh evidence (P2-03)
+
+`unblock --refresh-policy --reason ...` preserves the previous policy durably:
+`policy/policy-refresh-NN-before.yaml`, `-after.yaml` and `-NN.json`
+(`PolicyRefreshRecord`: refresh id, timestamp, actor, reason, before/after
+source, before/after SHA-256), appended to `TaskRun.policy_refreshes`. Refresh
+semantics are unchanged: usage is never reset, deleted or renumbered; a new
+(max) budget applies to already-spent calls exactly as it did before, and each
+refresh is audited.
+
+### A.1.6 P3 fixes
+
+* **P3-01** - `max_response_chars` is documented (config, README, error message)
+  as a *parsing/persistence* cap: the HTTP client may buffer the body first, so
+  it is not a network-level memory limit. Behaviour is unchanged: oversized
+  content is never parsed, never truncated-and-guessed, never persisted.
+* **P3-02** - retry phases follow the *cause* of the retry: a mixed
+  format -> transport -> format sequence is labelled `REVIEW`,
+  `REVIEW_FORMAT_RETRY`, `REVIEW_TRANSPORT_RETRY`, `REVIEW_FORMAT_RETRY`.
+* **P3-03** - finding fingerprints normalize path separators (`\` -> `/`) and
+  sort files, but never case-fold paths (POSIX repositories may hold both
+  `A.py` and `a.py`).
+* **P3-04** - `policy_source` is persisted as `snapshot` when the task is
+  created; `status` and `usage` resolve it read-only and never rewrite state
+  (legacy tasks keep showing `live-fallback` without being modified).
+* **P3-05** - AUD-09 remains open as a backlog item. `unblock` still clears
+  `blocked_code`/`blocked_reason`, but now records the cleared block verbatim in
+  the audit trail and deletes no evidence (calls, attempts, review attempts,
+  policy refreshes all survive).
+* **P3-06** - review-history growth is linear and non-nested: the reviewer
+  prompt renders one summary line per previous round and never re-renders
+  previous findings. Under the default policy a task has at most
+  `budget.max_reviewer_calls` (4) applied rounds, so the prompt is bounded by
+  roughly `4 x (summary + one line)`; exceeding that requires an explicit human
+  `unblock --refresh-policy`. Prompt compaction is therefore recorded as a
+  deferred P3 enhancement, not a defect.
+
+### A.1.7 State schema
+
+`state_schema_version` is bumped to **4** (durable sequences, review-result
+lifecycle, applied markers, policy refreshes). Public v0.1 task state
+(`state_schema_version: 2`) keeps loading and working: new fields default
+safely, and `status`/`usage` never rewrite it. States written by the unreleased
+`fe4b044` candidate are handled through the identity-based `finish_only` path.
 
 ## B–E (not started)
 

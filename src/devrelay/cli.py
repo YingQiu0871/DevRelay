@@ -408,15 +408,35 @@ def usage(
     if attempts:
         for attempt in attempts:
             typer.echo(
-                f"  #{attempt['review_number']} {attempt['status']} via "
+                f"  Review #{attempt['review_number']}"
+                f"  Attempt {attempt['attempt_id']} {attempt['status']} via "
                 f"{attempt['provider']} - calls {attempt['external_calls']}, "
                 f"http {attempt['transport_attempts']}, format "
                 f"{attempt['format_attempts']}"
                 + (f", result {attempt['result']}" if attempt["result"] else "")
                 + (f", error {attempt['error_type']}" if attempt["error_type"] else "")
             )
+            for call_id in attempt["call_ids"]:
+                typer.echo(f"    Call {call_id}")
+            if attempt["result_persisted"]:
+                typer.echo(
+                    "    result persisted"
+                    + (
+                        f", applied -> {attempt['applied_state']}"
+                        if attempt["result_applied"]
+                        else ", NOT applied yet (replayed locally on continue)"
+                    )
+                )
     else:
         typer.echo("  (none)")
+    if data["pending_review_result"]:
+        pending = data["pending_review_result"]
+        typer.echo("")
+        typer.echo(
+            "Pending review result: "
+            f"attempt {pending['attempt_id']} (round #{pending['review_number']}) - "
+            "will be replayed with 0 external calls"
+        )
     typer.echo("")
     typer.echo("Provider calls:")
     calls = data["provider_calls"]
@@ -432,6 +452,15 @@ def usage(
             )
     else:
         typer.echo("  (none)")
+    if data["policy_refreshes"]:
+        typer.echo("")
+        typer.echo("Policy refreshes (before/after preserved):")
+        for refresh in data["policy_refreshes"]:
+            typer.echo(
+                f"  {refresh['refresh_id']} {refresh['at']} "
+                f"{refresh['before_source']} -> {refresh['after_source']}: "
+                f"{refresh['reason']}"
+            )
     if data["blocked_code"]:
         typer.echo("")
         typer.echo(f"Blocked: {data['blocked_code']}")

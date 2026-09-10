@@ -16,6 +16,8 @@ review:
   blocking_severities: [P0, P1, P2]
   retries: 1
   transport_retries: 0
+  # Reviewer response parsing/persistence cap (fail closed; the HTTP
+  # client may buffer the body first - not a network-level memory limit).
   max_response_chars: 200000
   max_diff_bytes: 300000
   timeout_seconds: 120

@@ -344,8 +344,13 @@ class ProviderCallRecord(BaseModel):
 
     ``external_call_count`` is 1 when a real external model call was attempted
     (including attempts that failed after the request was started) and 0 for
-    events that never left the machine (manual review, unavailable CLI).
-    Never persists credentials, API keys, authorization headers or full URLs.
+    events that never left the machine (manual review, unavailable CLI). It is
+    the single authority for budget accounting.
+
+    ``call_id`` comes from a durable task-scoped sequence (``DR-0001-C0007``),
+    allocated and persisted *before* the invocation, so identities never repeat
+    across restarts, unblocks or retries.  Never persists credentials, API keys,
+    authorization headers or full URLs.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -365,10 +370,62 @@ class ProviderCallRecord(BaseModel):
     error: str | None = None
     model: str | None = None
     endpoint_host: str | None = None
+    # Traceability (v0.2-A remediation): which attempt/round caused this call.
+    parent_attempt_id: str | None = None
+    review_number: int | None = None
+
+
+class AppliedReviewRecord(BaseModel):
+    """Durable marker: one persisted ReviewResult was semantically applied.
+
+    ``identity`` is the fingerprint-insensitive hash of the sanitized,
+    normalized review, so a restart replay can prove whether a result already
+    reached ``review_history`` instead of guessing from list lengths.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    identity: str
+    review_number: int
+    attempt_id: str | None = None
+    review_file: str = ""
+    decision: str = ""
+    state: str = ""
+    findings: int = 0
+    applied_at: str = Field(default_factory=utcnow_iso)
+    # Progress snapshot at application time: lets a restart decide whether a
+    # missing terminal transition must be completed (nothing happened since) or
+    # whether the task legitimately moved on into a new review round.
+    fix_iterations: int = 0
+    implementation_passes: int = 0
+
+
+class PolicyRefreshRecord(BaseModel):
+    """Audited before/after evidence for one explicit policy refresh."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    refresh_id: str
+    at: str = Field(default_factory=utcnow_iso)
+    by: str = "human"
+    reason: str = ""
+    before_source: str = ""
+    after_source: str = ""
+    before_config_sha256: str = ""
+    after_config_sha256: str = ""
+    before_path: str = ""
+    after_path: str = ""
+    record_path: str = ""
 
 
 class ReviewAttempt(BaseModel):
-    """Lifecycle of one automatic (or imported manual) review round."""
+    """Lifecycle of one automatic (or imported manual) review round.
+
+    ``review_number`` is the *semantic* round (which review of this task it is);
+    ``attempt_id`` is the durable identity of this execution of that round.
+    One semantic round can have several attempts (interrupted call, explicit
+    acknowledgement, retry), so the two must never be conflated.
+    """
 
     model_config = ConfigDict(extra="forbid")
 
@@ -387,6 +444,18 @@ class ReviewAttempt(BaseModel):
     error_type: CallErrorType | None = None
     error: str | None = None
     result: ReviewResult | None = None
+    # Result lifecycle (v0.2-A remediation). Three distinct milestones:
+    #   CALL COMPLETED      -> status == COMPLETED (result may still be missing)
+    #   RESULT PERSISTED    -> result_persisted + result_hash (authoritative,
+    #                          sanitized, schema-valid; replayable after a crash)
+    #   RESULT APPLIED      -> result_applied + applied_at/applied_state
+    # A persisted-but-unapplied result is replayed locally on restart with
+    # ZERO additional external calls; an uncertain call fails closed instead.
+    result_persisted: bool = False
+    result_hash: str = ""
+    result_applied: bool = False
+    applied_at: str | None = None
+    applied_state: str | None = None
 
 
 class ProviderUsage(BaseModel):
@@ -463,6 +532,9 @@ class ProviderAttempt(BaseModel):
     policy_checked: bool = False
     policy_check_error: str | None = None
     violations: list[PolicyViolation] = Field(default_factory=list)
+    # Durable call identities that belong to this attempt (v0.2-A remediation),
+    # so attempt -> call -> phase -> budget is traceable without guessing.
+    call_ids: list[str] = Field(default_factory=list)
 
 
 class BaselineUntrackedEntry(BaseModel):
@@ -547,7 +619,7 @@ class TaskRun(BaseModel):
 
     task_id: str
     title: str
-    state_schema_version: int = 3
+    state_schema_version: int = 4
     packet: TaskPacket | None = None
     state: PipelineState = PipelineState.NEW
     plan_ready: bool = False
@@ -589,12 +661,56 @@ class TaskRun(BaseModel):
     # Fingerprint -> number of review rounds in which this blocker was seen.
     finding_seen_counts: dict[str, int] = Field(default_factory=dict)
     # Which config governed this task's policy: "snapshot" | "live-fallback".
+    # Persisted as "snapshot" at task creation; never *written* by read-only
+    # commands (status/usage only display the resolved value).
     policy_source: str = ""
+
+    # Durable, task-scoped, monotonic identity sequences (v0.2-A remediation).
+    # Allocated and persisted BEFORE the external invocation, never decremented,
+    # never reused after a failure, never reset by unblock or policy refresh.
+    next_provider_call_sequence: int = 1
+    next_provider_attempt_sequence: int = 1
+    next_review_attempt_sequence: int = 1
+    # Audited history of explicit policy refreshes (before/after evidence).
+    policy_refreshes: list[PolicyRefreshRecord] = Field(default_factory=list)
+    # Semantic application markers: one entry per applied ReviewResult.
+    applied_reviews: list[AppliedReviewRecord] = Field(default_factory=list)
 
     @property
     def next_attempt(self) -> int:
-        """1-based attempt number for the next implementation pass."""
+        """1-based logical pass number for the next implementation pass."""
         return max(1, self.implementation_passes + 1)
+
+    # -- durable identity allocation (mutates only; the caller persists) -----
+    def allocate_call_id(self) -> str:
+        """Allocate the next external-call identity (``DR-0001-C0007``)."""
+        sequence = max(1, int(self.next_provider_call_sequence))
+        self.next_provider_call_sequence = sequence + 1
+        return f"{self.task_id}-C{sequence:04d}"
+
+    def allocate_attempt_id(self) -> str:
+        """Allocate the next implementer-attempt identity (``DR-0001-A0002``)."""
+        sequence = max(1, int(self.next_provider_attempt_sequence))
+        self.next_provider_attempt_sequence = sequence + 1
+        return f"{self.task_id}-A{sequence:04d}"
+
+    def allocate_review_attempt_id(self) -> str:
+        """Allocate the next review-attempt identity (``DR-0001-R0002``)."""
+        sequence = max(1, int(self.next_review_attempt_sequence))
+        self.next_review_attempt_sequence = sequence + 1
+        return f"{self.task_id}-R{sequence:04d}"
+
+    def call_by_id(self, call_id: str) -> "ProviderCallRecord | None":
+        for record in self.provider_calls:
+            if record.call_id == call_id:
+                return record
+        return None
+
+    def applied_review_identity(self, identity: str) -> "AppliedReviewRecord | None":
+        for record in self.applied_reviews:
+            if record.identity == identity:
+                return record
+        return None
 
     @property
     def open_blocking_findings(self) -> list[Finding]:

@@ -185,11 +185,22 @@ artifacts:
 │   └── files/             # raw copies of pre-existing untracked files
 ├── implementation/iteration-01.md ...
 ├── reviews/review-01-request.md  review-01-result.json ...
-├── logs/codex-01.stdout.log  test-01-01.log ...
-├── policy/attempt-01.json  pre-run-01.json  post-run-01.json
-│            violations-01.json ...
+│          review-01-<attempt-id>-meta.json    # immutable per review attempt
+│          review-01-meta.json                 # latest view of that round
+├── logs/codex-01.stdout.log  <attempt-id>.stdout.log  test-01-01.log ...
+├── policy/attempt-01.json  pre-run-01.json  post-run-01.json   # latest views
+│          attempts/<attempt-id>.json          # immutable per attempt
+│          calls/<call-id>.json                # immutable per external call
+│          runs/<attempt-id>-{pre,post,violations}.json
+│          policy-refresh-NN-{before,after}.yaml + -NN.json
+│          violations-01.json ...
 └── final/final-review-request.md  report.md
 ```
+
+Identities in file names (`<call-id>` = `DR-0001-C0007`, `<attempt-id>` =
+`DR-0001-A0002` / `DR-0001-R0002`) come from persisted task sequences, so
+immutable evidence is never overwritten by a retry; the `NN`-named files are
+documented "latest view" convenience copies.
 
 `BaselineStore.load()` validates every artifact; corruption raises
 `BaselineCorruptError` ("DevRelay does not guess"). If the recorded tree
@@ -259,7 +270,9 @@ use `devrelay unblock --reason ...`.
 
 ### Interrupted provider attempts (fail closed)
 
-Every implement/fix run is a persisted *attempt* (`policy/attempt-NN.json`).
+Every implement/fix run is a persisted *attempt* with a durable identity
+(`policy/attempts/<attempt-id>.json`, plus `policy/attempt-NN.json` as the
+latest view of logical pass NN).
 The PRE snapshot **and** an in-flight crash marker are written *before* the
 provider starts, and the POST snapshot + policy guard run for every outcome -
 success, non-zero exit, timeout, `KeyboardInterrupt` or any Python exception.
@@ -435,7 +448,7 @@ review:
   blocking_severities: [P0, P1, P2]
   retries: 1                    # invalid-JSON (format) retries before BLOCKED
   transport_retries: 0          # network/HTTP retries: opt-in, each one is a call
-  max_response_chars: 200000    # hard cap; oversized answers are refused, not cut
+  max_response_chars: 200000    # response *parsing/persistence* cap (see below)
   max_diff_bytes: 300000        # oversized diffs are truncated + flagged
 ```
 
@@ -491,26 +504,43 @@ token, cost or subscription meter - it cannot see retries inside the provider
 CLI, provider-side billing or plan quota. "4 implementer calls" means "at most
 4 requests leave this machine", and says nothing about money.
 
+`review.max_response_chars` is a **parsing/persistence cap**, not a
+network-level memory limit: the HTTP client may buffer a response body before
+DevRelay applies the cap. What it guarantees is that oversized reviewer content
+is never parsed, never truncated-and-guessed and never persisted - it fails
+closed. A true streaming byte limit is a later-stage item.
+
 ### Reviewer attempt lifecycle and crash safety
 
-Each automatic review round writes `reviews/review-NN-meta.json` (reviewer,
-model, endpoint host, status, transport/format attempt counts, external calls
-consumed) plus one file per individual HTTP attempt. The in-flight marker
-`review_call_in_flight` is persisted *before* the request, so a hard kill
-leaves evidence rather than a silent gap: the next `devrelay continue` fails
-closed with `interrupted_reviewer_attempt` and requires
-`devrelay unblock --reason "..."`. A review round that was started but never
-finalized (crash after the provider answered, before the result was persisted)
-is detected from the persisted attempt and fails closed the same way - an
-acknowledging `unblock` closes it as `INTERRUPTED`, keeps its call evidence,
-and the retried round gets its own attempt identity.
+Each automatic review round writes immutable per-attempt evidence
+(`reviews/review-NN-<attempt-id>-meta.json`, plus `reviews/review-NN-meta.json`
+as the latest view) and one immutable file per call
+(`policy/calls/<call-id>.json`). Identities come from durable, task-scoped
+sequences allocated *before* anything leaves the machine (`DR-0001-C0007`,
+`DR-0001-R0002`, `DR-0001-A0002`), so restarts, unblocks and retries can never
+reuse an identity or overwrite another call's evidence.
+
+Crashes are handled by evidence, not by guessing:
+
+| What was persisted when the process died | On the next `devrelay continue` |
+| --- | --- |
+| Nothing (call may have been billed) | fail closed: `BLOCKED interrupted_reviewer_attempt`, needs `devrelay unblock --reason "..."` |
+| A schema-valid, sanitized **result** (but not yet applied) | **replayed locally with 0 external calls** into the policy-defined state |
+| Result applied, terminal transition missing | the transition is completed locally with 0 external calls |
+
+A review round that was started but never finalized is detected from the
+persisted attempt and fails closed the same way - an acknowledging `unblock`
+closes it as `INTERRUPTED`, keeps its call evidence, and the retried round gets
+its own attempt identity (`A0002`/`R0002`, never a reused `A0001`).
 
 Transport failures (network/HTTP/timeout) and format failures (schema-invalid
-answer) are separated. `review.retries` (default 1) retries only *format*
-failures; transport retries are opt-in via `review.transport_retries`
-(default 0) and are counted like any other call. HTTP error bodies and model
-output pass through the same redaction boundary as reviewer input before they
-are persisted.
+answer) are separated, and the phase label follows the *cause*: a mixed
+format -> transport -> format sequence is recorded as `REVIEW`,
+`REVIEW_FORMAT_RETRY`, `REVIEW_TRANSPORT_RETRY`, `REVIEW_FORMAT_RETRY`.
+`review.retries` (default 1) retries only *format* failures; transport retries
+are opt-in via `review.transport_retries` (default 0) and are counted like any
+other call. HTTP error bodies and model output pass through the same redaction
+boundary as reviewer input before they are persisted.
 
 ### Repeated findings
 
@@ -524,11 +554,18 @@ are recorded either way and are visible in `devrelay status` / `devrelay usage`.
 
 Budget, blocking severities, retry counts, test commands, scope and
 `max_same_finding_cycles` are captured into
-`.devrelay/tasks/<id>/config.snapshot.yaml` at `start` and apply for the whole
-task, so editing `.devrelay/config.yaml` mid-task cannot silently change the
-rules a task is judged by (`devrelay status` shows the source: `snapshot` or
-`live-fallback`). Codex executable/args and the reviewer endpoint/credentials
-remain live environment wiring.
+`.devrelay/tasks/<id>/config.snapshot.yaml` at `start` (with
+`policy_source: snapshot` persisted immediately, not inferred later) and apply
+for the whole task, so editing `.devrelay/config.yaml` mid-task cannot silently
+change the rules a task is judged by (`devrelay status` shows the source:
+`snapshot` or `live-fallback`). Codex executable/args and the reviewer
+endpoint/credentials remain live environment wiring.
+
+`devrelay unblock --refresh-policy --reason "..."` is the only supported way to
+change a running task's budget/blocking policy. It preserves the previous policy
+durably (`policy/policy-refresh-NN-before.yaml`, `-after.yaml`, `-NN.json` with
+before/after SHA-256) and never resets, deletes or renumbers usage: a tightened
+budget still counts the calls already spent.
 
 ### Visibility commands
 
@@ -680,7 +717,7 @@ python -m pip install -e ".[dev]"
 python -m pytest
 ```
 
-197 tests run fully offline with mocked subprocesses/HTTP where needed and
+219 tests run fully offline with mocked subprocesses/HTTP where needed and
 real (tiny) git repositories for baseline/guard/recovery coverage - no real
 Codex, DeepSeek or network required. Coverage includes: state transitions and
 rejected invalid transitions; max-iteration blocking; P0/P1/P2 ->
@@ -700,6 +737,13 @@ provider exception / `KeyboardInterrupt` still persisting post-run evidence and
 blocking auto-rerun after restart; reviewer payload and manual artifact
 redaction; review request and final report separation of PRE-EXISTING vs TASK
 changes; shell safety.
+
+v0.2-A audit remediation adds: replay of a persisted review result after a crash
+(zero external calls), single-application idempotency with durable applied
+markers, durable task-scoped call/attempt/review identities, immutable
+identity-keyed evidence, before/after policy-refresh evidence, truthful retry
+phase labels, separator-normalized fingerprints, eagerly persisted
+`policy_source` and read-only legacy `status`/`usage`.
 
 v0.2-A adds: pre-flight budget refusal for implementer/reviewer/total limits
 (no call is attempted once a limit is reached); exact call accounting for

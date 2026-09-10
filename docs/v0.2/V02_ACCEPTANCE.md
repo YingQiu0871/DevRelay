@@ -66,15 +66,50 @@ names the test/artifact that proves it.
 | `test_v02a_fix_handoff.py::test_fingerprints_and_seen_counts_are_recorded` | fingerprints are recorded even when the guard is disabled |
 | `test_v02a_state_migration.py::test_policy_snapshot_file_is_written_at_start` | the snapshot artifact exists and is readable |
 
+## Audit remediation (v0.2-A.1)
+
+Required regression matrix from the independent audit. Every row is proven by a
+test in `tests/test_v02a_audit_remediation.py`.
+
+| # | Criterion | Evidence |
+| --- | --- | --- |
+| A | Persisted valid result + crash before application -> restart replays it with **0** reviewer calls | `test_A_persisted_result_replayed_with_zero_reviewer_calls` |
+| A2 | Recovered blocking result enters `FIX_REQUIRED` and only the *new* round costs a call | `test_A2_recovered_blocking_result_enters_fix_without_extra_call` |
+| B | Half-applied legacy state (`fe4b044`) finishes without duplicate history | `test_B_legacy_half_apply_finishes_without_duplicate_history` |
+| C | `finding_seen_counts` counted exactly once across repeated continues | `test_C_repeated_continue_keeps_single_application` |
+| D | Applied marker + missing terminal transition completes locally, no reviewer call | `test_D_applied_marker_without_transition_completes_locally` |
+| E | Fully applied + repeated `continue` -> no-op, no extra calls, no audit growth | `test_E_fully_applied_repeated_continue_is_a_noop` |
+| F | Uncertain external call still fails closed and invents no result | `test_F_uncertain_call_fails_closed_and_invents_no_result` |
+| D* | Reviewer call ids unique across restart + unblock + retry | `test_reviewer_call_ids_unique_across_unblock_retry` |
+| E* | Reviewer call evidence immutable across retry (byte-identical) | `test_reviewer_call_ids_unique_across_unblock_retry` |
+| F* | Implementer retry gets a new attempt id (`A0002`) | `test_implementer_retry_gets_new_identity_and_keeps_evidence` |
+| G* | Implementer evidence (attempt/call/run/log) survives the retry | `test_implementer_retry_gets_new_identity_and_keeps_evidence` |
+| H* | All provider call ids globally unique and linked to attempts | `test_call_ids_are_unique_and_usage_matches_actual_calls` |
+| I* | Budget usage agrees with the actual fake call count | `test_call_ids_are_unique_and_usage_matches_actual_calls` |
+| J | Policy refresh preserves before/after YAML + record + SHA-256 | `test_policy_refresh_preserves_before_after_and_usage` |
+| K | Refresh never resets usage/call ids; §12 limit semantics hold | `test_policy_refresh_preserves_before_after_and_usage` |
+| L | Response cap wording is accurate and behaviour stays fail-closed | `test_response_cap_wording_and_behaviour` |
+| M | Mixed retry sequence: phase + error type match the real cause | `test_mixed_retry_sequence_labels_each_cause` |
+| M2 | Engine-level format retries: 3 calls, unique ids, exact usage | `test_engine_level_format_retries_are_counted_and_unique` |
+| N | Fingerprint normalizes separators/order, never case | `test_fingerprint_normalizes_separators_not_case` |
+| O | New tasks persist `policy_source: snapshot` + schema 4 + sequences | `test_new_task_persists_policy_source` |
+| P | Legacy task `status`/`usage` are read-only (state bytes unchanged) | `test_legacy_status_and_usage_are_read_only` |
+| P3-06 | Review-history prompt growth is linear and non-nested | `test_review_history_prompt_growth_is_linear_and_non_nested` |
+| Budget 1 | Recovery after a crash keeps reviewer usage at 1 (not 2) | `test_A_persisted_result_replayed_with_zero_reviewer_calls` |
+| Budget 2 | Failed implementer = 1 call, retry success = 2 | `test_implementer_retry_gets_new_identity_and_keeps_evidence` |
+| Budget 3 | Format retries: every HTTP call is counted (3) | `test_engine_level_format_retries_are_counted_and_unique` |
+| Budget 4 | Manual review consumes 0 external calls | `test_budget_manual_review_costs_zero_external_calls` |
+| Budget 5 | Budget-refused call spends nothing | `test_budget_refused_call_spends_nothing` |
+
 ## Verification run (recorded)
 
 | Item | Value |
 | --- | --- |
 | Date | 2026-09-10 |
 | Command | `python -m pytest -q --junitxml=...` (offline, no network) |
-| Result | **197 tests, 0 failures, 0 errors, 0 skipped** |
-| v0.2-A subset | 38 tests (files `tests/test_v02a_*.py`) |
-| Branch / base | `v0.2-a-auto-review` (from `main` @ `3456942`) |
+| Result | **219 tests, 0 failures, 0 errors, 0 skipped** |
+| v0.2-A subset | 60 tests (files `tests/test_v02a_*.py`, incl. 22 audit-remediation tests) |
+| Branch / base | `v0.2-a-auto-review` (`fe4b044` + remediation commit) |
 | Environment | Python 3.14.6, git 2.55.0.windows.3, Windows/Git Bash |
 | Provider usage | zero real Codex calls, zero real reviewer HTTP calls |
 

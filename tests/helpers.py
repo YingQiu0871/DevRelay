@@ -276,8 +276,10 @@ class ScriptedAutoReviewer(ReviewerProvider):
         )
         sink = getattr(call_policy, "sink", None) or NullCallSink()
         self._sequence += 1
+        # Identity comes from the sink (durable, task-scoped) - exactly like the
+        # real provider, so engine-level tests exercise real accounting.
         record = ProviderCallRecord(
-            call_id=f"scripted-call-{self._sequence:03d}",
+            call_id="",
             provider_kind=ProviderKind.REVIEWER,
             provider_name=self.name,
             phase=ProviderCallPhase.REVIEW,
@@ -287,7 +289,7 @@ class ScriptedAutoReviewer(ReviewerProvider):
             endpoint_host=self.endpoint_host,
         )
         sink.preflight(ProviderKind.REVIEWER, ProviderCallPhase.REVIEW)
-        sink.start(record)
+        record = sink.start(record)
 
         def settle(*, success: bool, error_type=None, error=None) -> ProviderCallRecord:
             settled = record.model_copy(

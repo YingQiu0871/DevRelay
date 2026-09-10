@@ -14,13 +14,19 @@ from devrelay.models import ProviderCallPhase, ProviderCallRecord, ProviderKind
 
 
 class CallSink(Protocol):
-    """Persistence boundary for provider call records."""
+    """Persistence boundary for provider call records.
+
+    Implementations own *identity*: :meth:`start` allocates the durable,
+    task-scoped call id (persisted before the request) and returns the record
+    the provider must use for every later update.  Providers never invent call
+    ids themselves, so identities cannot collide across restarts or retries.
+    """
 
     def preflight(self, kind: ProviderKind, phase: ProviderCallPhase) -> None:
         """Raise if the next call would exceed the task budget (no side effects)."""
 
-    def start(self, record: ProviderCallRecord) -> None:
-        """Persist a call *before* the external request is attempted."""
+    def start(self, record: ProviderCallRecord) -> ProviderCallRecord:
+        """Persist call intent before the request and return the stored record."""
 
     def finish(self, record: ProviderCallRecord) -> None:
         """Persist the final outcome of a call."""
@@ -31,15 +37,26 @@ class NullCallSink:
 
     def __init__(self) -> None:
         self.records: list[ProviderCallRecord] = []
+        self._sequence = 0
 
     def preflight(self, kind: ProviderKind, phase: ProviderCallPhase) -> None:
         return None
 
-    def start(self, record: ProviderCallRecord) -> None:
+    def start(self, record: ProviderCallRecord) -> ProviderCallRecord:
+        # No task state to allocate from: hand out a locally unique label so
+        # tooling still sees a stable, non-empty identity.
+        self._sequence += 1
+        record = record.model_copy(
+            update={"call_id": record.call_id or f"local-C{self._sequence:04d}"}
+        )
         self.records.append(record)
+        return record
 
     def finish(self, record: ProviderCallRecord) -> None:
-        return None
+        for index, existing in enumerate(self.records):
+            if existing.call_id == record.call_id:
+                self.records[index] = record
+                break
 
 
 class ReviewCallPolicy:

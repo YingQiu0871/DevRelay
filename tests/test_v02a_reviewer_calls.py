@@ -34,18 +34,28 @@ VALID = json.dumps(
 
 
 class MemorySink:
-    """CallSink double that records exactly what the provider reports."""
+    """CallSink double that records exactly what the provider reports.
+
+    Mirrors the real contract: ``start`` owns identity and returns the record
+    the provider must keep using (see ``ReviewSession.start``).
+    """
 
     def __init__(self) -> None:
         self.preflights: list[tuple[ProviderKind, ProviderCallPhase]] = []
         self.started: list = []
         self.finished: list = []
+        self._sequence = 0
 
     def preflight(self, kind, phase) -> None:
         self.preflights.append((kind, phase))
 
-    def start(self, record) -> None:
+    def start(self, record):
+        self._sequence += 1
+        record = record.model_copy(
+            update={"call_id": record.call_id or f"mem-C{self._sequence:04d}"}
+        )
         self.started.append(record)
+        return record
 
     def finish(self, record) -> None:
         self.finished.append(record)
@@ -212,7 +222,8 @@ def test_oversized_response_fails_closed():
     with pytest.raises(ReviewFormatError) as excinfo:
         reviewer.review(_bundle(), call_policy=_policy(sink, max_response_chars=1_000))
 
-    assert "exceeded the configured limit" in str(excinfo.value)
+    assert "exceeded the configured parsing/persistence limit" in str(excinfo.value)
+    assert "refuses to parse, truncate and guess" in str(excinfo.value)
     assert len(sink.started) == 1                      # no retry on oversized body
     assert sink.finished[0].error_type is CallErrorType.RESPONSE_TOO_LARGE
 

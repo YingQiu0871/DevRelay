@@ -38,6 +38,8 @@ review:
   # endpoint never silently spends reviewer calls.
   transport_retries: 0
   # Hard cap on a reviewer response body; larger responses fail closed.
+  # Reviewer response parsing/persistence cap (fail closed; the HTTP
+  # client may buffer the body first - not a network-level memory limit).
   max_response_chars: 200000
   # Cap on diff bytes shipped to reviewers; larger diffs are truncated with a
   # prominent warning and require human handling.
