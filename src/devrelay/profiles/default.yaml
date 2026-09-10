@@ -1,14 +1,22 @@
 # DevRelay bundled default profile (installed by `devrelay init`).
-# See profiles/default.yaml at the repository root (identical copy).
+# See profiles/default.yaml at the repository root (identical policy values).
 
 pipeline:
   max_fix_iterations: 3
   auto_fix_tests: false
+  max_same_finding_cycles: 0
+
+budget:
+  max_implementer_calls: 4
+  max_reviewer_calls: 4
+  max_total_provider_calls: 8
 
 review:
   provider: manual
   blocking_severities: [P0, P1, P2]
   retries: 1
+  transport_retries: 0
+  max_response_chars: 200000
   max_diff_bytes: 300000
   timeout_seconds: 120
 

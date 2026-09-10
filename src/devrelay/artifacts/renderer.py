@@ -85,6 +85,20 @@ def _clean_finding(finding: Finding) -> Finding:
     )
 
 
+def sanitize_review_result(review: ReviewResult) -> ReviewResult:
+    """Redact secret-shaped text in a reviewer's *semantic* result.
+
+    Applied before the result is persisted (state, review-NN-result.json,
+    review-NN-meta.json), because a reviewer may echo secrets from the diff.
+    """
+    return review.model_copy(
+        update={
+            "summary": redact_text(review.summary or ""),
+            "findings": [_clean_finding(f) for f in review.findings],
+        }
+    )
+
+
 def sanitize_review_bundle(bundle: ReviewBundle) -> ReviewBundle:
     """The single redaction boundary for anything a reviewer may see.
 

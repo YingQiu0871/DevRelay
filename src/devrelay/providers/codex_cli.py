@@ -65,11 +65,17 @@ def build_implementation_prompt(context: ImplementerContext) -> str:
         lines.append("")
         for finding in context.findings:
             lines.append(
-                f"- [{finding.severity.value}] {finding.title}: "
-                f"{finding.description} (evidence: {finding.evidence})"
+                f"- [{finding.severity.value}] id={finding.id or 'n/a'} "
+                f"title={finding.title}"
             )
+            if finding.description:
+                lines.append(f"  description: {finding.description}")
+            if finding.files:
+                lines.append(f"  files: {', '.join(finding.files)}")
+            if finding.evidence:
+                lines.append(f"  evidence: {finding.evidence}")
             if finding.recommendation:
-                lines.append(f"  Recommended: {finding.recommendation}")
+                lines.append(f"  recommendation: {finding.recommendation}")
         lines.append("")
 
     lines += [

@@ -20,11 +20,27 @@ DEFAULT_PROFILE_YAML = """\
 pipeline:
   max_fix_iterations: 3
   auto_fix_tests: false
+  # Stop the loop when the same blocking finding keeps coming back
+  # (0 disables; fingerprints are always recorded). v0.2-A.
+  max_same_finding_cycles: 0
+
+budget:
+  # External provider invocations allowed for one task. Counts are taken from
+  # persisted ProviderCallRecord entries, never inferred from iterations.
+  max_implementer_calls: 4
+  max_reviewer_calls: 4
+  max_total_provider_calls: 8
 
 review:
   provider: manual
   blocking_severities: [P0, P1, P2]
+  # Format retries: HTTP 200 with non-schema JSON (each retry is a real call).
   retries: 1
+  # Transport retries: network/HTTP failures. Default 0 so a flaky endpoint
+  # never silently spends reviewer calls.
+  transport_retries: 0
+  # Hard cap on a reviewer HTTP response body; larger responses fail closed.
+  max_response_chars: 200000
   max_diff_bytes: 300000
   timeout_seconds: 120
 
@@ -67,6 +83,19 @@ class PipelineConfig(BaseModel):
 
     max_fix_iterations: int = Field(default=3, ge=1)
     auto_fix_tests: bool = False
+    # 0 = disabled (default): fingerprints/seen-counts are always recorded, but
+    # the loop is never stopped for repetition unless a project opts in.
+    max_same_finding_cycles: int = Field(default=0, ge=0, le=10)
+
+
+class BudgetConfig(BaseModel):
+    """External provider call budget for one task (v0.2-A)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    max_implementer_calls: int = Field(default=4, ge=1)
+    max_reviewer_calls: int = Field(default=4, ge=0)
+    max_total_provider_calls: int = Field(default=8, ge=1)
 
 
 class ReviewConfig(BaseModel):
@@ -76,7 +105,12 @@ class ReviewConfig(BaseModel):
     blocking_severities: list[Severity] = Field(
         default_factory=lambda: [Severity.P0, Severity.P1, Severity.P2]
     )
+    # Format retries (HTTP 200 but not schema-valid JSON).
     retries: int = Field(default=1, ge=0, le=5)
+    # Transport retries (network/HTTP failures); separate on purpose.
+    transport_retries: int = Field(default=0, ge=0, le=5)
+    # Hard cap on the reviewer response body (fail closed, never truncate+guess).
+    max_response_chars: int = Field(default=200_000, ge=1_000)
     max_diff_bytes: int = Field(default=300_000, ge=1_000)
     timeout_seconds: float = Field(default=120.0, gt=0)
 
@@ -133,6 +167,7 @@ class DevRelayConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     pipeline: PipelineConfig = Field(default_factory=PipelineConfig)
+    budget: BudgetConfig = Field(default_factory=BudgetConfig)
     review: ReviewConfig = Field(default_factory=ReviewConfig)
     tests: TestsConfig = Field(default_factory=TestsConfig)
     scope: ScopeConfig = Field(default_factory=ScopeConfig)

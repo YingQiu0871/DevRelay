@@ -8,6 +8,14 @@ reports the same version via `devrelay version`).
 Source: <https://github.com/YingQiu0871/DevRelay> -
 [Issues](https://github.com/YingQiu0871/DevRelay/issues)
 
+> **v0.2-A candidate (unreleased)**: the automatic review loop described under
+> [Automatic review loop (v0.2-A)](#automatic-review-loop-v02-a) is implemented
+> in this working branch as a candidate for independent review. It is not part
+> of the v0.1.0 release, the version number is unchanged, and its behaviour was
+> validated with fake providers only. Specification and acceptance matrix:
+> [docs/v0.2/V02_SPEC.md](docs/v0.2/V02_SPEC.md),
+> [docs/v0.2/V02_ACCEPTANCE.md](docs/v0.2/V02_ACCEPTANCE.md).
+
 DevRelay is a **local AI coding orchestrator** (CLI) that automates the
 mechanical handoffs of a multi-model development workflow:
 
@@ -40,6 +48,9 @@ computed against that baseline - never blindly against `HEAD`.
   disappears.
 - Enforce a bounded fix loop (default 3 iterations) - never an infinite
   agent loop.
+- Cap external work with an enforced execution budget (v0.2-A): every
+  implementer/reviewer invocation is pre-flight checked and persisted, so a
+  runaway loop stops at `BLOCKED` instead of quietly spending calls.
 - Make reviews structural: P0/P1/P2 findings are blocking by policy; P3-only
   reviews pass by default; decisions come from the policy, not from natural
   language.
@@ -79,7 +90,8 @@ src/devrelay/
 ├── cli.py                 # Typer CLI (devrelay ...)
 ├── config.py              # YAML profiles -> validated Pydantic config
 ├── models.py              # TaskPacket / Finding / ReviewResult / TaskRun,
-│                          #   WorkspaceBaseline / PolicyViolation / TaskDelta
+│                          #   WorkspaceBaseline / PolicyViolation / TaskDelta,
+│                          #   ProviderCallRecord / ReviewAttempt (v0.2-A)
 ├── errors.py              # exception hierarchy
 ├── redact.py              # secret redaction for logs/artifacts
 ├── baseline/
@@ -91,9 +103,12 @@ src/devrelay/
 ├── pipeline/
 │   ├── states.py          # state machine (enum + transition table)
 │   ├── policy.py          # config-driven decisions (severities, caps)
+│   ├── budget.py          # execution budget: pre-flight + usage accounting
+│   ├── review_lifecycle.py # review attempts, call evidence, fingerprints
 │   └── engine.py          # orchestrator: stages, artifacts, persistence
 ├── providers/
 │   ├── base.py            # ImplementerProvider / ReviewerProvider
+│   ├── evidence.py        # CallSink protocol + ReviewCallPolicy (v0.2-A)
 │   ├── codex_cli.py       # official Codex CLI adapter (stdin transport)
 │   ├── manual.py          # manual reviewer handoff (markdown)
 │   └── openai_compatible.py  # DeepSeek-style HTTP reviewer
@@ -354,6 +369,8 @@ devrelay plan show            # show the current task.md
 devrelay plan import task.md  # or task.json -> state PLAN_READY
 devrelay continue             # run the next pipeline stage(s)
 devrelay status               # Planner/Implementer/Tests/Reviewer/Final Gate/Baseline
+                              #   + budget used/max, last review attempt, policy source
+devrelay usage                # provider call audit (read-only, never resets budget)
 devrelay diff                 # TASK-RELATIVE diff (baseline -> now)
 devrelay diff --binary --out task.patch   # binary-safe task patch
 devrelay logs                 # codex + test logs for the current task
@@ -416,7 +433,9 @@ export DEVRELAY_REVIEWER_MODEL=deepseek-chat
 review:
   provider: openai_compatible
   blocking_severities: [P0, P1, P2]
-  retries: 1                    # invalid-JSON retries before BLOCKED
+  retries: 1                    # invalid-JSON (format) retries before BLOCKED
+  transport_retries: 0          # network/HTTP retries: opt-in, each one is a call
+  max_response_chars: 200000    # hard cap; oversized answers are refused, not cut
   max_diff_bytes: 300000        # oversized diffs are truncated + flagged
 ```
 
@@ -424,16 +443,132 @@ The reviewer must answer with a single JSON object matching the
 `ReviewResult` schema. Output is schema-validated; invalid JSON is retried
 and **never guessed** - persistent failure routes the task to `BLOCKED`.
 
+With `provider: openai_compatible` the review step runs automatically (see
+below). With the default `provider: manual`, DevRelay stops at `REVIEWING`,
+`devrelay review export`/`review import` drive the loop, and **zero** external
+provider calls are made.
+
+## Automatic review loop (v0.2-A)
+
+v0.2-A makes the review step a bounded, fully accounted loop: DevRelay calls
+the configured reviewer itself, feeds blocking findings straight back into the
+fix prompt, and stops with hard evidence when a limit is reached. The state
+machine is unchanged - still `PipelineState`
+(`IMPLEMENTING -> TESTING -> REVIEWING -> FIX_REQUIRED -> FIXING -> ... ->
+FINAL_GATE_REQUIRED`), and never `DONE` without a human final approval.
+
+### Execution budget (always enforced)
+
+```yaml
+budget:
+  max_implementer_calls: 4
+  max_reviewer_calls: 4
+  max_total_provider_calls: 8
+```
+
+Every external invocation is recorded *before* it happens (`ProviderCallRecord`
+in task state plus `reviews/review-NN-call-MM-meta.json`) and the budget is
+checked *before* the call starts. When a limit would be exceeded the task goes
+`BLOCKED` with code `provider_budget_exhausted` and a message that reports
+used/max for all three limits. The budget is **never reset automatically** -
+not by `continue`, not by a restart, not by the fix loop. The only supported
+way to change it for a running task is the audited
+`devrelay unblock --refresh-policy --reason "..."`.
+
+What counts as one call (invocation counting, not billing):
+
+| Action | Counted as |
+| --- | --- |
+| Implementer (Codex) pass that actually ran | 1 |
+| Implementer pass refused before start (CLI unavailable, index pre-flight) | 0 |
+| Remote reviewer HTTP attempt | 1 |
+| ...including the attempt whose answer was invalid JSON (format retry) | 1 each |
+| Reviewer transport failure (the request was started) | 1 |
+| Manual review import | 0 (a `ReviewAttempt` is still recorded) |
+
+**Honesty**: the budget counts *DevRelay-initiated invocations*. It is not a
+token, cost or subscription meter - it cannot see retries inside the provider
+CLI, provider-side billing or plan quota. "4 implementer calls" means "at most
+4 requests leave this machine", and says nothing about money.
+
+### Reviewer attempt lifecycle and crash safety
+
+Each automatic review round writes `reviews/review-NN-meta.json` (reviewer,
+model, endpoint host, status, transport/format attempt counts, external calls
+consumed) plus one file per individual HTTP attempt. The in-flight marker
+`review_call_in_flight` is persisted *before* the request, so a hard kill
+leaves evidence rather than a silent gap: the next `devrelay continue` fails
+closed with `interrupted_reviewer_attempt` and requires
+`devrelay unblock --reason "..."`. A review round that was started but never
+finalized (crash after the provider answered, before the result was persisted)
+is detected from the persisted attempt and fails closed the same way - an
+acknowledging `unblock` closes it as `INTERRUPTED`, keeps its call evidence,
+and the retried round gets its own attempt identity.
+
+Transport failures (network/HTTP/timeout) and format failures (schema-invalid
+answer) are separated. `review.retries` (default 1) retries only *format*
+failures; transport retries are opt-in via `review.transport_retries`
+(default 0) and are counted like any other call. HTTP error bodies and model
+output pass through the same redaction boundary as reviewer input before they
+are persisted.
+
+### Repeated findings
+
+Every finding gets a deterministic fingerprint
+(`sha256(severity | normalized title | files | description)`) and per-task
+seen counts. `pipeline.max_same_finding_cycles` (default `0` = disabled) can
+stop a loop that keeps re-reporting the same findings; fingerprints and counts
+are recorded either way and are visible in `devrelay status` / `devrelay usage`.
+
+### Policy snapshot
+
+Budget, blocking severities, retry counts, test commands, scope and
+`max_same_finding_cycles` are captured into
+`.devrelay/tasks/<id>/config.snapshot.yaml` at `start` and apply for the whole
+task, so editing `.devrelay/config.yaml` mid-task cannot silently change the
+rules a task is judged by (`devrelay status` shows the source: `snapshot` or
+`live-fallback`). Codex executable/args and the reviewer endpoint/credentials
+remain live environment wiring.
+
+### Visibility commands
+
+```bash
+devrelay status     # state, budget used/max, last review attempt, policy source
+devrelay usage      # read-only: every provider call, every review attempt
+devrelay doctor     # checks env var PRESENCE only - it sends no request
+```
+
+`devrelay usage` is the audit view: per-call kind/phase/success/error type,
+duration, model and endpoint *host* (never a URL with credentials). There is
+deliberately no command that resets or forges usage, and `doctor` never spends
+a call: it reports `set`/`MISSING` for `DEVRELAY_REVIEWER_BASE_URL`,
+`DEVRELAY_REVIEWER_API_KEY` and `DEVRELAY_REVIEWER_MODEL` without contacting
+the endpoint.
+
+### Authority
+
+The reviewer is *advisory*. Policy decides: a `PASS` decision that still
+carries a blocking finding does not pass, blocking findings route to
+`FIX_REQUIRED` / `BLOCKED`, and the final gate stays manual
+(`devrelay final approve`) with zero provider calls.
+
 ## Policy (default profile)
 
 ```yaml
 pipeline:
   max_fix_iterations: 3
+  max_same_finding_cycles: 0        # 0 = disabled; fingerprints recorded anyway
   auto_fix_tests: false
+budget:
+  max_implementer_calls: 4          # checked before every external call
+  max_reviewer_calls: 4
+  max_total_provider_calls: 8
 review:
   provider: manual
   blocking_severities: [P0, P1, P2]
   retries: 1
+  transport_retries: 0
+  max_response_chars: 200000
   max_diff_bytes: 300000
 baseline:
   max_untracked_file_bytes: 52428800   # per-file cap for untracked copies
@@ -458,10 +593,12 @@ codex:
 ```
 
 The policy is enforced, not decorative: severity lists drive pass/fix
-decisions, caps drive the BLOCKED state, test commands drive the TESTING
-stage, and any `git.allow_*: true` is rejected at config load. Test commands
-run with `shell=False` and timeouts; every execution result is saved under
-`logs/`.
+decisions, caps drive the BLOCKED state, the execution budget gates every
+external call before it starts, test commands drive the TESTING stage, and any
+`git.allow_*: true` is rejected at config load. These policy values are
+snapshotted into the task at `devrelay start` (see the automatic review loop
+section). Test commands run with `shell=False` and timeouts; every execution
+result is saved under `logs/`.
 
 ## Security model
 
@@ -487,14 +624,21 @@ run with `shell=False` and timeouts; every execution result is saved under
   repository. Pre-existing changes are never attributed as task additions;
   unified-diff context lines may still show surrounding pre-existing content.
 - **Workspace boundary**: tasks operate only inside the initialized workspace.
-- **Bounded automation**: fix loops capped, no auto git actions, `BLOCKED`
-  requires an explicit human `unblock` with a reason (including interrupted
-  provider attempts).
+- **Bounded automation**: fix loops capped, an execution budget caps every
+  external provider call (pre-flight, never auto-reset), no auto git actions,
+  and `BLOCKED` requires an explicit human `unblock` with a reason (including
+  interrupted provider attempts and exhausted budgets).
 - **Provider limits are stated, not hidden**: push prohibition is
   BEST-EFFORT/PROVIDER-LIMITED and documented as such.
 
-## Current limitations (v0.1)
+## Current limitations (v0.1 core + v0.2-A candidate)
 
+- The automatic review loop (v0.2-A) is a **candidate under independent
+  review**: it is merged into no release, the version stays `0.1.0`, and the
+  reviewed behaviour is exercised with fake providers only (no real Codex run
+  and no real reviewer endpoint were used to validate it).
+- The execution budget counts *invocations*, not tokens, cost, plan quota or
+  provider-side billing - there is no billing integration in v0.2-A.
 - One implementer: official Codex CLI (stdin transport). Codex argv/sandbox
   behavior must be validated on your machine (DevRelay rejects flags the
   installed CLI does not document).
@@ -519,7 +663,10 @@ run with `shell=False` and timeouts; every execution result is saved under
 ## Roadmap
 
 - **v0.1** - local orchestration core with task baselines, task-relative
-  deltas and repository policy guards (this release)
+  deltas and repository policy guards
+- **v0.2-A** - automatic review loop with an enforced execution budget,
+  reviewer attempt lifecycle and fingerprint accounting (candidate under
+  independent review)
 - **v0.2** - structured Codex event output (`codex exec --json`),
   improved provider adapters / project profiles / state-driven UI
 - **v0.3** - MCP server
@@ -533,7 +680,7 @@ python -m pip install -e ".[dev]"
 python -m pytest
 ```
 
-142 tests run fully offline with mocked subprocesses/HTTP where needed and
+197 tests run fully offline with mocked subprocesses/HTTP where needed and
 real (tiny) git repositories for baseline/guard/recovery coverage - no real
 Codex, DeepSeek or network required. Coverage includes: state transitions and
 rejected invalid transitions; max-iteration blocking; P0/P1/P2 ->
@@ -553,6 +700,21 @@ provider exception / `KeyboardInterrupt` still persisting post-run evidence and
 blocking auto-rerun after restart; reviewer payload and manual artifact
 redaction; review request and final report separation of PRE-EXISTING vs TASK
 changes; shell safety.
+
+v0.2-A adds: pre-flight budget refusal for implementer/reviewer/total limits
+(no call is attempted once a limit is reached); exact call accounting for
+success, format retry, transport failure and manually imported reviews; format
+vs transport retry separation; response-size cap; sanitized HTTP error bodies
+and model output; reviewer attempt lifecycle incl. the persisted in-flight
+marker and fail-closed `interrupted_reviewer_attempt` recovery; policy
+authority over a `PASS` decision that carries blocking findings; task policy
+snapshot plus audited `unblock --refresh-policy`; repeated-finding
+fingerprints/seen counts and the opt-in stall guard; automatic-fix handoff of
+structured findings; state-schema migration with v0.1 fixture compatibility;
+`status`/`usage`/`doctor` visibility (offline, zero-cost); and a full
+engine-level fake-provider end-to-end loop (2 implementer + 2 reviewer calls
+-> `FINAL_GATE_REQUIRED`, never automatic `DONE`); fail-closed recovery for a
+review round that started but never finalized (acknowledged explicitly).
 
 ## License
 

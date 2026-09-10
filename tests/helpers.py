@@ -23,8 +23,17 @@ from devrelay.models import (
     WorkspaceBaseline,
     WorkspaceSnapshot,
 )
+from devrelay.errors import ProviderError, ReviewFormatError
+from devrelay.models import (
+    CallErrorType,
+    ProviderCallPhase,
+    ProviderCallRecord,
+    ProviderKind,
+    utcnow_iso,
+)
 from devrelay.pipeline.engine import DevRelayEngine
 from devrelay.providers.base import ImplementerProvider, ReviewerProvider
+from devrelay.providers.evidence import NullCallSink
 from devrelay.workspace.git import GitWorkspace
 from devrelay.workspace.runner import CommandRunner
 
@@ -229,6 +238,84 @@ class QueueImplementer(FakeImplementer):
         return ProviderExecutionResult(exit_code=0, stdout="ok", report="ok")
 
 
+class ScriptedAutoReviewer(ReviewerProvider):
+    """Automatic reviewer fake that accounts calls exactly like the real one.
+
+    Each scripted outcome consumes exactly one external reviewer call through
+    the sink the engine injects (``call_policy.sink``), so engine-level tests
+    exercise the real budget/accounting path instead of mocking it away.
+    """
+
+    name = "scripted-auto"
+
+    def __init__(self, outcomes: list, *, model: str = "fake-model") -> None:
+        self.outcomes = list(outcomes)
+        self.bundles: list = []
+        self._model = model
+        self._sequence = 0
+
+    @property
+    def automatic(self) -> bool:
+        return True
+
+    @property
+    def model(self) -> str:
+        return self._model
+
+    @property
+    def endpoint_host(self) -> str:
+        return "fake.endpoint.invalid"
+
+    def prepare_request(self, bundle, review_number=None):
+        return None
+
+    def review(self, bundle, *, call_policy=None):
+        self.bundles.append(bundle)
+        outcome = self.outcomes.pop(0) if self.outcomes else ReviewResult(
+            decision="PASS", summary="default pass"
+        )
+        sink = getattr(call_policy, "sink", None) or NullCallSink()
+        self._sequence += 1
+        record = ProviderCallRecord(
+            call_id=f"scripted-call-{self._sequence:03d}",
+            provider_kind=ProviderKind.REVIEWER,
+            provider_name=self.name,
+            phase=ProviderCallPhase.REVIEW,
+            attempt_number=self._sequence,
+            external_call_count=1,
+            model=self._model,
+            endpoint_host=self.endpoint_host,
+        )
+        sink.preflight(ProviderKind.REVIEWER, ProviderCallPhase.REVIEW)
+        sink.start(record)
+
+        def settle(*, success: bool, error_type=None, error=None) -> ProviderCallRecord:
+            settled = record.model_copy(
+                update={
+                    "success": success,
+                    "completed_at": utcnow_iso(),
+                    "error_type": error_type,
+                    "error": error,
+                }
+            )
+            sink.finish(settled)
+            return settled
+
+        if isinstance(outcome, ReviewResult):
+            settle(success=True)
+            return outcome
+        if isinstance(outcome, tuple) and outcome and outcome[0] == "format":
+            settle(success=False, error_type=CallErrorType.FORMAT, error=outcome[1])
+            raise ReviewFormatError(outcome[1])
+        if isinstance(outcome, tuple) and outcome and outcome[0] == "transport":
+            settle(success=False, error_type=CallErrorType.TRANSPORT, error=outcome[1])
+            raise ProviderError(outcome[1])
+        if isinstance(outcome, BaseException):
+            settle(success=False, error_type=CallErrorType.EXCEPTION, error=str(outcome))
+            raise outcome
+        raise AssertionError(f"unsupported scripted outcome: {outcome!r}")
+
+
 class QueueReviewer(ReviewerProvider):
     """Automatic reviewer with a queue of ReviewResults."""
 
@@ -245,7 +332,7 @@ class QueueReviewer(ReviewerProvider):
     def prepare_request(self, bundle, review_number=None):
         return None
 
-    def review(self, bundle) -> ReviewResult:
+    def review(self, bundle, *, call_policy=None) -> ReviewResult:
         self.bundles.append(bundle)
         if self.queue:
             return self.queue.pop(0)

@@ -120,6 +120,9 @@ class Finding(BaseModel):
     files: list[str] = Field(default_factory=list)
     evidence: str = ""
     recommendation: str = ""
+    # Deterministic identity of the finding across review rounds (v0.2-A);
+    # excludes the per-round finding id on purpose.
+    fingerprint: str = ""
 
     @field_validator("files", mode="before")
     @classmethod
@@ -302,6 +305,100 @@ class AttemptStatus(str, Enum):
     POLICY_CHECK_INCOMPLETE = "POLICY_CHECK_INCOMPLETE"
 
 
+class ProviderKind(str, Enum):
+    IMPLEMENTER = "IMPLEMENTER"
+    REVIEWER = "REVIEWER"
+
+
+class ProviderCallPhase(str, Enum):
+    IMPLEMENT = "IMPLEMENT"
+    FIX = "FIX"
+    REVIEW = "REVIEW"
+    REVIEW_FORMAT_RETRY = "REVIEW_FORMAT_RETRY"
+    REVIEW_TRANSPORT_RETRY = "REVIEW_TRANSPORT_RETRY"
+    MANUAL_REVIEW = "MANUAL_REVIEW"
+
+
+class CallErrorType(str, Enum):
+    TRANSPORT = "TRANSPORT"
+    TIMEOUT = "TIMEOUT"
+    HTTP_STATUS = "HTTP_STATUS"
+    FORMAT = "FORMAT"
+    RESPONSE_TOO_LARGE = "RESPONSE_TOO_LARGE"
+    PROVIDER_UNAVAILABLE = "PROVIDER_UNAVAILABLE"
+    PROVIDER_ERROR = "PROVIDER_ERROR"
+    EXCEPTION = "EXCEPTION"
+
+
+class ReviewAttemptStatus(str, Enum):
+    IN_FLIGHT = "IN_FLIGHT"
+    COMPLETED = "COMPLETED"
+    FORMAT_FAILED = "FORMAT_FAILED"
+    TRANSPORT_FAILED = "TRANSPORT_FAILED"
+    INTERRUPTED = "INTERRUPTED"
+    BUDGET_BLOCKED = "BUDGET_BLOCKED"
+
+
+class ProviderCallRecord(BaseModel):
+    """One attempted external provider invocation (v0.2-A accounting unit).
+
+    ``external_call_count`` is 1 when a real external model call was attempted
+    (including attempts that failed after the request was started) and 0 for
+    events that never left the machine (manual review, unavailable CLI).
+    Never persists credentials, API keys, authorization headers or full URLs.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    call_id: str
+    provider_kind: ProviderKind
+    provider_name: str
+    phase: ProviderCallPhase
+    started_at: str = Field(default_factory=utcnow_iso)
+    completed_at: str | None = None
+    success: bool = False
+    attempt_number: int = 1
+    task_iteration: int = 1
+    duration_seconds: float = 0.0
+    external_call_count: int = 0
+    error_type: CallErrorType | None = None
+    error: str | None = None
+    model: str | None = None
+    endpoint_host: str | None = None
+
+
+class ReviewAttempt(BaseModel):
+    """Lifecycle of one automatic (or imported manual) review round."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    review_number: int
+    attempt_id: str
+    provider_name: str
+    status: ReviewAttemptStatus = ReviewAttemptStatus.IN_FLIGHT
+    started_at: str = Field(default_factory=utcnow_iso)
+    completed_at: str | None = None
+    model: str | None = None
+    endpoint_host: str | None = None
+    format_attempts: int = 0
+    transport_attempts: int = 0
+    external_calls_consumed: int = 0
+    call_ids: list[str] = Field(default_factory=list)
+    error_type: CallErrorType | None = None
+    error: str | None = None
+    result: ReviewResult | None = None
+
+
+class ProviderUsage(BaseModel):
+    """Counts derived from persisted call records (never from iteration math)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    implementer_calls: int = 0
+    reviewer_calls: int = 0
+    total_calls: int = 0
+
+
 class PolicyViolation(BaseModel):
     """A structured repository-policy violation detected after a provider run."""
 
@@ -450,7 +547,7 @@ class TaskRun(BaseModel):
 
     task_id: str
     title: str
-    state_schema_version: int = 2
+    state_schema_version: int = 3
     packet: TaskPacket | None = None
     state: PipelineState = PipelineState.NEW
     plan_ready: bool = False
@@ -484,6 +581,15 @@ class TaskRun(BaseModel):
     # Persisted implement/fix attempt history + crash marker (see ProviderAttempt).
     attempts: list[ProviderAttempt] = Field(default_factory=list)
     attempt_in_flight: bool = False
+
+    # v0.2-A: external provider accounting + review lifecycle.
+    provider_calls: list[ProviderCallRecord] = Field(default_factory=list)
+    review_attempts: list[ReviewAttempt] = Field(default_factory=list)
+    review_call_in_flight: bool = False
+    # Fingerprint -> number of review rounds in which this blocker was seen.
+    finding_seen_counts: dict[str, int] = Field(default_factory=dict)
+    # Which config governed this task's policy: "snapshot" | "live-fallback".
+    policy_source: str = ""
 
     @property
     def next_attempt(self) -> int:

@@ -213,9 +213,18 @@ def doctor() -> None:
             ENV_MODEL,
         )
 
+        # Presence only - never the value, and never a network request
+        # (doctor must stay zero-cost).
         typer.echo(f"  {ENV_BASE_URL}: {'set' if os.environ.get(ENV_BASE_URL) else 'unset (default)'}")
         typer.echo(f"  {ENV_MODEL}: {'set' if os.environ.get(ENV_MODEL) else 'unset (default)'}")
         typer.echo(f"  {ENV_API_KEY}: {'set' if os.environ.get(ENV_API_KEY) else 'MISSING'}")
+        typer.echo("  (no request is sent by doctor; reviewer calls are counted per task)")
+    typer.echo(
+        "Provider budget: "
+        f"implementer {config.budget.max_implementer_calls}, "
+        f"reviewer {config.budget.max_reviewer_calls}, "
+        f"total {config.budget.max_total_provider_calls}"
+    )
     typer.echo(f"Tasks: {len(store.list_task_ids())}")
 
 
@@ -271,6 +280,9 @@ def status(
         ("Final Gate", "final_gate"),
         ("Baseline", "baseline"),
         ("Attempt", "attempt"),
+        ("Budget", "budget"),
+        ("Review", "review"),
+        ("Policy", "policy_source"),
     ):
         typer.echo(f"{label:<12} {block[key]}")
     if block["blocked"]:
@@ -358,6 +370,71 @@ def continue_task(
         raise typer.Exit(1)
     if state in ("BLOCKED", "FAILED"):
         raise typer.Exit(1)
+
+
+@app.command()
+def usage(
+    task: Optional[str] = typer.Option(None, "--task", help="Task id (default: current)"),
+) -> None:
+    """Show provider invocation counts, budget and review attempt history.
+
+    Read-only: there is deliberately no command that resets or forges usage.
+    """
+    root = _resolve_root()
+    store, config = _load_store_config(root)
+    task_id = _task_id(store, task)
+    engine = _engine(root, store, config)
+    try:
+        data = engine.usage_block(task_id)
+    except DevRelayError as exc:
+        _fail(str(exc))
+    typer.echo(f"Task: {data['task_id']}  (state {data['state']})")
+    typer.echo("")
+    typer.echo("Provider budget:")
+    typer.echo(
+        f"  Implementer  {data['implementer_calls']} / {data['max_implementer_calls']}"
+    )
+    typer.echo(f"  Reviewer     {data['reviewer_calls']} / {data['max_reviewer_calls']}")
+    typer.echo(f"  Total        {data['total_calls']} / {data['max_total_provider_calls']}")
+    typer.echo("")
+    typer.echo("Reviewer:")
+    typer.echo(f"  provider     {data['reviewer_provider']}")
+    typer.echo(f"  model        {data['reviewer_model']}")
+    typer.echo(f"  endpoint     {data['reviewer_endpoint_host']}")
+    typer.echo(f"  policy from  {data['policy_source']}")
+    typer.echo("")
+    typer.echo("Review attempts:")
+    attempts = data["review_attempts"]
+    if attempts:
+        for attempt in attempts:
+            typer.echo(
+                f"  #{attempt['review_number']} {attempt['status']} via "
+                f"{attempt['provider']} - calls {attempt['external_calls']}, "
+                f"http {attempt['transport_attempts']}, format "
+                f"{attempt['format_attempts']}"
+                + (f", result {attempt['result']}" if attempt["result"] else "")
+                + (f", error {attempt['error_type']}" if attempt["error_type"] else "")
+            )
+    else:
+        typer.echo("  (none)")
+    typer.echo("")
+    typer.echo("Provider calls:")
+    calls = data["provider_calls"]
+    if calls:
+        for call in calls:
+            typer.echo(
+                f"  {call['call_id']} {call['kind']} {call['phase']} "
+                f"external={call['external_calls']} "
+                f"{'ok' if call['success'] else 'failed'}"
+                + (f" ({call['error_type']})" if call["error_type"] else "")
+                + (f" model={call['model']}" if call["model"] else "")
+                + f" {call['duration_seconds']}s"
+            )
+    else:
+        typer.echo("  (none)")
+    if data["blocked_code"]:
+        typer.echo("")
+        typer.echo(f"Blocked: {data['blocked_code']}")
 
 
 @app.command()
@@ -500,6 +577,14 @@ def unblock(
     to: Optional[str] = typer.Option(
         None, "--to", help="plan | implement | fix | review (default: by block code)"
     ),
+    refresh_policy: bool = typer.Option(
+        False,
+        "--refresh-policy",
+        help=(
+            "Re-snapshot the workspace config as this task's policy (the only "
+            "supported way to raise a running task's budget). Audited."
+        ),
+    ),
     task: Optional[str] = typer.Option(None, "--task"),
 ) -> None:
     """Manually recover a BLOCKED/FAILED task (never skips findings silently)."""
@@ -508,11 +593,18 @@ def unblock(
     task_id = _task_id(store, task)
     engine = _engine(root, store, config)
     try:
-        run = engine.unblock(task_id, reason=reason, to=to)
+        run = engine.unblock(
+            task_id, reason=reason, to=to, refresh_policy=refresh_policy
+        )
     except DevRelayError as exc:
         _fail(str(exc))
     typer.echo(f"{task_id} unblocked -> {run.state.value} (reason: {reason})")
-    if run.state.value in ("FIX_REQUIRED", "IMPLEMENTING"):
+    if refresh_policy:
+        typer.echo(
+            "Policy snapshot refreshed from the workspace config "
+            f"(policy_source={run.policy_source}); recorded in the audit trail."
+        )
+    if run.state.value in ("FIX_REQUIRED", "IMPLEMENTING", "REVIEWING"):
         typer.echo("Next: 'devrelay continue' (manual override recorded in audit)")
 
 

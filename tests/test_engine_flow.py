@@ -165,8 +165,17 @@ def test_max_fix_iterations_blocks_then_unblock_allows_override(tmp_path):
     assert task.blocked_code == "max_iterations"
     assert task.fix_iterations_used == 3
 
-    # no silent skip: unblock requires a reason; findings still open
-    engine.unblock(task_id, reason="human reviewed findings; one more round")
+    # no silent skip: unblock requires a reason; findings still open.
+    # v0.2-A: the default budget allows 4 implementer calls (1 initial + 3
+    # fixes), so a manual override beyond the cap needs an explicit, audited
+    # budget refresh - the budget is never raised implicitly.
+    engine.config.budget.max_implementer_calls = 5
+    engine.config.budget.max_total_provider_calls = 9
+    engine.unblock(
+        task_id,
+        reason="human reviewed findings; one more round",
+        refresh_policy=True,
+    )
     task = store.read_task(task_id)
     assert task.state == S.FIX_REQUIRED
     assert task.manual_override is True
@@ -291,7 +300,7 @@ class _RaisingFormatReviewer(ReviewerProvider):
     def prepare_request(self, bundle, review_number=None):
         return None
 
-    def review(self, bundle):
+    def review(self, bundle, *, call_policy=None):
         from devrelay.errors import ReviewFormatError
 
         raise ReviewFormatError("not json after retries")

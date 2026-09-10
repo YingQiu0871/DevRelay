@@ -4,11 +4,14 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 
 from devrelay.models import Finding, ProviderExecutionResult, ReviewResult, TaskPacket
 
 from devrelay.artifacts.renderer import ReviewBundle
+
+if TYPE_CHECKING:  # pragma: no cover - typing only
+    from devrelay.providers.evidence import ReviewCallPolicy
 
 
 @dataclass
@@ -49,14 +52,33 @@ class ReviewerProvider(ABC):
     def automatic(self) -> bool:
         return False
 
+    @property
+    def model(self) -> str | None:
+        """Model identity for evidence purposes (never a token)."""
+        return None
+
+    @property
+    def endpoint_host(self) -> str | None:
+        """Endpoint host for evidence purposes (never credentials/query)."""
+        return None
+
     @abstractmethod
     def prepare_request(
         self, bundle: ReviewBundle, review_number: int | None = None
     ) -> str | None:
         """Return request text for a manual reviewer (None for automatic)."""
 
-    def review(self, bundle: ReviewBundle) -> ReviewResult:
-        """Run an automatic review (only valid when ``automatic`` is True)."""
+    def review(
+        self,
+        bundle: ReviewBundle,
+        *,
+        call_policy: "ReviewCallPolicy | None" = None,
+    ) -> ReviewResult:
+        """Run an automatic review (only valid when ``automatic`` is True).
+
+        ``call_policy`` carries the task-scoped retry/size policy; providers
+        with no external calls (manual reviewers) simply ignore it.
+        """
         from devrelay.errors import ProviderUnavailableError
 
         raise ProviderUnavailableError(

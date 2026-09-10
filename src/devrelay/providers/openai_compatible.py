@@ -18,8 +18,10 @@ from __future__ import annotations
 import json
 import os
 import re
+import time
 from dataclasses import dataclass
 from typing import Optional
+from urllib.parse import urlparse
 
 import httpx
 from pydantic import ValidationError
@@ -34,8 +36,19 @@ from devrelay.errors import (
     ProviderUnavailableError,
     ReviewFormatError,
 )
-from devrelay.models import Finding, ReviewResult, Severity
+from devrelay.models import (
+    CallErrorType,
+    Finding,
+    ProviderCallPhase,
+    ProviderCallRecord,
+    ProviderKind,
+    ReviewResult,
+    Severity,
+    utcnow_iso,
+)
 from devrelay.providers.base import ReviewerProvider
+from devrelay.providers.evidence import CallSink, NullCallSink, ReviewCallPolicy
+from devrelay.redact import sanitize
 
 ENV_BASE_URL = "DEVRELAY_REVIEWER_BASE_URL"
 ENV_API_KEY = "DEVRELAY_REVIEWER_API_KEY"
@@ -107,10 +120,19 @@ class OpenAICompatibleReviewer(ReviewerProvider):
         endpoint: ReviewerEndpoint,
         *,
         retries: int = 1,
+        transport_retries: int = 0,
+        max_response_chars: int = 200_000,
         client: httpx.Client | None = None,
+        call_sink: CallSink | None = None,
     ) -> None:
         self.endpoint = endpoint
+        # Format retries (HTTP 200 without schema-valid JSON).
         self.retries = max(0, retries)
+        # Transport retries (network/HTTP failures) - separate on purpose.
+        self.transport_retries = max(0, transport_retries)
+        self.max_response_chars = max(1_000, int(max_response_chars))
+        self._sink: CallSink = call_sink or NullCallSink()
+        self._call_sequence = 0
         headers = (
             {"Authorization": f"Bearer {endpoint.api_key}"} if endpoint.api_key else {}
         )
@@ -128,6 +150,15 @@ class OpenAICompatibleReviewer(ReviewerProvider):
             self._client = client
             self._owns_client = False
 
+    # -- identity evidence (never a token) ------------------------------
+    @property
+    def model(self) -> str:
+        return self.endpoint.model
+
+    @property
+    def endpoint_host(self) -> str | None:
+        return urlparse(self.endpoint.base_url).hostname
+
     @property
     def automatic(self) -> bool:
         return True
@@ -135,7 +166,55 @@ class OpenAICompatibleReviewer(ReviewerProvider):
     def prepare_request(self, bundle: ReviewBundle, review_number: int | None = None) -> None:
         return None
 
-    def review(self, bundle: ReviewBundle) -> ReviewResult:
+    # ------------------------------------------------------------------
+    def _new_record(self, phase: ProviderCallPhase) -> ProviderCallRecord:
+        self._call_sequence += 1
+        return ProviderCallRecord(
+            call_id=f"{self.name}-call-{self._call_sequence:03d}",
+            provider_kind=ProviderKind.REVIEWER,
+            provider_name=self.name,
+            phase=phase,
+            attempt_number=self._call_sequence,
+            external_call_count=1,  # a real external call is being attempted
+            model=self.endpoint.model,
+            endpoint_host=self.endpoint_host,
+        )
+
+    def _settle(
+        self,
+        record: ProviderCallRecord,
+        started: float,
+        *,
+        success: bool,
+        error_type: CallErrorType | None = None,
+        error: str | None = None,
+    ) -> ProviderCallRecord:
+        record = record.model_copy(
+            update={
+                "completed_at": utcnow_iso(),
+                "success": success,
+                "duration_seconds": round(time.monotonic() - started, 3),
+                "error_type": error_type,
+                "error": sanitize(error)[:1000] if error else None,
+            }
+        )
+        self._sink.finish(record)
+        return record
+
+    def review(
+        self,
+        bundle: ReviewBundle,
+        *,
+        call_policy: ReviewCallPolicy | None = None,
+    ) -> ReviewResult:
+        policy = call_policy or ReviewCallPolicy(
+            format_retries=self.retries,
+            transport_retries=self.transport_retries,
+            max_response_chars=self.max_response_chars,
+            timeout_seconds=self.endpoint.timeout_seconds,
+        )
+        sink: CallSink = policy.sink or self._sink
+        self._sink = sink  # account through the policy-provided sink
         payload = {
             "model": self.endpoint.model,
             "temperature": 0.0,
@@ -153,36 +232,119 @@ class OpenAICompatibleReviewer(ReviewerProvider):
             payload["response_format"] = {"type": "json_object"}
         url = "/chat/completions"
 
-        last_error: Exception | None = None
-        for attempt in range(self.retries + 1):
+        format_attempts = 0
+        transport_retries_used = 0
+        while True:
+            if transport_retries_used and format_attempts == 0:
+                phase = ProviderCallPhase.REVIEW_TRANSPORT_RETRY
+            elif format_attempts == 0:
+                phase = ProviderCallPhase.REVIEW
+            else:
+                phase = ProviderCallPhase.REVIEW_FORMAT_RETRY
+            record = self._new_record(phase)
+            # Budget gate BEFORE anything leaves the machine.
+            self._sink.preflight(ProviderKind.REVIEWER, phase)
+            self._sink.start(record)
+            started = time.monotonic()
+
             try:
-                response = self._client.post(url, json=payload)
-            except httpx.HTTPError as exc:
+                response = self._client.post(
+                    url, json=payload, timeout=policy.timeout_seconds
+                )
+            except httpx.TimeoutException as exc:
+                detail = sanitize(f"{type(exc).__name__}: {exc}")[:500]
+                self._settle(record, started, success=False, error_type=CallErrorType.TIMEOUT, error=detail)
+                if transport_retries_used < policy.transport_retries:
+                    transport_retries_used += 1
+                    continue
                 raise ProviderError(
-                    f"reviewer HTTP request failed ({self.endpoint.model}): {exc}"
+                    "reviewer request timed out after "
+                    f"{policy.timeout_seconds:g}s ({self.endpoint_host or '-'}): {detail}"
                 ) from exc
+            except httpx.HTTPError as exc:
+                detail = sanitize(f"{type(exc).__name__}: {exc}")[:500]
+                self._settle(record, started, success=False, error_type=CallErrorType.TRANSPORT, error=detail)
+                if transport_retries_used < policy.transport_retries:
+                    transport_retries_used += 1
+                    continue
+                raise ProviderError(
+                    "reviewer HTTP request failed "
+                    f"({self.endpoint.model} @ {self.endpoint_host or '-'}): {detail}"
+                ) from exc
+
+            body_text = response.text or ""
+            if len(body_text) > policy.max_response_chars:
+                message = (
+                    "reviewer response exceeded the configured limit "
+                    f"({len(body_text)} > {policy.max_response_chars} chars); "
+                    "DevRelay refuses to truncate and guess - the task is BLOCKED."
+                )
+                self._settle(
+                    record,
+                    started,
+                    success=False,
+                    error_type=CallErrorType.RESPONSE_TOO_LARGE,
+                    error=message,
+                )
+                raise ReviewFormatError(message)
+
             if response.status_code != 200:
-                # Never persist response bodies verbatim; keep a redacted hint.
-                detail = response.text[:500]
+                # Never persist response bodies verbatim; redact before use.
+                detail = sanitize(body_text[:500])
+                self._settle(
+                    record,
+                    started,
+                    success=False,
+                    error_type=CallErrorType.HTTP_STATUS,
+                    error=f"HTTP {response.status_code}: {detail}",
+                )
                 raise ProviderError(
                     f"reviewer endpoint returned HTTP {response.status_code} "
-                    f"({self.endpoint.model}). Body: {detail}"
+                    f"({self.endpoint.model} @ {self.endpoint_host or '-'}). "
+                    f"Body: {detail}"
                 )
+
             try:
                 data = response.json()
                 content = data["choices"][0]["message"]["content"]
-                return _parse_review_json(content)
+                review = _parse_review_json(content)
             except ReviewFormatError as exc:
-                last_error = exc
+                self._settle(
+                    record,
+                    started,
+                    success=False,
+                    error_type=CallErrorType.FORMAT,
+                    error=str(exc),
+                )
+                format_attempts += 1
+                if format_attempts > policy.format_retries:
+                    raise ReviewFormatError(
+                        "reviewer returned invalid/non-JSON output after "
+                        f"{format_attempts} attempt(s). DevRelay does not guess: "
+                        "the task is BLOCKED for manual review (import a review "
+                        f"with 'devrelay review import'). Last error: "
+                        f"{sanitize(str(exc))[:300]}"
+                    ) from exc
+                continue
             except (KeyError, IndexError, TypeError, json.JSONDecodeError) as exc:
-                last_error = exc
-            # fall through to retry
-        raise ReviewFormatError(
-            "reviewer returned invalid/non-JSON output after "
-            f"{self.retries + 1} attempt(s). DevRelay does not guess: the task "
-            "is BLOCKED for manual review (import a review with "
-            "'devrelay review import'). Last error: {last_error}"
-        )
+                self._settle(
+                    record,
+                    started,
+                    success=False,
+                    error_type=CallErrorType.FORMAT,
+                    error=f"{type(exc).__name__}: {exc}",
+                )
+                format_attempts += 1
+                if format_attempts > policy.format_retries:
+                    raise ReviewFormatError(
+                        "reviewer response did not contain a usable chat "
+                        f"completion after {format_attempts} attempt(s). Last "
+                        f"error: {sanitize(f'{type(exc).__name__}: {exc}')[:300]}"
+                    ) from exc
+                continue
+
+            self._settle(record, started, success=True)
+            return review
 
     def close(self) -> None:
         if self._owns_client:

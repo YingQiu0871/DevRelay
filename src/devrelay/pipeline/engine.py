@@ -20,10 +20,16 @@ from devrelay.artifacts.renderer import (
     render_review_request_md,
     render_task_markdown,
     sanitize_review_bundle,
+    sanitize_review_result,
     starter_task_markdown,
 )
 from devrelay.artifacts.store import ArtifactStore
-from devrelay.config import DevRelayConfig, dump_config_yaml
+from devrelay.config import (
+    ConfigError,
+    DevRelayConfig,
+    dump_config_yaml,
+    load_config,
+)
 from devrelay.errors import (
     BaselineError,
     BaselineUnavailableError,
@@ -35,14 +41,19 @@ from devrelay.errors import (
 )
 from devrelay.models import (
     AttemptStatus,
+    CallErrorType,
     Finding,
     FinalGateRecord,
     IndexSnapshotStatus,
     PolicyViolation,
     PolicyViolationType,
     ProviderAttempt,
+    ProviderCallPhase,
+    ProviderCallRecord,
     ProviderExecutionResult,
+    ProviderKind,
     RepoSnapshot,
+    ReviewAttemptStatus,
     ReviewDecision,
     ReviewResult,
     TaskDelta,
@@ -52,13 +63,22 @@ from devrelay.models import (
     WorkspaceSnapshot,
     utcnow_iso,
 )
+from devrelay.pipeline.budget import BudgetExhaustedError, ProviderBudget
 from devrelay.pipeline.policy import PipelinePolicy
+from devrelay.pipeline.review_lifecycle import (
+    ReviewSession,
+    acknowledge_unfinished_attempts,
+    mark_findings,
+    stalled_findings,
+    unfinished_attempt,
+)
 from devrelay.pipeline.states import PipelineState, transition
 from devrelay.providers.base import (
     ImplementerContext,
     ImplementerProvider,
     ReviewerProvider,
 )
+from devrelay.providers.evidence import ReviewCallPolicy
 from devrelay.redact import sanitize
 from devrelay.utils import truncate
 
@@ -76,9 +96,21 @@ _UNBLOCK_DEFAULT_TARGET = {
     "policy_guard_error": "plan",
     "policy_check_incomplete": "implement",
     "interrupted_attempt": "implement",
+    "interrupted_reviewer_attempt": "review",
+    "provider_budget_exhausted": "implement",
+    "review_stalled": "fix",
     "baseline_error": "plan",
     "internal": "plan",
 }
+
+# Appended to budget refusals raised during the review stage so the recovery
+# command is unambiguous (`provider_budget_exhausted` defaults to the implement
+# stage, but a reviewer-budget refusal must not force another implementer pass).
+_REVIEW_BUDGET_HINT = (
+    " Blocked during the review stage; to continue reviewing after raising the "
+    "limits explicitly: devrelay unblock --to review --refresh-policy "
+    "--reason \"...\""
+)
 
 _UNBLOCK_TARGETS = {
     "plan": PipelineState.PLAN_READY,
@@ -117,6 +149,56 @@ class DevRelayEngine:
         return self.baselines
 
     # ------------------------------------------------------------------ #
+    # task-scoped policy (v0.2-A)
+    # ------------------------------------------------------------------ #
+    def _task_config(self, task: TaskRun) -> DevRelayConfig:
+        """Execution policy for *task*: the snapshot taken at task start.
+
+        Editing the workspace ``.devrelay/config.yaml`` mid-task must not
+        silently change budget, blocking severities, retries or test policy.
+        A missing/unreadable snapshot falls back to the live config and is
+        marked auditable via ``task.policy_source == 'live-fallback'``.
+        """
+        snapshot = self.store.task_dir(task.task_id) / "config.snapshot.yaml"
+        if snapshot.is_file():
+            try:
+                config = load_config(snapshot)
+                task.policy_source = "snapshot"
+                return config
+            except ConfigError:
+                task.policy_source = "live-fallback"
+                return self.config
+        task.policy_source = "live-fallback"
+        return self.config
+
+    def refresh_task_policy(self, task_id: str, reason: str) -> TaskRun:
+        """Explicitly re-snapshot the live config as this task's policy.
+
+        This is the only supported way to change a running task's budget or
+        blocking policy; it is audited and requires a human reason.
+        """
+        task = self._load(task_id)
+        snapshot = self.store.task_dir(task_id) / "config.snapshot.yaml"
+        self.store.write_text(snapshot, dump_config_yaml(self.config))
+        task.policy_source = "snapshot"
+        task.audit.append(
+            TransitionEvent(
+                from_state=task.state.value,
+                to_state=task.state.value,
+                note=f"policy snapshot refreshed from workspace config: {reason}",
+                by="human",
+            )
+        )
+        self._persist(task)
+        return task
+
+    def _policy_for(self, task: TaskRun) -> PipelinePolicy:
+        return PipelinePolicy(self._task_config(task))
+
+    def _budget_for(self, task: TaskRun) -> ProviderBudget:
+        return ProviderBudget(self._task_config(task).budget)
+
+    # ------------------------------------------------------------------ #
     # persistence helpers
     # ------------------------------------------------------------------ #
     def _load(self, task_id: str) -> TaskRun:
@@ -151,6 +233,16 @@ class DevRelayEngine:
         if task.state != PipelineState.BLOCKED:
             self._move(task, PipelineState.BLOCKED, note=f"blocked: {code}")
         self._persist(task)
+
+    def _record_provider_call(self, task_id: str, record: ProviderCallRecord) -> None:
+        """Append an external-call record to the task and persist evidence."""
+        task = self._load(task_id)
+        task.provider_calls.append(record)
+        self._persist(task)
+        self.store.write_text(
+            self.store.policy_dir(task_id) / f"call-{record.call_id}.json",
+            _json_pretty(record),
+        )
 
     # ------------------------------------------------------------------ #
     # policy guard helpers
@@ -348,7 +440,7 @@ class DevRelayEngine:
     # ------------------------------------------------------------------ #
     def continue_task(self, task_id: str) -> list[str]:
         events: list[str] = []
-        max_steps = 10 + self.policy.max_fix_iterations * 4
+        max_steps = 10 + self._policy_for(self._load(task_id)).max_fix_iterations * 4
         steps = 0
         while steps < max_steps:
             steps += 1
@@ -437,15 +529,16 @@ class DevRelayEngine:
                 "still marked in-flight (manual acknowledgement required)"
             )
             return False
+        policy = self._policy_for(task)
         if task.state == PipelineState.PLAN_READY:
             self._move(task, PipelineState.IMPLEMENTING, note="implementation start")
         elif task.state == PipelineState.FIX_REQUIRED:
-            if not self.policy.can_fix_again(task):
+            if not policy.can_fix_again(task):
                 self._block(
                     task,
                     "max_iterations",
                     "blocking findings remain and max_fix_iterations "
-                    f"({self.policy.max_fix_iterations}) is exhausted; "
+                    f"({policy.max_fix_iterations}) is exhausted; "
                     "unblock explicitly to allow another fix round",
                 )
                 events.append(
@@ -466,6 +559,7 @@ class DevRelayEngine:
             iteration=attempt,
             phase="FIX" if is_fix else "IMPLEMENT",
         )
+        policy_config = self._task_config(task)
         context = ImplementerContext(
             task_id=task.task_id,
             packet=packet,
@@ -473,9 +567,19 @@ class DevRelayEngine:
             workspace_root=str(self.workspace.root),
             is_fix=is_fix,
             findings=list(task.current_findings),
-            reuse_approved_scope=self.config.scope.reuse_approved_scope,
-            current_delta_first=self.config.scope.current_delta_first,
+            reuse_approved_scope=policy_config.scope.reuse_approved_scope,
+            current_delta_first=policy_config.scope.current_delta_first,
         )
+
+        # ---- budget gate: never invoke the implementer when it would exceed --
+        budget = ProviderBudget(policy_config.budget)
+        try:
+            budget.check(task, ProviderKind.IMPLEMENTER)
+        except BudgetExhaustedError as exc:
+            current = self._load(task.task_id)
+            self._block(current, "provider_budget_exhausted", str(exc))
+            events.append(f"[{task.task_id}] BLOCKED: {exc}")
+            return False
 
         # ---- persist in-flight marker BEFORE the provider starts ----------
         task.attempt_in_flight = True
@@ -522,6 +626,52 @@ class DevRelayEngine:
             record.provider_timed_out = result.timed_out
             record.provider_error = result.error
         self._write_attempt(self._load(task.task_id), record)
+
+        # ---- v0.2-A: persisted external-call accounting --------------------
+        provider_unavailable = bool(
+            result is not None and result.error and result.exit_code is None
+        )
+        call_error: CallErrorType | None = None
+        call_error_text: str | None = None
+        if exception is not None:
+            call_error = CallErrorType.EXCEPTION
+            call_error_text = f"{type(exception).__name__}: {exception}"
+        elif provider_unavailable:
+            call_error = CallErrorType.PROVIDER_UNAVAILABLE
+            call_error_text = (result.error or "") if result else None
+        elif result is not None and not result.success:
+            call_error = (
+                CallErrorType.TIMEOUT if result.timed_out else CallErrorType.PROVIDER_ERROR
+            )
+            call_error_text = result.stderr.strip()[:1000] or result.error
+        call_record = ProviderCallRecord(
+            call_id=f"{record.attempt_id}-impl",
+            provider_kind=ProviderKind.IMPLEMENTER,
+            provider_name=self.implementer.name,
+            phase=(
+                ProviderCallPhase.FIX if is_fix else ProviderCallPhase.IMPLEMENT
+            ),
+            started_at=record.started_at,
+            completed_at=utcnow_iso(),
+            success=exception is None
+            and not provider_unavailable
+            and bool(result is not None and result.success),
+            attempt_number=attempt,
+            task_iteration=attempt,
+            duration_seconds=record_duration(record),
+            # No external call happened when the CLI was unavailable.
+            external_call_count=0 if provider_unavailable else 1,
+            error_type=call_error,
+            error=sanitize(call_error_text) if call_error_text else None,
+            model=None,
+            endpoint_host=None,
+        )
+        self._record_provider_call(task.task_id, call_record)
+        events.append(
+            f"[{task.task_id}] implementer call recorded "
+            f"({call_record.external_call_count} external call, "
+            f"{call_record.duration_seconds}s)"
+        )
 
         # ---- POST snapshot + policy guard: always attempted ---------------
         post_snapshot: RepoSnapshot | None = None
@@ -685,13 +835,15 @@ class DevRelayEngine:
         if task.state != PipelineState.TESTING:
             self._move(task, PipelineState.TESTING, note="tests resumed")
         attempt = max(1, task.implementation_passes)
-        command_lines = list(self.config.tests.targeted)
+        policy_config = self._task_config(task)
+        policy = PipelinePolicy(policy_config)
+        command_lines = list(policy_config.tests.targeted)
         if (
             task.packet
-            and self.policy.run_full_regression(task.packet.risk_level)
-            and self.config.tests.full
+            and policy.run_full_regression(task.packet.risk_level)
+            and policy_config.tests.full
         ):
-            command_lines += [f"[full] {cmd}" for cmd in self.config.tests.full]
+            command_lines += [f"[full] {cmd}" for cmd in policy_config.tests.full]
         events.append(
             f"[{task.task_id}] tests: {len(command_lines)} command(s) configured"
         )
@@ -712,7 +864,7 @@ class DevRelayEngine:
             result = self.runner.run(
                 argv,
                 cwd=str(self.workspace.root),
-                timeout_seconds=self.config.tests.timeout_seconds,
+                timeout_seconds=policy_config.tests.timeout_seconds,
             )
             log_dir = self.store.logs_dir(task.task_id)
             self.store.write_text(
@@ -742,7 +894,7 @@ class DevRelayEngine:
         task.last_tests_passed = all_ok
         if not all_ok:
             self._persist(task)
-            if self.config.pipeline.auto_fix_tests and self.policy.can_fix_again(task):
+            if policy_config.pipeline.auto_fix_tests and policy.can_fix_again(task):
                 self._move(task, PipelineState.FIX_REQUIRED, note="tests failed")
                 self._persist(task)
                 events.append(f"[{task.task_id}] tests failed -> FIX_REQUIRED")
@@ -785,7 +937,7 @@ class DevRelayEngine:
     def _build_raw_review_bundle(self, task: TaskRun) -> ReviewBundle:
         delta = self._require_task_delta(task)
         diff = delta.text_diff
-        diff_limit = self.config.review.max_diff_bytes
+        diff_limit = self._task_config(task).review.max_diff_bytes
         diff_truncated = len(diff) > diff_limit
         if diff_truncated:
             diff = truncate(diff, diff_limit)
@@ -829,6 +981,42 @@ class DevRelayEngine:
         pipeline should keep moving automatically (auto reviewer, fix needed)."""
         if task.state != PipelineState.REVIEWING:
             raise StateConflictError(f"cannot review from state {task.state.value}")
+        # Fail closed: a previous reviewer call may already have been billed.
+        if task.review_call_in_flight:
+            self._block(
+                task,
+                "interrupted_reviewer_attempt",
+                "A previous reviewer call was still marked in-flight when this "
+                "process started (crash or hard kill). That request may already "
+                "have consumed provider quota, so DevRelay will not repeat it "
+                "automatically. Manual acknowledgement is required: "
+                "'devrelay unblock --reason \"...\"'.",
+            )
+            events.append(
+                f"[{task.task_id}] BLOCKED: reviewer call in-flight marker from a "
+                "previous run (manual acknowledgement required)"
+            )
+            return False
+        # Fail closed for the wider window: a review round that was started but
+        # never finalized (crash after the response arrived) may also have been
+        # billed even though the marker was already cleared.
+        stale = unfinished_attempt(task)
+        if stale is not None:
+            self._block(
+                task,
+                "interrupted_reviewer_attempt",
+                f"Review round #{stale.review_number} was started but never "
+                "finalized (crash after the provider answered). The request may "
+                "already have consumed provider quota, so DevRelay will not "
+                "repeat it automatically. Review the persisted call evidence "
+                f"({len(stale.call_ids)} call(s) recorded) and acknowledge with "
+                "'devrelay unblock --reason \"...\"'.",
+            )
+            events.append(
+                f"[{task.task_id}] BLOCKED: unfinished review round #"
+                f"{stale.review_number} (manual acknowledgement required)"
+            )
+            return False
         try:
             bundle = self._build_review_bundle(task)
         except BaselineError as exc:
@@ -840,24 +1028,114 @@ class DevRelayEngine:
             return False
         if not self.reviewer.automatic:
             return self._export_manual_request(task, bundle, events)
+
+        policy_config = self._task_config(task)
+        budget = ProviderBudget(policy_config.budget)
+        review_number = len(task.review_history) + 1
+        session = ReviewSession(
+            store=self.store,
+            task_id=task.task_id,
+            review_number=review_number,
+            provider_name=self.reviewer.name,
+            model=self.reviewer.model,
+            endpoint_host=self.reviewer.endpoint_host,
+            budget=budget,
+            load_task=lambda: self._load(task.task_id),
+            persist=self._persist,
+            events=events,
+        )
+        # Budget gate before anything is sent (fail fast, spend nothing).
         try:
-            review = self.reviewer.review(bundle)
-        except ReviewFormatError as exc:
+            budget.check(task, ProviderKind.REVIEWER)
+        except BudgetExhaustedError as exc:
+            current = self._load(task.task_id)
             self._block(
-                task,
+                current, "provider_budget_exhausted", str(exc) + _REVIEW_BUDGET_HINT
+            )
+            events.append(
+                f"[{task.task_id}] BLOCKED: {exc}"
+            )
+            return False
+
+        session.begin()
+        call_policy = ReviewCallPolicy(
+            format_retries=policy_config.review.retries,
+            transport_retries=policy_config.review.transport_retries,
+            max_response_chars=policy_config.review.max_response_chars,
+            timeout_seconds=policy_config.review.timeout_seconds,
+            sink=session,
+        )
+        try:
+            review = sanitize_review_result(
+                self.reviewer.review(bundle, call_policy=call_policy)
+            )
+        except BudgetExhaustedError as exc:
+            current = session.finalize(
+                ReviewAttemptStatus.BUDGET_BLOCKED, error=str(exc)
+            )
+            self._block(
+                current, "provider_budget_exhausted", str(exc) + _REVIEW_BUDGET_HINT
+            )
+            events.append(f"[{task.task_id}] BLOCKED: {exc}")
+            return False
+        except ReviewFormatError as exc:
+            current = session.finalize(
+                ReviewAttemptStatus.FORMAT_FAILED,
+                error_type=CallErrorType.FORMAT,
+                error=str(exc),
+            )
+            self._block(
+                current,
                 "review_format",
                 f"reviewer output could not be validated: {exc}",
             )
             events.append(
                 f"[{task.task_id}] BLOCKED: invalid reviewer JSON "
-                "(see state.json blocked_reason)"
+                f"({session.attempt.external_calls_consumed} reviewer call(s) consumed)"
             )
             return False
         except ProviderError as exc:
-            self._block(task, "review_provider", str(exc))
-            events.append(f"[{task.task_id}] BLOCKED: review provider error")
+            current = session.finalize(
+                ReviewAttemptStatus.TRANSPORT_FAILED,
+                error_type=CallErrorType.TRANSPORT,
+                error=str(exc),
+            )
+            self._block(current, "review_provider", str(exc))
+            events.append(
+                f"[{task.task_id}] BLOCKED: review provider error "
+                f"({session.attempt.external_calls_consumed} reviewer call(s) consumed)"
+            )
             return False
-        return self._apply_review(task, review, events)
+        except (Exception, KeyboardInterrupt) as exc:  # noqa: BLE001 - audited path
+            session.finalize(
+                ReviewAttemptStatus.INTERRUPTED,
+                error_type=CallErrorType.EXCEPTION,
+                error=f"{type(exc).__name__}: {exc}",
+            )
+            current = self._load(task.task_id)
+            self._block(
+                current,
+                "interrupted_reviewer_attempt",
+                "INTERRUPTED_REVIEWER_ATTEMPT: the reviewer raised "
+                f"{type(exc).__name__}: {exc}. Call evidence was persisted; "
+                "manual acknowledgement is required before another reviewer "
+                "call: 'devrelay unblock --reason \"...\"'.",
+            )
+            events.append(
+                f"[{task.task_id}] BLOCKED: reviewer raised "
+                f"{type(exc).__name__}; evidence persisted"
+            )
+            raise exc
+
+        current = session.finalize(ReviewAttemptStatus.COMPLETED, result=review)
+        events.append(
+            f"[{task.task_id}] review #{review_number} via "
+            f"{self.reviewer.name}"
+            + (f" ({self.reviewer.model})" if self.reviewer.model else "")
+            + f": {session.attempt.external_calls_consumed} call(s), "
+            f"{session.attempt.transport_attempts} HTTP attempt(s)"
+        )
+        return self._apply_review(current, review, events)
 
     def _export_manual_request(
         self, task: TaskRun, bundle: ReviewBundle, events: list[str]
@@ -882,8 +1160,15 @@ class DevRelayEngine:
     def _apply_review(
         self, task: TaskRun, review: ReviewResult, events: list[str]
     ) -> bool:
-        """Persists the review and applies the policy decision."""
-        review = self._normalize_review(task.task_id, review)
+        """Persists the review and applies the policy decision.
+
+        The reviewer's ``decision`` string is never the final authority: the
+        task policy (``blocking_severities``) decides FIX vs PASS.
+        """
+        policy = self._policy_for(task)
+        # A reviewer may echo secrets from the diff; persist only sanitized text.
+        review = sanitize_review_result(self._normalize_review(task.task_id, review))
+        review = mark_findings(review, task)  # fingerprints + seen counters
         review_number = len(task.review_history) + 1
         reviews_dir = self.store.reviews_dir(task.task_id)
         result_file = self.store.write_text(
@@ -892,16 +1177,16 @@ class DevRelayEngine:
         )
         task.review_history.append(review)
         task.last_review = review
-        blocking = self.policy.blocking_findings(review)
+        blocking = policy.blocking_findings(review)
         task.current_findings = blocking
-        task.open_p3 = self.policy.non_blocking_findings(review)
+        task.open_p3 = policy.non_blocking_findings(review)
         self._persist(task)
         events.append(
             f"[{task.task_id}] review #{review_number} stored: "
             f"{self.store.rel_path(result_file)}"
         )
 
-        decision, _ = self.policy.effective_decision(review)
+        decision, _ = policy.effective_decision(review)
         if decision == ReviewDecision.BLOCKED:
             self._block(
                 task,
@@ -911,12 +1196,33 @@ class DevRelayEngine:
             events.append(f"[{task.task_id}] BLOCKED: reviewer decision=BLOCKED")
             return False
         if decision == ReviewDecision.REQUEST_CHANGES:
-            if not self.policy.can_fix_again(task):
+            stalled = stalled_findings(
+                review, task, self._task_config(task).pipeline.max_same_finding_cycles
+            )
+            if stalled:
+                first = stalled[0]
+                self._block(
+                    task,
+                    "review_stalled",
+                    "the same blocking finding keeps returning "
+                    f"(fingerprint {first.fingerprint}, seen "
+                    f"{task.finding_seen_counts.get(first.fingerprint, 0)}x): "
+                    f"[{first.severity.value}] {first.title}. DevRelay stopped the "
+                    "loop instead of re-running the same fix until the budget is "
+                    "gone; use 'devrelay unblock --reason \"...\"' if another "
+                    "cycle is genuinely intended.",
+                )
+                events.append(
+                    f"[{task.task_id}] BLOCKED: review stalled on a repeated "
+                    f"finding ({first.severity.value}: {first.title})"
+                )
+                return False
+            if not policy.can_fix_again(task):
                 self._block(
                     task,
                     "max_iterations",
                     f"blocking findings remain after "
-                    f"{self.policy.max_fix_iterations} fix iteration(s); "
+                    f"{policy.max_fix_iterations} fix iteration(s); "
                     "use 'devrelay unblock --to fix' for an explicit override",
                 )
                 events.append(f"[{task.task_id}] BLOCKED: max fix iterations reached")
@@ -989,6 +1295,22 @@ class DevRelayEngine:
                 "review is not applicable"
             )
         events: list[str] = []
+        # v0.2-A: manual review is auditable but consumes zero external calls.
+        review_number = len(task.review_history) + 1
+        session = ReviewSession(
+            store=self.store,
+            task_id=task.task_id,
+            review_number=review_number,
+            provider_name="manual",
+            model=None,
+            endpoint_host=None,
+            budget=self._budget_for(task),
+            load_task=lambda: self._load(task.task_id),
+            persist=self._persist,
+            events=events,
+        )
+        session.record_manual_review(review)
+        task = self._load(task_id)
         self._apply_review(task, review, events)
         return events
 
@@ -1068,7 +1390,12 @@ class DevRelayEngine:
         return task
 
     def unblock(
-        self, task_id: str, reason: str, to: str | None = None
+        self,
+        task_id: str,
+        reason: str,
+        to: str | None = None,
+        *,
+        refresh_policy: bool = False,
     ) -> TaskRun:
         if not reason or not reason.strip():
             raise DevRelayError("unblock requires a non-empty --reason")
@@ -1086,21 +1413,38 @@ class DevRelayEngine:
                 f"unknown unblock target '{target}' (use one of "
                 f"{sorted(_UNBLOCK_TARGETS)})"
             )
+        # Explicit, audited policy refresh: the only supported way to change a
+        # running task's budget/blocking policy (never implicit, never silent).
+        if refresh_policy:
+            self.refresh_task_policy(task_id, reason.strip())
+            task = self._load(task_id)
         to_state = _UNBLOCK_TARGETS[target]
         self._move(task, to_state, note=f"manual unblock: {reason.strip()}")
         if to_state == PipelineState.FIX_REQUIRED:
             task.manual_override = True
         # A human explicitly acknowledged the interrupted attempt: clear the
-        # crash marker so a new provider run is allowed (state/audit/evidence
+        # crash markers so a new provider run is allowed (state/audit/evidence
         # for the old attempt are kept).
+        marker_notes: list[str] = []
         if task.attempt_in_flight:
             task.attempt_in_flight = False
+            marker_notes.append("interrupted provider attempt")
+        if task.review_call_in_flight:
+            task.review_call_in_flight = False
+            marker_notes.append("interrupted reviewer attempt")
+        closed = acknowledge_unfinished_attempts(task, note=reason.strip())
+        if closed:
+            marker_notes.append(
+                "unfinished review round(s) "
+                + ", ".join(f"#{attempt.review_number}" for attempt in closed)
+            )
+        if marker_notes:
             task.audit.append(
                 TransitionEvent(
                     from_state=task.state.value,
                     to_state=task.state.value,
                     note=(
-                        "interrupted provider attempt acknowledged by human: "
+                        f"manual acknowledgement of {' and '.join(marker_notes)}: "
                         f"{reason.strip()}"
                     ),
                     by="human",
@@ -1166,6 +1510,28 @@ class DevRelayEngine:
             if state == PipelineState.DONE
             else "PENDING"
         )
+        policy_config = self._task_config(task)
+        budget = ProviderBudget(policy_config.budget)
+        usage = budget.usage(task)
+        budget_one_line = (
+            f"implementer {usage.implementer_calls}/{policy_config.budget.max_implementer_calls}"
+            f", reviewer {usage.reviewer_calls}/{policy_config.budget.max_reviewer_calls}"
+            f", total {usage.total_calls}/{policy_config.budget.max_total_provider_calls}"
+        )
+        if last_attempt := (task.review_attempts[-1] if task.review_attempts else None):
+            review_one_line = (
+                f"#{last_attempt.review_number} {last_attempt.status.value}"
+                f" via {last_attempt.provider_name}"
+                + (f" ({last_attempt.model})" if last_attempt.model else "")
+                + f", calls {last_attempt.external_calls_consumed}"
+                + (
+                    f", decision {last_attempt.result.decision.value}"
+                    if last_attempt.result
+                    else ""
+                )
+            )
+        else:
+            review_one_line = "-"
         return {
             "task_id": task.task_id,
             "title": task.title,
@@ -1185,7 +1551,67 @@ class DevRelayEngine:
                 task.attempts[-1].status.value if task.attempts else "-"
             )
             + (" (IN FLIGHT)" if task.attempt_in_flight else ""),
+            "budget": budget_one_line,
+            "review": review_one_line,
+            "policy_source": task.policy_source or "snapshot",
             "blocked": task.blocked_code or "",
+        }
+
+    def usage_block(self, task_id: str) -> dict[str, object]:
+        """Read-only provider usage/audit summary for `devrelay usage`."""
+        task = self._load(task_id)
+        policy_config = self._task_config(task)
+        budget = ProviderBudget(policy_config.budget)
+        usage = budget.usage(task)
+        last_attempt = task.review_attempts[-1] if task.review_attempts else None
+        return {
+            "task_id": task.task_id,
+            "state": task.state.value,
+            "implementer_calls": usage.implementer_calls,
+            "reviewer_calls": usage.reviewer_calls,
+            "total_calls": usage.total_calls,
+            "max_implementer_calls": policy_config.budget.max_implementer_calls,
+            "max_reviewer_calls": policy_config.budget.max_reviewer_calls,
+            "max_total_provider_calls": policy_config.budget.max_total_provider_calls,
+            "reviewer_provider": self.reviewer.name,
+            "reviewer_model": self.reviewer.model or "-",
+            "reviewer_endpoint_host": self.reviewer.endpoint_host or "-",
+            "provider_calls": [
+                {
+                    "call_id": record.call_id,
+                    "kind": record.provider_kind.value,
+                    "phase": record.phase.value,
+                    "success": record.success,
+                    "external_calls": record.external_call_count,
+                    "error_type": record.error_type.value if record.error_type else None,
+                    "model": record.model,
+                    "endpoint_host": record.endpoint_host,
+                    "duration_seconds": record.duration_seconds,
+                }
+                for record in task.provider_calls
+            ],
+            "review_attempts": [
+                {
+                    "review_number": attempt.review_number,
+                    "provider": attempt.provider_name,
+                    "status": attempt.status.value,
+                    "transport_attempts": attempt.transport_attempts,
+                    "format_attempts": attempt.format_attempts,
+                    "external_calls": attempt.external_calls_consumed,
+                    "model": attempt.model,
+                    "endpoint_host": attempt.endpoint_host,
+                    "error_type": attempt.error_type.value if attempt.error_type else None,
+                    "result": attempt.result.decision.value if attempt.result else None,
+                }
+                for attempt in task.review_attempts
+            ],
+            "last_review_attempt": (
+                last_attempt.status.value if last_attempt is not None else "-"
+            ),
+            "policy_source": task.policy_source or "snapshot",
+            "blocked_code": task.blocked_code,
+            "attempt_in_flight": task.attempt_in_flight,
+            "review_call_in_flight": task.review_call_in_flight,
         }
 
 
@@ -1193,3 +1619,16 @@ def _json_pretty(obj) -> str:
     import json
 
     return json.dumps(obj.model_dump(mode="json"), indent=2, ensure_ascii=False)
+
+
+def record_duration(record: ProviderAttempt) -> float:
+    """Seconds between attempt start and now (best-effort, never negative)."""
+    from datetime import datetime, timezone
+
+    try:
+        started = datetime.fromisoformat(record.started_at)
+    except ValueError:  # pragma: no cover - defensive
+        return 0.0
+    if started.tzinfo is None:
+        started = started.replace(tzinfo=timezone.utc)
+    return max(0.0, round((datetime.now(timezone.utc) - started).total_seconds(), 3))
