@@ -1,0 +1,123 @@
+# PyPI publication for DevRelay (Trusted Publishing / OIDC).
+#
+# No PyPI API token is stored in this repository. PyPI matches the publisher by
+# repository + workflow filename + environment:
+#   repository: YingQiu0871/DevRelay
+#   workflow:   release.yml
+#   environment: pypi
+#
+# v0.1 bootstrap: this workflow does NOT rebuild the package. It downloads the
+# already published and verified GitHub Release assets, verifies their sha256
+# against pinned digests, and uploads exactly those files to PyPI.
+#
+# Publication can only be started manually with confirm=PUBLISH; no push or
+# pull_request event ever triggers an upload.
+
+name: release
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag to publish (v0.1 bootstrap: must be v0.1.0)"
+        required: true
+        default: "v0.1.0"
+        type: string
+      confirm:
+        description: "Type exactly PUBLISH to confirm the PyPI upload"
+        required: true
+        default: ""
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    name: Publish to PyPI (OIDC)
+    if: ${{ inputs.confirm == 'PUBLISH' }}
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Validate tag (v0.1 bootstrap safety guard)
+        env:
+          TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          if [ "$TAG" != "v0.1.0" ]; then
+            echo "::error::v0.1 bootstrap safety guard: this workflow only publishes tag v0.1.0 (got '$TAG'). Generalize in v0.2."
+            exit 1
+          fi
+
+      - name: Verify the GitHub Release is published (not draft, not prerelease)
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          state=$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" \
+            --json isDraft,isPrerelease --jq 'if (.isDraft or .isPrerelease) then "bad" else "ok" end')
+          if [ "$state" != "ok" ]; then
+            echo "::error::release $TAG is a draft or a prerelease; refusing to publish."
+            exit 1
+          fi
+
+      - name: Download release artifacts (no rebuild)
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" \
+            --pattern 'devrelay-*.whl' --pattern 'devrelay-*.tar.gz' --dir dist
+          ls -l dist
+
+      - name: Verify artifact set, version and v0.1.0 integrity pins
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import hashlib
+          import pathlib
+          import sys
+
+          dist = pathlib.Path("dist")
+          wheels = sorted(dist.glob("*.whl"))
+          sdists = sorted(dist.glob("*.tar.gz"))
+          if len(wheels) != 1 or len(sdists) != 1:
+              sys.exit(f"expected exactly one wheel and one sdist, got {wheels} / {sdists}")
+          if wheels[0].name != "devrelay-0.1.0-py3-none-any.whl":
+              sys.exit(f"unexpected wheel name: {wheels[0].name}")
+          if sdists[0].name != "devrelay-0.1.0.tar.gz":
+              sys.exit(f"unexpected sdist name: {sdists[0].name}")
+
+          # v0.1.0 bootstrap integrity pin: sha256 of the GitHub Release assets
+          # that already passed fresh-install verification. A future release
+          # should replace this with a general provenance check.
+          pins = {
+              "devrelay-0.1.0-py3-none-any.whl": "8c9b3261455758a60eb95fa51c77100530e759eb688fc2ecd11447791e03a7c5",
+              "devrelay-0.1.0.tar.gz": "aea142a7975d2d9f651b94db252547be23d91742a862df0aef9848d9409da005",
+          }
+          for name, expected in pins.items():
+              actual = hashlib.sha256((dist / name).read_bytes()).hexdigest()
+              print(f"{name}: {actual}")
+              if actual != expected:
+                  sys.exit(f"sha256 mismatch for {name}: {actual} != {expected}")
+          print("artifact verification OK: exactly one wheel, one sdist, digests match the released assets")
+          PY
+
+      - name: twine check
+        run: |
+          set -euo pipefail
+          python3 -m pip install --upgrade --quiet twine
+          python3 -m twine check dist/*
+
+      - name: Publish to PyPI (Trusted Publishing / OIDC)
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: dist/
+          attestations: false
