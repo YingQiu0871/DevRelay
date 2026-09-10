@@ -5,6 +5,8 @@
 
 **Supported release: v0.1.0** (see [CHANGELOG.md](CHANGELOG.md); the CLI
 reports the same version via `devrelay version`).
+Source: <https://github.com/YingQiu0871/DevRelay> -
+[Issues](https://github.com/YingQiu0871/DevRelay/issues)
 
 DevRelay is a **local AI coding orchestrator** (CLI) that automates the
 mechanical handoffs of a multi-model development workflow:

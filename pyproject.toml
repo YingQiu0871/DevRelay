@@ -30,6 +30,12 @@ dependencies = [
     "httpx>=0.27",
 ]
 
+[project.urls]
+Homepage = "https://github.com/YingQiu0871/DevRelay"
+Repository = "https://github.com/YingQiu0871/DevRelay"
+Issues = "https://github.com/YingQiu0871/DevRelay/issues"
+Changelog = "https://github.com/YingQiu0871/DevRelay/blob/main/CHANGELOG.md"
+
 [project.optional-dependencies]
 dev = ["pytest>=8.0"]
 
