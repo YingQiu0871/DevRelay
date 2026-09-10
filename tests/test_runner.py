@@ -68,3 +68,38 @@ def test_shell_metacharacters_never_executed(tmp_path):
     assert result.success
     assert payload in result.stdout          # passed as a literal argument
     assert not marker.exists()               # nothing was executed by a shell
+
+
+# ---------------------------------------------------------------------------
+# AUD-01/AUD-05: byte-exact I/O (no newline translation anywhere)
+# ---------------------------------------------------------------------------
+_ECHO_BYTES = "import sys; sys.stdout.buffer.write(sys.stdin.buffer.read())"
+
+
+def test_run_bytes_is_byte_exact_on_stdin_and_stdout():
+    runner = CommandRunner()
+    payload = b"line1\nline2\r\nbare\rcr\nbinary\x00\xff\xfe\n"
+    result = runner.run_bytes(
+        [sys.executable, "-c", _ECHO_BYTES], input_bytes=payload, timeout_seconds=30
+    )
+    assert result.success
+    assert result.stdout == payload          # byte-for-byte round trip
+    assert b"\r\n" in result.stdout          # CR surviving proves no translation
+
+
+def test_text_path_does_not_inject_crlf_on_stdin():
+    """A text command must receive the exact bytes of input_text (LF stays LF)."""
+    runner = CommandRunner()
+    probe = "import sys; sys.stdout.write(repr(sys.stdin.buffer.read()))"
+    result = runner.run(
+        [sys.executable, "-c", probe], input_text="a\nb\n", timeout_seconds=30
+    )
+    assert result.stdout.strip() == repr(b"a\nb\n")
+
+
+def test_text_path_keeps_cr_on_stdout():
+    """stdout decoding must not normalise CRLF/CR away (AUD-05 fidelity)."""
+    runner = CommandRunner()
+    probe = "import sys; sys.stdout.buffer.write(b'A\\r\\nB\\rC\\n')"
+    result = runner.run([sys.executable, "-c", probe], timeout_seconds=30)
+    assert result.stdout == "A\r\nB\rC\n"

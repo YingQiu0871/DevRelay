@@ -270,6 +270,7 @@ def status(
         ("Reviewer", "reviewer"),
         ("Final Gate", "final_gate"),
         ("Baseline", "baseline"),
+        ("Attempt", "attempt"),
     ):
         typer.echo(f"{label:<12} {block[key]}")
     if block["blocked"]:

@@ -247,7 +247,9 @@ class BaselineBuilder:
             )
             dirty = _tracked_changed_names(self.root, self.runner, env=clone.env)
             # HEAD -> task-start worktree for tracked files (binary-capable).
-            patch_result = self.runner.run(
+            # Byte-exact transport: the patch is binary-sensitive durable data
+            # and must never pass through text-mode stdin/stdout translation.
+            patch_result = self.runner.run_bytes(
                 [
                     "git",
                     "-C",
@@ -267,9 +269,9 @@ class BaselineBuilder:
             if patch_result.exit_code != 0:
                 raise BaselineError(
                     "git diff --binary failed: "
-                    f"{(patch_result.stderr or '').strip()[:2000]}"
+                    f"{patch_result.stderr.decode('utf-8', errors='replace').strip()[:2000]}"
                 )
-            patch_bytes = patch_result.stdout.encode("utf-8")
+            patch_bytes = patch_result.stdout
             # Real index tree, read through the clone (read-only semantics).
             try:
                 index_tree = run_git(

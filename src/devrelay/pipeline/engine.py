@@ -19,6 +19,7 @@ from devrelay.artifacts.renderer import (
     render_final_report,
     render_review_request_md,
     render_task_markdown,
+    sanitize_review_bundle,
     starter_task_markdown,
 )
 from devrelay.artifacts.store import ArtifactStore
@@ -33,9 +34,13 @@ from devrelay.errors import (
     WorkspaceError,
 )
 from devrelay.models import (
+    AttemptStatus,
     Finding,
     FinalGateRecord,
+    IndexSnapshotStatus,
     PolicyViolation,
+    PolicyViolationType,
+    ProviderAttempt,
     ProviderExecutionResult,
     RepoSnapshot,
     ReviewDecision,
@@ -69,6 +74,8 @@ _UNBLOCK_DEFAULT_TARGET = {
     "implementer_failed": "plan",
     "policy_violation": "plan",
     "policy_guard_error": "plan",
+    "policy_check_incomplete": "implement",
+    "interrupted_attempt": "implement",
     "baseline_error": "plan",
     "internal": "plan",
 }
@@ -163,14 +170,15 @@ class DevRelayEngine:
         self.store.write_text(
             policy_dir / f"post-run-{attempt:02d}.json", _json_pretty(post)
         )
-        self.store.write_text(
-            policy_dir / f"violations-{attempt:02d}.json",
-            json.dumps(
-                [v.model_dump(mode="json") for v in violations],
-                indent=2,
-                ensure_ascii=False,
-            ),
-        )
+        if violations:
+            self.store.write_text(
+                policy_dir / f"violations-{attempt:02d}.json",
+                json.dumps(
+                    [v.model_dump(mode="json") for v in violations],
+                    indent=2,
+                    ensure_ascii=False,
+                ),
+            )
 
     def _record_policy_violations(
         self,
@@ -186,48 +194,67 @@ class DevRelayEngine:
             )
             task.policy_violations.append(violation)
 
-    def _policy_guard_after_run(
-        self,
-        task: TaskRun,
-        attempt: int,
-        pre: RepoSnapshot,
-        events: list[str],
-    ) -> bool:
-        """Post-run repository policy verification. Returns True when the
-        pipeline must stop (task already moved to BLOCKED)."""
-        service = self._baseline_service()
-        try:
-            post = service.post_snapshot()
-            violations = service.check_policy(pre, post)
-        except BaselineError as exc:
-            current = self._load(task.task_id)
-            self._block(
-                current,
-                "policy_guard_error",
-                f"post-run repository verification failed: {exc}",
-            )
-            events.append(
-                f"[{task.task_id}] BLOCKED: policy guard could not verify "
-                "repository state"
-            )
-            return True
-        if not violations:
-            return False
-        self._persist_policy_run(task.task_id, attempt, pre, post, violations)
+    # ------------------------------------------------------------------ #
+    # provider attempt lifecycle (AUD-02)
+    # ------------------------------------------------------------------ #
+    def _write_attempt(self, task: TaskRun, record: ProviderAttempt) -> None:
+        """Upsert the attempt in task state + policy/attempt-NN.json."""
+        for index, existing in enumerate(task.attempts):
+            if existing.attempt_id == record.attempt_id:
+                task.attempts[index] = record
+                break
+        else:
+            task.attempts.append(record)
+        self._persist(task)
+        policy_dir = self.store.policy_dir(task.task_id)
+        self.store.write_text(
+            policy_dir / f"attempt-{record.iteration:02d}.json", _json_pretty(record)
+        )
+
+    def _finalize_attempt(
+        self, task: TaskRun, record: ProviderAttempt, status: AttemptStatus
+    ) -> TaskRun:
+        """Close the attempt (crash marker cleared) and persist everything."""
+        record.status = status
+        record.completed_at = utcnow_iso()
         current = self._load(task.task_id)
-        self._record_policy_violations(current, violations, attempt)
-        first = violations[0]
+        current.attempt_in_flight = False
+        self._write_attempt(current, record)
+        return current
+
+    def _preflight_index_check(
+        self, task: TaskRun, record: ProviderAttempt, pre: RepoSnapshot, events: list[str]
+    ) -> bool:
+        """Fail closed BEFORE the provider starts when index state is unusable.
+
+        Running the provider first would spend quota and could mutate the
+        workspace that DevRelay cannot verify.
+        """
+        if pre.index_snapshot_status is IndexSnapshotStatus.OK:
+            return True
+        current = self._finalize_attempt(
+            task, record, AttemptStatus.POLICY_CHECK_INCOMPLETE
+        )
+        self.store.write_text(
+            self.store.policy_dir(task.task_id)
+            / f"pre-run-{record.iteration:02d}.json",
+            _json_pretty(pre),
+        )
         self._block(
             current,
-            "policy_violation",
-            f"[{first.type.value}] {first.description} "
-            "(policy/violations-*.json has full details)",
+            "policy_check_incomplete",
+            "index-mutation verification is impossible in this repository "
+            f"state (index snapshot: {pre.index_snapshot_status.value}"
+            + (f" - {pre.index_snapshot_error}" if pre.index_snapshot_error else "")
+            + "). Provider execution was refused before it started; resolve "
+            "unresolved merge conflicts / index problems, then "
+            "'devrelay unblock --reason \"...\"'.",
         )
         events.append(
-            f"[{task.task_id}] BLOCKED: policy violation "
-            f"{first.type.value} ({len(violations)} violation(s))"
+            f"[{task.task_id}] BLOCKED before provider run: index snapshot "
+            f"{pre.index_snapshot_status.value} (fail closed)"
         )
-        return True
+        return False
 
     # ------------------------------------------------------------------ #
     # lifecycle
@@ -344,6 +371,15 @@ class DevRelayEngine:
                 break
         if steps >= max_steps:  # pragma: no cover - hard guard
             events.append("[engine] safety stop: too many automatic steps")
+        if not events:
+            final = self._load(task_id)
+            if final.state in (PipelineState.BLOCKED, PipelineState.FAILED):
+                events.append(
+                    f"[{task_id}] task is {final.state.value}"
+                    + (f" ({final.blocked_code})" if final.blocked_code else "")
+                    + (f": {final.blocked_reason}" if final.blocked_reason else "")
+                    + " - use 'devrelay unblock --reason \"...\"' to resume manually"
+                )
         return events
 
     def _advance_once(self, task: TaskRun, events: list[str]) -> bool:
@@ -373,12 +409,34 @@ class DevRelayEngine:
     # implementation stage
     # ------------------------------------------------------------------ #
     def _do_implementation(self, task: TaskRun, events: list[str]) -> bool:
-        """Runs the implementer once. True = success and now TESTING."""
+        """Runs the implementer once. True = success and now TESTING.
+
+        Every run is a persisted :class:`ProviderAttempt`: the PRE snapshot and
+        the crash marker are written BEFORE the provider is invoked, and the
+        POST snapshot + policy guard run for success, non-zero exit,
+        timeouts and Python exceptions alike (AUD-02).
+        """
         packet = task.packet
         if packet is None:
             raise StateConflictError(
                 f"task {task.task_id} has no Task Packet; import a plan first"
             )
+        # Fail closed: a previous attempt may have modified the workspace and
+        # never completed its post-run verification (hard kill, crash).
+        if task.attempt_in_flight:
+            self._block(
+                task,
+                "interrupted_attempt",
+                "Previous provider attempt may have modified the workspace and "
+                "its post-run verification did not complete. Manual "
+                "acknowledgement is required before another provider run: "
+                "'devrelay unblock --reason \"...\"'.",
+            )
+            events.append(
+                f"[{task.task_id}] BLOCKED: previous provider attempt is "
+                "still marked in-flight (manual acknowledgement required)"
+            )
+            return False
         if task.state == PipelineState.PLAN_READY:
             self._move(task, PipelineState.IMPLEMENTING, note="implementation start")
         elif task.state == PipelineState.FIX_REQUIRED:
@@ -402,7 +460,12 @@ class DevRelayEngine:
             )
 
         attempt = task.next_attempt
-        is_fix = task.fix_iterations_used > 0 or bool(task.current_findings)
+        is_fix = task.state == PipelineState.FIXING
+        record = ProviderAttempt(
+            attempt_id=f"{task.task_id}-A{attempt:02d}",
+            iteration=attempt,
+            phase="FIX" if is_fix else "IMPLEMENT",
+        )
         context = ImplementerContext(
             task_id=task.task_id,
             packet=packet,
@@ -413,7 +476,10 @@ class DevRelayEngine:
             reuse_approved_scope=self.config.scope.reuse_approved_scope,
             current_delta_first=self.config.scope.current_delta_first,
         )
-        self._persist(task)
+
+        # ---- persist in-flight marker BEFORE the provider starts ----------
+        task.attempt_in_flight = True
+        self._write_attempt(task, record)
         events.append(
             f"[{task.task_id}] implementing (attempt {attempt}, "
             f"{'fix' if is_fix else 'initial'} pass)"
@@ -422,7 +488,9 @@ class DevRelayEngine:
         try:
             pre_snapshot = service.pre_snapshot()
         except BaselineError as exc:
-            current = self._load(task.task_id)
+            current = self._finalize_attempt(
+                task, record, AttemptStatus.PROVIDER_ERROR
+            )
             self._block(
                 current,
                 "policy_guard_error",
@@ -433,30 +501,144 @@ class DevRelayEngine:
                 "repository state before the provider run"
             )
             return False
-        result: ProviderExecutionResult = self.implementer.run(context)
+        record.pre_snapshot = pre_snapshot
+        self._write_attempt(task, record)  # PRE persisted before the provider run
+        if not self._preflight_index_check(task, record, pre_snapshot, events):
+            return False
 
+        # ---- provider execution (exceptions are captured, never guessed) ---
+        result: ProviderExecutionResult | None = None
+        exception: BaseException | None = None
+        try:
+            result = self.implementer.run(context)
+            record.provider_started = True
+            record.provider_finished = True
+        except (Exception, KeyboardInterrupt) as exc:  # noqa: BLE001 - audited path
+            exception = exc
+            record.provider_started = True
+            record.provider_exception = f"{type(exc).__name__}: {exc}"
+        if result is not None:
+            record.provider_exit_code = result.exit_code
+            record.provider_timed_out = result.timed_out
+            record.provider_error = result.error
+        self._write_attempt(self._load(task.task_id), record)
+
+        # ---- POST snapshot + policy guard: always attempted ---------------
+        post_snapshot: RepoSnapshot | None = None
+        violations: list[PolicyViolation] = []
+        guard_error: str | None = None
+        try:
+            post_snapshot = service.post_snapshot()
+            violations = service.check_policy(pre_snapshot, post_snapshot)
+            record.policy_checked = True
+        except BaselineError as exc:
+            guard_error = str(exc)
+            record.policy_check_error = guard_error
+        record.post_snapshot = post_snapshot
+        record.violations = violations
+        if post_snapshot is not None:
+            self._persist_policy_run(
+                task.task_id, attempt, pre_snapshot, post_snapshot, violations
+            )
+
+        # ---- logs (evidence for every outcome, incl. exceptions) ----------
         log_dir = self.store.logs_dir(task.task_id)
+        stdout_text = result.stdout if result is not None else ""
+        stderr_text = result.stderr if result is not None else ""
+        if exception is not None:
+            stderr_text = (
+                f"{stderr_text}\n[DevRelay] provider raised "
+                f"{type(exception).__name__}: {exception}\n"
+            )
         stdout_file = self.store.write_text(
             log_dir / f"codex-{attempt:02d}.stdout.log",
-            sanitize(truncate(result.stdout or "", _MAX_LOG_CHARS)),
+            sanitize(truncate(stdout_text or "", _MAX_LOG_CHARS)),
         )
         stderr_file = self.store.write_text(
             log_dir / f"codex-{attempt:02d}.stderr.log",
-            sanitize(truncate(result.stderr or "", _MAX_LOG_CHARS)),
+            sanitize(truncate(stderr_text or "", _MAX_LOG_CHARS)),
         )
         events.append(
             f"[{task.task_id}] implementer logs: "
             f"{self.store.rel_path(stdout_file)}, {self.store.rel_path(stderr_file)}"
         )
 
-        provider_ran = not (result.error and result.exit_code is None)
-        if provider_ran:
-            if self._policy_guard_after_run(task, attempt, pre_snapshot, events):
+        # ---- decide, with policy violations taking priority --------------
+        if violations:
+            incomplete = any(
+                v.type == PolicyViolationType.POLICY_CHECK_INCOMPLETE
+                for v in violations
+            )
+            current = self._finalize_attempt(
+                task,
+                record,
+                AttemptStatus.POLICY_CHECK_INCOMPLETE
+                if incomplete
+                else AttemptStatus.POLICY_VIOLATION,
+            )
+            self._record_policy_violations(current, violations, attempt)
+            first = violations[0]
+            code = "policy_check_incomplete" if incomplete else "policy_violation"
+            self._block(
+                current,
+                code,
+                f"[{first.type.value}] {first.description} "
+                "(policy/violations-*.json has full details)",
+            )
+            events.append(
+                f"[{task.task_id}] BLOCKED: policy check incomplete "
+                f"({first.type.value})"
+                if incomplete
+                else f"[{task.task_id}] BLOCKED: policy violation "
+                f"{first.type.value} ({len(violations)} violation(s))"
+            )
+            if exception is not None:
+                events.append(
+                    f"[{task.task_id}] provider exception also recorded: "
+                    f"{record.provider_exception}"
+                )
                 return False
+            return False
+        if guard_error is not None:
+            current = self._finalize_attempt(
+                task, record, AttemptStatus.POLICY_CHECK_INCOMPLETE
+            )
+            self._block(
+                current,
+                "policy_guard_error",
+                f"post-run repository verification failed: {guard_error}",
+            )
+            events.append(
+                f"[{task.task_id}] BLOCKED: policy guard could not verify "
+                "repository state after the provider run"
+            )
+            return False
+        if exception is not None:
+            current = self._finalize_attempt(
+                task, record, AttemptStatus.INTERRUPTED
+            )
+            self._block(
+                current,
+                "interrupted_attempt",
+                "INTERRUPTED_PROVIDER_ATTEMPT: the provider raised "
+                f"{record.provider_exception}. The workspace may have been "
+                "modified; post-run repository state was captured and "
+                "verified. Manual acknowledgement is required before another "
+                "provider run: 'devrelay unblock --reason \"...\"'.",
+            )
+            events.append(
+                f"[{task.task_id}] BLOCKED: provider raised "
+                f"{type(exception).__name__}; evidence persisted"
+            )
+            raise exception
 
+        assert result is not None  # no exception != None result
         if result.error and result.exit_code is None:
-            # Provider unavailable (e.g. Codex CLI missing): no state change,
-            # clear diagnostic, task stays IMPLEMENTING/FIXING for retry.
+            # Provider unavailable (e.g. Codex CLI missing): nothing ran, so the
+            # task stays IMPLEMENTING/FIXING for a retry after installation.
+            current = self._finalize_attempt(
+                task, record, AttemptStatus.PROVIDER_UNAVAILABLE
+            )
             events.append(f"[{task.task_id}] ERROR: {result.error}")
             return False
         if not result.success:
@@ -465,32 +647,32 @@ class DevRelayEngine:
                 + (f" timed_out={result.timed_out}" if result.timed_out else "")
                 + f" stderr={result.stderr.strip()[:1000]}"
             )
-            task = self._load(task.task_id)
-            self._hard_fail(task, "implementer_failed", reason)
+            current = self._finalize_attempt(task, record, AttemptStatus.PROVIDER_ERROR)
+            self._hard_fail(current, "implementer_failed", reason)
             events.append(f"[{task.task_id}] FAILED: {reason}")
             return False
 
-        task = self._load(task.task_id)
-        task.implementation_passes += 1
+        current = self._finalize_attempt(task, record, AttemptStatus.COMPLETED)
+        current.implementation_passes += 1
         summary_body = sanitize(result.report or result.stdout or "")
         summary = (
             f"# Implementation report — attempt {attempt}\n\n"
             f"Generated at {utcnow_iso()} by provider '{self.implementer.name}'.\n\n"
             f"{truncate(summary_body, 200_000)}\n"
         )
-        impl_dir = self.store.implementation_dir(task.task_id)
+        impl_dir = self.store.implementation_dir(current.task_id)
         impl_file = self.store.write_text(
             impl_dir / f"iteration-{attempt:02d}.md", summary
         )
         rel = self.store.rel_path(impl_file)
-        if rel not in task.implementation_report_paths:
-            task.implementation_report_paths.append(rel)
+        if rel not in current.implementation_report_paths:
+            current.implementation_report_paths.append(rel)
         self._move(
-            task,
+            current,
             PipelineState.TESTING,
             note=f"implementation attempt {attempt} succeeded",
         )
-        self._persist(task)
+        self._persist(current)
         events.append(f"[{task.task_id}] implementation done -> TESTING")
         return True
 
@@ -598,6 +780,9 @@ class DevRelayEngine:
         return self._baseline_service().task_delta(task)
 
     def _build_review_bundle(self, task: TaskRun) -> ReviewBundle:
+        return sanitize_review_bundle(self._build_raw_review_bundle(task))
+
+    def _build_raw_review_bundle(self, task: TaskRun) -> ReviewBundle:
         delta = self._require_task_delta(task)
         diff = delta.text_diff
         diff_limit = self.config.review.max_diff_bytes
@@ -868,7 +1053,7 @@ class DevRelayEngine:
             task,
             preexisting_changes=preexisting,
             task_changed_files=delta.changed_files,
-            task_diff_stat_text=delta.stat_text,
+            task_diff_stat_text=sanitize(delta.stat_text),
             head_now=self.workspace.head_sha(),
             note=note,
             policy_notes=policy_notes,
@@ -902,6 +1087,22 @@ class DevRelayEngine:
         self._move(task, to_state, note=f"manual unblock: {reason.strip()}")
         if to_state == PipelineState.FIX_REQUIRED:
             task.manual_override = True
+        # A human explicitly acknowledged the interrupted attempt: clear the
+        # crash marker so a new provider run is allowed (state/audit/evidence
+        # for the old attempt are kept).
+        if task.attempt_in_flight:
+            task.attempt_in_flight = False
+            task.audit.append(
+                TransitionEvent(
+                    from_state=task.state.value,
+                    to_state=task.state.value,
+                    note=(
+                        "interrupted provider attempt acknowledged by human: "
+                        f"{reason.strip()}"
+                    ),
+                    by="human",
+                )
+            )
         task.blocked_code = None
         task.blocked_reason = None
         self._persist(task)
@@ -977,6 +1178,10 @@ class DevRelayEngine:
                 if task.baseline and task.baseline.baseline_complete
                 else "NONE (legacy task)"
             ),
+            "attempt": (
+                task.attempts[-1].status.value if task.attempts else "-"
+            )
+            + (" (IN FLIGHT)" if task.attempt_in_flight else ""),
             "blocked": task.blocked_code or "",
         }
 

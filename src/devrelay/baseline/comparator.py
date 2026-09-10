@@ -101,7 +101,8 @@ class BaselineRecovery:
         with TempGitIndex(self.root) as tmp:
             run_git(self.root, self.runner, ["read-tree", baseline.head_sha], env=tmp.env)
             if patch_bytes:
-                result = self.runner.run(
+                # Byte-exact transport: raw patch bytes in, raw stderr out.
+                result = self.runner.run_bytes(
                     [
                         "git",
                         "-C",
@@ -113,13 +114,13 @@ class BaselineRecovery:
                     ],
                     cwd=self.root,
                     env=tmp.env,
-                    input_text=patch_bytes.decode("utf-8", errors="replace"),
+                    input_bytes=patch_bytes,
                     timeout_seconds=_GIT_TIMEOUT,
                 )
                 if result.exit_code != 0:
                     raise BaselineCorruptError(
                         "cannot apply tracked.patch to the baseline tree: "
-                        f"{(result.stderr or '').strip()[:2000]}"
+                        f"{result.stderr.decode('utf-8', errors='replace').strip()[:2000]}"
                     )
             for entry in baseline.untracked_entries:
                 data = read_untracked(entry.storage_name)

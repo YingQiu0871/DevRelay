@@ -18,6 +18,7 @@ from devrelay.baseline.capture import run_git
 from devrelay.config import GitPolicyConfig
 from devrelay.errors import BaselineError
 from devrelay.models import (
+    IndexSnapshotStatus,
     PolicyViolation,
     PolicyViolationType,
     RepoSnapshot,
@@ -43,6 +44,18 @@ def _run(root: Path, runner: CommandRunner, args: list[str]) -> str:
     return result.stdout
 
 
+def _try_run(root: Path, runner: CommandRunner, args: list[str]) -> tuple[bool, str]:
+    """Run a read-only evidence command; never raises."""
+    result = runner.run(
+        ["git", "-C", str(root), *args],
+        cwd=root,
+        timeout_seconds=_GIT_TIMEOUT,
+    )
+    if result.error is not None or result.exit_code != 0:
+        return False, (result.stderr or result.stdout or result.error or "").strip()
+    return True, result.stdout
+
+
 class RepoGuard:
     """Read-only repository state snapshots + policy comparison."""
 
@@ -66,11 +79,36 @@ class RepoGuard:
             )
         except BaselineError:
             branch = None
-        index_tree = None
+
+        # Index evidence: an unavailable/conflicted index must NEVER be read as
+        # "no change" - policy comparison fails closed on it (AUD-04).
+        index_status = IndexSnapshotStatus.OK
+        index_error: str | None = None
+        index_tree: str | None = None
+        unmerged: list[str] = []
+        ok, unmerged_raw = _try_run(
+            self.root, self.runner, ["ls-files", "--unmerged", "-z"]
+        )
+        if ok:
+            unmerged = sorted({n for n in unmerged_raw.split("\0") if n})
+        ok, porcelain = _try_run(
+            self.root,
+            self.runner,
+            ["--no-optional-locks", "status", "--porcelain=v2"],
+        )
+        index_porcelain = porcelain if ok else ""
         try:
             index_tree = _run(self.root, self.runner, ["write-tree"]).strip() or None
-        except BaselineError:
-            index_tree = None  # unmerged index etc. -> skipped, never guessed
+        except BaselineError as exc:
+            index_error = str(exc)
+            index_status = (
+                IndexSnapshotStatus.CONFLICTED
+                if unmerged
+                else IndexSnapshotStatus.UNAVAILABLE
+            )
+        if index_tree is None and index_status is IndexSnapshotStatus.OK:
+            index_status = IndexSnapshotStatus.ERROR
+            index_error = index_error or "git write-tree returned no tree"
         refs = sorted(
             line
             for line in _run(
@@ -85,6 +123,10 @@ class RepoGuard:
             head_sha=head,
             branch=branch,
             index_tree_sha=index_tree,
+            index_snapshot_status=index_status,
+            index_snapshot_error=index_error,
+            index_status_porcelain=index_porcelain,
+            index_unmerged_entries=unmerged,
             local_refs=refs,
             tags=tags,
             note=note,
@@ -169,8 +211,38 @@ class RepoGuard:
                     blocking=True,
                 )
             )
+        # AUD-04: an index snapshot that could not be captured reliably must
+        # fail closed - it is NOT evidence of "no change".
         if (
-            before.index_tree_sha is not None
+            before.index_snapshot_status is not IndexSnapshotStatus.OK
+            or after.index_snapshot_status is not IndexSnapshotStatus.OK
+        ):
+            violations.append(
+                PolicyViolation(
+                    id="",
+                    type=PolicyViolationType.POLICY_CHECK_INCOMPLETE,
+                    severity=Severity.P1,
+                    before={
+                        "index_snapshot_status": before.index_snapshot_status.value,
+                        "index_snapshot_error": before.index_snapshot_error,
+                    },
+                    after={
+                        "index_snapshot_status": after.index_snapshot_status.value,
+                        "index_snapshot_error": after.index_snapshot_error,
+                    },
+                    description=(
+                        "index-mutation verification could not run reliably "
+                        f"(pre={before.index_snapshot_status.value}, "
+                        f"post={after.index_snapshot_status.value}). DevRelay "
+                        "fails closed instead of assuming the index is unchanged."
+                    ),
+                    blocking=True,
+                )
+            )
+        if (
+            before.index_snapshot_status is IndexSnapshotStatus.OK
+            and after.index_snapshot_status is IndexSnapshotStatus.OK
+            and before.index_tree_sha is not None
             and after.index_tree_sha is not None
             and before.index_tree_sha != after.index_tree_sha
         ):

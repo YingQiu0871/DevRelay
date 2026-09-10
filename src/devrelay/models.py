@@ -174,6 +174,29 @@ class CommandResult(BaseModel):
         return self.error is None and not self.timed_out and self.exit_code == 0
 
 
+class BinaryCommandResult(BaseModel):
+    """Byte-exact subprocess result (no newline translation, no re-encoding).
+
+    Used for git binary-sensitive transport (``git diff --binary`` output,
+    ``git apply --cached --binary -`` input) where byte fidelity is required.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    command: list[str]
+    cwd: str | None = None
+    exit_code: int | None = None
+    stdout: bytes = b""
+    stderr: bytes = b""
+    duration_seconds: float = 0.0
+    timed_out: bool = False
+    error: str | None = None
+
+    @property
+    def success(self) -> bool:
+        return self.error is None and not self.timed_out and self.exit_code == 0
+
+
 class ProviderExecutionResult(BaseModel):
     """Result of running an implementer provider (e.g. Codex CLI)."""
 
@@ -257,6 +280,26 @@ class PolicyViolationType(str, Enum):
     UNEXPECTED_TAG_CHANGE = "UNEXPECTED_TAG_CHANGE"
     UNEXPECTED_REF_CHANGE = "UNEXPECTED_REF_CHANGE"
     UNEXPECTED_INDEX_MUTATION = "UNEXPECTED_INDEX_MUTATION"
+    POLICY_CHECK_INCOMPLETE = "POLICY_CHECK_INCOMPLETE"
+
+
+class IndexSnapshotStatus(str, Enum):
+    """Whether the real index could be captured reliably (fail closed)."""
+
+    OK = "OK"
+    UNAVAILABLE = "UNAVAILABLE"
+    CONFLICTED = "CONFLICTED"
+    ERROR = "ERROR"
+
+
+class AttemptStatus(str, Enum):
+    IN_FLIGHT = "IN_FLIGHT"
+    COMPLETED = "COMPLETED"
+    PROVIDER_ERROR = "PROVIDER_ERROR"
+    PROVIDER_UNAVAILABLE = "PROVIDER_UNAVAILABLE"
+    INTERRUPTED = "INTERRUPTED"
+    POLICY_VIOLATION = "POLICY_VIOLATION"
+    POLICY_CHECK_INCOMPLETE = "POLICY_CHECK_INCOMPLETE"
 
 
 class PolicyViolation(BaseModel):
@@ -283,11 +326,46 @@ class RepoSnapshot(BaseModel):
     head_sha: str | None = None
     branch: str | None = None
     index_tree_sha: str | None = None
+    # Index capture reliability.  UNAVAILABLE/CONFLICTED/ERROR must never be
+    # read as "no change": policy comparison fails closed for those.
+    index_snapshot_status: IndexSnapshotStatus = IndexSnapshotStatus.OK
+    index_snapshot_error: str | None = None
+    index_status_porcelain: str = ""
+    index_unmerged_entries: list[str] = Field(default_factory=list)
     # sorted "refname objectname" lines for local refs (tags excluded here)
     local_refs: list[str] = Field(default_factory=list)
     # sorted "tagname objectname" lines
     tags: list[str] = Field(default_factory=list)
     note: str = ""
+
+
+class ProviderAttempt(BaseModel):
+    """One persisted implement/fix execution attempt (audit evidence).
+
+    ``TaskRun.attempt_in_flight`` is the crash marker: it is written BEFORE
+    the provider starts and only cleared once this process has finalised the
+    attempt (post snapshot + policy guard).
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    attempt_id: str
+    iteration: int
+    phase: str = "IMPLEMENT"          # IMPLEMENT | FIX
+    status: AttemptStatus = AttemptStatus.IN_FLIGHT
+    started_at: str = Field(default_factory=utcnow_iso)
+    completed_at: str | None = None
+    provider_started: bool = False
+    provider_finished: bool = False
+    provider_exit_code: int | None = None
+    provider_timed_out: bool = False
+    provider_error: str | None = None
+    provider_exception: str | None = None
+    pre_snapshot: RepoSnapshot | None = None
+    post_snapshot: RepoSnapshot | None = None
+    policy_checked: bool = False
+    policy_check_error: str | None = None
+    violations: list[PolicyViolation] = Field(default_factory=list)
 
 
 class BaselineUntrackedEntry(BaseModel):
@@ -403,6 +481,9 @@ class TaskRun(BaseModel):
     final_gate: FinalGateRecord | None = None
     audit: list[TransitionEvent] = Field(default_factory=list)
     policy_violations: list[PolicyViolation] = Field(default_factory=list)
+    # Persisted implement/fix attempt history + crash marker (see ProviderAttempt).
+    attempts: list[ProviderAttempt] = Field(default_factory=list)
+    attempt_in_flight: bool = False
 
     @property
     def next_attempt(self) -> int:

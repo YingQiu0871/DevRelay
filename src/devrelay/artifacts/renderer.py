@@ -10,7 +10,7 @@ All artifacts are designed to be read by humans *and* machines:
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Optional
 
 from devrelay.models import (
@@ -22,6 +22,7 @@ from devrelay.models import (
     TaskRun,
     WorkspaceSnapshot,
 )
+from devrelay.redact import redact_text
 
 SECTION_ALIASES: dict[str, tuple[str, ...]] = {
     "title": ("title",),
@@ -66,6 +67,71 @@ class ReviewBundle:
     preexisting_dirty_files: list[str] = field(default_factory=list)
     attempt: int = 1
     is_fix: bool = False
+
+
+# --------------------------------------------------------------------------
+# Reviewer redaction boundary
+# --------------------------------------------------------------------------
+
+def _clean_finding(finding: Finding) -> Finding:
+    return finding.model_copy(
+        update={
+            "title": redact_text(finding.title or ""),
+            "description": redact_text(finding.description or ""),
+            "evidence": redact_text(finding.evidence or ""),
+            "recommendation": redact_text(finding.recommendation or ""),
+            "files": [redact_text(name) for name in finding.files],
+        }
+    )
+
+
+def sanitize_review_bundle(bundle: ReviewBundle) -> ReviewBundle:
+    """The single redaction boundary for anything a reviewer may see.
+
+    Applied once between the engine and BOTH reviewer paths (remote HTTP
+    payload and manual review-request artifact), so every field that can carry
+    workspace content is pattern-redacted consistently.  This is best-effort
+    pattern matching, not a data-loss-prevention system.
+    """
+    packet = bundle.packet.model_copy(
+        update={
+            "title": redact_text(bundle.packet.title or ""),
+            "objective": redact_text(bundle.packet.objective or ""),
+            "notes": redact_text(bundle.packet.notes or ""),
+            "scope": [redact_text(x) for x in bundle.packet.scope],
+            "out_of_scope": [redact_text(x) for x in bundle.packet.out_of_scope],
+            "acceptance_criteria": [
+                redact_text(x) for x in bundle.packet.acceptance_criteria
+            ],
+            "constraints": [redact_text(x) for x in bundle.packet.constraints],
+            "tests_required": [redact_text(x) for x in bundle.packet.tests_required],
+        }
+    )
+    history = [
+        review.model_copy(
+            update={
+                "summary": redact_text(review.summary or ""),
+                "findings": [_clean_finding(f) for f in review.findings],
+            }
+        )
+        for review in bundle.previous_reviews
+    ]
+    return replace(
+        bundle,
+        packet=packet,
+        diff=redact_text(bundle.diff or ""),
+        implementation_summary=redact_text(bundle.implementation_summary or ""),
+        test_evidence=[redact_text(line) for line in bundle.test_evidence],
+        previous_reviews=history,
+        current_findings=[_clean_finding(f) for f in bundle.current_findings],
+        changed_files=[redact_text(name) for name in bundle.changed_files],
+        implementation_report_paths=[
+            redact_text(p) for p in bundle.implementation_report_paths
+        ],
+        preexisting_dirty_files=[
+            redact_text(name) for name in bundle.preexisting_dirty_files
+        ],
+    )
 
 
 # --------------------------------------------------------------------------

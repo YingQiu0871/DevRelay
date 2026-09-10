@@ -138,6 +138,17 @@ DevRelay never runs `git add/reset/checkout/stash/commit` against the real
 index. Tests prove `.git/index` bytes are unchanged across capture and delta
 computation, and that no temporary index files are left behind.
 
+### Binary-exact patch transport
+
+`tracked.patch` is binary-sensitive durable data, so it never travels through a
+text-mode pipe: `git diff --binary` output is captured as raw bytes, stored
+verbatim (`raw git diff bytes == stored tracked.patch bytes`, byte-for-byte),
+and fed back to `git apply --cached --binary -` as raw bytes. No
+universal-newline translation and no implicit encode/decode can occur on that
+path (on Windows, text-mode stdin would otherwise rewrite `\n` to `\r\n` and
+silently corrupt the patch). Repositories whose *repo-form* content contains
+CRLF are covered by dedicated fidelity tests.
+
 ### Durable persistence - no reliance on unreachable trees
 
 A tree SHA written by `git write-tree` is only a fast path; if git garbage
@@ -155,7 +166,8 @@ artifacts:
 ├── implementation/iteration-01.md ...
 ├── reviews/review-01-request.md  review-01-result.json ...
 ├── logs/codex-01.stdout.log  test-01-01.log ...
-├── policy/pre-run-01.json  post-run-01.json  violations-01.json ...
+├── policy/attempt-01.json  pre-run-01.json  post-run-01.json
+│            violations-01.json ...
 └── final/final-review-request.md  report.md
 ```
 
@@ -163,7 +175,11 @@ artifacts:
 `BaselineCorruptError` ("DevRelay does not guess"). If the recorded tree
 object is gone, the tree is reconstructed from `baseline.head_sha` +
 `tracked.patch` + saved untracked blobs in another temporary index, and its
-SHA is verified against the recorded one before any diff is produced.
+SHA is verified against the recorded one before any diff is produced. The
+recovery path is regression-tested against a real `git gc --prune=now` for
+pre-existing tracked modifications, deletions, renames, binary changes, staged
+new files, staged+unstaged mixes and CRLF content - and it still fails closed
+(never a HEAD fallback) when an artifact is corrupt.
 
 ## Task-relative delta
 
@@ -180,9 +196,13 @@ Binary files are detected from the tree diff and listed separately; raw
 content is never force-decoded as text.  The review request and final report
 explicitly separate:
 
-* **PRE-EXISTING workspace changes** (baseline, listed by name, never in the
-  diff content) from
+* **PRE-EXISTING workspace changes** (baseline, listed by name; they are never
+  attributed as task additions) from
 * **TASK changes** (the true agent delta).
+
+A unified diff necessarily shows surrounding *context* lines, so pre-existing
+content can appear unmarked as context; it never appears as an added (`+`) task
+modification.
 
 Legacy tasks created before baselines have `baseline: null` and an explicit
 `state_schema_version` guard: DevRelay refuses to guess a diff for them and
@@ -209,12 +229,38 @@ POST SNAPSHOT
 | tags created/deleted/moved | yes (`git.allow_tag=false`) | BLOCKED |
 | other local refs mutated | yes | BLOCKED |
 | real git index staging mutated | yes (`git.allow_index_mutation=false`) | BLOCKED, never auto-unstage |
+| index state cannot be captured reliably (unresolved merge conflict, unreadable index) | yes - **fail closed** | BLOCKED *before* the provider runs (pre-check) or after the run (post-check); never treated as "no change" |
 | push performed | **BEST-EFFORT / PROVIDER-LIMITED** | see below |
 
 Violations are structured (`id/type/severity/before/after/description`),
 persisted under `policy/` and in `state.json`, and survive restarts. DevRelay
 **never automatically repairs repository state**; the human decides and may
 use `devrelay unblock --reason ...`.
+
+### Interrupted provider attempts (fail closed)
+
+Every implement/fix run is a persisted *attempt* (`policy/attempt-NN.json`).
+The PRE snapshot **and** an in-flight crash marker are written *before* the
+provider starts, and the POST snapshot + policy guard run for every outcome -
+success, non-zero exit, timeout, `KeyboardInterrupt` or any Python exception.
+Consequences:
+
+* A provider that raises after modifying the workspace still gets POST
+  evidence and policy verification; a policy violation takes priority over the
+  provider error, and the task goes BLOCKED (no auto-repair of the repo).
+* If an attempt raised without policy violations, the task is BLOCKED as
+  `interrupted_attempt`: the workspace may have been modified, so a human must
+  acknowledge with `devrelay unblock --reason "..."` before DevRelay will run a
+  provider again.
+* If the process died hard (kill -9 / power loss) the in-flight marker stays
+  persisted; on restart DevRelay refuses to auto-rerun the provider and reports
+  *"Previous provider attempt may have modified the workspace. Manual
+  acknowledgement is required."*
+
+Repositories with **unresolved merge conflicts** must be resolved (or the index
+made readable) before an automated provider run: DevRelay blocks because it
+cannot guarantee index-mutation detection. Baseline capture itself still works
+in such repos.
 
 **Push enforcement limitation (stated honestly):** a local postcondition
 check cannot mathematically prove that no `git push` occurred. The installed
@@ -245,7 +291,8 @@ Verified against the installed CLI (`codex exec --help`, codex-cli 0.150.1):
 
 DevRelay therefore streams the full Task Packet + findings + constraints on
 **stdin** by default (never in argv - Windows argv length limits and shell
-interpretation never apply). `argv` survives only as an explicit
+interpretation never apply). The stdin bytes are written byte-exactly (LF stays
+LF; no text-mode `\r\n` translation). `argv` survives only as an explicit
 compatibility fallback (`codex.prompt_mode: argv`).
 
 **Important:** this CLI version does **not** offer `--full-auto`; the shipped
@@ -398,21 +445,30 @@ run with `shell=False` and timeouts; every execution result is saved under
 ## Security model
 
 - **No credential handling**: Codex uses the user's own login; reviewer keys
-  come from environment variables only; secret-shaped values are redacted
-  from logs and artifacts (`[REDACTED]`).
+  come from environment variables only.
+- **Redaction is best-effort, not DLP**: secret-shaped values (`sk-...`,
+  `Bearer ...`, `Authorization: ...`, `API_KEY=...`, `token=...`, and values of
+  secret-looking environment variables) are pattern-redacted from logs, from
+  everything a reviewer receives, and from the manual review-request artifact.
+  This is pattern-based protection applied at a single
+  `sanitize_review_bundle()` boundary shared by the remote and manual reviewer
+  paths - it is **not** a full data-loss-prevention system and cannot guarantee
+  that no secret ever leaves the machine (the task diff is your own code).
 - **No shell execution** of reviewer output or agent reports: commands come
   exclusively from the validated profile; all subprocesses use argv lists
-  (`shell=False`) with UTF-8 pipes.
+  (`shell=False`) with byte-exact or explicitly decoded pipes.
 - **No destructive git**: DevRelay never commits, pushes, merges, tags,
   resets, or touches the user's real index. Repository control state is
   snapshotted before/after every provider run and violations BLOCK the task;
   nothing is auto-repaired.
 - **Reviewers only see the task delta**: Task Packet + task-relative diff +
   changed files + test evidence + reports (size capped), never the full
-  repository, never pre-existing user content.
+  repository. Pre-existing changes are never attributed as task additions;
+  unified-diff context lines may still show surrounding pre-existing content.
 - **Workspace boundary**: tasks operate only inside the initialized workspace.
 - **Bounded automation**: fix loops capped, no auto git actions, `BLOCKED`
-  requires an explicit human `unblock` with a reason.
+  requires an explicit human `unblock` with a reason (including interrupted
+  provider attempts).
 - **Provider limits are stated, not hidden**: push prohibition is
   BEST-EFFORT/PROVIDER-LIMITED and documented as such.
 
@@ -425,8 +481,13 @@ run with `shell=False` and timeouts; every execution result is saved under
   parsed in v0.1 - recorded on the v0.2 roadmap. Exit codes and full stdout
   are captured today.
 - One active task at a time; no concurrency.
+- Repositories with unresolved merge conflicts are refused by the policy guard
+  (fail closed) until the index is resolvable again; baseline capture itself
+  still works in such repos.
 - Real-git index byte-immutability is guaranteed for baseline/delta paths
   (tested); other git read commands use `--no-optional-locks` where possible.
+- Secret redaction is best-effort pattern matching (see Security model), not a
+  DLP guarantee.
 - Test commands are profile-configured whole commands; no per-language
   auto-detection.
 - OpenAI-compatible reviewer requires a JSON-object-capable endpoint.
@@ -451,20 +512,26 @@ python -m pip install -e ".[dev]"
 python -m pytest
 ```
 
-116 tests run fully offline with mocked subprocesses/HTTP where needed and
-real (tiny) git repositories for baseline/guard coverage - no real Codex,
-DeepSeek or network required. Coverage includes: state transitions and
+142 tests run fully offline with mocked subprocesses/HTTP where needed and
+real (tiny) git repositories for baseline/guard/recovery coverage - no real
+Codex, DeepSeek or network required. Coverage includes: state transitions and
 rejected invalid transitions; max-iteration blocking; P0/P1/P2 ->
 FIX_REQUIRED; P3-only pass policy; Codex missing/success/failure/timeout;
-stdin transport (long/Unicode/shell-metacharacter prompts stay on stdin);
+stdin transport (long/Unicode/shell-metacharacter prompts stay on stdin, and
+stdin/stdout are byte-exact - no newline translation);
 config parsing and invalid config; artifact persistence and resume; dirty
 workspace baselines (same-file user+agent edits, untracked, staged +
 staged/unstaged mixes, deletions, renames, binary, Unicode and space
-filenames, ignored files); baseline tree reconstruction after `git gc`;
-manifest corruption as explicit error; real-index immutability; temp-index
+filenames, ignored files); byte-faithful `tracked.patch` (LF, CRLF and binary);
+baseline tree reconstruction after a real `git gc --prune=now` for tracked
+modify/delete/rename/binary/staged/CRLF changes; manifest and patch corruption
+as explicit errors (never a HEAD fallback); real-index immutability; temp-index
 cleanup; HEAD/branch/tag/index-mutation policy violations -> BLOCKED without
-auto-repair; review request and final report separation of PRE-EXISTING vs
-TASK changes; secret redaction; shell safety.
+auto-repair; conflicted-index fail-closed (blocked before the provider runs);
+provider exception / `KeyboardInterrupt` still persisting post-run evidence and
+blocking auto-rerun after restart; reviewer payload and manual artifact
+redaction; review request and final report separation of PRE-EXISTING vs TASK
+changes; shell safety.
 
 ## License
 
