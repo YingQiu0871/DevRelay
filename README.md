@@ -3,6 +3,9 @@
 > Plan with one model, build with Codex, review with another - without
 > copy-pasting between agents.
 
+**Supported release: v0.1.0** (see [CHANGELOG.md](CHANGELOG.md); the CLI
+reports the same version via `devrelay version`).
+
 DevRelay is a **local AI coding orchestrator** (CLI) that automates the
 mechanical handoffs of a multi-model development workflow:
 
@@ -272,14 +275,18 @@ a guarantee it cannot verify.
 
 ## Codex CLI mode (no OpenAI API key)
 
-The implementer is the **official Codex CLI** running against the user's own
-already-authenticated Codex/ChatGPT login:
+DevRelay invokes the **official Codex CLI**; the Codex CLI may be authenticated
+using the user's own ChatGPT subscription login:
 
-- DevRelay **does not require `OPENAI_API_KEY`** for the Codex path.
-- DevRelay **never reads or manages ChatGPT credentials** - no cookie
+- DevRelay **does not read or manage ChatGPT credentials** - no cookie
   grabbing, no session tokens, no web automation, no undocumented auth.
+- **No OpenAI API key is required for the Codex CLI execution path.**
 - You are responsible for installing and authenticating the official Codex
   CLI (`codex --version`, `codex login`).
+- Codex usage is governed by your own Codex/ChatGPT plan and limits; DevRelay
+  makes no claim about how much usage any plan provides, and it never retries
+  a failed real invocation on its own - a failed or interrupted attempt is
+  surfaced as BLOCKED and requires explicit human acknowledgement.
 
 ### Prompt transport: stdin is canonical
 
@@ -316,10 +323,22 @@ pretend otherwise.
 ## Quick start
 
 Requirements: Python >= 3.11, git, and a repository with **at least one
-commit** (baselines snapshot `HEAD`).
+commit** (baselines snapshot `HEAD`; DevRelay reports a clear error instead of
+a Git error when the repository has no commits yet).
+
+DevRelay v0.1.0 is distributed from source (a PyPI release is planned):
 
 ```bash
-pip install devrelay          # or: pip install -e .   (from this checkout)
+# from a checkout or an unpacked sdist/wheel
+python -m pip install .
+# or isolated CLI install
+pipx install .
+```
+
+Build the wheel/sdist yourself with `python -m build` (dev extra:
+`python -m pip install -e ".[dev]"`).
+
+```bash
 cd your-project
 devrelay init                 # creates .devrelay/config.yaml (never overwrites)
 devrelay start "Fix Wear tile rendering"     # -> DR-0001, state PLAN_REQUIRED

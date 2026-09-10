@@ -1,0 +1,10 @@
+# Files included in the source distribution in addition to the package itself.
+# (The wheel intentionally ships only the runtime package + package data.)
+include LICENSE
+include README.md
+include CHANGELOG.md
+include CONTRIBUTING.md
+include pyproject.toml
+recursive-include docs *.md
+recursive-include profiles *.yaml
+recursive-include tests *.py

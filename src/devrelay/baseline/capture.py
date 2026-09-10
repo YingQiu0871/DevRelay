@@ -217,13 +217,17 @@ class BaselineBuilder:
         self.max_untracked_file_bytes = max_untracked_file_bytes
 
     def capture(self, task_id: str, storage_rel: str) -> CapturedBaseline:
-        head = run_git(
-            self.root, self.runner, ["rev-parse", "HEAD"]
-        ).strip()
+        try:
+            head = run_git(
+                self.root, self.runner, ["rev-parse", "HEAD"]
+            ).strip()
+        except BaselineError:
+            head = ""  # unborn HEAD: reported as a curated user error below
         if not head:
             raise BaselineUnavailableError(
-                "repository has no commits (unborn HEAD). DevRelay baselines "
-                "need at least one commit; commit the initial state first."
+                "Repository has no commits yet. Create an initial commit "
+                "before starting a DevRelay task "
+                "(git add -A && git commit -m \"initial commit\")."
             )
         try:
             branch = run_git(

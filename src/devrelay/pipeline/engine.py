@@ -1049,19 +1049,22 @@ class DevRelayEngine:
             f"[{v.id}] {v.type.value}: {v.description}"
             for v in task.policy_violations
         ]
+        head_now = self.workspace.head_sha()
+        # Transition FIRST so the persisted report reflects the task's real
+        # final state (DONE) instead of the pre-approval state.
+        self._move(task, PipelineState.DONE, note="final gate approved")
+        self._persist(task)
         report = render_final_report(
             task,
             preexisting_changes=preexisting,
             task_changed_files=delta.changed_files,
             task_diff_stat_text=sanitize(delta.stat_text),
-            head_now=self.workspace.head_sha(),
+            head_now=head_now,
             note=note,
             policy_notes=policy_notes,
         )
         final_dir = self.store.final_dir(task.task_id)
         self.store.write_text(final_dir / "report.md", report)
-        self._move(task, PipelineState.DONE, note="final gate approved")
-        self._persist(task)
         return task
 
     def unblock(
