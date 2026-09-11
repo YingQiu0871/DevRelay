@@ -405,6 +405,10 @@ class DevRelayEngine:
         """
         task = self._load(task_id)
         check = self.snapshot_check(task)
+        # Repairing a snapshot that is not valid IS an integrity recovery, no
+        # matter which entry point (unblock --refresh-policy or the execution
+        # grant) asked for it: the record must say so.
+        recovery = recovery or check.state is not SnapshotState.VALID
         # 1) Resolve the live policy first: a resolution failure mutates nothing.
         try:
             live = self._fallback_policy()

@@ -3,5 +3,6 @@
 *.md text eol=lf
 *.yaml text eol=lf
 *.toml text eol=lf
+MANIFEST.in text eol=lf
 *.json text eol=lf
 *.gitignore text eol=lf

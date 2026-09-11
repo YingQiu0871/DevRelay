@@ -125,6 +125,13 @@ def test_refresh_of_damaged_snapshot_needs_no_force(tmp_path, monkeypatch):
     assert result.exit_code == 0, _output(result)
     assert _snapshot(repo).is_file()
 
+    state_path = repo / ".devrelay" / "tasks" / "DR-0001" / "state.json"
+    record = json.loads(state_path.read_text(encoding="utf-8"))["policy_refreshes"][-1]
+    assert record["trigger"] == "integrity_recovery"
+    assert record["before_state"] == "missing"
+    assert record["before_snapshot_available"] is False
+    assert record["before_sha256"] == ""
+
 
 # ---------------------------------------------------------------------------
 # status reports integrity without touching live profiles
