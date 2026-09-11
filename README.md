@@ -601,6 +601,12 @@ carries a blocking finding does not pass, blocking findings route to
 
 ## Policy (default profile)
 
+The YAML below is the packaged default **policy**
+(`src/devrelay/profiles/default.yaml`) - the lowest layer of the v0.2-B chain
+described in the next section. `review.provider` and `codex` are shown here for
+completeness but are runtime wiring, not policy: they are never frozen into a
+task and can never be set by a project profile.
+
 ```yaml
 pipeline:
   max_fix_iterations: 3
@@ -647,6 +653,105 @@ snapshotted into the task at `devrelay start` (see the automatic review loop
 section). Test commands run with `shell=False` and timeouts; every execution
 result is saved under `logs/`.
 
+## Project profiles and frozen policy (v0.2-B)
+
+Policy is resolved in three layers, lowest precedence first:
+
+```
+packaged defaults (src/devrelay/profiles/default.yaml)
+  <  .devrelay/profiles/<name>.yaml      (in `profiles:` order, later wins)
+  <  policy overrides in .devrelay/config.yaml
+```
+
+`review.provider`, `codex.*` and `git.*` are **not** profile policy: provider and
+Codex settings are runtime wiring (live, environment-specific) and the git guard
+must stay hard-disabled.
+
+```
+.devrelay/
+  config.yaml              # runtime wiring + `profiles:` selector + overrides
+  profiles/
+    base.yaml              # committed, reusable policy
+    python.yaml
+  tasks/DR-0001/           # never committed
+    config.snapshot.yaml   # the frozen policy of that task
+```
+
+```yaml
+# .devrelay/config.yaml
+profiles: [base, python]
+
+# .devrelay/profiles/python.yaml   (policy only)
+budget:
+  max_reviewer_calls: 2
+tests:
+  targeted: ["pytest -q tests/test_x.py"]
+```
+
+Rules: at most 8 profiles, at most 1 MiB per file, `yaml.safe_load` only, no
+inheritance (`extends`), no user/global profile directory, no CLI profile
+override, one name grammar (`^[a-z0-9][a-z0-9_-]{0,63}$`), strict path
+containment, and lists replace wholesale rather than merging.
+
+### Frozen policy and snapshot integrity
+
+`devrelay start` freezes the resolved policy into
+`tasks/<id>/config.snapshot.yaml` together with the SHA-256 of its exact bytes.
+Execution verifies those bytes **before** parsing them:
+
+| snapshot state | execution |
+| --- | --- |
+| valid | the snapshot is the only policy authority |
+| missing / invalid / hash mismatch | fail closed (`policy_snapshot_*`); live wiring or workspace defaults are never substituted |
+| legacy (a task created before snapshots existed) | explicit live policy resolution |
+
+Recovery is explicit and audited:
+
+```bash
+devrelay unblock --reason "restore the task policy" --refresh-policy
+```
+
+It resolves the live chain first, preserves the previous snapshot bytes only when
+they are readable (`before_snapshot_available: false` otherwise - a before-state
+is never invented), writes the new snapshot, increments the policy
+**generation** (an evidence generation, not a change counter) and never touches
+usage counters, call identities, attempts or review history. Replacing the policy
+of an intact task additionally requires `--force`.
+
+### Diagnostics that work with a broken chain
+
+```bash
+devrelay profile list             # raw files; works with a broken selector
+devrelay profile show python      # only that file is read
+devrelay profile validate         # all problems, not just the first
+devrelay config show              # live wiring + unresolved selector (NOT policy)
+devrelay config show --resolved   # authoritative full resolution (fail closed)
+devrelay doctor [--strict]        # raw diagnostics + chain, reported separately
+devrelay status                   # state-only: no profile read, no drift check
+```
+
+Commit profiles, not state:
+
+```gitignore
+.devrelay/*
+!.devrelay/profiles/
+```
+
+```gitattributes
+*.yaml text eol=lf
+```
+
+The `.devrelay/*` form is required: with `.devrelay/` the negation cannot
+re-include the profiles directory.
+
+### State schema 5
+
+v0.2-B writes `state_schema_version: 5` (frozen-policy identity, digest and
+provenance) and reads schemas 2-5. The migration is **one-way**: before the first
+write that upgrades an older task, its state is copied once to
+`state.v<old>.json.bak`, and a v0.2-A binary cannot read schema 5 afterwards. Do
+not downgrade the binary inside a workspace that v0.2-B has already written.
+
 ## Security model
 
 - **No credential handling**: Codex uses the user's own login; reviewer keys
@@ -678,12 +783,18 @@ result is saved under `logs/`.
 - **Provider limits are stated, not hidden**: push prohibition is
   BEST-EFFORT/PROVIDER-LIMITED and documented as such.
 
-## Current limitations (v0.1 core + v0.2-A candidate)
+## Current limitations (v0.1 core + v0.2-A/v0.2-B candidates)
 
 - The automatic review loop (v0.2-A) is a **candidate under independent
   review**: it is merged into no release, the version stays `0.1.0`, and the
   reviewed behaviour is exercised with fake providers only (no real Codex run
   and no real reviewer endpoint were used to validate it).
+- Project profiles and frozen-policy integrity (v0.2-B) are a **candidate under
+  independent review** as well. `state_schema_version` is now 5 and the
+  migration is one-way (see "State schema 5"): keep the pre-upgrade
+  `state.v<old>.json.bak` if you may need to read a task with v0.2-A again.
+- Snapshot integrity protects against corruption and accidental drift, not
+  against a local actor who edits both the snapshot and `state.json`.
 - The execution budget counts *invocations*, not tokens, cost, plan quota or
   provider-side billing - there is no billing integration in v0.2-A.
 - One implementer: official Codex CLI (stdin transport). Codex argv/sandbox
@@ -714,8 +825,11 @@ result is saved under `logs/`.
 - **v0.2-A** - automatic review loop with an enforced execution budget,
   reviewer attempt lifecycle and fingerprint accounting (candidate under
   independent review)
-- **v0.2** - structured Codex event output (`codex exec --json`),
-  improved provider adapters / project profiles / state-driven UI
+- **v0.2-B** - project profiles, runtime-wiring/policy separation, frozen-policy
+  snapshot integrity with explicit recovery, state schema 5 (candidate under
+  independent review)
+- **v0.2-C** - structured Codex event output (`codex exec --json`),
+  improved provider adapters / state-driven UI
 - **v0.3** - MCP server
 - **v0.4** - ChatGPT integration / plugin
 - **v0.5** - optional release automation with explicit approvals

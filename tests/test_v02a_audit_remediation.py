@@ -31,7 +31,7 @@ import httpx
 import pytest
 
 from devrelay.artifacts.store import ArtifactStore
-from devrelay.config import DEFAULT_PROFILE_YAML
+from devrelay.config import bundled_default_path
 from devrelay.errors import ProviderError, ReviewFormatError
 from devrelay.models import (
     AppliedReviewRecord,
@@ -544,8 +544,11 @@ def test_policy_refresh_preserves_before_after_and_usage(tmp_path):
 # P3-01: cap wording + behaviour
 # ===========================================================================
 def test_response_cap_wording_and_behaviour(tmp_path):
-    assert "parsing/persistence" in DEFAULT_PROFILE_YAML
-    assert "network-level" in DEFAULT_PROFILE_YAML
+    # v0.2-B: the canonical default policy is the packaged file (the in-code
+    # DEFAULT_PROFILE_YAML literal was deleted - one editable authority).
+    default_policy = bundled_default_path().read_text(encoding="utf-8")
+    assert "parsing/persistence" in default_policy
+    assert "network-level" in default_policy
 
     def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(

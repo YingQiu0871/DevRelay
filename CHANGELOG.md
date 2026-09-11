@@ -4,6 +4,75 @@ All notable changes to DevRelay are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## Unreleased - v0.2-B project profiles (candidate under independent review)
+
+Reusable project policy profiles on top of a frozen, integrity-verified task
+policy. **Not released**: the package version stays `0.1.0`, nothing is pushed,
+merged, tagged or published, and all v0.2-B behaviour was validated offline with
+fake providers (no real Codex invocation, no real reviewer endpoint).
+
+### Added
+
+- **Project profiles** - `.devrelay/profiles/<name>.yaml` plus an ordered
+  `profiles: [base, python]` selector in `.devrelay/config.yaml`. Precedence:
+  packaged policy defaults < profiles in selector order < workspace overrides.
+  Profile files are *policy only*: `review.provider`, `codex.*`, `git.*` and the
+  selector itself are rejected (the model is the allowlist). Limits: <= 8
+  profiles, <= 1 MiB per file, `yaml.safe_load`, no `extends`, no user/global
+  profile directory, no CLI override, one name grammar, strict path containment.
+- **Raw profile diagnostics** - `devrelay profile list|show|validate`, which work
+  even when the selector is broken, and `profile validate` reports *all*
+  problems (invalid filenames, per-file errors, selector syntax, duplicates,
+  missing references) instead of stopping at the first one.
+- **`devrelay config show` / `--resolved`** - the first prints live runtime
+  wiring plus the raw, unresolved selector and explicitly says it is not the
+  effective task policy; the second is the authoritative, fail-closed resolver.
+- **`devrelay doctor`** now reports raw profile inspection and the full policy
+  chain separately, flags pre-schema-5 tasks and profile drift, and has
+  `--strict` for CI use (exit non-zero when anything is not OK).
+- **Snapshot integrity** - `tasks/<id>/config.snapshot.yaml` is verified by
+  SHA-256 over its exact on-disk bytes *before* it is parsed, and
+  `devrelay unblock --reason "..." --refresh-policy` recovers a missing,
+  invalid or hash-mismatched snapshot (recording `before_snapshot_available`
+  instead of inventing a before-snapshot).
+
+### Changed
+
+- **Runtime wiring and task policy are separate types.** `WiringConfig`
+  (`review.provider`, `codex.*`) is live and never frozen; `PolicyDocument`
+  (`pipeline`, `budget`, `review` policy knobs, `tests`, `scope`, `baseline`,
+  `git`) is resolved once and frozen into the task. `PipelinePolicy` accepts only
+  a `PolicyDocument`; a workspace config can no longer be used as task policy.
+- **`state_schema_version` 4 -> 5**: tasks persist `policy_snapshot_path`,
+  `policy_config_sha256` and `policy_provenance` (selector, per-profile raw-byte
+  hashes, workspace-config hash, generation, integrity). Before the first write
+  that upgrades an older task, its state is copied once to
+  `state.v<old>.json.bak`. State written by a *newer* DevRelay now produces a
+  dedicated `state_schema_too_new` diagnostic instead of a model error.
+- **All textual artifacts are written as UTF-8 with LF endings**, and every
+  recorded digest is the digest of the bytes actually written (on Windows,
+  `Path.write_text` used to turn LF into CRLF while hashes were computed over
+  LF text, so recorded hashes could never match the disk).
+- **`status`, `usage`, `diff` and `logs` are state-only**: they never validate
+  live policy, never resolve the profile chain and never read a profile file, so
+  deleting or editing profiles cannot break them. Live drift belongs to
+  `doctor` and `config show --resolved`.
+- **Execution commands classify the snapshot before any provider object is
+  constructed**, so a damaged snapshot fails closed without building a Codex or
+  reviewer client.
+- `devrelay init` installs a workspace template (wiring + selector + commented
+  policy overrides) instead of a copy of the policy defaults, and creates
+  `.devrelay/profiles/`. The packaged `src/devrelay/profiles/default.yaml` is now
+  the single editable default authority: the in-code `DEFAULT_PROFILE_YAML`
+  literal and the repository-root `profiles/default.yaml` copy are gone.
+
+### Removed
+
+- The v0.2-A silent policy downgrade: a task whose snapshot is missing, invalid
+  or hash-mismatched no longer continues under live wiring/workspace defaults.
+  Only genuine pre-snapshot ("legacy") tasks resolve live policy, and the
+  execution path never writes `policy_source`.
+
 ## Unreleased - v0.2-A candidate (audit remediation, closure audit pending)
 
 Automatic review loop with an enforced execution budget, plus the remediation of

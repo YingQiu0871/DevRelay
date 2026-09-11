@@ -10,75 +10,13 @@ from typing import Any, Literal, Optional
 import yaml
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from devrelay.artifacts.store import encode_lf
 from devrelay.errors import ConfigError
 from devrelay.models import PolicyProvenance, Severity
 
-# The exact same content as profiles/default.yaml at the repository root.
-# Loaded via importlib.resources-compatible fallback in _bundled_default().
+# The packaged default policy file (the only default authority).
 DEFAULT_PROFILE_NAME = "default.yaml"
 
-DEFAULT_PROFILE_YAML = """\
-pipeline:
-  max_fix_iterations: 3
-  auto_fix_tests: false
-  # Stop the loop when the same blocking finding keeps coming back
-  # (0 disables; fingerprints are always recorded). v0.2-A.
-  max_same_finding_cycles: 0
-
-budget:
-  # External provider invocations allowed for one task. Counts are taken from
-  # persisted ProviderCallRecord entries, never inferred from iterations.
-  max_implementer_calls: 4
-  max_reviewer_calls: 4
-  max_total_provider_calls: 8
-
-review:
-  provider: manual
-  blocking_severities: [P0, P1, P2]
-  # Format retries: HTTP 200 with non-schema JSON (each retry is a real call).
-  retries: 1
-  # Transport retries: network/HTTP failures. Default 0 so a flaky endpoint
-  # never silently spends reviewer calls.
-  transport_retries: 0
-  # Reviewer response *parsing/persistence* cap: a larger response is refused
-  # (fail closed, never truncated-and-guessed). The HTTP client may buffer the
-  # body before this cap is applied - it is NOT a network-level memory limit.
-  max_response_chars: 200000
-  max_diff_bytes: 300000
-  timeout_seconds: 120
-
-baseline:
-  # Per-file cap for pre-existing untracked files copied into the baseline.
-  # Files above this limit fail task creation with an explicit error.
-  max_untracked_file_bytes: 52428800
-
-tests:
-  targeted: []
-  full: []
-  full_regression: release_only
-  timeout_seconds: 900
-
-scope:
-  reuse_approved_scope: true
-  current_delta_first: true
-
-git:
-  allow_commit: false
-  allow_push: false
-  allow_tag: false
-  allow_reset_hard: false
-  allow_index_mutation: false
-
-codex:
-  executable: codex
-  # Verified against `codex exec --help` (codex-cli 0.150.1): this CLI does not
-  # offer --full-auto; the documented sandbox flag is used instead.  The
-  # implementation prompt is streamed on stdin (canonical transport); argv is
-  # kept only as an explicit compatibility fallback.
-  args: ["exec", "--sandbox", "workspace-write"]
-  prompt_mode: stdin
-  timeout_seconds: 1800
-"""
 
 
 class PipelineConfig(BaseModel):
@@ -384,10 +322,14 @@ def bundled_default_path() -> Path:
 
 
 def bundled_default_yaml() -> str:
+    """The single editable default policy authority, shipped in the package."""
     path = bundled_default_path()
-    if path.is_file():
-        return path.read_text(encoding="utf-8")
-    return DEFAULT_PROFILE_YAML
+    if not path.is_file():  # pragma: no cover - packaging failure
+        raise ConfigError(
+            f"packaged default policy is missing: {path}. "
+            "Reinstall DevRelay; there is deliberately no in-code fallback."
+        )
+    return path.read_text(encoding="utf-8")
 
 
 def _deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:
@@ -563,14 +505,57 @@ def dump_config_yaml(config: DevRelayConfig) -> str:
     return yaml.safe_dump(data, sort_keys=False, default_flow_style=False)
 
 
+WORKSPACE_CONFIG_TEMPLATE = """# DevRelay workspace configuration (installed once by `devrelay init`).
+#
+# This file is runtime wiring plus optional policy overrides.  Reusable policy
+# belongs in .devrelay/profiles/<name>.yaml, selected by `profiles:` below.
+#
+# Precedence:  packaged policy defaults  <  profiles (in order)  <  the policy
+#              overrides written here
+#
+# A task freezes the resolved policy at `devrelay start`; editing this file
+# afterwards never changes a running task (an explicit, audited
+# `devrelay unblock --refresh-policy` is required).
+
+# Project profiles, applied in order (later wins).  Profile files may set
+# pipeline / budget / review policy / tests / scope / baseline - never
+# review.provider, codex.*, git.* or this selector.
+profiles: []
+
+# ---- runtime wiring (environment-specific, live, never frozen) -------------
+review:
+  # manual | openai_compatible
+  provider: manual
+
+codex:
+  executable: codex
+  # Verified against `codex exec --help` (codex-cli 0.150.1): no --full-auto.
+  args: ["exec", "--sandbox", "workspace-write"]
+  prompt_mode: stdin
+  timeout_seconds: 1800
+
+# ---- optional policy overrides (uncomment what this workspace pins) --------
+# budget:
+#   max_reviewer_calls: 2
+#   max_total_provider_calls: 6
+# tests:
+#   targeted: ["pytest -q"]
+#   full: []
+# scope:
+#   reuse_approved_scope: true
+"""
+
+
 def install_default_config(destination: str | Path) -> Path:
-    """Write the merged default profile to *destination* (never overwrite)."""
+    """Write the workspace config template to *destination* (never overwrite).
+
+    The template carries live wiring, the (empty) profile selector and commented
+    policy-override examples - not the policy defaults, which stay editable in
+    exactly one place: the packaged ``profiles/default.yaml``.
+    """
     dest = Path(destination)
     if dest.exists():
         return dest
     dest.parent.mkdir(parents=True, exist_ok=True)
-    # Prefer the human-readable repository profile when running from a source
-    # checkout; otherwise use the bundled copy.
-    text = bundled_default_yaml()
-    dest.write_text(text, encoding="utf-8")
+    dest.write_bytes(encode_lf(WORKSPACE_CONFIG_TEMPLATE))
     return dest

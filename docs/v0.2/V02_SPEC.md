@@ -7,7 +7,7 @@ pipeline. **Only stage A is implemented in this branch.**
 | --- | --- | --- |
 | **A** | Automatic review loop (budget, review lifecycle, reviewer evidence, CLI visibility) | **CURRENT — candidate, not reviewed-closed** |
 | **A.1** | Audit remediation of the `fe4b044` candidate (P1-01, P2-01..03, P3-01..06) | **CURRENT — awaiting closure audit** |
-| B | Project profiles | NOT STARTED |
+| B | Project profiles | **CURRENT - candidate, not reviewed-closed (v0.2-B)** |
 | C | Structured Codex runtime (`codex exec --json` parsing, structured events) | NOT STARTED |
 | D | General release pipeline (generalized tag validation, provenance, release automation) | NOT STARTED |
 | E | RC / release process for v0.2 | NOT STARTED |
@@ -205,10 +205,43 @@ lifecycle, applied markers, policy refreshes). Public v0.1 task state
 safely, and `status`/`usage` never rewrite it. States written by the unreleased
 `fe4b044` candidate are handled through the identity-based `finish_only` path.
 
-## B–E (not started)
+## B. Project profiles (v0.2-B)
 
-* **B — Project profiles:** reusable per-project policy profiles, profile
-  inheritance, project-specific test/scope defaults.
+Implemented in this branch; see `docs/v0.2/V02B_ACCEPTANCE.md` for the acceptance
+criteria and evidence.
+
+1. **Three-layer policy chain.** packaged defaults
+   (`src/devrelay/profiles/default.yaml`) < `.devrelay/profiles/<name>.yaml`
+   (selector order, later wins) < policy overrides in `.devrelay/config.yaml`.
+2. **Wiring and policy are separate types.** `WiringConfig`
+   (`review.provider`, `codex.*`) is live and never frozen; `PolicyDocument`
+   (`pipeline`, `budget`, `review` policy knobs, `tests`, `scope`, `baseline`,
+   `git`) is resolved once and frozen per task. `PipelinePolicy` accepts only a
+   `PolicyDocument`.
+3. **Profile documents are policy only.** `review.provider`, `codex.*`,
+   `git.*`, `profiles` and unknown keys are rejected. Limits: <= 8 profiles,
+   <= 1 MiB per file, `safe_load`, no `extends`, no user/global directory, no CLI
+   override, one name grammar, strict containment.
+4. **Frozen policy integrity.** The snapshot is hashed over its exact on-disk
+   bytes and verified before parsing; missing/invalid/hash-mismatched snapshots
+   fail closed with `policy_snapshot_*` codes instead of falling back to live
+   wiring or workspace defaults. Genuine pre-snapshot tasks keep the historical
+   explicit live-policy path.
+5. **Explicit recovery.** `devrelay unblock --reason "..." --refresh-policy`
+   resolves the live chain first, preserves previous bytes only when readable,
+   records provenance and a new generation, and never touches usage or history.
+   Replacing an intact policy requires `--force`.
+6. **Read-only commands stay independent.** `status`/`usage`/`diff`/`logs` never
+   validate live policy, never resolve profiles and never rewrite state; raw
+   profile diagnostics (`profile list/show/validate`) work with a broken
+   selector, and `config show --resolved` is the only authoritative resolver.
+7. **State schema 5** persists snapshot path, digest and provenance; older states
+   (2-4) still load, `> 5` produces a dedicated `state_schema_too_new`
+   diagnostic, and a one-time `state.v<old>.json.bak` is kept before the one-way
+   upgrade.
+
+## C–E (not started)
+
 * **C — Structured Codex runtime:** parse `codex exec --json` events, capture
   structured tool/command events and per-run metadata instead of raw stdout.
 * **D — General release pipeline:** generalize the v0.1 bootstrap guards

@@ -1,50 +1,78 @@
-# DevRelay bundled default profile (installed by `devrelay init`).
-# See profiles/default.yaml at the repository root (identical policy values).
+# DevRelay canonical default **policy** (packaged with the release).
+#
+# Lowest layer of the v0.2-B policy chain:
+#
+#   packaged policy defaults  <  .devrelay/profiles/*.yaml  <  .devrelay/config.yaml
+#
+# Policy only: runtime wiring (review.provider, codex.*) lives in the
+# configuration model, and the `profiles:` selector lives in the workspace
+# config.  A task freezes the resolved document at `devrelay start`
+# (tasks/<id>/config.snapshot.yaml) together with the SHA-256 of its exact
+# bytes; later edits never silently change a running task.
 
 pipeline:
+  # Max fix iterations after the first implementation pass. Hitting this cap
+  # moves the task to BLOCKED (never an infinite loop).
   max_fix_iterations: 3
+  # When true, a failing targeted test run routes to FIX_REQUIRED instead of
+  # BLOCKED. Default false: failing tests stop for a human decision.
   auto_fix_tests: false
+  # Stop the loop when the same blocking finding keeps coming back
+  # (0 disables; fingerprints and seen-counts are always recorded). v0.2-A.
   max_same_finding_cycles: 0
 
 budget:
+  # External provider invocations allowed for one task. Counts come from
+  # persisted ProviderCallRecord entries; exceeding the budget BLOCKS the task
+  # before any provider is invoked and is never reset automatically.
   max_implementer_calls: 4
   max_reviewer_calls: 4
   max_total_provider_calls: 8
 
 review:
-  provider: manual
+  # A finding is blocking when its severity is in this list. P3-only reviews
+  # therefore pass unless P3 is added here.
   blocking_severities: [P0, P1, P2]
+  # Format retries: HTTP 200 with non-schema JSON (each retry is a real call).
   retries: 1
+  # Transport retries: network/HTTP failures. Default 0 so a flaky endpoint
+  # never silently spends reviewer calls.
   transport_retries: 0
-  # Reviewer response parsing/persistence cap (fail closed; the HTTP
-  # client may buffer the body first - not a network-level memory limit).
+  # Reviewer response parsing/persistence cap: a larger response is refused
+  # (fail closed, never truncated-and-guessed). The HTTP client may buffer the
+  # body before this cap is applied - it is NOT a network-level memory limit.
   max_response_chars: 200000
+  # Cap on diff bytes shipped to reviewers; larger diffs are truncated with a
+  # prominent warning and require human handling.
   max_diff_bytes: 300000
   timeout_seconds: 120
 
 baseline:
+  # Per-file cap (bytes) for pre-existing untracked files copied into the
+  # durable task baseline. Files above this limit fail task creation with an
+  # explicit error naming the file, its size and this knob.
   max_untracked_file_bytes: 52428800
 
 tests:
+  # Command lines run by the test runner (shell=False, split on whitespace).
+  # Project-specific: set these in a project profile or the workspace config.
   targeted: []
   full: []
+  # release_only | always | never
   full_regression: release_only
   timeout_seconds: 900
 
 scope:
+  # Previously approved scope stays closed unless the current delta can affect it.
   reuse_approved_scope: true
   current_delta_first: true
 
 git:
+  # DevRelay hard-disables every destructive/remote git action and any mutation
+  # of the user's real git index. These must remain false (a true value is a
+  # config error) and they are not profile-settable.
   allow_commit: false
   allow_push: false
   allow_tag: false
   allow_reset_hard: false
   allow_index_mutation: false
-
-codex:
-  executable: codex
-  # Verified against `codex exec --help` (codex-cli 0.150.1): no --full-auto.
-  args: ["exec", "--sandbox", "workspace-write"]
-  prompt_mode: stdin
-  timeout_seconds: 1800
