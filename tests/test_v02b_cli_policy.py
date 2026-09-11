@@ -93,6 +93,27 @@ def test_state_schema_too_new_has_a_dedicated_error(tmp_path, monkeypatch):
 # ---------------------------------------------------------------------------
 # R3-11: replacing an intact policy needs --force
 # ---------------------------------------------------------------------------
+def test_integrity_recovery_does_not_require_a_blocked_task(tmp_path, monkeypatch):
+    """The classifier state authorizes recovery; the task need not be blocked."""
+    repo = _prepared_repo(tmp_path, monkeypatch)
+    _snapshot(repo).unlink()
+    state_path = repo / ".devrelay" / "tasks" / "DR-0001" / "state.json"
+    before = json.loads(state_path.read_text(encoding="utf-8"))
+    assert before["state"] == "PLAN_REQUIRED"
+
+    result = CliRunner().invoke(
+        app, ["unblock", "--reason", "recover lost snapshot", "--refresh-policy"]
+    )
+    assert result.exit_code == 0, _output(result)
+    assert _snapshot(repo).is_file()
+    after = json.loads(state_path.read_text(encoding="utf-8"))
+    assert after["state"] == "PLAN_REQUIRED"  # nothing was unblocked
+    assert after["policy_source"] == "snapshot"
+    record = after["policy_refreshes"][-1]
+    assert record["trigger"] == "integrity_recovery"
+    assert record["before_snapshot_available"] is False
+
+
 def test_refresh_of_intact_policy_requires_force(tmp_path, monkeypatch):
     repo = _prepared_repo(tmp_path, monkeypatch)
     result = CliRunner().invoke(

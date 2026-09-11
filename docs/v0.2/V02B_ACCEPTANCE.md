@@ -55,6 +55,7 @@ offline; no network, no subprocess provider.
 | B26 | Generation counts successful freezes, not semantic changes | `test_v02b_refresh_recovery.py::test_generation_counts_evidence_not_semantic_change` |
 | B27 | Refresh never touches usage, call identities, attempts or history | `test_v02b_refresh_recovery.py::test_refresh_preserves_usage_calls_and_history` |
 | B28 | Replacing an intact policy needs `--force`; damaged snapshots do not | `test_v02b_cli_policy.py::test_refresh_of_intact_policy_requires_force`, `::test_refresh_of_damaged_snapshot_needs_no_force` |
+| B28b | Integrity recovery does not require a historically blocked task (the classifier state authorizes it, nothing is unblocked) | `test_v02b_cli_policy.py::test_integrity_recovery_does_not_require_a_blocked_task` |
 | B29 | Status reports an unverifiable snapshot without failing or repairing | `test_v02b_cli_policy.py::test_status_reports_unverified_snapshot` |
 
 ## State schema

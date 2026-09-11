@@ -2201,6 +2201,14 @@ class DevRelayEngine:
             raise DevRelayError("unblock requires a non-empty --reason")
         task = self._load(task_id)
         if task.state not in (PipelineState.BLOCKED, PipelineState.FAILED):
+            # Integrity recovery does not require a blocked task: the classifier
+            # state of the frozen policy is enough to authorize the explicit
+            # recovery path.  Nothing is unblocked (there is nothing to
+            # unblock); only the snapshot is re-frozen and audited.
+            if refresh_policy and self.snapshot_check(task).state is not SnapshotState.VALID:
+                return self.refresh_task_policy(
+                    task_id, reason.strip(), force=force, recovery=True
+                )
             raise StateConflictError(
                 f"task is in state {task.state.value}; unblock only applies "
                 "to BLOCKED/FAILED tasks"
