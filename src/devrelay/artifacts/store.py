@@ -7,6 +7,7 @@ state.  Writes are atomic (temp file + ``os.replace``).
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -16,11 +17,37 @@ from devrelay.errors import DevRelayError, TaskNotFoundError
 from devrelay.models import TaskRun
 
 
-def _atomic_write_text(path: Path, text: str) -> None:
+def encode_lf(text: str) -> bytes:
+    """Deterministic UTF-8/LF bytes for every textual artifact DevRelay writes.
+
+    v0.2-B byte discipline: Python's ``Path.write_text`` translates LF to
+    ``os.linesep`` on Windows, so hashing the in-memory text and writing the
+    same text produced two different byte streams (and therefore two different
+    SHA-256 digests).  All textual artifacts are now written through this
+    helper, and every recorded digest is the digest of the bytes it returns.
+    """
+    return text.replace("\r\n", "\n").replace("\r", "\n").encode("utf-8")
+
+
+def sha256_hex(data: bytes) -> str:
+    """Lowercase hex SHA-256 of raw bytes."""
+    return hashlib.sha256(data).hexdigest()
+
+
+def sha256_file(path: str | Path) -> str:
+    """SHA-256 of the exact bytes on disk (never of decoded/normalized text)."""
+    return sha256_hex(Path(path).read_bytes())
+
+
+def _atomic_write_bytes(path: Path, data: bytes) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_name(f".{path.name}.tmp")
-    tmp.write_text(text, encoding="utf-8")
+    tmp.write_bytes(data)
     os.replace(tmp, path)
+
+
+def _atomic_write_text(path: Path, text: str) -> None:
+    _atomic_write_bytes(path, encode_lf(text))
 
 
 class ArtifactStore:
@@ -167,6 +194,16 @@ class ArtifactStore:
         full = Path(path)
         _atomic_write_text(full, text)
         return full
+
+    def write_text_with_digest(self, path: str | Path, text: str) -> tuple[Path, str]:
+        """Write LF-normalized text and return (path, sha256 of written bytes).
+
+        The digest is computed from the exact byte string handed to the
+        filesystem, so it always matches ``sha256_file(path)`` afterwards.
+        """
+        data = encode_lf(text)
+        full = self.write_bytes(path, data)
+        return full, sha256_hex(data)
 
     def write_bytes(self, path: str | Path, data: bytes) -> Path:
         full = Path(path)
