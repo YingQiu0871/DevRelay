@@ -165,10 +165,24 @@ another attempt's keyed evidence.
 `unblock --refresh-policy --reason ...` preserves the previous policy durably:
 `policy/policy-refresh-NN-before.yaml`, `-after.yaml` and `-NN.json`
 (`PolicyRefreshRecord`: refresh id, timestamp, actor, reason, before/after
-source, before/after SHA-256), appended to `TaskRun.policy_refreshes`. Refresh
-semantics are unchanged: usage is never reset, deleted or renumbered; a new
-(max) budget applies to already-spent calls exactly as it did before, and each
-refresh is audited.
+source, before/after SHA-256, evidence attempt), appended to
+`TaskRun.policy_refreshes`. Refresh semantics are unchanged: usage is never
+reset, deleted or renumbered; a new (max) budget applies to already-spent calls
+exactly as it did before, and each refresh is audited.
+
+**Evidence attempt vs. generation.** The `NN` in `policy-refresh-NN-*` is an
+*evidence attempt* number, deliberately distinct from the policy generation:
+every attempt that starts writing evidence consumes a unique, never-reused
+number allocated from both the persisted records and the on-disk artifacts
+(`max(seen) + 1`, gaps tolerated), and evidence files are created with a
+create-new writer that refuses to replace an existing path. A failed attempt
+therefore keeps its artifacts - attempt 01 may remain on disk unreferenced by
+state while the successful retry is attempt 02 and still advances generation
+1 -> 2. An on-disk artifact is evidence of an *attempt* only; a refresh counts
+as authoritatively applied when the persisted task references that record and
+its `policy_provenance.generation`, `policy_config_sha256` and provenance
+describe the applied generation. Orphan evidence is never deleted, never
+overwritten and never interpreted as applied.
 
 ### A.1.6 P3 fixes
 
@@ -237,8 +251,10 @@ criteria and evidence.
    selector, and `config show --resolved` is the only authoritative resolver.
 7. **State schema 5** persists snapshot path, digest and provenance; older states
    (2-4) still load, `> 5` produces a dedicated `state_schema_too_new`
-   diagnostic, and a one-time `state.v<old>.json.bak` is kept before the one-way
-   upgrade.
+   diagnostic, and the first *mutating* write of an older task keeps its exact
+   previous `state.json` bytes in a one-time `state.v<old>.json.bak` before
+   writing the upgraded document (the backup is never overwritten, a backup
+   failure aborts the write, and read-only commands never migrate).
 
 ## C–E (not started)
 

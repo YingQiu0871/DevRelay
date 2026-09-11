@@ -153,20 +153,22 @@ def check_snapshot(store: ArtifactStore, task: TaskRun) -> SnapshotCheck:
             )
         strict = True
     else:
-        version = int(getattr(task, "state_schema_version", 0) or 0)
-        if version >= SNAPSHOT_ERA_SCHEMA:
+        # No recorded digest.  A *v0.2-B-frozen* task always records
+        # ``policy_snapshot_path`` next to the digest, so losing the digest while
+        # the provenance path survives is a real integrity failure (fail closed).
+        # A migrated v0.2-A task legitimately has neither: v0.2-A snapshots
+        # predate digests and are full workspace dumps, so the approved legacy
+        # tolerance still applies even though the state file is now schema 5.
+        if getattr(task, "policy_snapshot_path", ""):
             return SnapshotCheck(
                 SnapshotState.INVALID,
                 detail=(
-                    "integrity_metadata_absent: a schema-5 snapshot task must "
-                    "record policy_config_sha256"
+                    "integrity_metadata_absent: a frozen policy task must record "
+                    "policy_config_sha256"
                 ),
                 path=path,
                 actual_sha256=actual,
             )
-        # Approved legacy tolerance: digest-less v0.2-A snapshots were a full
-        # workspace-config dump; known wiring keys are dropped, everything else
-        # must still validate.
         strict = False
 
     try:

@@ -73,6 +73,35 @@ fake providers (no real Codex invocation, no real reviewer endpoint).
   Only genuine pre-snapshot ("legacy") tasks resolve live policy, and the
   execution path never writes `policy_source`.
 
+### Fixed (independent-review P2 remediation)
+
+- **P2-1 - real state-schema migration.** The first *mutating* write of a task
+  whose persisted `state_schema_version` is older than the current schema now
+  keeps the exact previous `state.json` bytes in a one-time
+  `state.v<old>.json.bak` and only then writes the upgraded (schema-current)
+  document. The backup is created once, is never overwritten, and a backup
+  failure aborts the write with `state.json` untouched; the upgraded document is
+  a serialized copy, so the caller's in-memory task is never mutated and a
+  failed write stays retryable. v5-only fields can no longer land in a file that
+  still claims schema 4, and `doctor` stops reporting a permanently pending
+  migration. Read-only commands still never migrate and never create a backup.
+  A *migrated* v0.2-A task still uses its digest-less legacy snapshot: the
+  integrity-metadata requirement now keys off the recorded snapshot path rather
+  than the bare schema number.
+- **P2-2 - refresh evidence is append-only.** Refresh evidence identity no
+  longer comes from `len(task.policy_refreshes) + 1`. Every attempt that starts
+  writing evidence consumes a unique, never-reused *evidence attempt* number
+  allocated from both persisted records and on-disk `policy-refresh-NN-*`
+  artifacts (gaps tolerated, `max(seen) + 1`), and the evidence files are
+  written with create-new writers that refuse to replace an existing path. A
+  failed attempt's artifacts therefore survive a retry untouched: attempt 01
+  stays on disk as orphan evidence while the successful retry is attempt 02 and
+  may still advance generation 1 -> 2. An on-disk artifact is evidence of an
+  *attempt*; a refresh counts as applied only when the persisted task references
+  that record and its generation/digest/provenance describe the applied
+  generation. Orphan evidence is never deleted, never overwritten and never
+  treated as applied.
+
 ## Unreleased - v0.2-A candidate (audit remediation, closure audit pending)
 
 Automatic review loop with an enforced execution budget, plus the remediation of

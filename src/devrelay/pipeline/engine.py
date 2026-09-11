@@ -10,6 +10,7 @@ the :mod:`devrelay.workspace.runner` module (shell=False everywhere).
 from __future__ import annotations
 
 import json
+import re
 import shlex
 from dataclasses import dataclass
 from pathlib import Path
@@ -118,6 +119,53 @@ _MAX_LOG_CHARS = 1_000_000
 def _rel_posix(path: str) -> str:
     """Persist workspace-relative paths with forward slashes (portable state)."""
     return str(path).replace("\\", "/")
+
+
+# One refresh evidence attempt = ``policy-refresh-NN-{before,after}.yaml`` or
+# ``policy-refresh-NN.json``.
+_REFRESH_EVIDENCE_RE = re.compile(
+    r"^policy-refresh-(\d+)(?:-(?:before|after)\.yaml|\.json)$"
+)
+_REFRESH_ID_RE = re.compile(r"-P(\d+)$")
+
+
+def next_refresh_attempt(task: TaskRun, policy_dir: Path) -> int:
+    """Next never-reused refresh *evidence attempt* number.
+
+    Deliberately separate from ``policy_provenance.generation``: a generation
+    advances only when a refresh is authoritatively applied (referenced by the
+    persisted task), while an attempt number is consumed as soon as an attempt
+    starts writing evidence.  A failed attempt is therefore never renumbered or
+    overwritten by a retry.
+
+    The number is allocated from BOTH sources, never from
+    ``len(task.policy_refreshes) + 1`` alone:
+
+    * persisted records (their ``evidence_attempt``, their ``refresh_id`` and the
+      attempt numbers embedded in their recorded paths);
+    * existing ``policy-refresh-NN-*`` artifacts on disk (evidence written by an
+      attempt that never reached ``state.json``).
+
+    Gaps are tolerated - the rule is ``max(seen) + 1``.
+    """
+    highest = 0
+    for record in task.policy_refreshes:
+        highest = max(highest, int(getattr(record, "evidence_attempt", 0) or 0))
+        match = _REFRESH_ID_RE.search(record.refresh_id or "")
+        if match:
+            highest = max(highest, int(match.group(1)))
+        for recorded in (record.before_path, record.after_path, record.record_path):
+            if not recorded:
+                continue
+            artifact = _REFRESH_EVIDENCE_RE.match(Path(recorded).name)
+            if artifact:
+                highest = max(highest, int(artifact.group(1)))
+    if policy_dir.is_dir():
+        for entry in policy_dir.iterdir():
+            artifact = _REFRESH_EVIDENCE_RE.match(entry.name)
+            if artifact:
+                highest = max(highest, int(artifact.group(1)))
+    return highest + 1
 
 
 @dataclass(frozen=True)
@@ -402,6 +450,21 @@ class DevRelayEngine:
         preserved only when they are actually readable (never invented), and
         usage counters, call identities, attempts and review history are never
         touched.
+
+        Evidence vs. authority (P2-2): every attempt that starts writing evidence
+        consumes a unique, never-reused evidence-attempt number, and its
+        artifacts are immutable (create-new writers; a collision fails closed).
+
+        * An on-disk ``policy-refresh-NN-*`` artifact is **evidence of an
+          attempt** - nothing more.
+        * A refresh is **authoritatively applied** only when the persisted
+          ``TaskRun.policy_refreshes`` references that record and the task's
+          ``policy_provenance.generation`` / ``policy_config_sha256`` /
+          ``policy_provenance`` describe the applied generation.
+
+        Orphan evidence from a failed attempt is therefore allowed, preserved and
+        never deleted or overwritten by a retry, and it is never interpreted as
+        applied merely because a JSON/YAML file exists.
         """
         task = self._load(task_id)
         check = self.snapshot_check(task)
@@ -421,7 +484,10 @@ class DevRelayEngine:
         after_text = dump_policy_yaml(document)
 
         policy_dir = self.store.policy_dir(task_id)
-        index = len(task.policy_refreshes) + 1
+        # Evidence-attempt identity is allocated from persisted records *and*
+        # on-disk artifacts, so a retry after a failed attempt can never reuse or
+        # overwrite that attempt's files (see next_refresh_attempt).
+        index = next_refresh_attempt(task, policy_dir)
         refresh_id = f"{task_id}-P{index:04d}"
         before_path = policy_dir / f"policy-refresh-{index:02d}-before.yaml"
         after_path = policy_dir / f"policy-refresh-{index:02d}-after.yaml"
@@ -436,13 +502,16 @@ class DevRelayEngine:
                 before_bytes = None
         before_available = before_bytes is not None
         before_sha = sha256_hex(before_bytes) if before_bytes is not None else ""
+        # Evidence is immutable: these writers refuse to replace an existing
+        # attempt artifact (a collision fails closed instead of rewriting history).
         if before_available:
-            self.store.write_bytes(before_path, before_bytes)
-        self.store.write_text(after_path, after_text)
+            self.store.write_bytes_new(before_path, before_bytes)
+        self.store.write_text_new(after_path, after_text)
         after_sha = sha256_hex(after_text.encode("utf-8"))
 
         # 3) New frozen-policy generation (evidence generation, not a change
-        #    counter: an explicit refresh always increments it).
+        #    counter: an explicit refresh always increments it, while a failed
+        #    attempt advances neither the generation nor the persisted task).
         previous_generation = int(
             getattr(task.policy_provenance, "generation", 0) or 0
         )
@@ -479,8 +548,9 @@ class DevRelayEngine:
             before_sha256=before_sha,
             after_sha256=after_sha,
             usage_unchanged=True,
+            evidence_attempt=index,
         )
-        self.store.write_text(record_path, _json_pretty(record))
+        self.store.write_text_new(record_path, _json_pretty(record))
 
         task.policy_refreshes.append(record)
         task.policy_source = "snapshot"

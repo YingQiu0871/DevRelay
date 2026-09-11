@@ -425,6 +425,12 @@ class PolicyRefreshRecord(BaseModel):
     before_sha256: str = ""
     after_sha256: str = ""
     usage_unchanged: bool = True
+    # Refresh *evidence attempt* number, deliberately distinct from
+    # ``generation``: every attempt that starts writing evidence consumes a
+    # never-reused number, so a failed attempt's artifacts survive a retry
+    # untouched.  A successful retry may therefore be attempt 02 while advancing
+    # generation 1 -> 2.
+    evidence_attempt: int = 0
 
 
 class ReviewAttempt(BaseModel):

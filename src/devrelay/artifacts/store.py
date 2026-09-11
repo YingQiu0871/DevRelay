@@ -158,9 +158,12 @@ class ArtifactStore:
             "policy",
         ):
             (path.parent / sub).mkdir(parents=True, exist_ok=True)
-        self._backup_before_schema_upgrade(path, task)
+        # Schema migration happens here and only here: read-only commands never
+        # call write_task, so they never migrate a task or create a backup.
+        upgraded = self._prepare_state_write(path, task)
         _atomic_write_text(
-            path, json.dumps(task.model_dump(mode="json"), indent=2, ensure_ascii=False)
+            path,
+            json.dumps(upgraded.model_dump(mode="json"), indent=2, ensure_ascii=False),
         )
         index = self._read_index()
         index.setdefault("tasks", {})[task.task_id] = {
@@ -172,29 +175,44 @@ class ArtifactStore:
             index["current_task"] = task.task_id
         self._write_index(index)
 
-    def _backup_before_schema_upgrade(self, path: Path, task: TaskRun) -> Path | None:
-        """Keep one ``state.v<old>.json.bak`` before upgrading a task state.
+    def _prepare_state_write(self, path: Path, task: TaskRun) -> TaskRun:
+        """Return the task to serialize, migrating an older persisted schema.
 
-        The schema migration is one-way (a v0.2-A binary cannot read schema 5),
-        so the pre-upgrade bytes are preserved exactly once.
+        Contract for the first mutating write of a task whose *persisted*
+        ``state_schema_version`` is older than the current schema:
+
+        1. the exact current ``state.json`` bytes are retained;
+        2. ``state.v<old>.json.bak`` is created **once** with those exact bytes
+           and is never overwritten afterwards;
+        3. a backup failure aborts the write with ``state.json`` untouched;
+        4. only then is the upgraded (schema-current) document serialized;
+        5. the caller's in-memory task is never mutated - a ``model_copy`` is
+           returned, so a failed write stays unambiguous and retryable.
+
+        A task saved *only* by this version already carries the current schema,
+        so no backup is created for it.
         """
         if not path.is_file():
-            return None
+            return task
         try:
-            previous = json.loads(path.read_text(encoding="utf-8"))
-        except (json.JSONDecodeError, OSError):
-            return None
-        old_version = previous.get("state_schema_version")
-        if not isinstance(old_version, int):
-            return None
-        new_version = int(getattr(task, "state_schema_version", 0) or 0)
-        if old_version >= new_version or old_version >= MAX_SUPPORTED_STATE_SCHEMA:
-            return None
+            raw = path.read_bytes()
+            previous = json.loads(raw.decode("utf-8"))
+        except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+            return task  # unknown/corrupt previous version: nothing to migrate
+        old_version = (
+            previous.get("state_schema_version") if isinstance(previous, dict) else None
+        )
+        if not isinstance(old_version, int) or old_version >= MAX_SUPPORTED_STATE_SCHEMA:
+            return task
         backup = path.with_name(f"state.v{old_version}.json.bak")
-        if backup.exists():
-            return backup
-        _atomic_write_bytes(backup, path.read_bytes())
-        return backup
+        if not backup.exists():
+            # Raises on failure: the main state write below is then never reached.
+            _atomic_write_bytes(backup, raw)
+        if int(getattr(task, "state_schema_version", 0) or 0) >= MAX_SUPPORTED_STATE_SCHEMA:
+            return task
+        return task.model_copy(
+            update={"state_schema_version": MAX_SUPPORTED_STATE_SCHEMA}
+        )
 
     def read_task(self, task_id: str) -> TaskRun:
         path = self.state_path(task_id)
@@ -253,6 +271,28 @@ class ArtifactStore:
         tmp.write_bytes(data)
         os.replace(tmp, full)
         return full
+
+    def write_bytes_new(self, path: str | Path, data: bytes) -> Path:
+        """Create an immutable evidence file; refuse to replace an existing one.
+
+        Used for refresh/recovery evidence: an attempt's artifacts are immutable
+        history, so a later attempt must never overwrite them (fail closed).
+        """
+        full = Path(path)
+        full.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            with open(full, "xb") as handle:
+                handle.write(data)
+        except FileExistsError as exc:
+            raise DevRelayError(
+                f"refusing to overwrite existing evidence file {full}; "
+                "evidence artifacts are immutable"
+            ) from exc
+        return full
+
+    def write_text_new(self, path: str | Path, text: str) -> Path:
+        """LF-normalized :meth:`write_bytes_new` for immutable text evidence."""
+        return self.write_bytes_new(path, encode_lf(text))
 
     def read_bytes(self, path: str | Path) -> bytes:
         return Path(path).read_bytes()
