@@ -416,6 +416,15 @@ class PolicyRefreshRecord(BaseModel):
     before_path: str = ""
     after_path: str = ""
     record_path: str = ""
+    # v0.2-B: generation-bound refresh/recovery provenance.
+    generation: int = 0
+    after_generation: int = 0
+    trigger: str = "explicit_refresh"
+    before_state: str = ""
+    before_snapshot_available: bool = True
+    before_sha256: str = ""
+    after_sha256: str = ""
+    usage_unchanged: bool = True
 
 
 class ReviewAttempt(BaseModel):
@@ -612,6 +621,44 @@ class TaskDelta(BaseModel):
         return bool(self.changed_files)
 
 
+# State schema versions (v0.2-B).
+STATE_SCHEMA_VERSION = 5
+MAX_SUPPORTED_STATE_SCHEMA = 5
+SNAPSHOT_ERA_SCHEMA = 5
+
+
+class ProfileRef(BaseModel):
+    """One profile that contributed to a resolved policy document."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    name: str
+    sha256: str = ""
+
+
+class PolicyProvenance(BaseModel):
+    """Where a task's frozen policy came from (v0.2-B, state schema 5).
+
+    Profile hashes are provenance, not trust anchors: normal execution never
+    re-reads or re-hashes a profile file.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    # Successful frozen-policy evidence generation (1 at task creation, +1 per
+    # successful explicit refresh/recovery) - not a count of semantic changes.
+    generation: int = 1
+    resolved_at: str = Field(default_factory=utcnow_iso)
+    selector_raw: list[str] = Field(default_factory=list)
+    profiles: list[ProfileRef] = Field(default_factory=list)
+    workspace_config_sha256: str = ""
+    snapshot_sha256: str = ""
+    resolver_version: str = "0.2-B/1"
+    # sha256_verified | unverified_legacy_no_digest | unverified_legacy_tolerant
+    integrity: str = ""
+    dropped_legacy_keys: list[str] = Field(default_factory=list)
+
+
 class TaskRun(BaseModel):
     """Persisted per-task runtime state (tasks/<id>/state.json)."""
 
@@ -619,7 +666,7 @@ class TaskRun(BaseModel):
 
     task_id: str
     title: str
-    state_schema_version: int = 4
+    state_schema_version: int = STATE_SCHEMA_VERSION
     packet: TaskPacket | None = None
     state: PipelineState = PipelineState.NEW
     plan_ready: bool = False
@@ -661,9 +708,14 @@ class TaskRun(BaseModel):
     # Fingerprint -> number of review rounds in which this blocker was seen.
     finding_seen_counts: dict[str, int] = Field(default_factory=dict)
     # Which config governed this task's policy: "snapshot" | "live-fallback".
-    # Persisted as "snapshot" at task creation; never *written* by read-only
-    # commands (status/usage only display the resolved value).
+    # v0.2-B writes it only at task freeze and at an explicit refresh/recovery;
+    # execution never rewrites it, and read-only commands only display it.
     policy_source: str = ""
+
+    # v0.2-B (schema 5): frozen-policy identity, integrity and provenance.
+    policy_snapshot_path: str = ""
+    policy_config_sha256: str = ""
+    policy_provenance: PolicyProvenance | None = None
 
     # Durable, task-scoped, monotonic identity sequences (v0.2-A remediation).
     # Allocated and persisted BEFORE the external invocation, never decremented,

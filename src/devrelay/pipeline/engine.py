@@ -9,7 +9,6 @@ the :mod:`devrelay.workspace.runner` module (shell=False everywhere).
 
 from __future__ import annotations
 
-import hashlib
 import json
 import shlex
 from dataclasses import dataclass
@@ -25,17 +24,24 @@ from devrelay.artifacts.renderer import (
     sanitize_review_result,
     starter_task_markdown,
 )
-from devrelay.artifacts.store import ArtifactStore
+from devrelay.artifacts.store import ArtifactStore, sha256_hex
 from devrelay.config import (
     ConfigError,
     DevRelayConfig,
-    dump_config_yaml,
-    load_config,
+    FrozenBudget,
+    PolicyDocument,
+    ResolvedPolicy,
+    WiringConfig,
+    dump_policy_yaml,
+    load_policy_snapshot,
 )
 from devrelay.errors import (
     BaselineError,
     BaselineUnavailableError,
     DevRelayError,
+    PolicyLiveResolutionFailedError,
+    PolicyLiveResolutionRequiredError,
+    PolicyRefreshNotAllowedError,
     ProviderError,
     ReviewFormatError,
     StateConflictError,
@@ -43,11 +49,13 @@ from devrelay.errors import (
 )
 from devrelay.models import (
     AppliedReviewRecord,
+    ProfileRef,
     AttemptStatus,
     CallErrorType,
     Finding,
     FinalGateRecord,
     IndexSnapshotStatus,
+    PolicyProvenance,
     PolicyRefreshRecord,
     PolicyViolation,
     PolicyViolationType,
@@ -68,6 +76,17 @@ from devrelay.models import (
     utcnow_iso,
 )
 from devrelay.pipeline.budget import BudgetExhaustedError, ProviderBudget
+from devrelay.snapshot import (
+    SnapshotCheck,
+    SnapshotState,
+    build_provenance,
+    check_snapshot,
+    classify_snapshot_state,
+    freeze_policy,
+    read_snapshot_document,
+    snapshot_error,
+    snapshot_path as snapshot_path_in_store,
+)
 from devrelay.pipeline.policy import PipelinePolicy
 from devrelay.pipeline.review_lifecycle import (
     APPLICATION_APPLIED,
@@ -94,6 +113,52 @@ from devrelay.utils import truncate
 
 # Sanity cap on persisted provider output (kept out of config on purpose).
 _MAX_LOG_CHARS = 1_000_000
+
+
+def _rel_posix(path: str) -> str:
+    """Persist workspace-relative paths with forward slashes (portable state)."""
+    return str(path).replace("\\", "/")
+
+
+@dataclass(frozen=True)
+class PolicyRecoveryGrant:
+    """Human authorization for the explicit policy-recovery path.
+
+    Only ``devrelay unblock --refresh-policy`` constructs one; the engine never
+    fabricates a grant, so a damaged snapshot can never be repaired implicitly.
+    """
+
+    reason: str = "policy integrity recovery"
+    by: str = "human"
+
+
+@dataclass(frozen=True)
+class PolicyReadout:
+    """State-only view of a task's policy for ``status``/``usage``.
+
+    Reading these commands never touches a live profile file: the document comes
+    from the task's own snapshot (integrity-checked) or from recorded
+    provenance, and a missing/corrupt snapshot degrades to a labelled
+    ``None`` document rather than an error.
+    """
+
+    source: str
+    document: PolicyDocument | None
+    integrity: str = ""
+    detail: str = ""
+    profiles: tuple[ProfileRef, ...] = ()
+
+    @property
+    def display(self) -> str:
+        if self.integrity == "verified":
+            return "snapshot (verified)"
+        if self.integrity == "unverified_legacy_no_digest":
+            return "snapshot (legacy: digest not recorded)"
+        if self.integrity == "not_frozen":
+            return "live-fallback (not frozen)"
+        if self.source == "snapshot":
+            return f"snapshot (UNVERIFIED: {self.integrity})"
+        return f"{self.source} ({self.integrity or 'unrecorded'})"
 
 
 @dataclass(frozen=True)
@@ -145,22 +210,55 @@ _UNBLOCK_TARGETS = {
 class DevRelayEngine:
     def __init__(
         self,
-        config: DevRelayConfig,
+        config: DevRelayConfig | None,
         store: ArtifactStore,
         workspace,
         implementer: ImplementerProvider,
         reviewer: ReviewerProvider,
         runner=None,
         baselines=None,
+        *,
+        runtime_config: WiringConfig | None = None,
+        fallback_policy_config: ResolvedPolicy | None = None,
+        policy_recovery=None,
+        policy_view_provider=None,
     ) -> None:
+        if config is None and runtime_config is None:
+            raise DevRelayError(
+                "engine needs either a workspace config or a runtime wiring config"
+            )
         self.config = config
-        self.policy = PipelinePolicy(config)
+        self.runtime_config = runtime_config or WiringConfig.from_workspace_config(
+            config  # type: ignore[arg-type]
+        )
+        self._fallback_policy_config = fallback_policy_config
+        self.policy_recovery = policy_recovery
+        # Lazily supplies the live workspace policy for *display* of legacy
+        # tasks only; read-only commands never resolve profiles for a task that
+        # owns a frozen snapshot.
+        self._policy_view_provider = policy_view_provider
         self.store = store
         self.workspace = workspace
         self.implementer = implementer
         self.reviewer = reviewer
         self.runner = runner
         self.baselines = baselines
+
+    def _fallback_policy(self) -> ResolvedPolicy:
+        """Explicit live policy, used only where the design allows it.
+
+        Either the caller supplied a resolved policy (CLI: profiles included) or
+        it is derived from the live workspace document.  It is never consulted
+        for a task whose frozen snapshot exists but cannot be used.
+        """
+        if self._fallback_policy_config is not None:
+            return self._fallback_policy_config
+        if self.config is None:
+            raise PolicyLiveResolutionRequiredError(
+                "no live policy is available in this command context and the task "
+                "has no usable frozen policy"
+            )
+        return ResolvedPolicy.from_workspace_config(self.config)
 
     def _baseline_service(self):
         if self.baselines is None:
@@ -171,101 +269,235 @@ class DevRelayEngine:
         return self.baselines
 
     # ------------------------------------------------------------------ #
-    # task-scoped policy (v0.2-A)
+    # task-scoped policy (v0.2-B: frozen snapshot or explicit live policy)
     # ------------------------------------------------------------------ #
-    def _resolve_task_config(self, task: TaskRun) -> tuple[DevRelayConfig, str]:
-        """Return (effective policy, source) without mutating the task.
+    def snapshot_path(self, task_id: str) -> Path:
+        return snapshot_path_in_store(self.store, task_id)
 
-        Read-only commands (``status``/``usage``) must never rewrite task state
-        just to display ``policy_source``, so this helper is pure.
+    def snapshot_check(self, task: TaskRun) -> SnapshotCheck:
+        """Read-only classification of the task's frozen policy snapshot."""
+        return check_snapshot(self.store, task)
+
+    def _resolve_task_policy(self, task: TaskRun) -> ResolvedPolicy:
+        """The task's effective policy - the single policy entry point.
+
+        * ``valid``       -> the frozen snapshot (the only policy authority)
+        * ``legacy_live`` -> the explicit live policy supplied by the caller
+        * anything else   -> fail closed; runtime wiring/workspace defaults are
+          never substituted for a snapshot that once governed the task.
         """
-        snapshot = self.store.task_dir(task.task_id) / "config.snapshot.yaml"
-        if snapshot.is_file():
+        check = self.snapshot_check(task)
+        if check.state is SnapshotState.VALID:
+            document, dropped, digest = read_snapshot_document(self.store, task)
+            provenance = (
+                task.policy_provenance
+                or build_provenance(
+                    generation=1, integrity="unverified_legacy_tolerant"
+                )
+            ).model_copy(
+                update={"snapshot_sha256": digest, "dropped_legacy_keys": dropped}
+            )
+            return ResolvedPolicy(
+                document=document, provenance=provenance, source="snapshot"
+            )
+        if check.state is SnapshotState.LEGACY_LIVE:
+            return self._fallback_policy()
+        if self.policy_recovery is not None:
+            return self._recover_task_policy(task, check)
+        raise snapshot_error(check)
+
+    def read_recorded_policy(self, task: TaskRun) -> PolicyReadout:
+        """Policy view for ``status``/``usage`` that never touches profiles."""
+        check = self.snapshot_check(task)
+        source = self.policy_source_for(task)
+        recorded = task.policy_provenance
+        profiles = tuple(recorded.profiles) if recorded is not None else ()
+        if check.state is SnapshotState.VALID:
             try:
-                return load_config(snapshot), "snapshot"
-            except ConfigError:
-                return self.config, "live-fallback"
-        return self.config, "live-fallback"
+                document, _dropped, _digest = read_snapshot_document(self.store, task)
+            except DevRelayError as exc:  # pragma: no cover - racing writer
+                return PolicyReadout(
+                    source=source,
+                    document=None,
+                    integrity="invalid",
+                    detail=str(exc),
+                    profiles=profiles,
+                )
+            integrity = (
+                "verified"
+                if getattr(task, "policy_config_sha256", "")
+                else "unverified_legacy_no_digest"
+            )
+            return PolicyReadout(
+                source=source,
+                document=document,
+                integrity=integrity,
+                profiles=profiles,
+            )
+        if check.state is SnapshotState.LEGACY_LIVE:
+            return PolicyReadout(
+                source=source,
+                document=self._legacy_display_policy(),
+                integrity="not_frozen",
+                detail=check.detail,
+                profiles=profiles,
+            )
+        return PolicyReadout(
+            source=source,
+            document=None,
+            integrity=check.state.value,
+            detail=check.detail,
+            profiles=profiles,
+        )
+
+    def _legacy_display_policy(self) -> PolicyDocument | None:
+        """Live workspace policy for *display* of a legacy task, best effort.
+
+        Legacy tasks have no frozen policy, so showing the live budget is the
+        v0.2-A contract.  This never runs for a task with a usable snapshot and
+        never fails a read-only command.
+        """
+        if self.config is not None:
+            return PolicyDocument.from_workspace_config(self.config)
+        if self._policy_view_provider is None:
+            return None
+        try:
+            return self._policy_view_provider()
+        except Exception:  # pragma: no cover - display only
+            return None
 
     def policy_source_for(self, task: TaskRun) -> str:
-        """Resolved policy source for display (never writes to the task)."""
+        """Recorded policy source for display (never writes to the task)."""
         if task.policy_source in ("snapshot", "live-fallback"):
             return task.policy_source
-        return self._resolve_task_config(task)[1]
+        state, _detail = classify_snapshot_state(task, self.store)
+        return "snapshot" if state is SnapshotState.VALID else "live-fallback"
 
-    def _task_config(self, task: TaskRun) -> DevRelayConfig:
-        """Execution policy for *task*: the snapshot taken at task start.
+    def _task_config(self, task: TaskRun) -> PolicyDocument:
+        """Deprecated v0.2-A name; now returns the task's **PolicyDocument**.
 
-        Editing the workspace ``.devrelay/config.yaml`` mid-task must not
-        silently change budget, blocking severities, retries or test policy.
-        A missing/unreadable snapshot falls back to the live config and is
-        recorded as ``policy_source == 'live-fallback'`` the next time the task
-        state is written by an execution path.
+        Kept because v0.2-A tests read ``engine._task_config(task).budget``.  It
+        no longer mutates task state and no longer returns a workspace config.
         """
-        config, source = self._resolve_task_config(task)
-        task.policy_source = source
-        return config
+        return self._resolve_task_policy(task).document
 
     def task_policy_snapshot_text(self, task_id: str) -> str | None:
-        snapshot = self.store.task_dir(task_id) / "config.snapshot.yaml"
+        snapshot = self.snapshot_path(task_id)
         return snapshot.read_text(encoding="utf-8") if snapshot.is_file() else None
 
     def refresh_task_policy(
-        self, task_id: str, reason: str, *, by: str = "human"
+        self,
+        task_id: str,
+        reason: str,
+        *,
+        by: str = "human",
+        force: bool = False,
+        recovery: bool = False,
     ) -> TaskRun:
-        """Explicitly re-snapshot the live config as this task's policy.
+        """Explicitly re-freeze the live policy as this task's policy.
 
-        This is the only supported way to change a running task's budget or
-        blocking policy; it is audited, requires a human reason, and *durably*
-        preserves the previous policy next to the new one. Usage counters and
-        call/attempt evidence are never touched: a refresh cannot reset, delete
-        or renumber what was already spent.
+        The only supported way to change a running task's policy, and the only
+        recovery for a missing/invalid/hash-mismatched snapshot.  Live policy is
+        resolved *before* anything is mutated; previous snapshot bytes are
+        preserved only when they are actually readable (never invented), and
+        usage counters, call identities, attempts and review history are never
+        touched.
         """
         task = self._load(task_id)
-        policy_dir = self.store.policy_dir(task_id)
-        before_text = self.task_policy_snapshot_text(task_id)
-        before_source = "snapshot" if before_text is not None else "live-fallback"
-        if before_text is None:
-            before_text = dump_config_yaml(self.config)
-        after_text = dump_config_yaml(self.config)
+        check = self.snapshot_check(task)
+        # 1) Resolve the live policy first: a resolution failure mutates nothing.
+        try:
+            live = self._fallback_policy()
+        except DevRelayError as exc:
+            raise PolicyLiveResolutionFailedError(
+                f"cannot refresh the policy of {task_id}: live policy resolution "
+                f"failed: {exc}"
+            ) from exc
+        document = live.document
+        after_text = dump_policy_yaml(document)
 
+        policy_dir = self.store.policy_dir(task_id)
         index = len(task.policy_refreshes) + 1
         refresh_id = f"{task_id}-P{index:04d}"
         before_path = policy_dir / f"policy-refresh-{index:02d}-before.yaml"
         after_path = policy_dir / f"policy-refresh-{index:02d}-after.yaml"
         record_path = policy_dir / f"policy-refresh-{index:02d}.json"
-        self.store.write_text(before_path, before_text)
+
+        # 2) Preserve the previous snapshot only if its bytes are readable.
+        before_bytes: bytes | None = None
+        if check.path is not None and check.path.is_file():
+            try:
+                before_bytes = check.path.read_bytes()
+            except OSError:
+                before_bytes = None
+        before_available = before_bytes is not None
+        before_sha = sha256_hex(before_bytes) if before_bytes is not None else ""
+        if before_available:
+            self.store.write_bytes(before_path, before_bytes)
         self.store.write_text(after_path, after_text)
+        after_sha = sha256_hex(after_text.encode("utf-8"))
+
+        # 3) New frozen-policy generation (evidence generation, not a change
+        #    counter: an explicit refresh always increments it).
+        previous_generation = int(
+            getattr(task.policy_provenance, "generation", 0) or 0
+        )
+        generation = previous_generation + 1
+        provenance = build_provenance(
+            generation=generation,
+            selector_raw=list(live.provenance.selector_raw),
+            profiles=list(live.provenance.profiles),
+            workspace_config_sha256=live.provenance.workspace_config_sha256,
+            integrity="sha256_verified",
+        )
+        digest, provenance = freeze_policy(
+            self.store, task_id, document, provenance
+        )
+
         record = PolicyRefreshRecord(
             refresh_id=refresh_id,
             by=by,
             reason=reason,
-            before_source=before_source,
+            before_source="snapshot" if before_available else "",
             after_source="snapshot",
-            before_config_sha256=hashlib.sha256(
-                before_text.encode("utf-8")
-            ).hexdigest(),
-            after_config_sha256=hashlib.sha256(after_text.encode("utf-8")).hexdigest(),
-            before_path=self.store.rel_path(before_path),
+            before_config_sha256=before_sha,
+            after_config_sha256=after_sha,
+            before_path=(
+                self.store.rel_path(before_path) if before_available else ""
+            ),
             after_path=self.store.rel_path(after_path),
             record_path=self.store.rel_path(record_path),
+            generation=generation,
+            after_generation=generation,
+            trigger="integrity_recovery" if recovery else "explicit_refresh",
+            before_state=check.state.value,
+            before_snapshot_available=before_available,
+            before_sha256=before_sha,
+            after_sha256=after_sha,
+            usage_unchanged=True,
         )
         self.store.write_text(record_path, _json_pretty(record))
-        # The effective policy for the task is the after-state.
-        self.store.write_text(
-            self.store.task_dir(task_id) / "config.snapshot.yaml", after_text
-        )
+
         task.policy_refreshes.append(record)
         task.policy_source = "snapshot"
+        task.policy_snapshot_path = _rel_posix(
+            self.store.rel_path(self.snapshot_path(task_id))
+        )
+        task.policy_config_sha256 = digest
+        task.policy_provenance = provenance
         task.audit.append(
             TransitionEvent(
                 from_state=task.state.value,
                 to_state=task.state.value,
                 note=(
                     f"policy snapshot refreshed from workspace config: {reason} "
-                    f"({refresh_id}; before/after preserved under "
-                    f"{self.store.rel_path(before_path)} / "
-                    f"{self.store.rel_path(after_path)})"
+                    f"({refresh_id}; forced={str(bool(force)).lower()}; "
+                    f"generation {generation}; trigger "
+                    f"{record.trigger}; previous state "
+                    f"{record.before_state}; before_snapshot_available="
+                    f"{str(before_available).lower()}; before/after evidence under "
+                    f"{self.store.rel_path(after_path)} and "
+                    f"{self.store.rel_path(record_path)})"
                 ),
                 by=by,
             )
@@ -273,11 +505,32 @@ class DevRelayEngine:
         self._persist(task)
         return task
 
+    def _recover_task_policy(self, task: TaskRun, check: SnapshotCheck) -> ResolvedPolicy:
+        """Explicit recovery of a missing/invalid/mismatched snapshot."""
+        grant = self.policy_recovery
+        refreshed = self.refresh_task_policy(
+            task.task_id,
+            getattr(grant, "reason", "policy integrity recovery"),
+            by=getattr(grant, "by", "human"),
+            force=True,
+            recovery=True,
+        )
+        return ResolvedPolicy(
+            document=self._task_config(refreshed),
+            provenance=refreshed.policy_provenance,
+            source="snapshot",
+        )
+
     def _policy_for(self, task: TaskRun) -> PipelinePolicy:
-        return PipelinePolicy(self._task_config(task))
+        return PipelinePolicy(self._resolve_task_policy(task).document)
 
     def _budget_for(self, task: TaskRun) -> ProviderBudget:
-        return ProviderBudget(self._task_config(task).budget)
+        limits = self._resolve_task_policy(task).document.budget
+        if not isinstance(limits, FrozenBudget):  # pragma: no cover - guard
+            raise DevRelayError(
+                "internal: task budget did not come from a policy resolution"
+            )
+        return ProviderBudget(limits)
 
     # ------------------------------------------------------------------ #
     # persistence helpers
@@ -529,12 +782,23 @@ class DevRelayEngine:
             task_dir / "task.md",
             starter_task_markdown(task_id, task.title),
         )
-        self.store.write_text(
-            task_dir / "config.snapshot.yaml",
-            dump_config_yaml(self.config),
+        freeze = self._fallback_policy()
+        try:
+            digest, provenance = freeze_policy(
+                self.store, task_id, freeze.document, freeze.provenance
+            )
+        except OSError:
+            import shutil
+
+            shutil.rmtree(task_dir, ignore_errors=True)
+            raise
+        # The snapshot *is* this task's policy from now on: persisted eagerly,
+        # with the digest of its exact bytes and the provenance behind it.
+        task.policy_snapshot_path = _rel_posix(
+            self.store.rel_path(self.snapshot_path(task_id))
         )
-        # The snapshot *is* this task's policy from now on - persisted eagerly
-        # instead of being inferred lazily by read-only commands.
+        task.policy_config_sha256 = digest
+        task.policy_provenance = provenance
         task.policy_source = "snapshot"
         self._move(task, PipelineState.PLAN_REQUIRED, note="task created")
         self._persist(task)
@@ -691,7 +955,7 @@ class DevRelayEngine:
             iteration=attempt,
             phase="FIX" if is_fix else "IMPLEMENT",
         )
-        policy_config = self._task_config(task)
+        policy_doc = self._task_config(task)
         context = ImplementerContext(
             task_id=task.task_id,
             packet=packet,
@@ -699,12 +963,12 @@ class DevRelayEngine:
             workspace_root=str(self.workspace.root),
             is_fix=is_fix,
             findings=list(task.current_findings),
-            reuse_approved_scope=policy_config.scope.reuse_approved_scope,
-            current_delta_first=policy_config.scope.current_delta_first,
+            reuse_approved_scope=policy_doc.scope.reuse_approved_scope,
+            current_delta_first=policy_doc.scope.current_delta_first,
         )
 
         # ---- budget gate: never invoke the implementer when it would exceed --
-        budget = ProviderBudget(policy_config.budget)
+        budget = ProviderBudget(policy_doc.budget)
         try:
             budget.check(task, ProviderKind.IMPLEMENTER)
         except BudgetExhaustedError as exc:
@@ -992,15 +1256,15 @@ class DevRelayEngine:
         if task.state != PipelineState.TESTING:
             self._move(task, PipelineState.TESTING, note="tests resumed")
         attempt = max(1, task.implementation_passes)
-        policy_config = self._task_config(task)
-        policy = PipelinePolicy(policy_config)
-        command_lines = list(policy_config.tests.targeted)
+        policy_doc = self._task_config(task)
+        policy = PipelinePolicy(policy_doc)
+        command_lines = list(policy_doc.tests.targeted)
         if (
             task.packet
             and policy.run_full_regression(task.packet.risk_level)
-            and policy_config.tests.full
+            and policy_doc.tests.full
         ):
-            command_lines += [f"[full] {cmd}" for cmd in policy_config.tests.full]
+            command_lines += [f"[full] {cmd}" for cmd in policy_doc.tests.full]
         events.append(
             f"[{task.task_id}] tests: {len(command_lines)} command(s) configured"
         )
@@ -1021,7 +1285,7 @@ class DevRelayEngine:
             result = self.runner.run(
                 argv,
                 cwd=str(self.workspace.root),
-                timeout_seconds=policy_config.tests.timeout_seconds,
+                timeout_seconds=policy_doc.tests.timeout_seconds,
             )
             log_dir = self.store.logs_dir(task.task_id)
             self.store.write_text(
@@ -1051,7 +1315,7 @@ class DevRelayEngine:
         task.last_tests_passed = all_ok
         if not all_ok:
             self._persist(task)
-            if policy_config.pipeline.auto_fix_tests and policy.can_fix_again(task):
+            if policy_doc.pipeline.auto_fix_tests and policy.can_fix_again(task):
                 self._move(task, PipelineState.FIX_REQUIRED, note="tests failed")
                 self._persist(task)
                 events.append(f"[{task.task_id}] tests failed -> FIX_REQUIRED")
@@ -1095,7 +1359,7 @@ class DevRelayEngine:
         delta = self._require_task_delta(task)
         diff = delta.text_diff
         # Pure resolution: building a bundle must not rewrite task state.
-        diff_limit = self._resolve_task_config(task)[0].review.max_diff_bytes
+        diff_limit = self._task_config(task).review.max_diff_bytes
         diff_truncated = len(diff) > diff_limit
         if diff_truncated:
             diff = truncate(diff, diff_limit)
@@ -1201,8 +1465,8 @@ class DevRelayEngine:
         if not self.reviewer.automatic:
             return self._export_manual_request(task, bundle, events)
 
-        policy_config = self._task_config(task)
-        budget = ProviderBudget(policy_config.budget)
+        policy_doc = self._task_config(task)
+        budget = ProviderBudget(policy_doc.budget)
         review_number = len(task.review_history) + 1
         session = ReviewSession(
             store=self.store,
@@ -1231,10 +1495,10 @@ class DevRelayEngine:
 
         session.begin()
         call_policy = ReviewCallPolicy(
-            format_retries=policy_config.review.retries,
-            transport_retries=policy_config.review.transport_retries,
-            max_response_chars=policy_config.review.max_response_chars,
-            timeout_seconds=policy_config.review.timeout_seconds,
+            format_retries=policy_doc.review.retries,
+            transport_retries=policy_doc.review.transport_retries,
+            max_response_chars=policy_doc.review.max_response_chars,
+            timeout_seconds=policy_doc.review.timeout_seconds,
             sink=session,
         )
         try:
@@ -1927,6 +2191,7 @@ class DevRelayEngine:
         to: str | None = None,
         *,
         refresh_policy: bool = False,
+        force: bool = False,
     ) -> TaskRun:
         if not reason or not reason.strip():
             raise DevRelayError("unblock requires a non-empty --reason")
@@ -1947,7 +2212,7 @@ class DevRelayEngine:
         # Explicit, audited policy refresh: the only supported way to change a
         # running task's budget/blocking policy (never implicit, never silent).
         if refresh_policy:
-            self.refresh_task_policy(task_id, reason.strip())
+            self.refresh_task_policy(task_id, reason.strip(), force=force)
             task = self._load(task_id)
         to_state = _UNBLOCK_TARGETS[target]
         self._move(task, to_state, note=f"manual unblock: {reason.strip()}")
@@ -2061,14 +2326,22 @@ class DevRelayEngine:
         )
         # Read-only: resolve the effective policy/source without rewriting the
         # task just to display where the policy came from.
-        policy_config, policy_source = self._resolve_task_config(task)
-        budget = ProviderBudget(policy_config.budget)
-        usage = budget.usage(task)
-        budget_one_line = (
-            f"implementer {usage.implementer_calls}/{policy_config.budget.max_implementer_calls}"
-            f", reviewer {usage.reviewer_calls}/{policy_config.budget.max_reviewer_calls}"
-            f", total {usage.total_calls}/{policy_config.budget.max_total_provider_calls}"
-        )
+        readout = self.read_recorded_policy(task)
+        policy_source = readout.source
+        usage = ProviderBudget.usage(task)
+        if readout.document is not None:
+            limits = readout.document.budget
+            budget_one_line = (
+                f"implementer {usage.implementer_calls}/{limits.max_implementer_calls}"
+                f", reviewer {usage.reviewer_calls}/{limits.max_reviewer_calls}"
+                f", total {usage.total_calls}/{limits.max_total_provider_calls}"
+            )
+        else:
+            budget_one_line = (
+                f"implementer {usage.implementer_calls}/-, reviewer "
+                f"{usage.reviewer_calls}/-, total {usage.total_calls}/- "
+                f"({readout.display})"
+            )
         if last_attempt := (task.review_attempts[-1] if task.review_attempts else None):
             review_one_line = (
                 f"#{last_attempt.review_number} {last_attempt.status.value}"
@@ -2112,15 +2385,22 @@ class DevRelayEngine:
             "budget": budget_one_line,
             "review": review_one_line,
             "policy_source": policy_source,
+            "policy_display": readout.display,
+            "policy_integrity": readout.integrity,
+            "policy_detail": readout.detail,
+            "policy_profiles": [
+                {"name": ref.name, "sha256": ref.sha256} for ref in readout.profiles
+            ],
             "blocked": task.blocked_code or "",
         }
 
     def usage_block(self, task_id: str) -> dict[str, object]:
         """Read-only provider usage/audit summary for `devrelay usage`."""
         task = self._load(task_id)
-        policy_config, policy_source = self._resolve_task_config(task)
-        budget = ProviderBudget(policy_config.budget)
-        usage = budget.usage(task)
+        readout = self.read_recorded_policy(task)
+        policy_source = readout.source
+        limits = readout.document.budget if readout.document is not None else None
+        usage = ProviderBudget.usage(task)
         last_attempt = task.review_attempts[-1] if task.review_attempts else None
         pending = pending_result_attempt(task)
         return {
@@ -2129,9 +2409,21 @@ class DevRelayEngine:
             "implementer_calls": usage.implementer_calls,
             "reviewer_calls": usage.reviewer_calls,
             "total_calls": usage.total_calls,
-            "max_implementer_calls": policy_config.budget.max_implementer_calls,
-            "max_reviewer_calls": policy_config.budget.max_reviewer_calls,
-            "max_total_provider_calls": policy_config.budget.max_total_provider_calls,
+            "max_implementer_calls": (
+                limits.max_implementer_calls if limits is not None else None
+            ),
+            "max_reviewer_calls": (
+                limits.max_reviewer_calls if limits is not None else None
+            ),
+            "max_total_provider_calls": (
+                limits.max_total_provider_calls if limits is not None else None
+            ),
+            "policy_display": readout.display,
+            "policy_integrity": readout.integrity,
+            "policy_detail": readout.detail,
+            "policy_profiles": [
+                {"name": ref.name, "sha256": ref.sha256} for ref in readout.profiles
+            ],
             "reviewer_provider": self.reviewer.name,
             "reviewer_model": self.reviewer.model or "-",
             "reviewer_endpoint_host": self.reviewer.endpoint_host or "-",

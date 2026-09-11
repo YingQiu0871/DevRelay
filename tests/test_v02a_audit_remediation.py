@@ -715,7 +715,9 @@ def test_new_task_persists_policy_source(tmp_path):
     assert task.policy_source == "snapshot"
     raw = json.loads(store.state_path(STATE).read_text(encoding="utf-8"))
     assert raw["policy_source"] == "snapshot"
-    assert raw["state_schema_version"] == 4
+    # v0.2-B writes state schema 5 (approved, intentional persisted-schema
+    # evolution: frozen-policy identity, digest and provenance).
+    assert raw["state_schema_version"] == 5
     assert raw["next_provider_call_sequence"] >= 1
 
 

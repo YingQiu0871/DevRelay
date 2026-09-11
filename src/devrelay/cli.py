@@ -19,16 +19,24 @@ from devrelay.artifacts.store import ArtifactStore
 from devrelay.baseline.service import BaselineService
 from devrelay.config import (
     DevRelayConfig,
+    PolicyDocument,
+    ResolvedPolicy,
+    WiringConfig,
     install_default_config,
     load_config,
+    load_wiring_config,
 )
+from devrelay.profiles import resolve_policy_config
 from devrelay.errors import (
     BaselineError,
     ConfigError,
     DevRelayError,
+    PolicyLiveResolutionFailedError,
+    PolicyRefreshNotAllowedError,
     ProviderUnavailableError,
     TaskNotFoundError,
 )
+from devrelay.snapshot import SnapshotState, check_snapshot, snapshot_error
 from devrelay.models import ReviewResult, TaskPacket
 from devrelay.pipeline.engine import DevRelayEngine
 from devrelay.providers.base import ImplementerProvider, ReviewerProvider
@@ -84,6 +92,18 @@ def _load_store_config(root: Path) -> tuple[ArtifactStore, DevRelayConfig]:
     return store, config
 
 
+def _read_task(store: ArtifactStore, task_id: str):
+    """Read task state, turning any state problem into a clean CLI failure.
+
+    Covers the dedicated ``state_schema_too_new`` diagnostic: state written by a
+    newer DevRelay is reported, never traced back as a pydantic error.
+    """
+    try:
+        return store.read_task(task_id)
+    except DevRelayError as exc:
+        _fail(str(exc))
+
+
 def _task_id(store: ArtifactStore, explicit: str | None) -> str:
     if explicit:
         return explicit
@@ -93,22 +113,76 @@ def _task_id(store: ArtifactStore, explicit: str | None) -> str:
     return current
 
 
+def _store(root: Path) -> ArtifactStore:
+    """Initialized artifact store for *root* (no configuration is read)."""
+    store = ArtifactStore(root)
+    if not store.is_initialized():
+        _fail(f"DevRelay is not initialized in {root}; run 'devrelay init' first")
+    return store
+
+
+def _load_wiring(root: Path) -> WiringConfig:
+    """Live runtime wiring only - never validates live policy sections."""
+    try:
+        return load_wiring_config(root / ".devrelay" / "config.yaml")
+    except ConfigError as exc:
+        _fail(str(exc))
+
+
+def _display_policy_provider(root: Path):
+    """Lazy *display* policy for legacy tasks (never touches profile files).
+
+    Read-only commands pass this to the engine; it is only called for a task
+    that has no frozen snapshot at all, and a malformed live policy override
+    degrades to "no limits shown" instead of failing the command.
+    """
+
+    def _provide() -> PolicyDocument | None:
+        try:
+            return PolicyDocument.from_workspace_config(
+                load_config(root / ".devrelay" / "config.yaml")
+            )
+        except (ConfigError, OSError):
+            return None
+
+    return _provide
+
+
 def _engine(
     root: Path,
     store: ArtifactStore,
-    config: DevRelayConfig,
+    config: DevRelayConfig | None,
     *,
     reviewer_required: bool = False,
+    policy: ResolvedPolicy | None = None,
+    wiring: WiringConfig | None = None,
+    display_policy: bool = False,
 ) -> DevRelayEngine:
     runner = CommandRunner()
     workspace = GitWorkspace(root, runner)
-    implementer = CodexCLIProvider(config.codex, runner, workspace_root=root)
+    if wiring is None:
+        wiring = WiringConfig.from_workspace_config(config) if config is not None else WiringConfig()
+    # Reviewer construction-time defaults come from the resolved task policy when
+    # one is available.  The engine always passes the frozen per-call
+    # ReviewCallPolicy, so these values are fallbacks for direct provider use
+    # only - never the policy the pipeline runs under.
+    if policy is not None:
+        policy_view = policy.document
+    elif config is not None:
+        policy_view = PolicyDocument.from_workspace_config(config)
+    else:
+        # Wiring-only commands (status/usage/diff/logs) never execute a policy:
+        # the baseline service is constructed with defaults because it only
+        # *reads* an already-captured baseline here, and every valid policy
+        # hard-disables the git guard flags it consults.
+        policy_view = PolicyDocument()
+    implementer = CodexCLIProvider(wiring.codex, runner, workspace_root=root)
     reviewer: ReviewerProvider
-    if config.review.provider == "openai_compatible":
+    if wiring.review_provider == "openai_compatible":
         try:
             reviewer = OpenAICompatibleReviewer(
-                endpoint_from_env(timeout_seconds=config.review.timeout_seconds),
-                retries=config.review.retries,
+                endpoint_from_env(timeout_seconds=policy_view.review.timeout_seconds),
+                retries=policy_view.review.retries,
             )
         except ProviderUnavailableError:
             if reviewer_required:
@@ -116,7 +190,7 @@ def _engine(
             reviewer = ManualReviewer()
     else:
         reviewer = ManualReviewer()
-    baseline_service = BaselineService(root, runner, store, config)
+    baseline_service = BaselineService(root, runner, store, policy_view)
     return DevRelayEngine(
         config,
         store,
@@ -125,15 +199,52 @@ def _engine(
         reviewer=reviewer,
         runner=runner,
         baselines=baseline_service,
+        runtime_config=wiring,
+        fallback_policy_config=policy,
+        policy_view_provider=_display_policy_provider(root) if display_policy else None,
     )
+
+
+def _task_engine(
+    root: Path,
+    store: ArtifactStore,
+    task_id: str,
+    *,
+    fail_closed: bool = True,
+) -> DevRelayEngine:
+    """Engine for a command that acts on an existing task.
+
+    Guardrail: the task's snapshot is classified *before* any provider object is
+    constructed, so a missing/invalid/mismatched snapshot fails closed without a
+    Codex or reviewer client ever being built.  A task with a valid frozen
+    snapshot never has its live policy validated and never reads a profile; a
+    legacy task resolves its live policy explicitly.
+    """
+    check = check_snapshot(store, _read_task(store, task_id))
+    damaged = check.state in (
+        SnapshotState.MISSING,
+        SnapshotState.INVALID,
+        SnapshotState.HASH_MISMATCH,
+    )
+    wiring = _load_wiring(root)
+    if damaged:
+        if fail_closed:
+            _fail(str(snapshot_error(check)))
+        return _engine(
+            root, store, None, wiring=wiring, display_policy=True
+        )
+    if check.state is not SnapshotState.LEGACY_LIVE:
+        return _engine(root, store, None, wiring=wiring)
+    try:
+        policy = resolve_policy_config(root)
+    except DevRelayError as exc:
+        _fail(str(PolicyLiveResolutionFailedError(str(exc))))
+    return _engine(root, store, None, policy=policy, wiring=wiring)
 
 
 def _require_reviewing_task(store: ArtifactStore, explicit: str | None) -> str:
     task_id = _task_id(store, explicit)
-    try:
-        task = store.read_task(task_id)
-    except TaskNotFoundError as exc:
-        _fail(str(exc))
+    task = _read_task(store, task_id)
     if task.state.value != "REVIEWING":
         _fail(
             f"task {task_id} is in state {task.state.value}; expected REVIEWING"
@@ -232,14 +343,20 @@ def doctor() -> None:
 def start(title: str = typer.Argument(..., help="Short task title")) -> None:
     """Create a new task (state PLAN_REQUIRED)."""
     root = _resolve_root()
-    store, config = _load_store_config(root)
+    store = _store(root)
     ws = GitWorkspace(root)
     if not ws.detect_repo():
         _fail(
             f"{root} is not a git repository — DevRelay tasks require git "
             "(run 'git init' first)."
         )
-    engine = _engine(root, store, config)
+    try:
+        policy = resolve_policy_config(root)
+    except DevRelayError as exc:
+        _fail(str(exc))
+    engine = _engine(
+        root, store, None, policy=policy, wiring=_load_wiring(root)
+    )
     try:
         task = engine.create_task(title)
     except BaselineError as exc:
@@ -256,13 +373,13 @@ def status(
 ) -> None:
     """Show the current task and stage status."""
     root = _resolve_root()
-    store, _config = _load_store_config(root)
+    store = _store(root)
     task_id = _task_id(store, task)
-    try:
-        run = store.read_task(task_id)
-    except TaskNotFoundError as exc:
-        _fail(str(exc))
-    engine = _engine(root, store, _config)
+    run = _read_task(store, task_id)
+    # State-only: status never resolves live profiles and never rewrites state.
+    engine = _engine(
+        root, store, None, wiring=_load_wiring(root), display_policy=True
+    )
     block = engine.status_block(task_id)
     typer.echo("DevRelay")
     typer.echo("")
@@ -284,7 +401,31 @@ def status(
         ("Review", "review"),
         ("Policy", "policy_source"),
     ):
+        if key == "policy_source":
+            typer.echo(f"{label:<12} {block['policy_display']}")
+            continue
         typer.echo(f"{label:<12} {block[key]}")
+    recorded = block.get("policy_profiles") or []
+    if recorded:
+        typer.echo("")
+        typer.echo("Profiles recorded (frozen with the task, not re-read):")
+        for ref in recorded:
+            typer.echo(f"  {ref['name']:<16} {ref['sha256']}")
+    if block.get("policy_integrity") not in (
+        "",
+        "verified",
+        "not_frozen",
+        "unverified_legacy_no_digest",
+        "workspace_overrides",
+    ):
+        typer.echo("")
+        typer.echo(
+            f"Policy problem ({block['policy_integrity']}): "
+            f"{block.get('policy_detail') or 'snapshot unusable'}"
+        )
+        typer.echo(
+            "Recovery: 'devrelay unblock --reason \"...\" --refresh-policy'"
+        )
     if block["blocked"]:
         reason = run.blocked_reason or ""
         typer.echo("")
@@ -302,7 +443,7 @@ def plan_show(
 ) -> None:
     """Show the current task.md."""
     root = _resolve_root()
-    store, _config = _load_store_config(root)
+    store = _store(root)
     task_id = _task_id(store, task)
     md_path = store.task_dir(task_id) / "task.md"
     if not md_path.is_file():
@@ -317,11 +458,11 @@ def plan_import(
 ) -> None:
     """Import a Task Packet (state -> PLAN_READY)."""
     root = _resolve_root()
-    store, config = _load_store_config(root)
+    store = _store(root)
     task_id = _task_id(store, task)
     if not file.is_file():
         _fail(f"file not found: {file}")
-    engine = _engine(root, store, config)
+    engine = _task_engine(root, store, task_id)
     try:
         if file.suffix.lower() == ".json":
             raw = json.loads(file.read_text(encoding="utf-8"))
@@ -353,16 +494,17 @@ def continue_task(
 ) -> None:
     """Run the next pipeline stage(s) for the current task."""
     root = _resolve_root()
-    store, config = _load_store_config(root)
+    store = _store(root)
     task_id = _task_id(store, task)
+    # Guardrail: classify + verify the frozen policy before any provider exists.
+    engine = _task_engine(root, store, task_id)
     try:
-        engine = _engine(root, store, config, reviewer_required=True)
         events = engine.continue_task(task_id)
     except DevRelayError as exc:
         _fail(str(exc))
     for line in events:
         typer.echo(line)
-    state = store.read_task(task_id).state.value
+    state = _read_task(store, task_id).state.value
     typer.echo(f"[{task_id}] state: {state}")
     if any(line.endswith("-> FIX_REQUIRED") for line in events):
         typer.echo(f"[{task_id}] next: 'devrelay continue' to run the fix pass")
@@ -381,27 +523,35 @@ def usage(
     Read-only: there is deliberately no command that resets or forges usage.
     """
     root = _resolve_root()
-    store, config = _load_store_config(root)
+    store = _store(root)
     task_id = _task_id(store, task)
-    engine = _engine(root, store, config)
+    engine = _engine(
+        root, store, None, wiring=_load_wiring(root), display_policy=True
+    )
     try:
         data = engine.usage_block(task_id)
     except DevRelayError as exc:
         _fail(str(exc))
+
+    def _limit(value: object) -> str:
+        return "-" if value is None else str(value)
+
     typer.echo(f"Task: {data['task_id']}  (state {data['state']})")
     typer.echo("")
     typer.echo("Provider budget:")
     typer.echo(
-        f"  Implementer  {data['implementer_calls']} / {data['max_implementer_calls']}"
+        f"  Implementer  {data['implementer_calls']} / {_limit(data['max_implementer_calls'])}"
     )
-    typer.echo(f"  Reviewer     {data['reviewer_calls']} / {data['max_reviewer_calls']}")
-    typer.echo(f"  Total        {data['total_calls']} / {data['max_total_provider_calls']}")
+    typer.echo(f"  Reviewer     {data['reviewer_calls']} / {_limit(data['max_reviewer_calls'])}")
+    typer.echo(f"  Total        {data['total_calls']} / {_limit(data['max_total_provider_calls'])}")
     typer.echo("")
     typer.echo("Reviewer:")
     typer.echo(f"  provider     {data['reviewer_provider']}")
     typer.echo(f"  model        {data['reviewer_model']}")
     typer.echo(f"  endpoint     {data['reviewer_endpoint_host']}")
-    typer.echo(f"  policy from  {data['policy_source']}")
+    typer.echo(f"  policy from  {data['policy_source']} ({data['policy_display']})")
+    for ref in data.get("policy_profiles") or []:
+        typer.echo(f"  profile      {ref['name']} {ref['sha256']}")
     typer.echo("")
     typer.echo("Review attempts:")
     attempts = data["review_attempts"]
@@ -479,9 +629,9 @@ def diff(
 ) -> None:
     """Show the TASK-RELATIVE diff (task baseline -> current workspace)."""
     root = _resolve_root()
-    store, config = _load_store_config(root)
+    store = _store(root)
     task_id = _task_id(store, task)
-    engine = _engine(root, store, config)
+    engine = _engine(root, store, None, wiring=_load_wiring(root))
     try:
         if binary:
             content = engine.task_binary_diff(task_id)
@@ -504,7 +654,7 @@ def logs(
 ) -> None:
     """List task log files (codex/test runs)."""
     root = _resolve_root()
-    store, _config = _load_store_config(root)
+    store = _store(root)
     task_id = _task_id(store, task)
     log_dir = store.logs_dir(task_id)
     names = store.list_dir(log_dir)
@@ -525,9 +675,9 @@ def review_export(
 ) -> None:
     """Write the manual review request for the current REVIEWING task."""
     root = _resolve_root()
-    store, config = _load_store_config(root)
+    store = _store(root)
     task_id = _require_reviewing_task(store, task)
-    engine = _engine(root, store, config)
+    engine = _task_engine(root, store, task_id)
     try:
         path = engine.export_review_request(task_id)
     except DevRelayError as exc:
@@ -542,7 +692,7 @@ def review_import(
 ) -> None:
     """Import a manual review JSON result."""
     root = _resolve_root()
-    store, config = _load_store_config(root)
+    store = _store(root)
     task_id = _require_reviewing_task(store, task)
     if not file.is_file():
         _fail(f"file not found: {file}")
@@ -551,14 +701,14 @@ def review_import(
         review = ReviewResult.model_validate(raw)
     except (json.JSONDecodeError, ValidationError, ValueError) as exc:
         _fail(f"invalid review file: {exc}")
-    engine = _engine(root, store, config)
+    engine = _task_engine(root, store, task_id)
     try:
         events = engine.import_manual_review(task_id, review)
     except DevRelayError as exc:
         _fail(str(exc))
     for line in events:
         typer.echo(line)
-    state = store.read_task(task_id).state.value
+    state = _read_task(store, task_id).state.value
     typer.echo(f"[{task_id}] state: {state}")
 
 
@@ -572,9 +722,9 @@ def final_export(
 ) -> None:
     """Generate the final human review package."""
     root = _resolve_root()
-    store, config = _load_store_config(root)
+    store = _store(root)
     task_id = _task_id(store, task)
-    engine = _engine(root, store, config)
+    engine = _task_engine(root, store, task_id)
     try:
         path = engine.export_final(task_id)
     except DevRelayError as exc:
@@ -589,9 +739,9 @@ def final_approve(
 ) -> None:
     """Approve the final gate (task -> DONE, report.md written)."""
     root = _resolve_root()
-    store, config = _load_store_config(root)
+    store = _store(root)
     task_id = _task_id(store, task)
-    engine = _engine(root, store, config)
+    engine = _task_engine(root, store, task_id)
     try:
         run = engine.approve_final(task_id, note=note)
     except DevRelayError as exc:
@@ -610,20 +760,59 @@ def unblock(
         False,
         "--refresh-policy",
         help=(
-            "Re-snapshot the workspace config as this task's policy (the only "
-            "supported way to raise a running task's budget). Audited."
+            "Re-freeze the workspace policy as this task's policy (the only "
+            "supported way to raise a running task's budget, and the recovery "
+            "for a missing/invalid/damaged snapshot). Audited."
+        ),
+    ),
+    force: bool = typer.Option(
+        False,
+        "--force",
+        help=(
+            "Required to replace the frozen policy of a task that is neither "
+            "blocked nor failed and whose snapshot is intact."
         ),
     ),
     task: Optional[str] = typer.Option(None, "--task"),
 ) -> None:
     """Manually recover a BLOCKED/FAILED task (never skips findings silently)."""
     root = _resolve_root()
-    store, config = _load_store_config(root)
+    store = _store(root)
     task_id = _task_id(store, task)
-    engine = _engine(root, store, config)
+    if refresh_policy and not force:
+        current = _read_task(store, task_id)
+        snapshot_state = check_snapshot(store, current).state
+        healthy = snapshot_state is SnapshotState.VALID
+        blocked = bool(current.blocked_code) or current.state.value == "FAILED"
+        if healthy and not blocked:
+            _fail(
+                str(
+                    PolicyRefreshNotAllowedError(
+                        f"task {task_id} has a valid frozen policy "
+                        f"(sha256 {current.policy_config_sha256}) and is not "
+                        "blocked; pass --force to replace an intact task policy"
+                    )
+                )
+            )
+    if refresh_policy:
+        # Full live-policy validation is required here: this command is the
+        # explicit recovery/change mechanism and must resolve the chain first.
+        try:
+            policy = resolve_policy_config(root)
+        except DevRelayError as exc:
+            _fail(str(PolicyLiveResolutionFailedError(str(exc))))
+        engine = _engine(
+            root, store, None, policy=policy, wiring=_load_wiring(root)
+        )
+    else:
+        engine = _task_engine(root, store, task_id, fail_closed=False)
     try:
         run = engine.unblock(
-            task_id, reason=reason, to=to, refresh_policy=refresh_policy
+            task_id,
+            reason=reason,
+            to=to,
+            refresh_policy=refresh_policy,
+            force=force,
         )
     except DevRelayError as exc:
         _fail(str(exc))

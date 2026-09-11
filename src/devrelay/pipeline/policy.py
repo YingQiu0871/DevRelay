@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from devrelay.config import DevRelayConfig
+from devrelay.config import PolicyDocument
 from devrelay.models import (
     Finding,
     ReviewDecision,
@@ -20,16 +20,21 @@ class PipelinePolicy:
     decision logic unit-testable.
     """
 
-    def __init__(self, config: DevRelayConfig) -> None:
-        self.config = config
+    def __init__(self, policy: PolicyDocument) -> None:
+        if not isinstance(policy, PolicyDocument):
+            raise TypeError(
+                "PipelinePolicy requires a resolved PolicyDocument (task policy); "
+                f"got {type(policy).__name__}. Runtime wiring is never policy."
+            )
+        self.policy = policy
 
     @property
     def max_fix_iterations(self) -> int:
-        return self.config.pipeline.max_fix_iterations
+        return self.policy.pipeline.max_fix_iterations
 
     @property
     def blocking_severities(self) -> set[Severity]:
-        return set(self.config.review.blocking_severities)
+        return set(self.policy.review.blocking_severities)
 
     def is_blocking(self, finding: Finding) -> bool:
         return finding.severity in self.blocking_severities
@@ -66,7 +71,7 @@ class PipelinePolicy:
         return task.fix_iterations_used < self.max_fix_iterations
 
     def run_full_regression(self, risk_level: RiskLevel) -> bool:
-        mode = self.config.tests.full_regression
+        mode = self.policy.tests.full_regression
         if mode == "always":
             return True
         if mode == "never":

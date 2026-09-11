@@ -457,6 +457,8 @@ def build_engine(
     runner=None,
     use_real_git: bool = False,
     baseline_service=None,
+    fallback_policy_config=None,
+    runtime_config=None,
 ):
     """Return (root, store, engine). Root contains a .devrelay store."""
     root = tmp_path / "ws"
@@ -488,6 +490,8 @@ def build_engine(
         reviewer=reviewer or ManualReviewerProxy(),
         runner=runner or FakeCommandRunner(),
         baselines=baseline_service,
+        runtime_config=runtime_config,
+        fallback_policy_config=fallback_policy_config,
     )
     return root, store, eng
 

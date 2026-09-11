@@ -76,3 +76,146 @@ class BaselineSizeError(BaselineError):
             "No task was created; adjust the limit in .devrelay/config.yaml "
             "if you really want to snapshot this file."
         )
+
+
+# ---------------------------------------------------------------------------
+# v0.2-B: frozen task policy, project profiles, state schema
+# ---------------------------------------------------------------------------
+
+class PolicySnapshotError(DevRelayError):
+    """A task's frozen policy snapshot exists but cannot be used (fail closed).
+
+    DevRelay never substitutes live wiring or workspace defaults for a snapshot
+    that once governed a task; recovery is explicit:
+    ``devrelay unblock --refresh-policy --reason "..."``.
+    """
+
+    code = "policy_snapshot_error"
+
+    def __init__(
+        self,
+        detail: str,
+        *,
+        path: object | None = None,
+        expected_sha256: str = "",
+        actual_sha256: str = "",
+    ) -> None:
+        self.detail = detail
+        self.path = path
+        self.expected_sha256 = expected_sha256
+        self.actual_sha256 = actual_sha256
+        super().__init__(self._describe())
+
+    def _describe(self) -> str:
+        parts = [f"{self.code}: {self.detail}"]
+        if self.path is not None:
+            parts.append(f"snapshot: {self.path}")
+        if self.expected_sha256:
+            parts.append(f"recorded sha256: {self.expected_sha256}")
+        if self.actual_sha256:
+            parts.append(f"actual sha256: {self.actual_sha256}")
+        parts.append(
+            'recovery: devrelay unblock --refresh-policy --reason "<why>"'
+        )
+        return "; ".join(parts)
+
+
+class PolicySnapshotMissingError(PolicySnapshotError):
+    """The frozen snapshot a task's provenance expects is not there."""
+
+    code = "policy_snapshot_missing"
+
+
+class PolicySnapshotInvalidError(PolicySnapshotError):
+    """The snapshot bytes are there but unusable (YAML/schema/size/path)."""
+
+    code = "policy_snapshot_invalid"
+
+
+class PolicySnapshotIntegrityError(PolicySnapshotError):
+    """The snapshot bytes no longer match the recorded digest."""
+
+    code = "policy_snapshot_integrity_error"
+
+
+class PolicySnapshotStateError(PolicySnapshotError):
+    """Persisted provenance is internally inconsistent (fail closed)."""
+
+    code = "policy_snapshot_state_inconsistent"
+
+
+class CodedError(DevRelayError):
+    """A DevRelay error whose message always starts with its stable code.
+
+    Scripts and tests key off the code; humans still get the full sentence.
+    """
+
+    code = "error"
+
+    def __init__(self, message: str = "") -> None:
+        text = message or (self.__doc__ or "").strip() or self.code
+        if self.code and not text.startswith(f"{self.code}:"):
+            text = f"{self.code}: {text}"
+        super().__init__(text)
+
+
+class PolicyLiveResolutionRequiredError(CodedError):
+    """A legacy task needs an explicit live-policy resolution and got none."""
+
+    code = "policy_live_resolution_required"
+
+
+class PolicyLiveResolutionFailedError(CodedError):
+    """Explicit live-policy resolution failed (profiles/config invalid)."""
+
+    code = "policy_live_resolution_failed"
+
+
+class PolicyRefreshNotAllowedError(CodedError):
+    """Refusing to refresh a healthy snapshot without an explicit force."""
+
+    code = "policy_refresh_not_allowed"
+
+
+class StateSchemaTooNewError(CodedError):
+    """Task state was written by a newer DevRelay (schema > supported)."""
+
+    code = "state_schema_too_new"
+
+
+class ProfileError(CodedError):
+    """A project profile or the profile selector is invalid."""
+
+    code = "profile_error"
+
+
+class ProfileNameInvalidError(ProfileError):
+    code = "profile_name_invalid"
+
+
+class ProfileNotFoundError(ProfileError):
+    code = "profile_not_found"
+
+
+class ProfilePathEscapeError(ProfileError):
+    code = "profile_path_escape"
+
+
+class ProfileTooLargeError(ProfileError):
+    code = "profile_too_large"
+
+
+class ProfileDuplicateError(ProfileError):
+    code = "profile_duplicate"
+
+
+class ProfileCountExceededError(ProfileError):
+    code = "profile_count_exceeded"
+
+
+class ProfileKeyForbiddenError(ProfileError):
+    code = "profile_key_forbidden"
+
+
+class ProfileSelectorError(ProfileError):
+    code = "profile_selector_unresolved"

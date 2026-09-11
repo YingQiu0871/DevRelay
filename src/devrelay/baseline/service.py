@@ -3,14 +3,13 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional, Protocol
 
 from devrelay.artifacts.store import ArtifactStore
 from devrelay.baseline.capture import BaselineBuilder, worktree_tree_sha
 from devrelay.baseline.comparator import BaselineComparator
 from devrelay.baseline.guard import RepoGuard
 from devrelay.baseline.store import BaselineStore
-from devrelay.config import DevRelayConfig
 from devrelay.errors import BaselineCorruptError, BaselineUnavailableError
 from devrelay.models import (
     PolicyViolation,
@@ -22,6 +21,17 @@ from devrelay.models import (
 from devrelay.workspace.runner import CommandRunner
 
 
+class PolicyView(Protocol):
+    """Read-only policy surface the baseline service needs.
+
+    Both ``DevRelayConfig`` (workspace document) and ``PolicyDocument`` (frozen
+    task policy) satisfy it; the engine passes the frozen policy document.
+    """
+
+    baseline: Any
+    git: Any
+
+
 class BaselineService:
     """Real-git baseline service: capture, delta, reconstruction, guard."""
 
@@ -30,7 +40,7 @@ class BaselineService:
         root: str | Path,
         runner: CommandRunner | None,
         store: ArtifactStore,
-        config: DevRelayConfig,
+        config: PolicyView,
     ) -> None:
         self.root = Path(root).resolve()
         self.runner = runner or CommandRunner()

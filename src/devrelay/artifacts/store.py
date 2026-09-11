@@ -13,8 +13,12 @@ import os
 from pathlib import Path
 from typing import Any, Optional
 
-from devrelay.errors import DevRelayError, TaskNotFoundError
-from devrelay.models import TaskRun
+from devrelay.errors import (
+    DevRelayError,
+    StateSchemaTooNewError,
+    TaskNotFoundError,
+)
+from devrelay.models import MAX_SUPPORTED_STATE_SCHEMA, TaskRun
 
 
 def encode_lf(text: str) -> bytes:
@@ -154,6 +158,7 @@ class ArtifactStore:
             "policy",
         ):
             (path.parent / sub).mkdir(parents=True, exist_ok=True)
+        self._backup_before_schema_upgrade(path, task)
         _atomic_write_text(
             path, json.dumps(task.model_dump(mode="json"), indent=2, ensure_ascii=False)
         )
@@ -167,6 +172,30 @@ class ArtifactStore:
             index["current_task"] = task.task_id
         self._write_index(index)
 
+    def _backup_before_schema_upgrade(self, path: Path, task: TaskRun) -> Path | None:
+        """Keep one ``state.v<old>.json.bak`` before upgrading a task state.
+
+        The schema migration is one-way (a v0.2-A binary cannot read schema 5),
+        so the pre-upgrade bytes are preserved exactly once.
+        """
+        if not path.is_file():
+            return None
+        try:
+            previous = json.loads(path.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError):
+            return None
+        old_version = previous.get("state_schema_version")
+        if not isinstance(old_version, int):
+            return None
+        new_version = int(getattr(task, "state_schema_version", 0) or 0)
+        if old_version >= new_version or old_version >= MAX_SUPPORTED_STATE_SCHEMA:
+            return None
+        backup = path.with_name(f"state.v{old_version}.json.bak")
+        if backup.exists():
+            return backup
+        _atomic_write_bytes(backup, path.read_bytes())
+        return backup
+
     def read_task(self, task_id: str) -> TaskRun:
         path = self.state_path(task_id)
         if not path.is_file():
@@ -175,10 +204,22 @@ class ArtifactStore:
             )
         try:
             data = json.loads(path.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError) as exc:
+            raise DevRelayError(f"corrupt task state {path}: {exc}") from exc
+        if not isinstance(data, dict):
+            raise DevRelayError(f"invalid task state {path}: not a mapping")
+        # Diagnostics before validation: TaskRun forbids extra fields, so a
+        # future schema would otherwise surface as an opaque ValidationError.
+        version = data.get("state_schema_version", 0)
+        if isinstance(version, int) and version > MAX_SUPPORTED_STATE_SCHEMA:
+            raise StateSchemaTooNewError(
+                f"state for {task_id} was written by a newer DevRelay "
+                f"(state_schema_version {version} > "
+                f"{MAX_SUPPORTED_STATE_SCHEMA}); upgrade DevRelay"
+            )
+        try:
             return TaskRun.model_validate(data)
-        except (json.JSONDecodeError, OSError, Exception) as exc:
-            if isinstance(exc, (json.JSONDecodeError, OSError)):
-                raise DevRelayError(f"corrupt task state {path}: {exc}") from exc
+        except Exception as exc:
             raise DevRelayError(f"invalid task state {path}: {exc}") from exc
 
     def rel_path(self, path: str | Path) -> str:
