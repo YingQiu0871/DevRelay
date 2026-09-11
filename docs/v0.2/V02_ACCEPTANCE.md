@@ -101,14 +101,28 @@ test in `tests/test_v02a_audit_remediation.py`.
 | Budget 4 | Manual review consumes 0 external calls | `test_budget_manual_review_costs_zero_external_calls` |
 | Budget 5 | Budget-refused call spends nothing | `test_budget_refused_call_spends_nothing` |
 
+## Smoke-blocker remediation (baseline capture, v0.2-A)
+
+| # | Criterion | Evidence |
+| --- | --- | --- |
+| B1 | `.devrelay/` gitignored -> `devrelay init` + `devrelay start` succeed, state `PLAN_REQUIRED`, no `BaselineError` | `test_baseline_ignored_self.py::test_start_succeeds_when_devrelay_is_ignored` |
+| B2 | Raw capture in the same repo excludes `.devrelay` from the tree | `test_raw_capture_survives_ignored_self_dir` |
+| B3 | `.devrelay` not ignored -> self state still excluded (baseline + current tree) | `test_self_state_excluded_when_not_ignored` |
+| B4 | Repository that *tracks* `.devrelay/**` -> excluded from tree and patch | `test_tracked_devrelay_state_is_excluded` |
+| B5 | Other ignored files stay excluded; untracked + staged-new + tracked modification included; tracked deletion represented | `test_ignored_files_excluded_and_new_files_included` |
+| B6 | Real `.git/index` bytes unchanged; temp index cleaned up | `test_real_index_bytes_unchanged_and_temp_index_cleaned` |
+| B7 | Task-relative delta excludes DevRelay state | `test_task_delta_excludes_devrelay_state` |
+| B8 | The failing argv (`:(exclude).devrelay` on an ignored path) is not used and still demonstrably fails | `test_exclude_pathspec_on_ignored_path_is_not_used` |
+
 ## Verification run (recorded)
 
 | Item | Value |
 | --- | --- |
 | Date | 2026-09-10 |
 | Command | `python -m pytest -q --junitxml=...` (offline, no network) |
-| Result | **219 tests, 0 failures, 0 errors, 0 skipped** |
+| Result | **227 tests, 0 failures, 0 errors, 0 skipped** |
 | v0.2-A subset | 60 tests (files `tests/test_v02a_*.py`, incl. 22 audit-remediation tests) |
+| Baseline smoke-blocker subset | 8 tests (`tests/test_baseline_ignored_self.py`) |
 | Branch / base | `v0.2-a-auto-review` (`fe4b044` + remediation commit) |
 | Environment | Python 3.14.6, git 2.55.0.windows.3, Windows/Git Bash |
 | Provider usage | zero real Codex calls, zero real reviewer HTTP calls |

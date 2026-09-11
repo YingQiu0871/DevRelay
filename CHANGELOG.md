@@ -12,6 +12,18 @@ the independent audit of commit `fe4b044` (one P1, three P2, six P3 findings).
 tagged or published, and the behaviour below was validated with fake providers
 only (no real Codex invocation and no real reviewer endpoint were used).
 
+### Fixed
+
+- Baseline capture no longer fails with `git add -A -- . :(exclude).devrelay
+  failed: The following paths are ignored ...: .devrelay` in repositories whose
+  `.gitignore` lists `.devrelay/` (the normal, documented setup). The worktree
+  tree is now built from an explicit list of eligible paths (tracked changes +
+  non-ignored new files, `.devrelay` filtered in DevRelay code) against the
+  temporary index, never from an explicitly named ignored pathspec, and never
+  with `git add -f` (which would include unrelated ignored files). A repository
+  that *tracks* `.devrelay/**` is excluded symmetrically. Regression coverage:
+  `tests/test_baseline_ignored_self.py`.
+
 ### Fixed (audit remediation)
 
 - **P1-01** - the crash window between persisting a reviewer result and applying
@@ -126,7 +138,7 @@ only (no real Codex invocation and no real reviewer endpoint were used).
 
 ### Tests
 
-- 219 tests, fully offline (fake providers, `httpx.MockTransport`, real tiny
+- 227 tests, fully offline (fake providers, `httpx.MockTransport`, real tiny
   git repositories): 38 v0.2-A tests covering budget pre-flight, exact call
   accounting, format/transport separation, crash recovery, policy authority,
   fingerprints, snapshot/refresh-policy, CLI visibility and a fake-provider
@@ -134,7 +146,8 @@ only (no real Codex invocation and no real reviewer endpoint were used).
   required crash/identity/policy matrix (persisted-result replay with zero
   calls, single application, immutable evidence, durable ids, policy-refresh
   evidence, retry labelling, fingerprint normalization, read-only legacy
-  status/usage, budget regressions).
+  status/usage, budget regressions), plus 8 baseline-capture tests for the
+  ignored-`.devrelay` smoke blocker.
 
 ## 0.1.0 - 2026-09-10
 

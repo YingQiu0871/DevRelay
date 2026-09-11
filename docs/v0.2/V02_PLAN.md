@@ -73,6 +73,17 @@ remediation that must be closure-audited before A can be closed.
 9. **Tests** — 20 new tests in `tests/test_v02a_audit_remediation.py` covering the
    required A–P matrix and budget regressions 1–5.
 
+## Smoke-blocker remediation (v0.2-A, completed in this branch)
+
+The first real-provider smoke attempt stopped before any provider call: in a
+disposable repository whose `.gitignore` listed `.devrelay/`, baseline capture
+ran `git add -A -- . :(exclude).devrelay`, and git refuses an explicitly named
+*ignored* pathspec (exit 1, `The following paths are ignored ...`). Fixed by
+building the temporary worktree tree from an explicit eligible-path list
+(tracked changes + non-ignored new files, `.devrelay` filtered in DevRelay
+code) plus `update-index --force-remove` for tracked self state; `git add -f`
+is not used. Regression suite: `tests/test_baseline_ignored_self.py`.
+
 ## Deliberately deferred (recorded, not silently dropped)
 
 * Automatic stagnation stop is implemented as an opt-in guard with default

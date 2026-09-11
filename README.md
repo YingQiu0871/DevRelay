@@ -149,14 +149,24 @@ message (file, size, limit) - never a silent skip.
 ### Temporary index strategy - the real index is never modified
 
 Baseline and delta computation run git with `GIT_INDEX_FILE=<temp>`:
-`git read-tree HEAD`, `git add -A -- .` (excluding `.devrelay`) and
-`git write-tree` all happen against a throwaway index. Index-reading commands
+`git read-tree HEAD`, staging of the eligible paths (tracked changes plus
+non-ignored new files, with `.devrelay` filtered out in DevRelay code) and
+`git write-tree` all happen against a throwaway index. The tree is built from
+an explicit path list rather than `git add -A -- . ':(exclude).devrelay'`,
+because git rejects an explicitly named *ignored* pathspec - which used to make
+`devrelay start` fail in repositories that ignore their own `.devrelay/`
+directory. `git add -f` is deliberately not used (it would drag unrelated
+ignored files into the tree). Index-reading commands
 that can opportunistically refresh stat data (`git status`, `git diff`,
 `git write-tree`) run against a *clone* of the real index under the same
 temporary mechanism, so even stat refreshes never touch `.git/index`.
 DevRelay never runs `git add/reset/checkout/stash/commit` against the real
 index. Tests prove `.git/index` bytes are unchanged across capture and delta
 computation, and that no temporary index files are left behind.
+
+A repository that *tracks* `.devrelay/**` gets the same treatment: those index
+entries are removed from the temporary tree, so DevRelay state never reaches a
+baseline, a tree SHA or a task delta.
 
 ### Binary-exact patch transport
 
@@ -717,7 +727,7 @@ python -m pip install -e ".[dev]"
 python -m pytest
 ```
 
-219 tests run fully offline with mocked subprocesses/HTTP where needed and
+227 tests run fully offline with mocked subprocesses/HTTP where needed and
 real (tiny) git repositories for baseline/guard/recovery coverage - no real
 Codex, DeepSeek or network required. Coverage includes: state transitions and
 rejected invalid transitions; max-iteration blocking; P0/P1/P2 ->

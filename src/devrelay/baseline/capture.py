@@ -4,8 +4,10 @@ Hard rules:
 
 * never run ``git add/reset/checkout/stash/commit`` against the real index;
 * every index manipulation runs with ``GIT_INDEX_FILE=<temp>``;
-* ignored files are excluded by git itself (plus an explicit
-  ``:(exclude).devrelay`` pathspec so DevRelay state never pollutes deltas);
+* ignored files are excluded by git's own ignore rules, and DevRelay-owned
+  ``.devrelay`` state is filtered explicitly in DevRelay code (never via a
+  ``:(exclude).devrelay`` pathspec, which git rejects when the path is
+  ignored) so DevRelay state can never pollute baselines or task deltas;
 * the temp index is created under a temporary directory and always removed.
 """
 
@@ -90,20 +92,114 @@ def run_git(
     return result.stdout
 
 
+def run_git_bytes(
+    root: Path,
+    runner: CommandRunner,
+    args: list[str],
+    *,
+    env: dict[str, str] | None = None,
+    input_bytes: bytes | None = None,
+    timeout: float = _GIT_TIMEOUT,
+) -> bytes:
+    """Run one git command with byte-exact stdin/stdout; raise on failure."""
+    result = runner.run_bytes(
+        ["git", "-C", str(root), *args],
+        cwd=root,
+        env=env,
+        input_bytes=input_bytes,
+        timeout_seconds=timeout,
+    )
+    if result.error is not None or result.exit_code != 0:
+        detail = (result.stderr or result.stdout or b"").decode(
+            "utf-8", errors="replace"
+        ).strip()[:2000]
+        raise BaselineError(f"git {' '.join(args[:6])} failed: {detail}")
+    return result.stdout
+
+
+def _self_index_entries(
+    root: Path, runner: CommandRunner, env: dict[str, str]
+) -> list[str]:
+    """Index entries under ``.devrelay`` in the temporary index.
+
+    A repository may track ``.devrelay/**`` (e.g. it was committed before being
+    ignored).  DevRelay state must never pollute baselines or task deltas, so
+    those entries are removed from the temporary tree as well.
+    """
+    raw = runner.run(
+        ["git", "-C", str(root), "ls-files", "-z", "--cached", "--", ".devrelay"],
+        cwd=root,
+        env=env,
+        timeout_seconds=_GIT_TIMEOUT,
+    )
+    if raw.exit_code != 0:
+        raise BaselineError(
+            f"git ls-files --cached .devrelay failed: "
+            f"{(raw.stderr or '').strip()[:2000]}"
+        )
+    return [name for name in raw.stdout.split("\0") if name]
+
+
+def _chunk_paths(paths: list[str], *, max_chars: int = 6000) -> list[list[str]]:
+    """Split paths so every ``git add`` argv stays well inside OS limits."""
+    chunks: list[list[str]] = []
+    current: list[str] = []
+    size = 0
+    for path in paths:
+        if current and size + len(path) + 1 > max_chars:
+            chunks.append(current)
+            current, size = [], 0
+        current.append(path)
+        size += len(path) + 1
+    if current:
+        chunks.append(current)
+    return chunks
+
+
+def _eligible_worktree_paths(
+    root: Path, runner: CommandRunner, env: dict[str, str]
+) -> list[str]:
+    """Paths that belong in the worktree tree: tracked changes + new files.
+
+    ``.devrelay`` state and every ignored file are filtered out *in DevRelay
+    code* here, so git is never asked to add an explicitly named ignored path.
+    """
+    changed = _tracked_changed_names(root, runner, env=env)
+    # Temp-index "others" is what catches staged-new files: they exist in the
+    # worktree but not in the HEAD-seeded temp index.
+    untracked = _untracked_names(root, runner, env=env)
+    return sorted(set(changed) | set(untracked))
+
+
 def worktree_tree_sha(root: Path, runner: CommandRunner) -> str:
     """Snapshot the current worktree as a tree using a temporary index.
 
     Content == HEAD + tracked modifications/deletions + non-ignored untracked
-    files (with ``.devrelay`` excluded).  Never touches the real index.
+    files (with ``.devrelay`` excluded, whether or not it is ignored).  Never
+    touches the real index.
+
+    Implementation note: the tree is built from an explicit list of *eligible*
+    paths instead of ``git add -A -- . ':(exclude).devrelay'``.  Git rejects an
+    explicitly named ignored pathspec (``The following paths are ignored ...``,
+    exit 1), which used to break ``devrelay start`` in any repository that
+    ignored its own ``.devrelay/`` directory.  ``git add -f`` is deliberately
+    not used: it would pull unrelated ignored files into the tree.
     """
     with TempGitIndex(root) as tmp:
         run_git(root, runner, ["read-tree", "HEAD"], env=tmp.env)
-        run_git(
-            root,
-            runner,
-            ["add", "-A", "--", ".", SELF_PATHPEC],
-            env=tmp.env,
-        )
+        self_entries = _self_index_entries(root, runner, tmp.env)
+        if self_entries:
+            run_git_bytes(
+                root,
+                runner,
+                ["update-index", "--force-remove", "-z", "--stdin"],
+                env=tmp.env,
+                input_bytes="\0".join(self_entries).encode("utf-8"),
+            )
+        for chunk in _chunk_paths(_eligible_worktree_paths(root, runner, tmp.env)):
+            # -A also records paths that exist in the tree/index but were
+            # deleted from the worktree; ignored paths never appear here.
+            run_git(root, runner, ["add", "-A", "--", *chunk], env=tmp.env)
         tree = run_git(root, runner, ["write-tree"], env=tmp.env).strip()
         if not tree:
             raise BaselineError("git write-tree returned an empty tree sha")
@@ -131,10 +227,22 @@ def _tracked_changed_names(
     return sorted(set(names))
 
 
-def _untracked_names(root: Path, runner: CommandRunner) -> list[str]:
+def _untracked_names(
+    root: Path, runner: CommandRunner, env: dict[str, str] | None = None
+) -> list[str]:
+    """Non-ignored worktree files that are not in the given index.
+
+    The index matters: against the *real* index a staged-new file is not
+    "other" (the index already tracks it), while against the temporary tree
+    index (seeded from HEAD) it correctly counts as a new worktree file.  Tree
+    building therefore passes the temp index so staged additions are never
+    lost, while the baseline manifest keeps the real-index meaning of
+    "pre-existing untracked".
+    """
     raw = runner.run(
         ["git", "-C", str(root), "ls-files", "--others", "--exclude-standard", "-z"],
         cwd=root,
+        env=env,
         timeout_seconds=_GIT_TIMEOUT,
     )
     if raw.exit_code != 0:
