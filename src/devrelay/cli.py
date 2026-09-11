@@ -9,6 +9,8 @@ from __future__ import annotations
 import json
 import os
 from pathlib import Path
+
+import yaml
 from typing import Optional
 
 import typer
@@ -22,11 +24,22 @@ from devrelay.config import (
     PolicyDocument,
     ResolvedPolicy,
     WiringConfig,
+    dump_policy_yaml,
     install_default_config,
     load_config,
     load_wiring_config,
+    workspace_policy_overrides,
 )
-from devrelay.profiles import resolve_policy_config
+from devrelay.profiles import (
+    PROFILE_NAME_PATTERN,
+    load_profile,
+    PROFILE_SUFFIX,
+    discover_profiles,
+    inspect_profile,
+    profiles_dir,
+    resolve_policy_config,
+    validate_profiles,
+)
 from devrelay.errors import (
     BaselineError,
     ConfigError,
@@ -37,6 +50,7 @@ from devrelay.errors import (
     TaskNotFoundError,
 )
 from devrelay.snapshot import SnapshotState, check_snapshot, snapshot_error
+from devrelay.models import SNAPSHOT_ERA_SCHEMA
 from devrelay.models import ReviewResult, TaskPacket
 from devrelay.pipeline.engine import DevRelayEngine
 from devrelay.providers.base import ImplementerProvider, ReviewerProvider
@@ -119,6 +133,17 @@ def _store(root: Path) -> ArtifactStore:
     if not store.is_initialized():
         _fail(f"DevRelay is not initialized in {root}; run 'devrelay init' first")
     return store
+
+
+def _raw_config_mapping(path: Path) -> dict:
+    """Raw top-level keys of the workspace config (no validation, no profiles)."""
+    if not path.is_file():
+        return {}
+    try:
+        data = yaml.safe_load(path.read_text(encoding="utf-8"))
+    except yaml.YAMLError:
+        return {}
+    return data if isinstance(data, dict) else {}
 
 
 def _load_wiring(root: Path) -> WiringConfig:
@@ -290,34 +315,63 @@ def init() -> None:
     store = ArtifactStore(repo_root)
     store.ensure_initialized()
     config_path = install_default_config(repo_root / ".devrelay" / "config.yaml")
+    profile_dir = profiles_dir(repo_root)
+    profile_dir.mkdir(parents=True, exist_ok=True)
     typer.echo(f"Initialized DevRelay v{__version__} at {repo_root}")
     typer.echo(f"Config: {config_path}")
+    typer.echo(f"Profiles: {profile_dir}")
+    typer.echo("")
+    typer.echo("Project profiles are committed; task state is not. Recipe:")
+    typer.echo("  .devrelay/*")
+    typer.echo("  !.devrelay/profiles/")
+    typer.echo("Recommended: '*.yaml text eol=lf' in .gitattributes (stable hashes).")
     typer.echo("Next: devrelay start \"<task title>\"")
 
 
 @app.command()
-def doctor() -> None:
-    """Diagnose the environment (Codex CLI, git, reviewer env)."""
+def doctor(
+    strict: bool = typer.Option(
+        False, "--strict", help="Exit non-zero when any diagnostic is not OK"
+    ),
+) -> None:
+    """Diagnose the environment: wiring, profiles, policy chain, tasks.
+
+    Raw profile inspection and the authoritative full-chain resolution are
+    reported separately, so a broken selector never hides the per-file
+    diagnostics (and vice versa).  Zero cost: no network request is ever sent.
+    """
     try:
         root = require_root(Path.cwd())
     except DevRelayError as exc:
         _fail(str(exc))
-    store, config = _load_store_config(root)
+    store = _store(root)
+    config_file = root / ".devrelay" / "config.yaml"
+    problems: list[str] = []
     typer.echo(f"Workspace: {root}")
-    typer.echo(f"Config: {root / '.devrelay' / 'config.yaml'}")
+    typer.echo(f"Config: {config_file}")
     ws = GitWorkspace(root)
     typer.echo(f"Git repo: {ws.detect_repo()}")
-    codex = CodexCLIProvider(config.codex, CommandRunner(), workspace_root=root)
+
+    # -- runtime wiring (live, never validates policy) --------------------
+    wiring: WiringConfig
+    try:
+        wiring = load_wiring_config(config_file)
+        typer.echo("Runtime wiring: OK")
+    except ConfigError as exc:
+        wiring = WiringConfig()
+        problems.append(str(exc))
+        typer.echo(f"Runtime wiring: BROKEN — {exc}")
+    codex = CodexCLIProvider(wiring.codex, CommandRunner(), workspace_root=root)
     ok, diagnostic = codex.availability()
     typer.echo(f"Codex CLI: {'OK' if ok else 'MISSING'} — {diagnostic}")
     typer.echo(
-        f"  Args: {' '.join(config.codex.args)} "
-        f"(prompt transport: {config.codex.prompt_mode})"
+        f"  Args: {' '.join(wiring.codex.args)} "
+        f"(prompt transport: {wiring.codex.prompt_mode})"
     )
     for warning in codex.unknown_arg_warnings():
         typer.echo(f"  Warning: {warning}")
-    typer.echo(f"Reviewer provider: {config.review.provider}")
-    if config.review.provider == "openai_compatible":
+    typer.echo(f"Reviewer provider: {wiring.review_provider}")
+    if wiring.review_provider == "openai_compatible":
         from devrelay.providers.openai_compatible import (
             ENV_API_KEY,
             ENV_BASE_URL,
@@ -330,13 +384,98 @@ def doctor() -> None:
         typer.echo(f"  {ENV_MODEL}: {'set' if os.environ.get(ENV_MODEL) else 'unset (default)'}")
         typer.echo(f"  {ENV_API_KEY}: {'set' if os.environ.get(ENV_API_KEY) else 'MISSING'}")
         typer.echo("  (no request is sent by doctor; reviewer calls are counted per task)")
+
+    # -- raw profile inspection (independent of the selector) -------------
+    names, invalid = discover_profiles(root)
+    typer.echo("Project profiles (raw inspection):")
+    typer.echo(f"  discovered: {', '.join(names) if names else '(none)'}")
+    for filename in invalid:
+        problems.append(f"{filename} is not a valid profile filename")
+        typer.echo(f"  warning: {filename} is not a valid profile file and is ignored")
+    report = validate_profiles(root)
+    typer.echo(f"  selector (raw): {report.selector_raw}")
+    invalid_entries = [entry for entry in report.entries if not entry.ok]
     typer.echo(
-        "Provider budget: "
-        f"implementer {config.budget.max_implementer_calls}, "
-        f"reviewer {config.budget.max_reviewer_calls}, "
-        f"total {config.budget.max_total_provider_calls}"
+        "  per-file validation: "
+        + (
+            f"OK ({len(report.entries)} profile(s))"
+            if not invalid_entries
+            else f"{len(invalid_entries)} invalid of {len(report.entries)}"
+        )
     )
-    typer.echo(f"Tasks: {len(store.list_task_ids())}")
+    for error in report.errors:
+        problems.append(error)
+        typer.echo(f"  problem: {error}")
+
+    # -- authoritative full-chain resolution ------------------------------
+    budget = None
+    try:
+        policy = resolve_policy_config(root)
+        budget = policy.document.budget
+        typer.echo(
+            "Effective policy chain: OK "
+            f"(profiles applied: {[ref.name for ref in policy.provenance.profiles]})"
+        )
+    except DevRelayError as exc:
+        problems.append(f"policy chain: {exc}")
+        typer.echo(f"Effective policy chain: FAILED — {exc}")
+        try:
+            budget = PolicyDocument.from_workspace_config(
+                load_config(config_file)
+            ).budget
+            typer.echo("  (showing workspace-only values below; this is NOT the chain)")
+        except DevRelayError:
+            budget = None
+    if budget is not None:
+        typer.echo(
+            "Provider budget: "
+            f"implementer {budget.max_implementer_calls}, "
+            f"reviewer {budget.max_reviewer_calls}, "
+            f"total {budget.max_total_provider_calls}"
+        )
+
+    # -- task state --------------------------------------------------------
+    task_ids = store.list_task_ids()
+    typer.echo(f"Tasks: {len(task_ids)}")
+    for task_id in task_ids:
+        try:
+            task = store.read_task(task_id)
+        except DevRelayError as exc:
+            problems.append(str(exc))
+            typer.echo(f"  {task_id}: UNREADABLE — {exc}")
+            continue
+        state = check_snapshot(store, task).state
+        notes: list[str] = [f"policy {state.value}"]
+        if task.state_schema_version < SNAPSHOT_ERA_SCHEMA:
+            notes.append(
+                f"state schema {task.state_schema_version} (migration to 5 pending)"
+            )
+            problems.append(
+                f"{task_id} is on state schema {task.state_schema_version}; the "
+                "next write migrates it to 5 (one-way, backup kept)"
+            )
+        if state is not SnapshotState.VALID:
+            problems.append(f"{task_id} has no usable frozen policy ({state.value})")
+        recorded = task.policy_provenance
+        if recorded is not None and recorded.profiles:
+            drift = []
+            for ref in recorded.profiles:
+                try:
+                    _document, digest = load_profile(root, ref.name)
+                except DevRelayError:
+                    drift.append(f"{ref.name}: missing")
+                    continue
+                if digest != ref.sha256:
+                    drift.append(f"{ref.name}: changed since freeze")
+            if drift:
+                notes.append("profile drift — " + "; ".join(drift))
+        typer.echo(f"  {task_id}: {', '.join(notes)}")
+
+    if strict and problems:
+        typer.echo("")
+        typer.echo(f"doctor --strict: {len(problems)} problem(s) found")
+        raise typer.Exit(1)
+
 
 
 @app.command()
@@ -824,6 +963,131 @@ def unblock(
         )
     if run.state.value in ("FIX_REQUIRED", "IMPLEMENTING", "REVIEWING"):
         typer.echo("Next: 'devrelay continue' (manual override recorded in audit)")
+
+
+profile_app = typer.Typer(
+    help="Project profile inspection (raw, works with a broken selector).",
+    no_args_is_help=True,
+)
+app.add_typer(profile_app, name="profile")
+
+config_app = typer.Typer(
+    help="Show runtime wiring (unresolved) or the resolved policy chain.",
+    no_args_is_help=True,
+)
+app.add_typer(config_app, name="config")
+
+
+@profile_app.command("list")
+def profile_list() -> None:
+    """List project profile files without resolving the selector."""
+    root = _resolve_root()
+    _store(root)
+    names, invalid = discover_profiles(root)
+    if not names and not invalid:
+        typer.echo(f"no project profiles in {profiles_dir(root)}")
+        return
+    for name in names:
+        entry = inspect_profile(root, name)
+        status = "ok" if entry.ok else "INVALID"
+        typer.echo(f"{name:<24} {status:<8} {entry.sha256[:16]}")
+    for filename in invalid:
+        typer.echo(
+            f"{filename:<24} {'IGNORED':<8} not a valid profile file "
+            f"(expected <name>{PROFILE_SUFFIX} with name {PROFILE_NAME_PATTERN})"
+        )
+
+
+@profile_app.command("show")
+def profile_show(
+    name: str = typer.Argument(..., help="Profile name (without .yaml)"),
+) -> None:
+    """Print one profile file; only that file is read."""
+    root = _resolve_root()
+    _store(root)
+    entry = inspect_profile(root, name)
+    if not entry.ok:
+        _fail(entry.error)
+    typer.echo(f"Profile: {name}")
+    typer.echo(f"Path: {entry.path}")
+    typer.echo(f"SHA-256: {entry.sha256}")
+    typer.echo("")
+    typer.echo(entry.path.read_text(encoding="utf-8"), nl=False)
+
+
+@profile_app.command("validate")
+def profile_validate(
+    name: Optional[str] = typer.Argument(None, help="Profile name (default: all)"),
+) -> None:
+    """Validate one profile, or every profile plus the raw selector."""
+    root = _resolve_root()
+    _store(root)
+    if name:
+        entry = inspect_profile(root, name)
+        if entry.ok:
+            typer.echo(f"{name}: OK ({entry.sha256})")
+            return
+        _fail(entry.error)
+    report = validate_profiles(root)
+    typer.echo(f"Selector (raw): {report.selector_raw}")
+    for entry in report.entries:
+        typer.echo(
+            f"  {entry.name:<24} {'OK' if entry.ok else 'INVALID'}"
+            + ("" if entry.ok else f" — {entry.error}")
+        )
+    for filename in report.invalid_filenames:
+        typer.echo(f"  {filename:<24} IGNORED — not a valid profile filename")
+    if report.ok:
+        typer.echo(f"All {len(report.entries)} profile(s) valid; chain composes.")
+        return
+    typer.echo("")
+    for error in report.errors:
+        typer.echo(f"error: {error}")
+    raise typer.Exit(1)
+
+
+@config_app.command("show")
+def config_show(
+    resolved: bool = typer.Option(
+        False, "--resolved", help="Resolve the full profile chain (authoritative)"
+    ),
+) -> None:
+    """Show live runtime wiring + the raw selector, or the resolved policy."""
+    root = _resolve_root()
+    _store(root)
+    path = root / ".devrelay" / "config.yaml"
+    if resolved:
+        try:
+            policy = resolve_policy_config(root)
+        except DevRelayError as exc:
+            _fail(f"policy chain could not be resolved: {exc}")
+        typer.echo("# Effective task policy (authoritative full resolution)")
+        typer.echo(f"# selector: {policy.provenance.selector_raw}")
+        for ref in policy.provenance.profiles:
+            typer.echo(f"# profile {ref.name}: {ref.sha256}")
+        typer.echo(
+            f"# workspace config sha256: {policy.provenance.workspace_config_sha256}"
+        )
+        typer.echo(dump_policy_yaml(policy.document), nl=False)
+        return
+
+    wiring = _load_wiring(root)
+    raw = _raw_config_mapping(path)
+    selector = raw.get("profiles") or []
+    typer.echo("Runtime wiring / workspace overrides:")
+    typer.echo(f"  review.provider        {wiring.review_provider}")
+    typer.echo(f"  codex.executable       {wiring.codex.executable}")
+    typer.echo(f"  codex.args             {' '.join(wiring.codex.args)}")
+    typer.echo(f"  codex.prompt_mode      {wiring.codex.prompt_mode}")
+    typer.echo(f"  codex.timeout_seconds  {wiring.codex.timeout_seconds:g}")
+    typer.echo("")
+    typer.echo(f"Selected profiles (unresolved): {selector}")
+    overrides = sorted(workspace_policy_overrides(path))
+    typer.echo(f"Policy overrides present in config.yaml: {overrides or '[]'}")
+    typer.echo("")
+    typer.echo("Note: this is live runtime wiring, not the effective task policy.")
+    typer.echo("      For the resolved chain:  devrelay config show --resolved")
+    typer.echo("      For a task's frozen policy: devrelay status --task <id>")
 
 
 def main() -> None:
