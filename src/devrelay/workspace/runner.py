@@ -290,6 +290,10 @@ class CommandRunner:
                             "contained Codex process tree did not terminate "
                             "within the containment deadline"
                         )
+                        # Fail closed: an unverified tree can never be reported
+                        # as a successful run (the engine also refuses to run
+                        # the POST control-plane check in this case).
+                        error = error or containment_error
                     else:
                         containment_all_dead = True
                     containment.close()

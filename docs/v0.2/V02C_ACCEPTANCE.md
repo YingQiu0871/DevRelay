@@ -29,7 +29,7 @@ automated in this stage.
 | C17 | Old CLI without structured flags → `codex_runtime_unsupported`, 0 cost | PARTIAL | capability detection + engine pre-flight block path (unit-tested helpers) |
 | C18 | v0.2-B (schema 5) state loads and migrates | COVERED | `test_v02c_units.py::test_schema5_state_loads_and_migrates` |
 | C19 | No commit/push/tag/reset; index untouched | COVERED | guard + baseline suites (unchanged) |
-| C20 | Full offline suite green | COVERED | `python -m pytest` — 348 passed (was 338 before the P1 remediation; 10 new tests, none weakened, no skip/xfail added) |
+| C20 | Full offline suite green | COVERED | `python -m pytest` — 349 passed (was 338 before the P1 remediation; 11 new tests, none weakened, no skip/xfail added) |
 | C21 | COMPLETION_READY + matching identities → local replay, `TESTING` once | COVERED | `test_completion_replay_workspace_match` |
 | C22 | Workspace drift → `implementer_replay_workspace_changed`, 0 calls, no rollback | COVERED | `test_completion_replay_workspace_drift_blocks` |
 | C23 | Raw `-o` staged transiently, sanitized durable result, raw hash recorded | COVERED | happy-path test (+ `staging_removed`, `raw_result_sha256`) |
@@ -71,3 +71,4 @@ automated in this stage.
 | R4 (P1-B) | Inherited pipes cannot hang the parent, and a timed-out tree is really dead | COVERED | `test_descendant_inheriting_pipes_is_contained_without_hanging` (bounded run, `containment_all_dead == True`), `test_structured_timeout_kills_the_contained_tree_and_still_checks_post` (60 s child killed at a 2 s timeout; its 6 s descendant write never lands) |
 | R5 (P1-B / capability gate) | Structured mode refuses to start without strong containment (0 provider calls) | COVERED | `test_containment_is_required_for_structured_mode` — `codex_process_containment_unsupported`, `implementer_calls == 0`, ledger entry settled at `external_call_count == 0`, no argv ever captured; `doctor` reports the missing capability |
 | R6 (P1-D) | A consumed call is never erased by the failure paths | COVERED | `test_violation_keeps_the_consumed_call_charged` (`provider_calls == [DR-0001-C0001]`, usage 1, ledger file, hold on the same call id, containment recorded in the violation report), `test_state_tamper_keeps_the_consumed_call_in_the_trusted_pre` (tampered `state.json` left exactly as written; the parent's `*-state.pre.json` copy contains the charged call) |
+| R7 (P1-B, fail closed) | POST is skipped entirely when the contained tree cannot be confirmed dead | COVERED | `test_unverified_containment_skips_post_and_holds` — forced containment-deadline failure: `codex_containment_unverified`, `post_manifest_sha256 == ""` (POST never ran), no `COMPLETION_READY`/verdict persisted, hold written, call still charged |

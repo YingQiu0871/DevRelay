@@ -459,6 +459,69 @@ def test_structured_timeout_kills_the_contained_tree_and_still_checks_post(tmp_p
     _assert_no_post_guard_tamper(root, marker, store)
 
 
+def test_unverified_containment_skips_post_and_holds(tmp_path, monkeypatch):
+    """If the tree cannot be confirmed dead, POST must not run at all."""
+    from devrelay.workspace import containment as containment_module
+
+    stub = write_codex_stub(tmp_path / "tools")
+    root, store, engine = _engine_with_stub(tmp_path, stub)
+
+    class _NeverDead:
+        """Containment that never confirms the tree is dead."""
+
+        name = CONTAINMENT
+
+        def __init__(self, inner):
+            self._inner = inner
+
+        def __getattr__(self, item):
+            return getattr(self._inner, item)
+
+        def all_contained_processes_dead(self, timeout: float = 0.0) -> bool:
+            self._inner.all_contained_processes_dead(timeout)
+            return False
+
+    real_create = containment_module.create_containment
+
+    def _create():
+        return _NeverDead(real_create())
+
+    import devrelay.providers.codex_cli as codex_cli
+
+    monkeypatch.setattr(containment_module, "create_containment", _create)
+    monkeypatch.setattr(codex_cli, "create_containment", _create)
+
+    events = engine.continue_task(STATE)
+    assert any("codex_containment_unverified" in e for e in events), events
+
+    # the guard did NOT run: no POST identity was ever computed, and the state
+    # on disk is exactly the parent-written pre-run state (no verdict persisted)
+    hold = json.loads(
+        (store.task_dir(STATE) / "CONTROL_PLANE_HOLD.json").read_text(encoding="utf-8")
+    )
+    assert hold["code"] == "codex_containment_unverified"
+    assert hold["call_id"] == f"{STATE}-C0001"
+    assert hold["containment"]["containment_all_dead"] is False
+    report = json.loads(
+        next(iter(store.control_state_dir(STATE).glob("*-violation.json"))).read_text(
+            encoding="utf-8"
+        )
+    )
+    assert report["code"] == "codex_containment_unverified"
+    assert report["post_manifest_sha256"] == ""
+    task = store.read_task(STATE)
+    assert task.state.value == "IMPLEMENTING"
+    assert all(not attempt.completion_ready for attempt in task.attempts)
+    assert all(
+        attempt.milestone.value not in ("COMPLETION_READY", "COMPLETION_APPLIED")
+        for attempt in task.attempts
+    )
+    # the consumed call is still charged (the process really ran)
+    assert [(r.call_id, r.external_call_count) for r in task.provider_calls] == [
+        (f"{STATE}-C0001", 1)
+    ]
+
+
 def test_containment_is_required_for_structured_mode(tmp_path, monkeypatch):
     """No strong containment -> structured mode refuses to start (0 calls)."""
     import devrelay.providers.codex_cli as codex_cli

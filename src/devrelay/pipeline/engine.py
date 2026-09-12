@@ -1243,6 +1243,7 @@ class DevRelayEngine:
         state_sha_at_pre: str = "",
         pre_state_bytes: bytes = b"",
         containment: dict | None = None,
+        code: str = "codex_control_plane_violation",
     ) -> None:
         """Persist metadata-only violation evidence plus the hold.
 
@@ -1253,7 +1254,7 @@ class DevRelayEngine:
             "task_id": task_id,
             "attempt_id": attempt_id,
             "call_id": call_id,
-            "code": "codex_control_plane_violation",
+            "code": code,
             "detected_at": utcnow_iso(),
             "trust": "parent-post-mortem",
             "detail": sanitize(detail)[:2000],
@@ -1296,7 +1297,7 @@ class DevRelayEngine:
                     "task_id": task_id,
                     "attempt_id": attempt_id,
                     "call_id": call_id,
-                    "code": "codex_control_plane_violation",
+                    "code": code,
                     "created_at": utcnow_iso(),
                     "trust": "parent-post-mortem",
                     "trusted_pre_manifest_sha256": self._manifest_identity(
@@ -1308,6 +1309,7 @@ class DevRelayEngine:
                     "diverging_paths": unexpected_manifest_paths(differences),
                     "differences": [d.to_json() for d in differences],
                     "violation_report": self.store.rel_path(report_path),
+                    "containment": dict(containment or {}),
                     "recovery": (
                         "protected control state must match the trusted PRE "
                         "identity again before the hold can be cleared; there is "
@@ -2185,6 +2187,34 @@ class DevRelayEngine:
         # comparison never re-reads it from disk.  Any unexpected change under
         # `.devrelay` fails closed without overwriting the tampered state.
         if control_plane_pre is not None and runtime_plan is not None:
+            if result is not None and result.containment and not result.containment_all_dead:
+                # Containment contract violated: the parent could not confirm
+                # that every process the Codex child spawned is dead, so the
+                # workspace cannot be trusted and POST must NOT run.  Evidence
+                # and a hold are written; no state is overwritten.
+                self._write_control_plane_violation(
+                    task.task_id,
+                    attempt_id=attempt_id,
+                    call_id=call_id,
+                    pre_manifest=control_plane_pre,
+                    post_manifest=None,
+                    differences=[],
+                    detail=(
+                        "the contained Codex process tree was not confirmed dead "
+                        f"({result.containment_error or 'containment deadline expired'}); "
+                        "the control-plane POST verification was skipped and no "
+                        "state was written"
+                    ),
+                    pre_state_bytes=pre_state_bytes,
+                    containment=self._containment_evidence(result),
+                    code="codex_containment_unverified",
+                )
+                events.append(
+                    f"[{task.task_id}] BLOCKED: codex_containment_unverified - "
+                    "the contained process tree was not confirmed dead, so the "
+                    "control plane was NOT verified and no state was written"
+                )
+                return False
             violation = self._control_plane_check_after_run(
                 task.task_id,
                 attempt_id=attempt_id,

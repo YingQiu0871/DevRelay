@@ -190,7 +190,11 @@ network).
   `codex_process_containment_unsupported` and **0 provider calls** instead of
   claiming weak containment, and `doctor` flags the missing capability.
   Containment facts (`containment`, `containment_all_dead`) are persisted in the
-  attempt runtime evidence and in the violation report.
+  attempt runtime evidence, in the violation report and in the hold. If the tree
+  cannot be confirmed dead within the containment deadline, the run fails closed
+  as `codex_containment_unverified`: the POST comparison is skipped entirely, no
+  state is overwritten, a post-mortem hold is written for manual recovery, and
+  the invocation stays charged (the process really ran).
 - **P1-D — a consumed call disappeared from `provider_calls`/budget on the
   control-plane-violation path.** The pre-run attempt write persisted a stale
   in-memory `TaskRun` and erased the accounting intent recorded moments earlier,

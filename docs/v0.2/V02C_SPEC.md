@@ -67,7 +67,10 @@ DevRelay wraps it with a stronger runtime contract:
   “spawn Codex, then assign it” order has a race window and is not used).
   `DETACHED_PROCESS` and new process groups do not remove a process from its job,
   so a detached grandchild is killed with the tree; the parent verifies
-  `all_contained_processes_dead()` **before** computing POST. On any platform
+  `all_contained_processes_dead()` **before** computing POST, and a tree that
+  cannot be confirmed dead fails closed as `codex_containment_unverified` — the
+  POST comparison is then skipped entirely (no state is overwritten, a hold is
+  written for manual recovery, the charged call stays charged). On any platform
   without this mechanism (POSIX: a process group cannot contain a
   `setsid`/double-fork descendant) structured mode fails pre-flight with
   `codex_process_containment_unsupported` and **zero provider calls** rather than
