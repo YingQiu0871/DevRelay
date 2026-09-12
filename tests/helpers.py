@@ -535,6 +535,7 @@ Options:
 CODEX_STUB_SOURCE = '''"""Offline `codex` stub for DevRelay v0.2-C tests (never calls a model)."""
 import json
 import os
+import subprocess
 import sys
 import time
 from pathlib import Path
@@ -565,6 +566,22 @@ def main() -> int:
         Path(cfg["env_capture"]).write_text(json.dumps(record), encoding="utf-8")
     if cfg.get("argv_capture"):
         Path(cfg["argv_capture"]).write_text(json.dumps(args), encoding="utf-8")
+    if cfg.get("argv_full_capture"):
+        # sys.argv including the entry point: proves whether the run went through
+        # the configured launcher prefix (structured) or straight to the CLI.
+        Path(cfg["argv_full_capture"]).write_text(
+            json.dumps(sys.argv), encoding="utf-8"
+        )
+    if cfg.get("descendant"):
+        # A deferred, detached grandchild: it outlives this process (and is
+        # deliberately given the inherited pipes when close_fds is False) so the
+        # parent can prove that containment kills the whole tree before POST.
+        subprocess.Popen(
+            [sys.executable, str(cfg["descendant"])]
+            + [str(arg) for arg in cfg.get("descendant_args", [])],
+            creationflags=0x00000008 if os.name == "nt" else 0,
+            close_fds=bool(cfg.get("descendant_close_fds", True)),
+        )
     for op, target, *rest in cfg.get("tamper", []) or []:
         path = Path(target)
         if op == "write":

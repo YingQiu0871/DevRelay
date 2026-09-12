@@ -16,8 +16,8 @@ automated in this stage.
 | C4 | Falsely claimed file flagged (`claimed_not_changed`) | COVERED | happy-path warnings |
 | C5 | Malformed result → `codex_result_malformed`, no retry | COVERED | `test_structured_failures_block_without_retry` |
 | C6 | Missing result (exit 0) → `codex_result_missing` | COVERED | same |
-| C7 | Non-zero exit with partial result → hard failure, evidence kept | PARTIAL | `test_nonzero_exit_is_a_hard_failure` (result not parsed on failure by design) |
-| C8 | Timeout: child killed, bounded capture, failure | PARTIAL | `test_runner.py` (terminate→kill, bounded capture) + structured path inherits it |
+| C7 | Non-zero exit with partial result → hard failure, evidence kept | COVERED | `test_v02c_p1_remediation.py::test_c7_nonzero_exit_with_a_valid_result_is_still_a_failure` (a *valid* result still cannot upgrade a failed process; charged once, no `result.json`/`completion.json`) |
+| C8 | Timeout: child killed, bounded capture, failure | COVERED | `test_v02c_p1_remediation.py::test_structured_timeout_kills_the_contained_tree_and_still_checks_post` (contained tree killed, POST still runs, run still charged) + `test_runner.py` |
 | C9 | Unknown completion / crash → fail closed | COVERED | `test_v02c_replay.py::test_hard_crash_uncertainty_fails_closed_without_rerun` |
 | C10 | Replay without reinvocation (0 calls) | COVERED | `test_completion_replay_workspace_match` |
 | C11 | Unique attempt/call identities | COVERED | v0.2-A identity suites + happy-path call count |
@@ -25,11 +25,11 @@ automated in this stage.
 | C13 | Git guard violation wins over claims | COVERED | `test_policy_guard.py` (unchanged) |
 | C14 | Binary/untracked/CRLF delta handling | COVERED | `test_baseline_service.py`, `test_audit_remediation.py` (unchanged) |
 | C15 | Secret containment in runtime artifacts | COVERED | `test_structured_happy_path…` + `test_secret_in_tampered_file_never_reaches_evidence` |
-| C16 | Unicode/quoted paths | PARTIAL | argv-list invocation (no shell) + claim normalization unit; no dedicated end-to-end Unicode path test |
+| C16 | Unicode/quoted paths | COVERED | `test_v02c_p1_remediation.py::test_c16_unicode_paths_end_to_end` (unicode workspace root + unicode claim, end-to-end) |
 | C17 | Old CLI without structured flags → `codex_runtime_unsupported`, 0 cost | PARTIAL | capability detection + engine pre-flight block path (unit-tested helpers) |
 | C18 | v0.2-B (schema 5) state loads and migrates | COVERED | `test_v02c_units.py::test_schema5_state_loads_and_migrates` |
 | C19 | No commit/push/tag/reset; index untouched | COVERED | guard + baseline suites (unchanged) |
-| C20 | Full offline suite green | COVERED | `python -m pytest` — 338 passed |
+| C20 | Full offline suite green | COVERED | `python -m pytest` — 348 passed (was 338 before the P1 remediation; 10 new tests, none weakened, no skip/xfail added) |
 | C21 | COMPLETION_READY + matching identities → local replay, `TESTING` once | COVERED | `test_completion_replay_workspace_match` |
 | C22 | Workspace drift → `implementer_replay_workspace_changed`, 0 calls, no rollback | COVERED | `test_completion_replay_workspace_drift_blocks` |
 | C23 | Raw `-o` staged transiently, sanitized durable result, raw hash recorded | COVERED | happy-path test (+ `staging_removed`, `raw_result_sha256`) |
@@ -60,3 +60,14 @@ automated in this stage.
 | C48 | Junction/reparse handling (probe SKIPPED, never PASS, when privileged) | COVERED | `test_v02c_units.py::test_reparse_detection_uses_platform_attributes` |
 | C49 | Hold discovery precedes workspace-index trust | COVERED | `test_hold_discovery_survives_corrupt_workspace_index` |
 | C50 | Old-child uncertainty prevents an automatic new Codex attempt | COVERED | `test_hard_crash_uncertainty_fails_closed_without_rerun` |
+
+## Independent-review P1 remediation closure
+
+| # | Criterion | Status | Evidence |
+| --- | --- | --- | --- |
+| R1 (P1-A) | A frozen task driven through the **production CLI** really runs the structured runtime | COVERED | `test_cli_continue_runs_the_structured_runtime` — real `devrelay init/start/plan import/continue`; stub argv has exactly one `exec`/`--sandbox` plus every DevRelay-owned flag, the launcher prefix made the stub the entry point, `runtime.json`/`schema.json`/`result.json`/`completion.json` exist, `status` shows `Runtime: structured`, `doctor` agrees, and the frozen snapshot carries no `codex`/`runtime_mode` key (proof the mode cannot come from task policy) |
+| R2 (P1-A) | An explicitly text-wired workspace keeps the legacy path (no silent upgrade/downgrade) | COVERED | `test_cli_runtime_mode_text_is_explicit_and_stays_text` — argv has no `--output-schema`/`--output-last-message`/`--ignore-rules`, no `exec`, no launcher prefix; `status` shows `Runtime: text` |
+| R3 (P1-B) | A detached descendant cannot mutate the control plane after POST | COVERED | `test_detached_descendant_cannot_tamper_after_post` — the delegated grandchild's write is scheduled after the Codex process exits; `evil.txt` never appears, `state.json` title is untouched, and the tamper payload's liveness is proven by an uncontained control run in the same test |
+| R4 (P1-B) | Inherited pipes cannot hang the parent, and a timed-out tree is really dead | COVERED | `test_descendant_inheriting_pipes_is_contained_without_hanging` (bounded run, `containment_all_dead == True`), `test_structured_timeout_kills_the_contained_tree_and_still_checks_post` (60 s child killed at a 2 s timeout; its 6 s descendant write never lands) |
+| R5 (P1-B / capability gate) | Structured mode refuses to start without strong containment (0 provider calls) | COVERED | `test_containment_is_required_for_structured_mode` — `codex_process_containment_unsupported`, `implementer_calls == 0`, ledger entry settled at `external_call_count == 0`, no argv ever captured; `doctor` reports the missing capability |
+| R6 (P1-D) | A consumed call is never erased by the failure paths | COVERED | `test_violation_keeps_the_consumed_call_charged` (`provider_calls == [DR-0001-C0001]`, usage 1, ledger file, hold on the same call id, containment recorded in the violation report), `test_state_tamper_keeps_the_consumed_call_in_the_trusted_pre` (tampered `state.json` left exactly as written; the parent's `*-state.pre.json` copy contains the charged call) |

@@ -58,9 +58,34 @@ DevRelay wraps it with a stronger runtime contract:
   `--restore-state-from-pre` for the hash-validated parent-held state copy). There
   is no “accept tampered state” path, and a hard parent crash offers no automatic
   restore (`control_plane_unverified` semantics: fail closed, manual recovery);
-* **budget** — unchanged: `ProviderCallRecord` is the sole authority, intent is
-  persisted before the spawn, replay/parsing/reconciliation cost nothing, and
-  there is no invisible repair call.
+* **strong process containment (required)** — the POST comparison is only
+  meaningful if nothing the Codex child spawned can still be alive, so structured
+  mode requires *strong descendant containment*: on Windows a Job Object with
+  `JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE` and no breakaway, established **before**
+  Codex runs through a broker hand-off (the launcher is assigned to the job first
+  and only then signalled to `exec` the DevRelay-owned argv — the naive
+  “spawn Codex, then assign it” order has a race window and is not used).
+  `DETACHED_PROCESS` and new process groups do not remove a process from its job,
+  so a detached grandchild is killed with the tree; the parent verifies
+  `all_contained_processes_dead()` **before** computing POST. On any platform
+  without this mechanism (POSIX: a process group cannot contain a
+  `setsid`/double-fork descendant) structured mode fails pre-flight with
+  `codex_process_containment_unsupported` and **zero provider calls** rather than
+  claiming weak containment; `codex.runtime_mode: text` stays the explicit,
+  documented compatibility escape (and the text runtime has no containment);
+* **budget/accounting authority (P1-D)** — a real invocation stays charged even
+  when the run is voided: the call intent is persisted *before* the spawn and the
+  pre-run attempt write merges the persisted accounting facts, so the
+  `codex_control_plane_violation` path leaves the invocation in `provider_calls`,
+  in the budget usage and in `policy/calls/<call-id>.json`, and the trusted
+  parent-held `*-state.pre.json` copy contains it too. A crash between the intent
+  and the verdict can therefore never make a paid call invisible.
+* **runtime wiring vs task policy (P1-A)** — the Codex runtime mode is *wiring*
+  (`WiringConfig`, live, never frozen). Entities frozen into a task
+  (`config.snapshot.yaml`) carry no `codex` section and therefore can never
+  select — or silently downgrade — the runtime mode; the frozen document stays
+  authoritative for policy only. Reading the mode from policy made every
+  production `devrelay continue` fall back to the legacy text path.
 
 ## Configuration
 
@@ -87,5 +112,14 @@ codex:
   (user-owned); `--ephemeral` is available as an explicit trade-off.
 * Crash-replay and control-plane scenarios are validated offline with a stub
   Codex CLI; the single real Codex smoke is still pending.
+* Containment is Windows-only by construction, so the structured runtime (and the
+  v0.2-C end-to-end tests that exercise it) currently require Windows. A POSIX
+  backend (cgroup v2 / PID namespace) is explicitly out of scope for this
+  remediation; Linux structured runs fail closed with
+  `codex_process_containment_unsupported` instead of running uncontained.
+* The legacy `text` runtime has no structured contract, no control-plane guard
+  and **no containment**: a descendant it spawns can still mutate `.devrelay`
+  after the run. It exists only as the explicit compatibility opt-out, is
+  reported by `doctor`, and is never entered implicitly.
 * `state_schema_version` is **6** (v0.2-B schema-5 tasks load and migrate through
   the existing backup/too-new machinery; read-only commands never migrate).

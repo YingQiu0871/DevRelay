@@ -158,6 +158,56 @@ network).
 - Bumped `MAX_SUPPORTED_STATE_SCHEMA` accordingly; a v0.2-B binary refuses v6 with
   `state_schema_too_new` instead of guessing.
 
+### Fixed (independent-review P1 remediation)
+
+- **P1-A — structured mode was silently downgraded on every frozen-task CLI
+  path.** The effective runtime mode was read from the *task policy* source, but
+  the CLI builds engines with `config=None` for tasks that own a frozen snapshot,
+  so `devrelay continue` fell back to `text`: no `--output-schema`, no bounded
+  result read, no child environment scrub, no control-plane PRE/POST guard and no
+  containment — a silent loss of the whole v0.2-C contract. The mode now comes
+  from the live `WiringConfig` only (`self.runtime_config.codex.runtime_mode`),
+  the frozen document stays authoritative for policy only (it carries no `codex`
+  section at all), and a mis-wired engine fails pre-flight instead of
+  downgrading. `status` prints the effective mode as `Runtime:` and `doctor`
+  reports mode, capability and containment. Regression coverage drives the *real
+  CLI* end-to-end (`test_cli_continue_runs_the_structured_runtime`,
+  `test_cli_runtime_mode_text_is_explicit_and_stays_text`), not just an internal
+  helper.
+- **P1-B — a detached descendant could mutate the control plane after POST.**
+  Nothing contained the Codex process tree: the child could spawn a detached
+  grandchild that outlived it, wait for the POST manifest comparison to pass and
+  then rewrite `.devrelay/tasks/<id>/state.json` (and drop arbitrary files) with
+  no violation and no trace. New module `devrelay/workspace/containment.py`
+  provides the abstraction (`spawn_contained` / `wait_contained` /
+  `terminate_contained` / `kill_contained` / `all_contained_processes_dead`) and a
+  race-free Windows Job Object backend (`KILL_ON_JOB_CLOSE`, no breakaway, broker
+  hand-off *before* Codex runs). The runner ends a contained window by closing the
+  job and verifying `all_contained_processes_dead()` **before** the engine
+  computes POST, so a surviving descendant can no longer land after the guard. The
+  refusal is honest: on POSIX (where a process group cannot contain a
+  `setsid`/double-fork descendant) structured mode fails pre-flight with
+  `codex_process_containment_unsupported` and **0 provider calls** instead of
+  claiming weak containment, and `doctor` flags the missing capability.
+  Containment facts (`containment`, `containment_all_dead`) are persisted in the
+  attempt runtime evidence and in the violation report.
+- **P1-D — a consumed call disappeared from `provider_calls`/budget on the
+  control-plane-violation path.** The pre-run attempt write persisted a stale
+  in-memory `TaskRun` and erased the accounting intent recorded moments earlier,
+  so a *real* Codex invocation that was voided by the guard left
+  `provider_calls == []`, budget usage `0` and an orphan `policy/calls/*.json`
+  entry. The pre-run write now merges the persisted accounting facts (call list
+  plus the monotonic sequencing counters, `max()` of both sides) into the record
+  it writes while the caller's in-memory transition is preserved. A voided run is
+  now fully charged: call id `DR-0001-C0001`, usage `implementer_calls == 1`,
+  ledger entry present, hold referencing the same call id, and the trusted
+  parent-held `*-state.pre.json` copy contains it.
+- **C7 / C16 acceptance closure.** `C7`: a non-zero exit with a *valid* model
+  result is still a failure (`implementer_failed`, no `COMPLETION_READY`, no
+  durable `result.json`) and is still charged once. `C16`: unicode workspace
+  roots, staging paths and claimed file names survive the whole structured
+  runtime (manifest, reconciliation, evidence).
+
 ## Unreleased - v0.2-A candidate (audit remediation, closure audit pending)
 
 Automatic review loop with an enforced execution budget, plus the remediation of
