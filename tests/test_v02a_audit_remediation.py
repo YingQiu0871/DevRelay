@@ -34,6 +34,7 @@ from devrelay.artifacts.store import ArtifactStore
 from devrelay.config import bundled_default_path
 from devrelay.errors import ProviderError, ReviewFormatError
 from devrelay.models import (
+    STATE_SCHEMA_VERSION,
     AppliedReviewRecord,
     CallErrorType,
     ProviderCallPhase,
@@ -718,9 +719,8 @@ def test_new_task_persists_policy_source(tmp_path):
     assert task.policy_source == "snapshot"
     raw = json.loads(store.state_path(STATE).read_text(encoding="utf-8"))
     assert raw["policy_source"] == "snapshot"
-    # v0.2-B writes state schema 5 (approved, intentional persisted-schema
-    # evolution: frozen-policy identity, digest and provenance).
-    assert raw["state_schema_version"] == 5
+    # Current schema (v0.2-B introduced 5, v0.2-C adds the runtime milestones).
+    assert raw["state_schema_version"] == STATE_SCHEMA_VERSION
     assert raw["next_provider_call_sequence"] >= 1
 
 

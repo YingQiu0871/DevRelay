@@ -15,6 +15,26 @@ if TYPE_CHECKING:  # pragma: no cover - typing only
 
 
 @dataclass
+class RuntimePlan:
+    """Engine-owned Codex runtime plan for one attempt (v0.2-C).
+
+    The engine builds it *before* the control-plane PRE manifest is captured, so
+    every artifact it references already exists when the guard starts watching.
+    """
+
+    runtime_mode: str
+    argv: list[str]
+    env_remove: list[str]
+    staging_path: str
+    schema_path: str
+    workdir: str
+    prompt: str
+    attempt_id: str = ""
+    call_id: str = ""
+    capabilities: str = ""
+
+
+@dataclass
 class ImplementerContext:
     """Everything the implementer provider needs for one pass."""
 
@@ -26,6 +46,10 @@ class ImplementerContext:
     findings: list[Finding] = field(default_factory=list)
     reuse_approved_scope: bool = True
     current_delta_first: bool = True
+    # v0.2-C: prompt text (built by the engine so the exact bytes are hashed
+    # before the run) and the runtime plan for structured Codex execution.
+    prompt: str = ""
+    plan: "RuntimePlan | None" = None
 
 
 class ImplementerProvider(ABC):

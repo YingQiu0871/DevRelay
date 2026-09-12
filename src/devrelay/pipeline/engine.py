@@ -51,10 +51,13 @@ from devrelay.errors import (
 from devrelay.models import (
     AppliedReviewRecord,
     ProfileRef,
+    AttemptMilestone,
+    AttemptRuntimeEvidence,
     AttemptStatus,
     CallErrorType,
     Finding,
     FinalGateRecord,
+    ImplementationResult,
     IndexSnapshotStatus,
     PolicyProvenance,
     PolicyRefreshRecord,
@@ -73,10 +76,21 @@ from devrelay.models import (
     TaskPacket,
     TaskRun,
     TransitionEvent,
+    WorkspaceIdentity,
     WorkspaceSnapshot,
     utcnow_iso,
 )
 from devrelay.pipeline.budget import BudgetExhaustedError, ProviderBudget
+from devrelay.pipeline.control_plane import (
+    ControlPlaneError,
+    ControlPlaneManifest,
+    build_manifest,
+    build_staging_dir,
+    cleanup_staging,
+    diff_manifests,
+    is_reparse_or_link,
+    unexpected_manifest_paths,
+)
 from devrelay.snapshot import (
     SnapshotCheck,
     SnapshotState,
@@ -107,6 +121,18 @@ from devrelay.providers.base import (
     ImplementerContext,
     ImplementerProvider,
     ReviewerProvider,
+    RuntimePlan,
+)
+from devrelay.providers.codex_cli import build_implementation_prompt
+from devrelay.providers.codex_runtime import (
+    CodexRuntimeUnsupportedError,
+    delta_identity,
+    guard_identity,
+    reconcile_observed_files,
+    repo_is_case_insensitive,
+    sanitized_summary_markdown,
+    write_json_new,
+    write_text_new,
 )
 from devrelay.providers.evidence import ReviewCallPolicy
 from devrelay.redact import sanitize
@@ -731,13 +757,18 @@ class DevRelayEngine:
     # ------------------------------------------------------------------ #
     # provider attempt lifecycle (AUD-02)
     # ------------------------------------------------------------------ #
-    def _write_attempt(self, task: TaskRun, record: ProviderAttempt) -> None:
+    def _write_attempt(
+        self, task: TaskRun, record: ProviderAttempt, *, digest: bool = False
+    ) -> str:
         """Upsert the attempt in task state + evidence artifacts.
 
         ``policy/attempt-NN.json`` stays the *latest* view of logical pass NN
         (v0.1 compatibility).  The immutable per-attempt copy is keyed by the
         durable attempt id, so a failed attempt's evidence survives the retry
         that reuses the same logical pass number.
+
+        With ``digest=True`` the SHA-256 of the exact persisted ``state.json``
+        bytes is returned (v0.2-C COMPLETION_READY identity).
         """
         for index, existing in enumerate(task.attempts):
             if existing.attempt_id == record.attempt_id:
@@ -745,7 +776,12 @@ class DevRelayEngine:
                 break
         else:
             task.attempts.append(record)
-        self._persist(task)
+        task.updated_at = utcnow_iso()
+        state_digest = ""
+        if digest:
+            state_digest = self.store.write_task_with_digest(task)
+        else:
+            self.store.write_task(task)
         policy_dir = self.store.policy_dir(task.task_id)
         self.store.write_text(
             policy_dir / f"attempt-{record.iteration:02d}.json", _json_pretty(record)
@@ -754,6 +790,7 @@ class DevRelayEngine:
             policy_dir / "attempts" / f"{record.attempt_id}.json",
             _json_pretty(record),
         )
+        return state_digest
 
     def _finalize_attempt(
         self, task: TaskRun, record: ProviderAttempt, status: AttemptStatus
@@ -964,6 +1001,553 @@ class DevRelayEngine:
         return False
 
     # ------------------------------------------------------------------ #
+    # v0.2-C structured runtime + control plane
+    # ------------------------------------------------------------------ #
+    def _runtime_mode(self) -> str:
+        """Effective Codex runtime mode (live wiring, not frozen policy)."""
+        codex_config = getattr(self.config, "codex", None)
+        return getattr(codex_config, "runtime_mode", "text") or "text"
+
+    def _settle_call(
+        self,
+        task_id: str,
+        call_id: str,
+        *,
+        success: bool,
+        external_calls: int,
+        error_type: CallErrorType | None = None,
+        error: str | None = None,
+    ) -> None:
+        """Settle an already-persisted call intent in place (same call id)."""
+        task = self._load(task_id)
+        existing = task.call_by_id(call_id)
+        if existing is None:  # pragma: no cover - defensive
+            return
+        self._record_provider_call(
+            task_id,
+            existing.model_copy(
+                update={
+                    "completed_at": utcnow_iso(),
+                    "success": success,
+                    "external_call_count": max(0, int(external_calls)),
+                    "error_type": error_type,
+                    "error": sanitize(error)[:1000] if error else None,
+                }
+            ),
+        )
+
+    def _prepare_runtime_plan(
+        self,
+        task: TaskRun,
+        context: ImplementerContext,
+        *,
+        attempt_id: str,
+        call_id: str,
+    ) -> RuntimePlan | None:
+        """Build the structured runtime plan, or ``None`` for the text runtime.
+
+        ``None`` also covers providers that do not implement the structured
+        runtime (test doubles, third-party implementers): the engine only wires
+        a plan when both the configured mode and the provider support it.
+        """
+        mode = self._runtime_mode()
+        preparer = getattr(self.implementer, "prepare_runtime", None)
+        if mode != "structured" or preparer is None:
+            return None
+        staging_dir = build_staging_dir(
+            self.store.attempt_staging_dir(task.task_id, attempt_id)
+        )
+        return preparer(
+            context,
+            attempt_id=attempt_id,
+            call_id=call_id,
+            runtime_dir=self.store.task_runtime_dir(task.task_id, attempt_id),
+            staging_dir=staging_dir,
+            runtime_mode=mode,
+        )
+
+    def _control_plane_allowed_files(self) -> tuple[str, ...]:
+        return ("last-message.raw.json",)
+
+    def _control_plane_check_after_run(
+        self,
+        task_id: str,
+        *,
+        attempt_id: str,
+        call_id: str,
+        staging_path: str,
+        pre_manifest: ControlPlaneManifest,
+        record: ProviderAttempt,
+        events: list[str],
+    ) -> bool:
+        """Compare POST against the in-memory PRE; True = violation handled.
+
+        On violation the parent writes evidence and a hold, then returns without
+        touching ``state.json`` (never blind-overwrite a tampered state).
+        """
+        staging_parent = Path(staging_path).parent
+        state_sha = self._state_sha256(task_id)
+        try:
+            post = build_manifest(
+                self.store.devrelay_dir,
+                staging_dir=staging_parent,
+                allowed_files=self._control_plane_allowed_files(),
+            )
+        except ControlPlaneError as exc:
+            self._write_control_plane_violation(
+                task_id,
+                attempt_id=attempt_id,
+                call_id=call_id,
+                pre_manifest=pre_manifest,
+                post_manifest=None,
+                differences=[],
+                detail=f"control plane could not be verified after the run: {exc}",
+                state_sha_at_pre=state_sha,
+            )
+            events.append(
+                f"[{task_id}] BLOCKED: control plane could not be verified "
+                f"after the provider run ({exc})"
+            )
+            return True
+        differences = diff_manifests(pre_manifest, post)
+        if not differences:
+            evidence = record.runtime or AttemptRuntimeEvidence()
+            record.runtime = evidence.model_copy(
+                update={
+                    "runtime_mode": self._runtime_mode(),
+                    "control_plane_pre_sha256": pre_manifest.sha256,
+                    "control_plane_post_sha256": post.sha256,
+                    "control_plane_changes": 0,
+                }
+            )
+            self._write_attempt(self._load(task_id), record)
+            return False
+        self._write_control_plane_violation(
+            task_id,
+            attempt_id=attempt_id,
+            call_id=call_id,
+            pre_manifest=pre_manifest,
+            post_manifest=post,
+            differences=differences,
+            detail="unexpected control-plane mutation by the Codex child",
+            state_sha_at_pre=state_sha,
+        )
+        events.append(
+            f"[{task_id}] BLOCKED: codex_control_plane_violation - "
+            f"{len(differences)} protected path(s) changed: "
+            + ", ".join(unexpected_manifest_paths(differences)[:5])
+        )
+        return True
+
+    def _state_sha256(self, task_id: str) -> str:
+        path = self.store.state_path(task_id)
+        try:
+            return hashlib.sha256(path.read_bytes()).hexdigest()
+        except OSError:
+            return ""
+
+    def _write_control_plane_violation(
+        self,
+        task_id: str,
+        *,
+        attempt_id: str,
+        call_id: str,
+        pre_manifest: ControlPlaneManifest,
+        post_manifest: ControlPlaneManifest | None,
+        differences: list,
+        detail: str,
+        state_sha_at_pre: str = "",
+    ) -> None:
+        """Persist metadata-only violation evidence plus the hold.
+
+        Tampered file *contents* are never copied into durable evidence: a
+        control file is child-written data and may carry injected secrets.
+        """
+        report = {
+            "task_id": task_id,
+            "attempt_id": attempt_id,
+            "call_id": call_id,
+            "code": "codex_control_plane_violation",
+            "detected_at": utcnow_iso(),
+            "trust": "parent-post-mortem",
+            "detail": sanitize(detail)[:2000],
+            "trusted_pre_manifest_sha256": pre_manifest.sha256,
+            "post_manifest_sha256": post_manifest.sha256 if post_manifest else "",
+            "staging_dir": pre_manifest.staging_dir,
+            "allowed_staging_files": list(pre_manifest.allowed_files),
+            "differences": [difference.to_json() for difference in differences],
+            "hash_skipped_paths": list(pre_manifest.hash_skipped_paths),
+        }
+        report_path = write_json_new(
+            self.store.control_state_dir(task_id) / f"{attempt_id}-violation.json",
+            report,
+        )
+        state_sha = state_sha_at_pre or self._state_sha256(task_id)
+        try:
+            self.store.write_control_plane_hold(
+                task_id,
+                {
+                    "task_id": task_id,
+                    "attempt_id": attempt_id,
+                    "call_id": call_id,
+                    "code": "codex_control_plane_violation",
+                    "created_at": utcnow_iso(),
+                    "trust": "parent-post-mortem",
+                    "trusted_pre_manifest_sha256": pre_manifest.sha256,
+                    "trusted_state_sha256": state_sha,
+                    "staging_dir": pre_manifest.staging_dir,
+                    "allowed_staging_files": list(pre_manifest.allowed_files),
+                    "diverging_paths": unexpected_manifest_paths(differences),
+                    "violation_report": self.store.rel_path(report_path),
+                    "recovery": (
+                        "protected control state must match the trusted PRE "
+                        "identity again before the hold can be cleared; there is "
+                        "no 'accept tampered state' path"
+                    ),
+                },
+            )
+        except DevRelayError:
+            # A hold already exists (earlier violation): keep both records.
+            pass
+
+    # ------------------------------------------------------------------ #
+    # v0.2-C completion milestones + replay
+    # ------------------------------------------------------------------ #
+    def _persist_structured_evidence(
+        self,
+        task: TaskRun,
+        record: ProviderAttempt,
+        result: ProviderExecutionResult,
+        *,
+        attempt_id: str,
+        events: list[str],
+    ) -> tuple[AttemptRuntimeEvidence, str, str]:
+        """Persist sanitized runtime evidence; return (evidence, code, reason).
+
+        A non-empty code means the structured contract failed (missing/
+        malformed/oversized/unsupported result): the caller blocks with that code
+        and never retries automatically.
+        """
+        runtime_dir = self.store.task_runtime_dir(task.task_id, attempt_id)
+        evidence = AttemptRuntimeEvidence(
+            runtime_mode=result.runtime_mode,
+            raw_result_sha256=result.raw_result_sha256,
+            session_id=sanitize(result.session_id)[:200],
+            model="",
+            staging_file=result.staging_path,
+            warnings=[sanitize(w)[:300] for w in result.runtime_warnings[:20]],
+        )
+        events_path = runtime_dir / "events.jsonl"
+        if result.stdout and result.runtime_mode == "structured":
+            try:
+                write_text_new(events_path, sanitize(result.stdout))
+                evidence = evidence.model_copy(
+                    update={
+                        "events_path": self.store.rel_path(events_path),
+                        "events_sha256": hashlib.sha256(
+                            result.stdout.encode("utf-8", errors="replace")
+                        ).hexdigest(),
+                    }
+                )
+            except DevRelayError:
+                pass
+        structured = result.structured_result
+        if structured is not None:
+            result_path = runtime_dir / "result.json"
+            try:
+                write_json_new(result_path, structured.model_dump(mode="json"))
+            except DevRelayError as exc:
+                return evidence, "codex_runtime_artifact_collision", str(exc)
+            payload_sha = hashlib.sha256(
+                json.dumps(
+                    structured.model_dump(mode="json"), sort_keys=True
+                ).encode("utf-8")
+            ).hexdigest()
+            evidence = evidence.model_copy(
+                update={
+                    "result_path": self.store.rel_path(result_path),
+                    "result_sha256": payload_sha,
+                    "result_status": structured.status,
+                    "result_schema_version": structured.schema_version,
+                    "result_claimed": True,
+                }
+            )
+            events.append(
+                f"[{task.task_id}] structured result persisted "
+                f"(status={structured.status}, schema="
+                f"{structured.schema_version}, raw={result.raw_result_sha256[:12]})"
+            )
+        # The raw staging file is transient: remove it best-effort.
+        if result.staging_path:
+            try:
+                removed = cleanup_staging(
+                    Path(result.staging_path).parent,
+                    allowed_files=self._control_plane_allowed_files(),
+                )
+                evidence = evidence.model_copy(update={"staging_removed": True})
+                if removed:
+                    events.append(
+                        f"[{task.task_id}] transient raw result staging removed "
+                        f"({', '.join(removed)})"
+                    )
+            except ControlPlaneError as exc:
+                evidence = evidence.model_copy(
+                    update={
+                        "staging_removed": False,
+                        "warnings": list(evidence.warnings)
+                        + [f"staging cleanup refused: {exc}"],
+                    }
+                )
+        code = result.result_error_code
+        reason = result.result_error
+        if code:
+            events.append(
+                f"[{task.task_id}] structured result rejected: {code} - {reason}"
+            )
+        return evidence, code, reason
+
+    def _write_implementation_reconciliation(
+        self,
+        task: TaskRun,
+        result: ProviderExecutionResult,
+        delta: TaskDelta,
+        *,
+        attempt_id: str,
+    ) -> tuple[str, list[str]]:
+        """Write the immutable implementation-stage reconciliation file."""
+        structured = result.structured_result
+        observed = list(delta.changed_files)
+        case_insensitive = False
+        try:
+            case_insensitive = repo_is_case_insensitive(self.runner, self.workspace.root)
+        except Exception:  # pragma: no cover - defensive
+            case_insensitive = False
+        claimed = list(structured.changed_files) if structured else []
+        claimed_not_changed, unclaimed = reconcile_observed_files(
+            claimed, observed, case_insensitive=case_insensitive
+        )
+        scope = {path.replace("\\", "/") for path in (task.packet.scope if task.packet else [])}
+        outside_scope = [
+            path for path in unclaimed if scope and path not in scope
+        ]
+        payload = {
+            "attempt_id": attempt_id,
+            "stage": "implementation",
+            "created_at": utcnow_iso(),
+            "comparison_mode": "case-insensitive" if case_insensitive else "exact",
+            "claimed_status": structured.status if structured else "",
+            "claimed_files": claimed,
+            "observed_files": observed,
+            "claimed_not_changed": claimed_not_changed,
+            "unclaimed_change": unclaimed,
+            "outside_packet_scope": outside_scope,
+            "path_rejected": list(result.rejected_path_claims),
+            "unknown_field_names": list(result.unknown_result_fields),
+            "unresolved_items": list(structured.unresolved_items) if structured else [],
+            "status_evidence_conflict": bool(
+                structured
+                and structured.status == "COMPLETE"
+                and (not observed or structured.unresolved_items)
+            ),
+        }
+        path = write_json_new(
+            self.store.task_runtime_dir(task.task_id, attempt_id)
+            / "implementation-reconciliation.json",
+            payload,
+        )
+        warnings: list[str] = []
+        if claimed_not_changed:
+            warnings.append(
+                f"claimed_not_changed: {len(claimed_not_changed)} file(s) the model "
+                "reported but that did not change"
+            )
+        if unclaimed:
+            warnings.append(
+                f"unclaimed_change: {len(unclaimed)} changed file(s) the model "
+                "did not report"
+            )
+        if payload["status_evidence_conflict"]:
+            warnings.append("status_evidence_conflict: model reported COMPLETE")
+        return self.store.rel_path(path), warnings
+
+    def _complete_implementation(
+        self,
+        task: TaskRun,
+        record: ProviderAttempt,
+        result: ProviderExecutionResult,
+        *,
+        attempt: int,
+        attempt_id: str,
+        events: list[str],
+    ) -> bool:
+        """COMPLETION_READY then COMPLETION_APPLIED (v0.2-C milestones)."""
+        current = self._load(task.task_id)
+        evidence, failure_code, failure_reason = self._persist_structured_evidence(
+            current, record, result, attempt_id=attempt_id, events=events
+        )
+        if failure_code:
+            record.status = AttemptStatus.PROVIDER_ERROR
+            record.completed_at = utcnow_iso()
+            record.milestone = AttemptMilestone.RESULT_PERSISTED
+            record.runtime = evidence
+            current.attempt_in_flight = False
+            self._write_attempt(current, record)
+            self._block(
+                self._load(current.task_id), failure_code, failure_reason or failure_code
+            )
+            events.append(f"[{task.task_id}] BLOCKED: {failure_code}")
+            return False
+
+        try:
+            delta = self._require_task_delta(self._load(current.task_id))
+        except BaselineError:
+            # Legacy baseline-less tasks keep working: without a frozen baseline
+            # there is nothing to reconcile against and replay is disabled (an
+            # empty tree identity never matches).
+            delta = None
+        post = record.post_snapshot or (
+            current.attempts[-1].post_snapshot if current.attempts else None
+        )
+        identity = WorkspaceIdentity(
+            worktree_tree_sha=delta.to_tree or "" if delta is not None else "",
+            delta_identity=delta_identity(delta) if delta is not None else "",
+            guard_identity=guard_identity(post) if post is not None else "",
+            head_sha=post.head_sha if post is not None else None,
+            branch=post.branch if post is not None else None,
+            index_tree_sha=post.index_tree_sha if post is not None else None,
+            changed_files=list(delta.changed_files) if delta is not None else [],
+        )
+        if delta is None:
+            reconciliation_path = ""
+            recon_warnings = ["no task baseline: reconciliation and replay disabled"]
+        else:
+            reconciliation_path, recon_warnings = (
+                self._write_implementation_reconciliation(
+                    current, result, delta, attempt_id=attempt_id
+                )
+            )
+        evidence = evidence.model_copy(
+            update={
+                "implementation_reconciliation_path": reconciliation_path,
+                "warnings": list(evidence.warnings) + recon_warnings,
+            }
+        )
+        summary = sanitized_summary_markdown(
+            attempt=attempt,
+            attempt_id=attempt_id,
+            provider=self.implementer.name,
+            result=result.structured_result,
+            raw_report=result.report or result.stdout or "",
+            reconciliation_path=reconciliation_path,
+            warnings=evidence.warnings,
+        )
+        impl_file = self.store.write_text(
+            self.store.implementation_dir(current.task_id)
+            / f"iteration-{attempt:02d}.md",
+            summary,
+        )
+        rel = self.store.rel_path(impl_file)
+        if rel not in current.implementation_report_paths:
+            current.implementation_report_paths.append(rel)
+
+        # ---- COMPLETION_READY: durable replay decision, marker cleared ------
+        record.status = AttemptStatus.COMPLETED
+        record.completed_at = utcnow_iso()
+        record.milestone = AttemptMilestone.COMPLETION_READY
+        record.completion_ready = True
+        record.workspace_identity = identity
+        record.runtime = evidence
+        current.attempt_in_flight = False
+        digest = self._write_attempt(current, record, digest=True)
+        completion_path = write_json_new(
+            self.store.task_runtime_dir(current.task_id, attempt_id)
+            / "completion.json",
+            {
+                "attempt_id": attempt_id,
+                "milestone": AttemptMilestone.COMPLETION_READY.value,
+                "created_at": utcnow_iso(),
+                "trust": "parent-post-mortem",
+                "state_sha256_at_ready": digest,
+                "workspace_identity": identity.model_dump(mode="json"),
+                "control_plane": {
+                    "pre_sha256": evidence.control_plane_pre_sha256,
+                    "post_sha256": evidence.control_plane_post_sha256,
+                },
+                "runtime": evidence.model_dump(mode="json"),
+                "summary_path": rel,
+            },
+        )
+        events.append(
+            f"[{task.task_id}] COMPLETION_READY persisted "
+            f"(attempt {attempt_id}, tree {identity.worktree_tree_sha[:12]}, "
+            f"evidence {self.store.rel_path(completion_path)})"
+        )
+        return self._apply_completion(
+            self._load(current.task_id), record.attempt_id, events, attempt=attempt
+        )
+
+    def _apply_completion(
+        self,
+        task: TaskRun,
+        attempt_id: str,
+        events: list[str],
+        *,
+        attempt: int | None = None,
+    ) -> bool:
+        """COMPLETION_APPLIED: idempotent transition to TESTING (one write)."""
+        current = self._load(task.task_id)
+        target = None
+        for stored in current.attempts:
+            if stored.attempt_id == attempt_id:
+                target = stored
+                break
+        if target is None:  # pragma: no cover - defensive
+            return False
+        if target.completion_applied:
+            events.append(
+                f"[{task.task_id}] completion {attempt_id} already applied"
+            )
+            return True
+        fresh = target.model_copy(
+            update={
+                "milestone": AttemptMilestone.COMPLETION_APPLIED,
+                "completion_applied": True,
+                "applied_at": utcnow_iso(),
+                "applied_state": PipelineState.TESTING.value,
+            }
+        )
+        if fresh.runtime is not None:
+            ready_sha = self._completion_state_sha(current.task_id, attempt_id)
+            fresh = fresh.model_copy(
+                update={
+                    "runtime": fresh.runtime.model_copy(
+                        update={"state_sha256_at_ready": ready_sha}
+                    )
+                }
+            )
+        current.implementation_passes += 1
+        self._move(
+            current,
+            PipelineState.TESTING,
+            note=f"implementation attempt {attempt or target.iteration} succeeded",
+        )
+        self._write_attempt(current, fresh)
+        events.append(
+            f"[{task.task_id}] implementation done -> TESTING "
+            f"(completion {attempt_id} applied)"
+        )
+        return True
+
+    def _completion_state_sha(self, task_id: str, attempt_id: str) -> str:
+        path = self.store.task_runtime_dir(task_id, attempt_id) / "completion.json"
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return ""
+        value = payload.get("state_sha256_at_ready")
+        return value if isinstance(value, str) else ""
+
+    # ------------------------------------------------------------------ #
     # implementation stage
     # ------------------------------------------------------------------ #
     def _do_implementation(self, task: TaskRun, events: list[str]) -> bool:
@@ -1101,6 +1685,61 @@ class DevRelayEngine:
         if not self._preflight_index_check(task, record, pre_snapshot, events):
             return False
 
+        # ---- v0.2-C: structured runtime preparation + control plane --------
+        context.prompt = build_implementation_prompt(context)
+        runtime_plan = None
+        control_plane_pre = None
+        try:
+            runtime_plan = self._prepare_runtime_plan(
+                task, context, attempt_id=attempt_id, call_id=call_id
+            )
+        except CodexRuntimeUnsupportedError as exc:
+            # Pre-flight refusal: nothing was spawned, so the call settles to 0.
+            self._finalize_attempt(task, record, AttemptStatus.PROVIDER_UNAVAILABLE)
+            self._settle_call(
+                task.task_id,
+                call_id,
+                success=False,
+                external_calls=0,
+                error_type=CallErrorType.PROVIDER_UNAVAILABLE,
+                error=str(exc),
+            )
+            self._block(
+                self._load(task.task_id),
+                getattr(exc, "code", "codex_runtime_unsupported"),
+                str(exc),
+            )
+            events.append(f"[{task.task_id}] BLOCKED before provider start: {exc}")
+            return False
+        except DevRelayError as exc:
+            current = self._finalize_attempt(task, record, AttemptStatus.PROVIDER_ERROR)
+            self._block(current, "codex_runtime_error", str(exc))
+            events.append(f"[{task.task_id}] BLOCKED: {exc}")
+            return False
+        if runtime_plan is not None:
+            context.plan = runtime_plan
+            try:
+                control_plane_pre = self._control_plane_snapshot(
+                    task.task_id,
+                    attempt_id=attempt_id,
+                    staging_path=runtime_plan.staging_path,
+                )
+            except ControlPlaneError as exc:
+                current = self._finalize_attempt(
+                    task, record, AttemptStatus.POLICY_CHECK_INCOMPLETE
+                )
+                self._block(current, "codex_control_plane_unavailable", str(exc))
+                events.append(
+                    f"[{task.task_id}] BLOCKED: control plane could not be "
+                    f"inspected before the provider run: {exc}"
+                )
+                return False
+            events.append(
+                f"[{task.task_id}] control-plane PRE captured in memory "
+                f"({len(control_plane_pre.entries)} entries, "
+                f"{control_plane_pre.sha256[:12]})"
+            )
+
         # ---- provider execution (exceptions are captured, never guessed) ---
         result: ProviderExecutionResult | None = None
         exception: BaseException | None = None
@@ -1116,6 +1755,24 @@ class DevRelayEngine:
             record.provider_exit_code = result.exit_code
             record.provider_timed_out = result.timed_out
             record.provider_error = result.error
+            record.milestone = AttemptMilestone.PROCESS_EXITED
+
+        # ---- v0.2-C: control-plane POST check BEFORE trusting any state -----
+        # The authoritative PRE identity lives in this process's memory; the
+        # comparison never re-reads it from disk.  Any unexpected change under
+        # `.devrelay` fails closed without overwriting the tampered state.
+        if control_plane_pre is not None and runtime_plan is not None:
+            violation = self._control_plane_check_after_run(
+                task.task_id,
+                attempt_id=attempt_id,
+                call_id=call_id,
+                staging_path=runtime_plan.staging_path,
+                pre_manifest=control_plane_pre,
+                record=record,
+                events=events,
+            )
+            if violation:
+                return False
         self._write_attempt(self._load(task.task_id), record)
 
         # ---- v0.2-A: persisted external-call accounting --------------------
@@ -1297,29 +1954,14 @@ class DevRelayEngine:
             events.append(f"[{task.task_id}] FAILED: {reason}")
             return False
 
-        current = self._finalize_attempt(task, record, AttemptStatus.COMPLETED)
-        current.implementation_passes += 1
-        summary_body = sanitize(result.report or result.stdout or "")
-        summary = (
-            f"# Implementation report — attempt {attempt}\n\n"
-            f"Generated at {utcnow_iso()} by provider '{self.implementer.name}'.\n\n"
-            f"{truncate(summary_body, 200_000)}\n"
+        return self._complete_implementation(
+            task,
+            record,
+            result,
+            attempt=attempt,
+            attempt_id=attempt_id,
+            events=events,
         )
-        impl_dir = self.store.implementation_dir(current.task_id)
-        impl_file = self.store.write_text(
-            impl_dir / f"iteration-{attempt:02d}.md", summary
-        )
-        rel = self.store.rel_path(impl_file)
-        if rel not in current.implementation_report_paths:
-            current.implementation_report_paths.append(rel)
-        self._move(
-            current,
-            PipelineState.TESTING,
-            note=f"implementation attempt {attempt} succeeded",
-        )
-        self._persist(current)
-        events.append(f"[{task.task_id}] implementation done -> TESTING")
-        return True
 
     # ------------------------------------------------------------------ #
     # test stage

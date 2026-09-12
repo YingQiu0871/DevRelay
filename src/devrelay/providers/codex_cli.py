@@ -14,14 +14,29 @@ Security contract (enforced here):
 
 from __future__ import annotations
 
+import hashlib
 import re
 from pathlib import Path
 from typing import Optional
 
+from devrelay.artifacts.store import ArtifactStore
 from devrelay.config import CodexConfig
 from devrelay.errors import ProviderUnavailableError
 from devrelay.models import ProviderExecutionResult, TaskPacket
-from devrelay.providers.base import ImplementerContext, ImplementerProvider
+from devrelay.providers.base import ImplementerContext, ImplementerProvider, RuntimePlan
+from devrelay.providers.codex_runtime import (
+    CodexResultError,
+    CodexRuntimeUnsupportedError,
+    build_invocation,
+    detect_capabilities,
+    detect_repo_codex_config,
+    observe_events,
+    parse_result_bytes,
+    result_json_schema,
+    write_json_new,
+    write_text_new,
+)
+from devrelay.redact import sanitize
 from devrelay.workspace.runner import CommandRunner
 
 _FLAG_RE = re.compile(r"^\s+--([a-z0-9-]+)", re.IGNORECASE)
@@ -179,6 +194,176 @@ class CodexCLIProvider(ImplementerProvider):
                 )
         return warnings
 
+    # -- v0.2-C structured runtime preparation (never invokes a model) ----
+    def prepare_runtime(
+        self,
+        context: ImplementerContext,
+        *,
+        attempt_id: str,
+        call_id: str,
+        runtime_dir: Path,
+        staging_dir: Path,
+        runtime_mode: str,
+    ) -> RuntimePlan:
+        """Detect capabilities, honour the repo-config gate and build argv.
+
+        Writes the parent-owned request/schema/runtime artifacts *before* the
+        control-plane PRE manifest is captured, so nothing DevRelay writes can
+        later look like a child mutation.
+        """
+        capabilities = detect_capabilities(self.runner, self.config.executable)
+        if not capabilities.present:
+            raise CodexRuntimeUnsupportedError(
+                f"Codex CLI unavailable: {capabilities.diagnostic}"
+            )
+        if runtime_mode == "structured":
+            if not capabilities.structured_supported:
+                raise CodexRuntimeUnsupportedError(
+                    "structured runtime requested but the installed Codex CLI "
+                    "does not support "
+                    + ", ".join(capabilities.missing_structured_flags())
+                    + "; set codex.runtime_mode: text explicitly to use the "
+                    "legacy text runtime (DevRelay never downgrades silently)"
+                )
+            repo_config = detect_repo_codex_config(Path(context.workspace_root))
+            if repo_config:
+                raise CodexRuntimeUnsupportedError(
+                    "repository Codex configuration is not supported in "
+                    "structured mode (it can change sandbox/tool/runtime "
+                    "controls indirectly): "
+                    + ", ".join(repo_config)
+                    + "; remove it or set codex.runtime_mode: text explicitly"
+                )
+        prompt = context.prompt or build_implementation_prompt(context)
+        runtime_dir = Path(runtime_dir)
+        runtime_dir.mkdir(parents=True, exist_ok=True)
+        schema_path = runtime_dir / "schema.json"
+        staging_path = Path(staging_dir) / "last-message.raw.json"
+        if not schema_path.exists():
+            write_json_new(schema_path, result_json_schema())
+        invocation = build_invocation(
+            config=self.config,
+            capabilities=capabilities,
+            workdir=Path(context.workspace_root),
+            prompt=prompt,
+            staging_path=staging_path,
+            schema_path=schema_path,
+            runtime_mode=runtime_mode,
+        )
+        runtime_json = runtime_dir / "runtime.json"
+        if not runtime_json.exists():
+            write_json_new(
+                runtime_json,
+                {
+                    "attempt_id": attempt_id,
+                    "call_id": call_id,
+                    "runtime_mode": runtime_mode,
+                    "capabilities": invocation.describe(),
+                    "timeout_seconds": self.config.timeout_seconds,
+                    "max_result_bytes": self.config.max_result_bytes,
+                    "max_capture_bytes": self.config.max_capture_bytes,
+                },
+            )
+        request_path = runtime_dir / "request.sanitized.txt"
+        if not request_path.exists():
+            write_text_new(request_path, sanitize(prompt))
+        return RuntimePlan(
+            runtime_mode=runtime_mode,
+            argv=invocation.argv,
+            env_remove=invocation.env_remove,
+            staging_path=str(staging_path),
+            schema_path=str(schema_path),
+            workdir=str(Path(context.workspace_root)),
+            prompt=prompt,
+            attempt_id=attempt_id,
+            call_id=call_id,
+            capabilities=capabilities.describe(),
+        )
+
+    def _run_structured(
+        self, context: ImplementerContext, plan: RuntimePlan
+    ) -> ProviderExecutionResult:
+        """Spawn Codex with the DevRelay-owned argv and collect the result."""
+        result = self.runner.run(
+            plan.argv,
+            cwd=plan.workdir,
+            timeout_seconds=self.config.timeout_seconds,
+            input_text=plan.prompt,
+            env_remove=plan.env_remove,
+            max_capture_bytes=self.config.max_capture_bytes,
+        )
+        stdout = result.stdout or ""
+        stderr = result.stderr or ""
+        observation = observe_events(stdout)
+        warnings: list[str] = []
+        if not observation.types:
+            warnings.append("no JSONL events observed (observational only)")
+        warnings.extend(observation.parse_warnings[:5])
+        outcome = ProviderExecutionResult(
+            exit_code=result.exit_code,
+            stdout=stdout,
+            stderr=stderr,
+            duration_seconds=result.duration_seconds,
+            timed_out=result.timed_out,
+            error=result.error,
+            report=stdout.strip(),
+            runtime_mode=plan.runtime_mode,
+            staging_path=plan.staging_path,
+            argv=list(plan.argv),
+            env_removed=list(plan.env_remove),
+            capabilities=plan.capabilities,
+            session_id=observation.session_id,
+            events_summary=observation.to_json(),
+            runtime_warnings=warnings,
+            stdout_bytes_total=result.stdout_bytes_total,
+            stderr_bytes_total=result.stderr_bytes_total,
+            stdout_truncated=result.stdout_truncated,
+            stderr_truncated=result.stderr_truncated,
+        )
+        if result.timed_out or result.error or result.exit_code is None:
+            return outcome
+        # Read the model result with a hard cap *before* parsing anything.
+        staging = Path(plan.staging_path)
+        try:
+            data, size, truncated = ArtifactStore.read_bytes_bounded(
+                staging, self.config.max_result_bytes
+            )
+        except OSError:
+            outcome.result_error_code = "codex_result_missing"
+            outcome.result_error = (
+                "Codex did not write the structured result file "
+                f"({plan.staging_path}); the run cannot be treated as complete"
+            )
+            return outcome
+        outcome.result_bytes_total = size
+        outcome.raw_result_sha256 = hashlib.sha256(data).hexdigest()
+        if truncated:
+            outcome.result_error_code = "codex_result_too_large"
+            outcome.result_error = (
+                f"structured result is {size} bytes, above the configured "
+                f"{self.config.max_result_bytes}-byte cap; DevRelay refuses to "
+                "read or guess it"
+            )
+            return outcome
+        try:
+            parsed, rejected, unknown = parse_result_bytes(data)
+        except CodexResultError as exc:
+            outcome.result_error_code = getattr(exc, "code", "codex_result_malformed")
+            outcome.result_error = str(exc)
+            return outcome
+        outcome.structured_result = parsed
+        outcome.rejected_path_claims = rejected
+        outcome.unknown_result_fields = unknown
+        if rejected:
+            outcome.runtime_warnings.append(
+                f"{len(rejected)} rejected path claim(s) (traversal/absolute)"
+            )
+        if unknown:
+            outcome.runtime_warnings.append(
+                "unknown result field(s): " + ", ".join(unknown[:5])
+            )
+        return outcome
+
     def run(self, context: ImplementerContext) -> ProviderExecutionResult:
         available, diagnostic = self.availability()
         if not available:
@@ -187,6 +372,9 @@ class CodexCLIProvider(ImplementerProvider):
                 stderr=diagnostic,
                 error=diagnostic,
             )
+        plan = context.plan
+        if plan is not None and plan.runtime_mode == "structured":
+            return self._run_structured(context, plan)
         unknown = self.unknown_arg_warnings()
         if unknown:
             message = (

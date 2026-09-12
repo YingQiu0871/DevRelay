@@ -25,6 +25,7 @@ from devrelay.artifacts.store import ArtifactStore, encode_lf, sha256_file
 from devrelay.cli import app
 from devrelay.config import load_config
 from devrelay.errors import DevRelayError, PolicySnapshotError
+from devrelay.models import STATE_SCHEMA_VERSION
 from devrelay.pipeline.engine import next_refresh_attempt
 from devrelay.snapshot import SnapshotState, check_snapshot, snapshot_path
 
@@ -84,15 +85,15 @@ def test_first_mutating_write_migrates_and_backs_up_once(tmp_path, version):
     engine.refresh_task_policy(STATE, "migrate")
 
     # C/D: upgraded schema and a one-time backup of the exact previous bytes
-    assert _raw_version(store) == 5
-    assert store.read_task(STATE).state_schema_version == 5
+    assert _raw_version(store) == STATE_SCHEMA_VERSION
+    assert store.read_task(STATE).state_schema_version == STATE_SCHEMA_VERSION
     assert backup.is_file()
     assert backup.read_bytes() == before_bytes  # E: byte-exact
     assert [p.name for p in _backups(store)] == [backup.name]
 
-    # F/G: a second real write keeps the backup untouched and stays schema 5
+    # F/G: a second real write keeps the backup untouched and stays current
     engine.refresh_task_policy(STATE, "second write")
-    assert _raw_version(store) == 5
+    assert _raw_version(store) == STATE_SCHEMA_VERSION
     assert backup.read_bytes() == before_bytes
     assert [p.name for p in _backups(store)] == [backup.name]
 
@@ -148,7 +149,7 @@ def test_migration_state_write_failure_keeps_backup_and_allows_retry(tmp_path, m
 
     # retry succeeds, does not overwrite the backup
     engine.import_plan(STATE, make_packet(task_id=STATE))
-    assert _raw_version(store) == 5
+    assert _raw_version(store) == STATE_SCHEMA_VERSION
     assert backup.read_bytes() == before_bytes
     assert [p.name for p in _backups(store)] == [backup.name]
 
@@ -201,11 +202,11 @@ def test_doctor_stops_reporting_pending_after_migration(tmp_path, monkeypatch):
     result = runner.invoke(app, ["plan", "import", str(task_md)])
     assert result.exit_code == 0, result.output
 
-    assert _raw_version(store) == 5
+    assert _raw_version(store) == STATE_SCHEMA_VERSION
     assert (store.task_dir(STATE) / "state.v4.json.bak").read_bytes() == before_bytes
     doctor = runner.invoke(app, ["doctor"])
     assert doctor.exit_code == 0, doctor.output
-    assert "migration to 5 pending" not in doctor.output
+    assert f"migration to {STATE_SCHEMA_VERSION} pending" not in doctor.output
     assert "DR-0001: policy valid" in doctor.output
 
 
@@ -239,7 +240,7 @@ def test_migrated_legacy_snapshot_task_keeps_its_frozen_policy(tmp_path):
     # real mutating write -> schema 5, digest still absent, no provenance path
     engine.import_plan(STATE, make_packet(task_id=STATE))
     migrated = store.read_task(STATE)
-    assert migrated.state_schema_version == 5
+    assert migrated.state_schema_version == STATE_SCHEMA_VERSION
     assert migrated.policy_config_sha256 == ""
     assert migrated.policy_snapshot_path == ""
 

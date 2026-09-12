@@ -249,6 +249,38 @@ class ArtifactStore:
             path,
             json.dumps(upgraded.model_dump(mode="json"), indent=2, ensure_ascii=False),
         )
+        self._update_index(task)
+        return None
+
+    def write_task_with_digest(self, task: TaskRun) -> str:
+        """Like :meth:`write_task` but returns the SHA-256 of the written bytes.
+
+        The digest is computed from the exact byte string handed to the
+        filesystem, so it is the identity of the persisted document *without*
+        reading it back (no race, no second write).  Used by the v0.2-C
+        COMPLETION_READY milestone so a replay can prove that nothing edited
+        ``state.json`` afterwards.
+        """
+        path = self.state_path(task.task_id)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        for sub in (
+            "implementation",
+            "reviews",
+            "logs",
+            "final",
+            "baseline",
+            "policy",
+        ):
+            (path.parent / sub).mkdir(parents=True, exist_ok=True)
+        upgraded = self._prepare_state_write(path, task)
+        data = json.dumps(
+            upgraded.model_dump(mode="json"), indent=2, ensure_ascii=False
+        ).encode("utf-8")
+        _atomic_write_bytes(path, data)
+        self._update_index(task)
+        return hashlib.sha256(data).hexdigest()
+
+    def _update_index(self, task: TaskRun) -> None:
         index = self._read_index()
         index.setdefault("tasks", {})[task.task_id] = {
             "title": task.title,

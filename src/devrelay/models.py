@@ -223,6 +223,27 @@ class ProviderExecutionResult(BaseModel):
     error: str | None = None
     report: str = ""
 
+    # v0.2-C structured runtime evidence (advisory; the engine persists it).
+    runtime_mode: str = "text"
+    structured_result: ImplementationResult | None = None
+    raw_result_sha256: str = ""
+    result_bytes_total: int = 0
+    staging_path: str = ""
+    events_summary: dict | None = None
+    runtime_warnings: list[str] = Field(default_factory=list)
+    argv: list[str] = Field(default_factory=list)
+    env_removed: list[str] = Field(default_factory=list)
+    capabilities: str = ""
+    result_error_code: str = ""
+    result_error: str = ""
+    rejected_path_claims: list[str] = Field(default_factory=list)
+    unknown_result_fields: list[str] = Field(default_factory=list)
+    session_id: str = ""
+    stdout_bytes_total: int = 0
+    stderr_bytes_total: int = 0
+    stdout_truncated: bool = False
+    stderr_truncated: bool = False
+
     @property
     def success(self) -> bool:
         return self.error is None and not self.timed_out and self.exit_code == 0
@@ -530,6 +551,111 @@ class RepoSnapshot(BaseModel):
     note: str = ""
 
 
+# Structured implementer result contract version (v0.2-C), distinct from
+# STATE_SCHEMA_VERSION below.
+IMPLEMENTATION_RESULT_SCHEMA_VERSION = 1
+
+
+class AttemptMilestone(str, Enum):
+    """Durable implementer lifecycle (v0.2-C).
+
+    "provider process finished" and "completion applied to pipeline state" are
+    different facts; the milestone records which one is durable.
+    """
+
+    IN_FLIGHT = "IN_FLIGHT"
+    PROCESS_EXITED = "PROCESS_EXITED"
+    WORKSPACE_OBSERVED = "WORKSPACE_OBSERVED"
+    GUARD_VERDICT_PERSISTED = "GUARD_VERDICT_PERSISTED"
+    RESULT_PERSISTED = "RESULT_PERSISTED"
+    COMPLETION_READY = "COMPLETION_READY"
+    COMPLETION_APPLIED = "COMPLETION_APPLIED"
+
+
+class WorkspaceIdentity(BaseModel):
+    """Authoritative workspace/guard identity recorded for one attempt."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    worktree_tree_sha: str = ""
+    delta_identity: str = ""
+    guard_identity: str = ""
+    head_sha: str | None = None
+    branch: str | None = None
+    index_tree_sha: str | None = None
+    changed_files: list[str] = Field(default_factory=list)
+    observed_at: str = Field(default_factory=utcnow_iso)
+
+
+class TestClaim(BaseModel):
+    """One test run *claimed* by the model (always advisory)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    command: str = ""
+    result: str = "NOT_RUN"          # PASS | FAIL | NOT_RUN
+    notes: str = ""
+
+
+class ImplementationResult(BaseModel):
+    """Structured implementer result (advisory evidence, schema version 1)."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    schema_version: int = IMPLEMENTATION_RESULT_SCHEMA_VERSION
+    status: str = "COMPLETE"         # COMPLETE | PARTIAL | BLOCKED | FAILED
+    summary: str = ""
+    changed_files: list[str] = Field(default_factory=list)
+    tests_run: list[TestClaim] = Field(default_factory=list)
+    unresolved_items: list[str] = Field(default_factory=list)
+    known_risks: list[str] = Field(default_factory=list)
+
+
+class AttemptRuntimeEvidence(BaseModel):
+    """Paths/hashes of the immutable runtime evidence for one attempt."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    runtime_mode: str = "text"       # structured | text
+    result_path: str = ""
+    result_sha256: str = ""
+    raw_result_sha256: str = ""
+    result_status: str = ""
+    result_schema_version: int | None = None
+    events_path: str = ""
+    events_sha256: str = ""
+    session_id: str = ""
+    model: str = ""
+    staging_file: str = ""
+    staging_removed: bool = False
+    warnings: list[str] = Field(default_factory=list)
+    implementation_reconciliation_path: str = ""
+    test_reconciliation_paths: list[str] = Field(default_factory=list)
+    control_plane_pre_sha256: str = ""
+    control_plane_post_sha256: str = ""
+    # SHA-256 of the exact state.json bytes written by the COMPLETION_READY
+    # write; any later external edit changes it and blocks replay.
+    state_sha256_at_ready: str = ""
+    control_plane_changes: int = 0
+    result_claimed: bool = False
+
+
+class ControlPlaneDifference(BaseModel):
+    """One control-plane change (metadata only; never raw content)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    rel_path: str
+    change: str
+    kind_before: str | None = None
+    kind_after: str | None = None
+    size_before: int | None = None
+    size_after: int | None = None
+    sha256_before: str | None = None
+    sha256_after: str | None = None
+    detail: str = ""
+
+
 class ProviderAttempt(BaseModel):
     """One persisted implement/fix execution attempt (audit evidence).
 
@@ -560,6 +686,16 @@ class ProviderAttempt(BaseModel):
     # Durable call identities that belong to this attempt (v0.2-A remediation),
     # so attempt -> call -> phase -> budget is traceable without guessing.
     call_ids: list[str] = Field(default_factory=list)
+
+    # v0.2-C: durable milestones, replay identity and runtime evidence.
+    milestone: AttemptMilestone = AttemptMilestone.IN_FLIGHT
+    workspace_identity: WorkspaceIdentity | None = None
+    completion_ready: bool = False
+    completion_applied: bool = False
+    applied_at: str | None = None
+    applied_state: str | None = None
+    runtime: AttemptRuntimeEvidence | None = None
+    control_plane_violation: bool = False
 
 
 class BaselineUntrackedEntry(BaseModel):
@@ -637,9 +773,13 @@ class TaskDelta(BaseModel):
         return bool(self.changed_files)
 
 
-# State schema versions (v0.2-B).
-STATE_SCHEMA_VERSION = 5
-MAX_SUPPORTED_STATE_SCHEMA = 5
+# State schema versions (v0.2-C).
+STATE_SCHEMA_VERSION = 6
+MAX_SUPPORTED_STATE_SCHEMA = 6
+
+# Structured implementer result contract version (distinct from the state
+# schema version above).
+IMPLEMENTATION_RESULT_SCHEMA_VERSION = 1
 SNAPSHOT_ERA_SCHEMA = 5
 
 

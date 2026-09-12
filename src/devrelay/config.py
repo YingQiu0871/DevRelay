@@ -94,6 +94,10 @@ class CodexConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     executable: str = "codex"
+    # Fixed launcher prefix for wrapper scripts / alternative entry points
+    # (e.g. ["python", "wrapper.py"]).  Never a runtime-control surface: the
+    # same argument-ownership validation applies to it.
+    launcher_args: list[str] = Field(default_factory=list)
     # Defaults verified against codex-cli 0.150.1 `codex exec --help`:
     # prompts travel on stdin (canonical); --full-auto is NOT offered by this
     # CLI version, so the shipped default uses the documented sandbox flag.
@@ -102,6 +106,20 @@ class CodexConfig(BaseModel):
     )
     prompt_mode: Literal["stdin", "argv"] = "stdin"
     timeout_seconds: float = Field(default=1800.0, gt=0)
+    # v0.2-C: structured Codex runtime is the default; `text` is the explicit,
+    # visible compatibility opt-out (never an automatic downgrade).
+    runtime_mode: Literal["structured", "text"] = "structured"
+    # Bounded reads/captures for the structured runtime (bytes).
+    max_result_bytes: int = Field(default=262_144, ge=1_024, le=8_388_608)
+    max_capture_bytes: int = Field(default=262_144, ge=1_024, le=8_388_608)
+
+    @model_validator(mode="after")
+    def _validate_argument_ownership(self) -> "CodexConfig":
+        # Imported lazily: codex_runtime imports models, not config.
+        from devrelay.providers.codex_runtime import validate_user_args
+
+        validate_user_args(self.args, launcher_args=self.launcher_args)
+        return self
 
 
 class DevRelayConfig(BaseModel):
