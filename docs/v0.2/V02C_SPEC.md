@@ -10,7 +10,13 @@ DevRelay wraps it with a stronger runtime contract:
 
 * **structured result contract** — `--output-schema` + `--output-last-message`
   produce a validated `ImplementationResult` (`schema_version = 1`);
-  `--json` events are observational only and never required;
+  `--json` events are observational only and never required. The schema sent via
+  `--output-schema` is a **strict** transport contract (every object closed with
+  `additionalProperties: false`, every declared field required, `schema_version`
+  pinned to `1`): the real Structured Outputs endpoint rejects anything else
+  (`invalid_json_schema`), and a strict transport schema does not weaken the
+  defensive local parser (caps, status/version enforcement, claim-path
+  rejection and unknown-field recording are unchanged);
 * **transient raw output** — the model writes into
   `.devrelay/tmp/runtime/<attempt-id>/last-message.raw.json`; the parent reads it
   with a hard cap, records `raw_result_sha256`, validates, sanitizes, writes the

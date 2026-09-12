@@ -543,6 +543,51 @@ from pathlib import Path
 HELP = """%s"""
 
 
+def strict_schema_problems(path):
+    """Local strictness lint mirroring the real structured-output endpoint."""
+    problems = []
+    try:
+        schema = json.loads(Path(path).read_text(encoding="utf-8"))
+    except Exception as exc:
+        return ["schema unreadable: " + str(exc)]
+
+    def walk(node, where):
+        if isinstance(node, dict):
+            is_object = node.get("type") == "object" or "properties" in node
+            if is_object:
+                if node.get("additionalProperties") is not False:
+                    problems.append(where + ": additionalProperties must be false")
+                props = node.get("properties")
+                required = node.get("required")
+                if not isinstance(props, dict) or not props:
+                    problems.append(where + ": missing properties")
+                elif not isinstance(required, list):
+                    problems.append(where + ": missing required")
+                else:
+                    if len(set(required)) != len(required):
+                        problems.append(where + ": duplicate required keys")
+                    if set(required) != set(props):
+                        problems.append(where + ": required must list every property")
+                    undeclared = [k for k in required if k not in props]
+                    if undeclared:
+                        problems.append(where + ": required keys not declared")
+                if where == "root" and isinstance(props, dict):
+                    version = props.get("schema_version")
+                    if isinstance(version, dict):
+                        allowed = version.get("enum") or []
+                        if version.get("const", 1) != 1 or list(allowed) != [1]:
+                            problems.append("root: schema_version must be constrained to 1")
+            for key, value in node.items():
+                if key in ("properties", "items", "$defs"):
+                    walk(value, where + "." + key)
+        elif isinstance(node, list):
+            for item in node:
+                walk(item, where + "[]")
+
+    walk(schema, "root")
+    return problems
+
+
 def main() -> int:
     args = sys.argv[1:]
     config_path = Path(__file__).with_name("stub-config.json")
@@ -600,6 +645,18 @@ def main() -> int:
             out = token.split("=", 1)[1]
     if cfg.get("extra_staging") and out:
         Path(out).parent.joinpath(cfg["extra_staging"]).write_text("x", encoding="utf-8")
+    schema_path = None
+    for index, token in enumerate(args):
+        if token == "--output-schema" and index + 1 < len(args):
+            schema_path = args[index + 1]
+        elif token.startswith("--output-schema="):
+            schema_path = token.split("=", 1)[1]
+    if schema_path and cfg.get("strict_schema", True):
+        problems = strict_schema_problems(schema_path)
+        if problems:
+            print(json.dumps({"type": "error", "message": "invalid_json_schema: "
+                              + "; ".join(problems)}))
+            return 3
     if out and cfg.get("result", "valid") != "missing":
         payload = cfg.get("result_payload")
         if payload is None:

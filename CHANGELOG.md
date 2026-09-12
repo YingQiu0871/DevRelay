@@ -212,6 +212,32 @@ network).
   roots, staging paths and claimed file names survive the whole structured
   runtime (manifest, reconciliation, evidence).
 
+### Fixed (real-smoke structured schema remediation)
+
+- **The transport schema was rejected by the real Structured Outputs endpoint.**
+  The one approved real Codex smoke (call `DR-0001-C0001` against `301e891`)
+  authenticated via ChatGPT, ran the real structured argv, passed containment and
+  a clean control-plane check, and was then refused with HTTP 400
+  `invalid_json_schema`: *"'additionalProperties' is required to be supplied and
+  to be false"*. `result_json_schema()` emitted a tolerant schema
+  (`additionalProperties: true`, only three required root fields), which the
+  offline stub accepted, so no test could see it. The transport schema is now
+  strict: every object node (root and `tests_run` items) sets
+  `additionalProperties: false`, `required` lists exactly the declared
+  properties, `schema_version` is `{"type": "integer", "enum": [1]}`, and
+  optionality is expressed only by deterministic empty values (`[]` / `""`).
+  The local post-parse model is unchanged and stays defensive (caps,
+  `schema_version`/status enforcement, claim-path rejection, unknown-field
+  recording) - a strict transport contract is not a weaker trust model.
+- **The offline Codex stub is now as strict as the real endpoint.** Before
+  writing a structured result it lints the supplied `--output-schema`
+  recursively (closed objects, fully required objects, declared required keys,
+  `schema_version` pinned to 1) and refuses (`invalid_json_schema`, exit 3)
+  otherwise, so the pre-fix schema now fails offline too. Regression coverage:
+  `tests/test_v02c_schema_strictness.py` (recursive strictness lint, nested item
+  contract, no risky constructs, pre-fix schema rejected end-to-end with exactly
+  one charged call, strict-schema happy path, parser caps/security intact).
+
 ## Unreleased - v0.2-A candidate (audit remediation, closure audit pending)
 
 Automatic review loop with an enforced execution budget, plus the remediation of
