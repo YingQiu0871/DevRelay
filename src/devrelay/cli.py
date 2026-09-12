@@ -409,7 +409,11 @@ def doctor(
 
     typer.echo(f"  Runtime mode: {wiring.codex.runtime_mode}")
     if ok:
-        capabilities = detect_capabilities(codex.runner, wiring.codex.executable)
+        capabilities = detect_capabilities(
+            codex.runner,
+            wiring.codex.executable,
+            getattr(wiring.codex, "launcher_args", ()) or (),
+        )
         typer.echo(f"  {capabilities.describe()}")
         if wiring.codex.runtime_mode == "structured" and not capabilities.structured_supported:
             problems.append("structured runtime unsupported by the installed CLI")

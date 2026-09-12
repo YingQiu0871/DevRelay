@@ -235,11 +235,18 @@ def parse_help_flags(help_text: str) -> frozenset[str]:
     return frozenset(flags)
 
 
-def detect_capabilities(runner, executable: str) -> CodexCapabilities:
-    """Probe the installed CLI via `--version` and `exec --help` only."""
+def detect_capabilities(
+    runner, executable: str, launcher_args: Sequence[str] = ()
+) -> CodexCapabilities:
+    """Probe the installed CLI via `--version` and `exec --help` only.
+
+    A configured launcher prefix (wrapper script) is part of the executable
+    surface, so every probe runs through it exactly like the real invocation.
+    """
+    prefix = [executable, *launcher_args]
     if not runner.which(executable):
         return CodexCapabilities(present=False, diagnostic="executable not found")
-    version = runner.run([executable, "--version"], timeout_seconds=30)
+    version = runner.run([*prefix, "--version"], timeout_seconds=30)
     text = (version.stdout or "").strip()
     if not version.success:
         return CodexCapabilities(
@@ -249,7 +256,7 @@ def detect_capabilities(runner, executable: str) -> CodexCapabilities:
                 + ((version.stderr or version.error or "").strip()[:200])
             ),
         )
-    help_result = runner.run([executable, "exec", "--help"], timeout_seconds=60)
+    help_result = runner.run([*prefix, "exec", "--help"], timeout_seconds=60)
     flags = parse_help_flags(help_result.stdout or "") if help_result.success else frozenset()
     return CodexCapabilities(present=True, version=text, flags=flags)
 
@@ -273,11 +280,21 @@ def _config_key(token: str) -> str:
 
 
 def validate_user_args(args: Sequence[str], *, launcher_args: Sequence[str] = ()) -> None:
-    """Reject user args/launcher tokens that could weaken the runtime."""
-    tokens = list(launcher_args) + list(args)
-    stripped = [token for token in tokens if token not in ("", None)]
-    if stripped == LEGACY_DEFAULT_ARGS:
-        return  # the shipped default is recognised and normalised away
+    """Reject user args/launcher tokens that could weaken the runtime.
+
+    The shipped default ``args`` (``exec --sandbox workspace-write``) is
+    recognised and normalised away, so existing configurations keep working even
+    when a launcher prefix (wrapper script) is configured.  Launcher tokens get
+    no such exemption: they are a fixed prefix, never a runtime-control surface.
+    """
+    if list(launcher_args):
+        _scan_for_forbidden(list(launcher_args))
+    if list(args) == LEGACY_DEFAULT_ARGS:
+        return
+    _scan_for_forbidden(list(args))
+
+
+def _scan_for_forbidden(tokens: Sequence[str]) -> None:
     for index, token in enumerate(tokens):
         name = token.split("=", 1)[0].lower()
         if name in ("-c", "--config"):

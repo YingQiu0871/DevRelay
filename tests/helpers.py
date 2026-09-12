@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import json
 import os
 import subprocess
+import sys
 from pathlib import Path
 from typing import Optional
 
@@ -497,3 +499,127 @@ def build_engine(
 
 
 from devrelay.providers.manual import ManualReviewer as ManualReviewerProxy  # noqa: E402
+
+
+# ---------------------------------------------------------------------------
+# v0.2-C: fake Codex CLI (offline structured-runtime harness)
+# ---------------------------------------------------------------------------
+CODEX_STUB_HELP = """Run Codex non-interactively
+
+Usage: codex exec [OPTIONS] [PROMPT]
+
+Options:
+  -s, --sandbox <SANDBOX_MODE>      [possible values: read-only, workspace-write, danger-full-access]
+      --ignore-user-config          Do not load $CODEX_HOME/config.toml; auth still uses CODEX_HOME
+      --ignore-rules                Do not load user or project execpolicy `.rules` files
+      --output-schema <FILE>        Path to a JSON Schema file describing the model's final response shape
+  -o, --output-last-message <FILE>  Specifies file where the last message from the agent should be written
+      --json                        Print events to stdout as JSONL
+      --color <COLOR>               [possible values: always, never, auto]
+  -h, --help                        Print help
+"""
+
+CODEX_STUB_SOURCE = '''"""Offline `codex` stub for DevRelay v0.2-C tests (never calls a model)."""
+import json
+import os
+import sys
+import time
+from pathlib import Path
+
+HELP = """%s"""
+
+
+def main() -> int:
+    args = sys.argv[1:]
+    config_path = Path(__file__).with_name("stub-config.json")
+    cfg = json.loads(config_path.read_text(encoding="utf-8")) if config_path.is_file() else {}
+    if "--version" in args:
+        print("codex-cli 9.9.9-stub")
+        return 0
+    if "exec" in args and ("--help" in args or "-h" in args):
+        print(HELP)
+        return 0
+    prompt = ""
+    if not sys.stdin.isatty():
+        try:
+            prompt = sys.stdin.buffer.read().decode("utf-8", errors="replace")
+        except Exception:
+            prompt = ""
+    if cfg.get("prompt_capture"):
+        Path(cfg["prompt_capture"]).write_text(prompt, encoding="utf-8", errors="replace")
+    if cfg.get("env_capture"):
+        record = {name: bool(os.environ.get(name)) for name in cfg.get("env_names", [])}
+        Path(cfg["env_capture"]).write_text(json.dumps(record), encoding="utf-8")
+    if cfg.get("argv_capture"):
+        Path(cfg["argv_capture"]).write_text(json.dumps(args), encoding="utf-8")
+    for op, target, *rest in cfg.get("tamper", []) or []:
+        path = Path(target)
+        if op == "write":
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(rest[0] if rest else "", encoding="utf-8")
+        elif op == "delete" and path.exists():
+            path.unlink()
+    if cfg.get("sleep"):
+        time.sleep(float(cfg["sleep"]))
+    exit_code = int(cfg.get("exit_code", 0) or 0)
+    out = None
+    for index, token in enumerate(args):
+        if token in ("-o", "--output-last-message") and index + 1 < len(args):
+            out = args[index + 1]
+        elif token.startswith("--output-last-message="):
+            out = token.split("=", 1)[1]
+    if cfg.get("extra_staging") and out:
+        Path(out).parent.joinpath(cfg["extra_staging"]).write_text("x", encoding="utf-8")
+    if out and cfg.get("result", "valid") != "missing":
+        payload = cfg.get("result_payload")
+        if payload is None:
+            payload = {
+                "schema_version": 1,
+                "status": cfg.get("status", "COMPLETE"),
+                "summary": cfg.get("summary", "stub implementation"),
+                "changed_files": cfg.get("changed_files", ["app.py"]),
+                "tests_run": cfg.get("tests_run", [{"command": "python -m pytest -q", "result": "PASS"}]),
+                "unresolved_items": cfg.get("unresolved_items", []),
+                "known_risks": cfg.get("known_risks", []),
+            }
+        raw = payload if isinstance(payload, str) else json.dumps(payload)
+        Path(out).parent.mkdir(parents=True, exist_ok=True)
+        Path(out).write_text(raw, encoding="utf-8")
+    for line in cfg.get("events", ['{"type":"thread.started","thread_id":"stub-session-1"}', '{"type":"turn.completed","model":"stub-model"}']):
+        print(line)
+    return exit_code
+
+
+if __name__ == "__main__":
+    sys.exit(main())
+''' % CODEX_STUB_HELP
+
+
+def write_codex_stub(directory: Path, **config) -> Path:
+    """Write an offline Codex stub plus its behaviour sidecar.
+
+    Returns the stub path; use it as ``CodexConfig(executable=sys.executable,
+    launcher_args=[str(stub)], runtime_mode="structured")``.
+    """
+    directory = Path(directory)
+    directory.mkdir(parents=True, exist_ok=True)
+    stub = directory / "codex_stub.py"
+    stub.write_text(CODEX_STUB_SOURCE, encoding="utf-8")
+    (directory / "stub-config.json").write_text(
+        json.dumps(config, indent=2), encoding="utf-8"
+    )
+    return stub
+
+
+def structured_codex_config(stub: Path, **overrides):
+    """CodexConfig wired to the offline stub in structured mode."""
+    from devrelay.config import CodexConfig
+
+    payload = {
+        "executable": sys.executable,
+        "launcher_args": [str(stub)],
+        "args": ["exec", "--sandbox", "workspace-write"],
+        "runtime_mode": "structured",
+    }
+    payload.update(overrides)
+    return CodexConfig(**payload)

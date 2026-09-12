@@ -211,7 +211,11 @@ class CodexCLIProvider(ImplementerProvider):
         control-plane PRE manifest is captured, so nothing DevRelay writes can
         later look like a child mutation.
         """
-        capabilities = detect_capabilities(self.runner, self.config.executable)
+        capabilities = detect_capabilities(
+            self.runner,
+            self.config.executable,
+            getattr(self.config, "launcher_args", ()) or (),
+        )
         if not capabilities.present:
             raise CodexRuntimeUnsupportedError(
                 f"Codex CLI unavailable: {capabilities.diagnostic}"

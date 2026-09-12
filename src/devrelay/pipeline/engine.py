@@ -9,6 +9,7 @@ the :mod:`devrelay.workspace.runner` module (shell=False everywhere).
 
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 import shlex
@@ -962,6 +963,10 @@ class DevRelayEngine:
             }:
                 break
             again = self._advance_once(task, events)
+            if self._control_plane_hold(task_id) is not None:
+                # A control-plane violation was detected: the persisted state may
+                # be the tampered file, so never parse it again in this run.
+                break
             current = self._load(task_id).state
             if not again:
                 break
@@ -970,6 +975,16 @@ class DevRelayEngine:
         if steps >= max_steps:  # pragma: no cover - hard guard
             events.append("[engine] safety stop: too many automatic steps")
         if not events:
+            hold = self._control_plane_hold(task_id)
+            if hold is not None:
+                # The task state may itself be the tampered file: never parse it
+                # just to print a status line after a control-plane violation.
+                events.append(
+                    f"[{task_id}] CONTROL-PLANE HOLD ({hold.get('code')}): "
+                    "protected state changed during a Codex run; see "
+                    "'devrelay status' and the violation report"
+                )
+                return events
             final = self._load(task_id)
             if final.state in (PipelineState.BLOCKED, PipelineState.FAILED):
                 events.append(
@@ -1071,6 +1086,16 @@ class DevRelayEngine:
 
     def _control_plane_allowed_files(self) -> tuple[str, ...]:
         return ("last-message.raw.json",)
+
+    def _control_plane_snapshot(
+        self, task_id: str, *, attempt_id: str, staging_path: str
+    ) -> ControlPlaneManifest:
+        """Trusted in-memory PRE identity (never re-read from disk as authority)."""
+        return build_manifest(
+            self.store.devrelay_dir,
+            staging_dir=Path(staging_path).parent,
+            allowed_files=self._control_plane_allowed_files(),
+        )
 
     def _control_plane_check_after_run(
         self,
