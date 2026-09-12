@@ -14,6 +14,7 @@ raises :class:`BaselineCorruptError` (never a silent guess).
 
 from __future__ import annotations
 
+import hashlib
 import json
 from pathlib import Path
 from typing import Optional
@@ -23,6 +24,36 @@ from devrelay.errors import BaselineCorruptError
 from devrelay.models import BaselineUntrackedEntry, WorkspaceBaseline
 
 MANIFEST_VERSION = 1
+
+# v0.2-C: untracked blob bytes are verified against their declared SHA-256
+# before use.  ``load()`` verifies eagerly while the total stays inside this
+# budget; larger baselines are verified per blob on read instead, so a tampered
+# blob can never be consumed without failing closed.
+_BLOB_VERIFY_BUDGET = 64 * 1024 * 1024
+
+
+def _verify_blob_bytes(path: Path, entry: BaselineUntrackedEntry) -> None:
+    """Recompute the blob hash; raise BaselineCorruptError on mismatch."""
+    if not entry.sha256:
+        return
+    digest = hashlib.sha256()
+    try:
+        with open(path, "rb") as handle:
+            while True:
+                chunk = handle.read(65536)
+                if not chunk:
+                    break
+                digest.update(chunk)
+    except OSError as exc:
+        raise BaselineCorruptError(
+            f"cannot verify stored baseline file {entry.storage_name!r}: {exc}"
+        ) from exc
+    if digest.hexdigest() != entry.sha256:
+        raise BaselineCorruptError(
+            f"stored baseline file for {entry.rel_path!r} does not match its "
+            "recorded SHA-256 (baseline integrity check failed). DevRelay does "
+            "not guess - recreate the task so a fresh baseline is captured."
+        )
 
 
 class BaselineStore:
@@ -98,6 +129,7 @@ class BaselineStore:
             patch_bytes = self.patch_path(task_id).read_bytes()
             if not isinstance(manifest, dict) or manifest.get("manifest_version") != MANIFEST_VERSION:
                 raise ValueError("manifest_version mismatch")
+            verify_budget = 0
             expected = {
                 entry.rel_path: entry for entry in baseline.untracked_entries
             }
@@ -115,6 +147,9 @@ class BaselineStore:
                     raise ValueError(
                         f"stored blob size mismatch for {entry.rel_path!r}"
                     )
+                if verify_budget + entry.size <= _BLOB_VERIFY_BUDGET:
+                    _verify_blob_bytes(stored, entry)
+                    verify_budget += entry.size
         except BaselineCorruptError:
             raise
         except Exception as exc:  # JSON/parse/missing file/OSError...
@@ -128,11 +163,14 @@ class BaselineStore:
     def read_untracked_file(self, task_id: str, entry: BaselineUntrackedEntry) -> bytes:
         path = self.files_dir(task_id) / entry.storage_name
         try:
-            return path.read_bytes()
+            data = path.read_bytes()
         except OSError as exc:
             raise BaselineCorruptError(
                 f"cannot read stored baseline file {entry.storage_name!r}: {exc}"
             ) from exc
+        # v0.2-C: never hand out blob bytes that do not match the declared hash.
+        _verify_blob_bytes(path, entry)
+        return data
 
     def validate(self, task_id: str) -> WorkspaceBaseline:
         baseline, _ = self.load(task_id)
