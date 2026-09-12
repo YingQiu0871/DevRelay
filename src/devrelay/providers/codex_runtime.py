@@ -449,8 +449,6 @@ def result_json_schema() -> dict[str, Any]:
     and unknown-field recording are unchanged.
     """
     return {
-        "$schema": "https://json-schema.org/draft/2020-12/schema",
-        "title": "DevRelay ImplementationResult",
         "type": "object",
         "additionalProperties": False,
         "required": [

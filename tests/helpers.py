@@ -544,7 +544,12 @@ HELP = """%s"""
 
 
 def strict_schema_problems(path):
-    """Local strictness lint mirroring the real structured-output endpoint."""
+    """Local strictness lint mirroring the real structured-output endpoint.
+
+    Mirrors the *transport* contract: an exact schema-keyword allowlist, closed
+    objects and fully required objects.  Property *names* are not keywords.
+    """
+    allowed = ("type", "properties", "required", "additionalProperties", "items", "enum")
     problems = []
     try:
         schema = json.loads(Path(path).read_text(encoding="utf-8"))
@@ -553,6 +558,9 @@ def strict_schema_problems(path):
 
     def walk(node, where):
         if isinstance(node, dict):
+            for key in node:
+                if key not in allowed:
+                    problems.append(where + ": unsupported schema keyword " + str(key))
             is_object = node.get("type") == "object" or "properties" in node
             if is_object:
                 if node.get("additionalProperties") is not False:
@@ -568,26 +576,25 @@ def strict_schema_problems(path):
                         problems.append(where + ": duplicate required keys")
                     if set(required) != set(props):
                         problems.append(where + ": required must list every property")
-                    undeclared = [k for k in required if k not in props]
-                    if undeclared:
+                    if [k for k in required if k not in props]:
                         problems.append(where + ": required keys not declared")
                 if where == "root" and isinstance(props, dict):
                     version = props.get("schema_version")
                     if isinstance(version, dict):
-                        allowed = version.get("enum") or []
-                        if version.get("const", 1) != 1 or list(allowed) != [1]:
-                            problems.append("root: schema_version must be constrained to 1")
+                        if version.get("type") != "integer" or list(version.get("enum") or []) != [1]:
+                            problems.append("root: schema_version must be integer enum [1]")
             for key, value in node.items():
-                if key in ("properties", "items", "$defs"):
-                    walk(value, where + "." + key)
+                if key == "properties" and isinstance(value, dict):
+                    for name, sub in value.items():
+                        walk(sub, where + ".properties." + str(name))
+                elif key == "items":
+                    walk(value, where + ".items")
         elif isinstance(node, list):
-            for item in node:
-                walk(item, where + "[]")
+            for index, item in enumerate(node):
+                walk(item, where + "[" + str(index) + "]")
 
     walk(schema, "root")
     return problems
-
-
 def main() -> int:
     args = sys.argv[1:]
     config_path = Path(__file__).with_name("stub-config.json")

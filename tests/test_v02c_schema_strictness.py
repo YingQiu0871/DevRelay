@@ -134,26 +134,58 @@ def test_root_and_nested_contract_shape():
     assert set(item["properties"]["result"]["enum"]) == {"PASS", "FAIL", "NOT_RUN"}
 
 
-def test_no_free_form_or_risky_constructs_remain():
+ALLOWED_KEYWORDS = {
+    "type",
+    "properties",
+    "required",
+    "additionalProperties",
+    "items",
+    "enum",
+}
+
+
+def _schema_keywords(schema, where="root"):
+    """Yield (where, key) for every SCHEMA keyword, never for property names."""
+    if isinstance(schema, dict):
+        for key, value in schema.items():
+            yield where, key
+            if key == "properties" and isinstance(value, dict):
+                for name, sub in value.items():
+                    yield from _schema_keywords(sub, f"{where}.properties.{name}")
+            elif key == "items":
+                yield from _schema_keywords(value, f"{where}.items")
+    elif isinstance(schema, list):
+        for index, item in enumerate(schema):
+            yield from _schema_keywords(item, f"{where}[{index}]")
+
+
+def test_schema_contains_no_annotations():
+    """A: the transport schema carries no $schema/title (or any annotation)."""
     schema = result_json_schema()
-    risky = {
-        "oneOf", "anyOf", "allOf", "not", "$ref", "patternProperties",
-        "unevaluatedProperties", "dependentSchemas", "dependentRequired",
-        "propertyNames", "default", "examples", "if", "then", "else",
+    assert "$schema" not in schema
+    assert "title" not in schema
+    assert not [key for _, key in _schema_keywords(schema) if key in ("$schema", "title")]
+
+
+def test_schema_uses_only_the_exact_allowed_keyword_set():
+    """B: every schema keyword is inside the approved v0.2-C set."""
+    schema = result_json_schema()
+    keywords = {key for _, key in _schema_keywords(schema)}
+    assert keywords == ALLOWED_KEYWORDS, sorted(keywords ^ ALLOWED_KEYWORDS)
+    # property names are not keywords and must not be reported as violations
+    assert all(
+        key in ALLOWED_KEYWORDS for _, key in _schema_keywords(schema)
+    )
+    assert set(schema["properties"]) == {
+        "schema_version",
+        "status",
+        "summary",
+        "changed_files",
+        "tests_run",
+        "unresolved_items",
+        "known_risks",
     }
-
-    def walk(node, where="root"):
-        if isinstance(node, dict):
-            hits = risky.intersection(node)
-            assert not hits, f"{where}: unsupported/risky keyword(s) {sorted(hits)}"
-            for key, value in node.items():
-                walk(value, f"{where}.{key}")
-        elif isinstance(node, list):
-            for index, item in enumerate(node):
-                walk(item, f"{where}[{index}]")
-
-    walk(schema)
-    # no unbounded arbitrary object: arrays are strings/objects, never "items": {}
+    # no unbounded arbitrary object: arrays are strings or the fixed closed object
     assert schema["properties"]["changed_files"]["items"] == {"type": "string"}
     assert schema["properties"]["tests_run"]["items"]["type"] == "object"
 
@@ -268,3 +300,41 @@ def test_parser_keeps_caps_and_security_after_the_schema_change():
     result, _, unknown = parse_result_bytes(_payload(extra_field="ignored"))
     assert unknown == ["extra_field"]  # recorded by name only, never applied
     assert not hasattr(result, "extra_field")
+
+
+def _annotation_payload(kind: str) -> dict:
+    schema = json.loads(json.dumps(result_json_schema()))
+    if kind == "title":
+        schema["title"] = "ImplementationResult"
+    elif kind == "$schema":
+        schema["$schema"] = "https://json-schema.org/draft/2020-12/schema"
+    elif kind == "nested-title":
+        schema["properties"]["tests_run"]["items"]["title"] = "TestRunEntry"
+    else:  # pragma: no cover - defensive
+        raise AssertionError(kind)
+    return schema
+
+
+def test_strict_stub_rejects_injected_annotations(tmp_path, monkeypatch):
+    """C/D: the local strict validator refuses any non-allowlisted keyword."""
+    import devrelay.providers.codex_cli as codex_cli
+
+    for kind in ("title", "$schema", "nested-title"):
+        base = tmp_path / kind.replace("$", "dollar")
+        stub = write_codex_stub(base / "tools")
+        root, store, engine = _engine(base, stub)
+        monkeypatch.setattr(
+            codex_cli, "result_json_schema", lambda kind=kind: _annotation_payload(kind)
+        )
+        engine.continue_task(STATE)
+        task = store.read_task(STATE)
+        attempt = task.attempts[-1]
+        assert task.state.value == "FAILED", kind
+        assert task.blocked_code == "implementer_failed"
+        assert ProviderBudget.usage(task).implementer_calls == 1
+        assert attempt.completion_ready is False and attempt.completion_applied is False
+        stdout = (
+            store.logs_dir(STATE) / f"{attempt.attempt_id}.stdout.log"
+        ).read_text(encoding="utf-8")
+        assert "invalid_json_schema" in stdout, (kind, stdout[:200])
+        assert "unsupported schema keyword" in stdout, (kind, stdout[:200])
