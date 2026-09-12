@@ -425,6 +425,19 @@ class FakeBaselineService:
         self.post_snapshots += 1
         return RepoSnapshot(head_sha="abc123", branch="main", index_tree_sha="i" * 40)
 
+    def validate_baseline(self, task_id: str) -> WorkspaceBaseline:
+        """In-memory double: nothing to validate, always succeeds."""
+        return self.capture(task_id)
+
+    def task_delta(self, task) -> TaskDelta:
+        return TaskDelta(
+            text_diff=self._delta_text,
+            changed_files=["src/x.py"],
+            from_tree="a" * 40,
+            to_tree="b" * 40,
+            method="trees",
+        )
+
     def check_policy(self, before, after) -> list:
         if self._violation_queues:
             return self._violation_queues.pop(0)

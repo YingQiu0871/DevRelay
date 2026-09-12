@@ -1145,8 +1145,8 @@ class DevRelayEngine:
             record.runtime = evidence.model_copy(
                 update={
                     "runtime_mode": self._runtime_mode(),
-                    "control_plane_pre_sha256": pre_manifest.protected_sha256,
-                    "control_plane_post_sha256": post.protected_sha256,
+                    "control_plane_pre_sha256": pre_manifest.protected_sha256(),
+                    "control_plane_post_sha256": post.protected_sha256(),
                     "control_plane_changes": 0,
                 }
             )
@@ -1225,7 +1225,12 @@ class DevRelayEngine:
                 )
             except DevRelayError:
                 pass
-        state_sha = state_sha_at_pre or self._state_sha256(task_id)
+        # Trusted hash of the parent-written pre-run state: taken from the bytes
+        # captured before the spawn (never from the tampered file on disk).
+        if pre_state_bytes:
+            state_sha = hashlib.sha256(pre_state_bytes).hexdigest()
+        else:
+            state_sha = state_sha_at_pre or self._state_sha256(task_id)
         try:
             self.store.write_control_plane_hold(
                 task_id,
@@ -1236,11 +1241,14 @@ class DevRelayEngine:
                     "code": "codex_control_plane_violation",
                     "created_at": utcnow_iso(),
                     "trust": "parent-post-mortem",
-                    "trusted_pre_manifest_sha256": pre_manifest.protected_sha256,
+                    "trusted_pre_manifest_sha256": self._manifest_identity(
+                    pre_manifest, task_id, attempt_id
+                ),
                     "trusted_state_sha256": state_sha,
                     "staging_dir": pre_manifest.staging_dir,
                     "allowed_staging_files": list(pre_manifest.allowed_files),
                     "diverging_paths": unexpected_manifest_paths(differences),
+                    "differences": [d.to_json() for d in differences],
                     "violation_report": self.store.rel_path(report_path),
                     "recovery": (
                         "protected control state must match the trusted PRE "
@@ -1272,13 +1280,16 @@ class DevRelayEngine:
         and never retries automatically.
         """
         runtime_dir = self.store.task_runtime_dir(task.task_id, attempt_id)
-        evidence = AttemptRuntimeEvidence(
-            runtime_mode=result.runtime_mode,
-            raw_result_sha256=result.raw_result_sha256,
-            session_id=sanitize(result.session_id)[:200],
-            model="",
-            staging_file=result.staging_path,
-            warnings=[sanitize(w)[:300] for w in result.runtime_warnings[:20]],
+        # Start from what the control-plane POST check already recorded (pre/post
+        # manifest hashes) so later milestones never erase trusted evidence.
+        evidence = (record.runtime or AttemptRuntimeEvidence()).model_copy(
+            update={
+                "runtime_mode": result.runtime_mode,
+                "raw_result_sha256": result.raw_result_sha256,
+                "session_id": sanitize(result.session_id)[:200],
+                "staging_file": result.staging_path,
+                "warnings": [sanitize(w)[:300] for w in result.runtime_warnings[:20]],
+            }
         )
         events_path = runtime_dir / "events.jsonl"
         if result.stdout and result.runtime_mode == "structured":
@@ -1501,7 +1512,14 @@ class DevRelayEngine:
         record.workspace_identity = identity
         record.runtime = evidence
         current.attempt_in_flight = False
+        record.runtime = evidence
         digest = self._write_attempt(current, record, digest=True)
+        # The recomputable protected identity is taken *after* the READY write,
+        # because every parent write (including the workspace index) is part of
+        # the protected plane and must not make replay impossible.
+        ready_control_plane = self._protected_identity(
+            current.task_id, attempt_id=attempt_id
+        )
         completion_path = write_json_new(
             self.store.task_runtime_dir(current.task_id, attempt_id)
             / "completion.json",
@@ -1514,7 +1532,7 @@ class DevRelayEngine:
                 "workspace_identity": identity.model_dump(mode="json"),
                 "control_plane": {
                     "pre_sha256": evidence.control_plane_pre_sha256,
-                    "post_sha256": evidence.control_plane_post_sha256,
+                    "post_sha256": ready_control_plane,
                 },
                 "runtime": evidence.model_dump(mode="json"),
                 "summary_path": rel,
@@ -1670,12 +1688,8 @@ class DevRelayEngine:
         recorded_cp = (evidence.get("control_plane") or {}).get("post_sha256") or ""
         if recorded_cp:
             try:
-                manifest = build_manifest(
-                    self.store.devrelay_dir,
-                    staging_dir=Path(
-                        self.store.attempt_staging_dir(task.task_id, attempt_id)
-                    ),
-                    allowed_files=self._control_plane_allowed_files(),
+                identity_now = self._protected_identity(
+                    task.task_id, attempt_id=attempt_id
                 )
             except ControlPlaneError as exc:
                 self._block(task, "codex_control_plane_unavailable", str(exc))
@@ -1683,7 +1697,7 @@ class DevRelayEngine:
                     f"[{task.task_id}] BLOCKED: control plane unreadable during replay"
                 )
                 return False
-            if manifest.protected_sha256 != recorded_cp:
+            if identity_now != recorded_cp:
                 self._block(
                     task,
                     "replay_control_state_changed",
@@ -1726,21 +1740,59 @@ class DevRelayEngine:
         """Read a control-plane hold without trusting the workspace index."""
         return self.store.read_control_plane_hold(task_id)
 
-    def _protected_manifest_sha256(self, task_id: str, *, attempt_id: str) -> str:
-        """Protected-plane identity (excluding the staging subtree).
-
-        The staging directory is not evidence and is cleaned after a run, so the
-        replay/recovery identity covers only the protected control paths.
-        """
-        manifest = build_manifest(
+    def _protected_manifest(
+        self, task_id: str, *, attempt_id: str
+    ) -> ControlPlaneManifest:
+        return build_manifest(
             self.store.devrelay_dir,
             staging_dir=self.store.attempt_staging_dir(task_id, attempt_id),
             allowed_files=self._control_plane_allowed_files(),
         )
-        return manifest.protected_sha256
+
+    @staticmethod
+    def _manifest_identity(
+        manifest: ControlPlaneManifest, task_id: str, attempt_id: str
+    ) -> str:
+        """Recomputable protected identity over one manifest (single definition).
+
+        The hold's trusted value and the recovery/replay recomputation must use
+        exactly the same exclusions, otherwise recovery could never verify.
+        """
+        return manifest.protected_sha256(
+            exclude_paths=(
+                f"tasks/{task_id}/state.json",
+                f"tasks/{task_id}/CONTROL_PLANE_HOLD.json",
+            ),
+            exclude_prefixes=(
+                f"tasks/{task_id}/policy/control-state",
+                f"tasks/{task_id}/runtime/{attempt_id}",
+            ),
+        )
+
+    def _protected_identity(self, task_id: str, *, attempt_id: str) -> str:
+        """Recomputable protected-plane identity for replay/recovery.
+
+        Excludes exactly the parent-owned paths that legitimately change after
+        the identity is taken: the transient staging subtree, this task's
+        ``state.json`` (it has a dedicated hash check) and post-hoc violation
+        evidence (hold + control-state reports/copies).
+        """
+        manifest = self._protected_manifest(task_id, attempt_id=attempt_id)
+        return self._manifest_identity(manifest, task_id, attempt_id)
+
+    def _protected_manifest_sha256(self, task_id: str, *, attempt_id: str) -> str:
+        return self._protected_identity(task_id, attempt_id=attempt_id)
 
     def control_plane_recovery_divergences(self, task_id: str) -> list[str]:
-        """Paths that still differ from the trusted PRE identity (empty = clean)."""
+        """Flagged control paths that still differ from their trusted PRE values.
+
+        Verification is scoped to the paths the violation actually flagged (with
+        the trusted PRE hash/kind recorded in the hold at detection time).  That
+        is precise and robust: legitimate parent evidence written after the
+        violation (logs, ledgers, index, runtime evidence, hold/report) cannot
+        masquerade as an un-restored tamper, while a tampered path that has not
+        been restored is always reported.
+        """
         hold = self.store.read_control_plane_hold(task_id)
         if hold is None or hold.get("corrupt"):
             return ["corrupt or missing hold record"]
@@ -1748,18 +1800,30 @@ class DevRelayEngine:
         divergences: list[str] = []
         trusted_state = hold.get("trusted_state_sha256") or ""
         if trusted_state and self._state_sha256(task_id) != trusted_state:
-            divergences.append(f"{task_id}/state.json")
-        trusted_manifest = hold.get("trusted_pre_manifest_sha256") or ""
-        if trusted_manifest and attempt_id:
-            try:
-                current = self._protected_manifest_sha256(
-                    task_id, attempt_id=attempt_id
-                )
-            except ControlPlaneError:
-                divergences.append("(control plane unreadable)")
-            else:
-                if current != trusted_manifest:
-                    divergences.extend(hold.get("diverging_paths") or [])
+            divergences.append(f"tasks/{task_id}/state.json")
+        try:
+            current = self._protected_manifest(task_id, attempt_id=attempt_id)
+        except ControlPlaneError:
+            return sorted(set(divergences + ["(control plane unreadable)"]))
+        entries = current.by_path()
+        for difference in hold.get("differences") or []:
+            if not isinstance(difference, dict):
+                continue
+            rel_path = str(difference.get("rel_path") or "")
+            if not rel_path or rel_path == f"tasks/{task_id}/state.json":
+                continue  # covered by the dedicated state hash check
+            entry = entries.get(rel_path)
+            expected_sha = difference.get("sha256_before")
+            expected_kind = difference.get("kind_before")
+            if entry is None:
+                if expected_kind is not None:
+                    divergences.append(rel_path)
+                continue
+            if expected_kind is not None and entry.kind != expected_kind:
+                divergences.append(rel_path)
+                continue
+            if expected_sha and entry.sha256 != expected_sha:
+                divergences.append(rel_path)
         return sorted(set(divergences))
 
     def restore_state_from_pre(self, task_id: str, *, reason: str) -> bool:
@@ -1789,17 +1853,25 @@ class DevRelayEngine:
                 "the parent-held pre-run state copy does not match the trusted "
                 "hash (it may itself have been tampered with); refusing to restore"
             )
+        # The restored file must be *byte-identical* to the trusted pre-run
+        # state (that is exactly what the recovery verification compares), so
+        # the audit record is written next to the violation evidence instead of
+        # being appended to state.json.
         self.store.write_bytes(self.store.state_path(task_id), data)
-        task = self.store.read_task(task_id)
-        task.audit.append(
-            TransitionEvent(
-                from_state=task.state.value,
-                to_state=task.state.value,
-                note=f"control-plane recovery: restored pre-run state ({reason})",
-                by="human",
-            )
+        audit_path = write_json_new(
+            self.store.control_state_dir(task_id)
+            / f"restore-{utcnow_iso().replace(':', '-')}.json",
+            {
+                "task_id": task_id,
+                "attempt_id": attempt_id,
+                "restored_at": utcnow_iso(),
+                "by": "human",
+                "reason": sanitize(reason)[:1000],
+                "state_sha256": hashlib.sha256(data).hexdigest(),
+                "source": self.store.rel_path(source),
+            },
         )
-        self._persist(task)
+        _ = audit_path
         return True
 
     def _assert_no_control_plane_hold(self, task_id: str) -> None:
@@ -2024,7 +2096,7 @@ class DevRelayEngine:
             events.append(
                 f"[{task.task_id}] control-plane PRE captured in memory "
                 f"({len(control_plane_pre.entries)} entries, "
-                f"{control_plane_pre.protected_sha256[:12]})"
+                f"{control_plane_pre.protected_sha256()[:12]})"
             )
 
         # ---- provider execution (exceptions are captured, never guessed) ---
@@ -3319,6 +3391,29 @@ class DevRelayEngine:
                 )
             return self._load(task_id)
         task = self._load(task_id)
+        if hold is not None and task.state not in (
+            PipelineState.BLOCKED,
+            PipelineState.FAILED,
+        ):
+            # Control-plane recovery does not require a BLOCKED state: the hold
+            # *is* the blocker.  The human acknowledgement clears the uncertainty
+            # markers; the task keeps its state and may be continued again.
+            task.attempt_in_flight = False
+            task.review_call_in_flight = False
+            acknowledge_unfinished_attempts(task, note=reason.strip())
+            task.audit.append(
+                TransitionEvent(
+                    from_state=task.state.value,
+                    to_state=task.state.value,
+                    note=(
+                        "control-plane hold cleared after verification; "
+                        f"acknowledged: {reason.strip()}"
+                    ),
+                    by="human",
+                )
+            )
+            self._persist(task)
+            return task
         if task.state not in (PipelineState.BLOCKED, PipelineState.FAILED):
             # Integrity recovery does not require a blocked task: the classifier
             # state of the frozen policy is enough to authorize the explicit

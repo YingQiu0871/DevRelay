@@ -166,21 +166,40 @@ class ControlPlaneManifest:
             "entries": [entry.to_json() for entry in self.entries],
         }
 
-    @property
-    def protected_sha256(self) -> str:
-        """Identity over protected paths only (staging subtree excluded).
+    def protected_sha256(
+        self,
+        *,
+        exclude_paths: Iterable[str] = (),
+        exclude_prefixes: Iterable[str] = (),
+    ) -> str:
+        """Identity over protected paths, excluding declared parent-owned paths.
 
-        Used for replay/recovery: the staging directory is transient by design
-        and is cleaned after a run, so it must not participate in an identity
-        that has to be recomputable later.
+        Used for replay/recovery, so it must be recomputable later: the staging
+        subtree is transient, the task's own ``state.json`` has its own hash
+        check, and post-hoc violation evidence (hold, reports, pre-run copies)
+        is written *by the parent after* the identity was taken.
         """
-        staging = self.staging_dir.replace("\\", "/").rstrip("/")
-        prefix = staging + "/"
+        excluded_paths = {
+            path.replace("\\", "/").strip("/") for path in exclude_paths
+        }
+        excluded_prefixes = {
+            prefix.replace("\\", "/").strip("/") + "/"
+            for prefix in exclude_prefixes
+        }
+        staging = self.staging_dir.replace("\\", "/").strip("/")
+        excluded_prefixes.add(staging + "/")
+        excluded_paths.add(staging)
+
+        def is_excluded(rel_path: str) -> bool:
+            normalized = rel_path.replace("\\", "/").strip("/")
+            if normalized in excluded_paths:
+                return True
+            return any(normalized.startswith(prefix) for prefix in excluded_prefixes)
+
         entries = [
             entry.to_json()
             for entry in self.entries
-            if entry.rel_path.replace("\\", "/") != staging
-            and not entry.rel_path.replace("\\", "/").startswith(prefix)
+            if not is_excluded(entry.rel_path)
         ]
         payload = json.dumps(
             {"version": self.version, "entries": entries},
