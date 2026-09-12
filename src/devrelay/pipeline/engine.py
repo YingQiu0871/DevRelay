@@ -1121,6 +1121,7 @@ class DevRelayEngine:
         record: ProviderAttempt,
         events: list[str],
         pre_state_bytes: bytes = b"",
+        containment: dict | None = None,
     ) -> bool:
         """Compare POST against the in-memory PRE; True = violation handled.
 
@@ -1146,6 +1147,7 @@ class DevRelayEngine:
                 differences=[],
                 detail=f"control plane could not be verified after the run: {exc}",
                 state_sha_at_pre=state_sha,
+                containment=containment,
             )
             events.append(
                 f"[{task_id}] BLOCKED: control plane could not be verified "
@@ -1161,6 +1163,7 @@ class DevRelayEngine:
                     "control_plane_pre_sha256": pre_manifest.protected_sha256(),
                     "control_plane_post_sha256": post.protected_sha256(),
                     "control_plane_changes": 0,
+                    **(containment or {}),
                 }
             )
             self._write_attempt(self._load(task_id), record)
@@ -1175,6 +1178,7 @@ class DevRelayEngine:
             detail="unexpected control-plane mutation by the Codex child",
             state_sha_at_pre=state_sha,
             pre_state_bytes=pre_state_bytes,
+            containment=containment,
         )
         events.append(
             f"[{task_id}] BLOCKED: codex_control_plane_violation - "
@@ -1190,6 +1194,17 @@ class DevRelayEngine:
         except OSError:
             return ""
 
+    @staticmethod
+    def _containment_evidence(result: ProviderExecutionResult | None) -> dict:
+        """Containment facts of the *just finished* provider run (no content)."""
+        if result is None:
+            return {}
+        return {
+            "containment": result.containment,
+            "containment_all_dead": bool(result.containment_all_dead),
+            "containment_error": sanitize(result.containment_error)[:300],
+        }
+
     def _write_control_plane_violation(
         self,
         task_id: str,
@@ -1202,6 +1217,7 @@ class DevRelayEngine:
         detail: str,
         state_sha_at_pre: str = "",
         pre_state_bytes: bytes = b"",
+        containment: dict | None = None,
     ) -> None:
         """Persist metadata-only violation evidence plus the hold.
 
@@ -1222,6 +1238,10 @@ class DevRelayEngine:
             "allowed_staging_files": list(pre_manifest.allowed_files),
             "differences": [difference.to_json() for difference in differences],
             "hash_skipped_paths": list(pre_manifest.hash_skipped_paths),
+            # Containment facts (metadata only): proof that the POST comparison
+            # happened *after* every contained process was dead, so no descendant
+            # can still be running and mutate the control plane later.
+            "containment": dict(containment or {}),
         }
         report_path = write_json_new(
             self.store.control_state_dir(task_id) / f"{attempt_id}-violation.json",
@@ -1302,6 +1322,9 @@ class DevRelayEngine:
                 "session_id": sanitize(result.session_id)[:200],
                 "staging_file": result.staging_path,
                 "warnings": [sanitize(w)[:300] for w in result.runtime_warnings[:20]],
+                "containment": result.containment,
+                "containment_all_dead": result.containment_all_dead,
+                "containment_error": sanitize(result.containment_error)[:300],
             }
         )
         events_path = runtime_dir / "events.jsonl"
@@ -2143,6 +2166,7 @@ class DevRelayEngine:
                 record=record,
                 events=events,
                 pre_state_bytes=pre_state_bytes,
+                containment=self._containment_evidence(result),
             )
             if violation:
                 return False

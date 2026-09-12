@@ -25,6 +25,7 @@ from devrelay.errors import ProviderUnavailableError
 from devrelay.models import ProviderExecutionResult, TaskPacket
 from devrelay.providers.base import ImplementerContext, ImplementerProvider, RuntimePlan
 from devrelay.providers.codex_runtime import (
+    CodexContainmentUnsupportedError,
     CodexResultError,
     CodexRuntimeUnsupportedError,
     build_invocation,
@@ -37,6 +38,12 @@ from devrelay.providers.codex_runtime import (
     write_text_new,
 )
 from devrelay.redact import sanitize
+from devrelay.workspace.containment import (
+    ContainmentError,
+    ContainmentUnsupportedError,
+    containment_support,
+    create_containment,
+)
 from devrelay.workspace.runner import CommandRunner
 
 _FLAG_RE = re.compile(r"^\s+--([a-z0-9-]+)", re.IGNORECASE)
@@ -229,6 +236,15 @@ class CodexCLIProvider(ImplementerProvider):
                     + "; set codex.runtime_mode: text explicitly to use the "
                     "legacy text runtime (DevRelay never downgrades silently)"
                 )
+            supported, diagnostic = containment_support()
+            if not supported:
+                raise CodexContainmentUnsupportedError(
+                    "structured runtime requires strong descendant containment "
+                    f"so that nothing the Codex child spawns can outlive the "
+                    f"control-plane check, but {diagnostic}. Set "
+                    "codex.runtime_mode: text explicitly to use the legacy text "
+                    "runtime (DevRelay never downgrades silently)"
+                )
             repo_config = detect_repo_codex_config(Path(context.workspace_root))
             if repo_config:
                 raise CodexRuntimeUnsupportedError(
@@ -288,14 +304,35 @@ class CodexCLIProvider(ImplementerProvider):
         self, context: ImplementerContext, plan: RuntimePlan
     ) -> ProviderExecutionResult:
         """Spawn Codex with the DevRelay-owned argv and collect the result."""
-        result = self.runner.run(
-            plan.argv,
-            cwd=plan.workdir,
-            timeout_seconds=self.config.timeout_seconds,
-            input_text=plan.prompt,
-            env_remove=plan.env_remove,
-            max_capture_bytes=self.config.max_capture_bytes,
-        )
+        try:
+            containment = create_containment()
+        except (ContainmentUnsupportedError, ContainmentError) as exc:
+            # The pre-flight gate should have refused already; fail closed
+            # rather than spawning without containment.
+            return ProviderExecutionResult(
+                exit_code=None,
+                stderr=str(exc),
+                error=(
+                    "codex_process_containment_unsupported: strong descendant "
+                    f"containment is unavailable ({exc}); refusing to spawn"
+                ),
+                runtime_mode=plan.runtime_mode,
+            )
+        try:
+            result = self.runner.run(
+                plan.argv,
+                cwd=plan.workdir,
+                timeout_seconds=self.config.timeout_seconds,
+                input_text=plan.prompt,
+                env_remove=plan.env_remove,
+                max_capture_bytes=self.config.max_capture_bytes,
+                containment=containment,
+            )
+        finally:
+            try:
+                containment.close()
+            except Exception:  # pragma: no cover - defensive
+                pass
         stdout = result.stdout or ""
         stderr = result.stderr or ""
         observation = observe_events(stdout)
@@ -323,6 +360,9 @@ class CodexCLIProvider(ImplementerProvider):
             stderr_bytes_total=result.stderr_bytes_total,
             stdout_truncated=result.stdout_truncated,
             stderr_truncated=result.stderr_truncated,
+            containment=result.containment,
+            containment_all_dead=result.containment_all_dead,
+            containment_error=result.containment_error,
         )
         if result.timed_out or result.error or result.exit_code is None:
             return outcome

@@ -177,6 +177,10 @@ class CommandResult(BaseModel):
     stderr_bytes_total: int = 0
     stdout_truncated: bool = False
     stderr_truncated: bool = False
+    # Strong process-containment evidence (structured runtime only).
+    containment: str = ""
+    containment_all_dead: bool = False
+    containment_error: str = ""
 
     @property
     def success(self) -> bool:
@@ -202,6 +206,9 @@ class BinaryCommandResult(BaseModel):
     stderr_bytes_total: int = 0
     stdout_truncated: bool = False
     stderr_truncated: bool = False
+    containment: str = ""
+    containment_all_dead: bool = False
+    containment_error: str = ""
     timed_out: bool = False
     error: str | None = None
 
@@ -243,6 +250,9 @@ class ProviderExecutionResult(BaseModel):
     stderr_bytes_total: int = 0
     stdout_truncated: bool = False
     stderr_truncated: bool = False
+    containment: str = ""
+    containment_all_dead: bool = False
+    containment_error: str = ""
 
     @property
     def success(self) -> bool:
@@ -638,6 +648,12 @@ class AttemptRuntimeEvidence(BaseModel):
     state_sha256_at_ready: str = ""
     control_plane_changes: int = 0
     result_claimed: bool = False
+    # Strong process containment: the mechanism that guarantees no descendant of
+    # the Codex child can outlive it (and therefore can never mutate the control
+    # plane after the POST check).
+    containment: str = ""                 # e.g. windows-job-object | none
+    containment_all_dead: bool = False    # parent-verified before POST
+    containment_error: str = ""
 
 
 class ControlPlaneDifference(BaseModel):

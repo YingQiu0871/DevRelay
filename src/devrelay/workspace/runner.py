@@ -151,6 +151,7 @@ class CommandRunner:
         env: Mapping[str, str] | None = None,
         env_remove: Sequence[str] | None = None,
         max_capture_bytes: int | None = None,
+        containment=None,
     ) -> BinaryCommandResult:
         """Run a command with byte-exact stdin/stdout (no newline translation).
 
@@ -161,6 +162,13 @@ class CommandRunner:
         drained by reader threads while only that many bytes (head + tail) are
         retained, so a runaway child can neither deadlock on a full pipe nor
         exhaust parent memory.
+
+        ``containment`` (v0.2-C structured runtime) is a
+        :class:`~devrelay.workspace.containment.ProcessContainment`.  When given,
+        the child is spawned inside strong OS containment and this method does
+        not return until ``all_contained_processes_dead()`` is true, so the
+        caller's POST control-plane verification can never race a detached
+        descendant.
         """
         args = [str(item) for item in argv]
         if not args:
@@ -189,18 +197,33 @@ class CommandRunner:
         stderr_total = 0
         stdout_truncated = False
         stderr_truncated = False
+        containment_name = ""
+        containment_all_dead = False
+        containment_error = ""
 
         try:
-            proc = subprocess.Popen(
-                args,
-                cwd=resolved_cwd,
-                env=run_env,
-                shell=self._shell_enabled,
-                stdin=subprocess.PIPE if input_bytes is not None else None,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-            )
-            if max_capture_bytes is None:
+            if containment is not None:
+                containment_name = getattr(containment, "name", "containment")
+                proc = containment.spawn_contained(
+                    args,
+                    cwd=resolved_cwd,
+                    env=run_env,
+                    stdin_pipe=input_bytes is not None,
+                    stdout_pipe=True,
+                    stderr_pipe=True,
+                    input_bytes=input_bytes,
+                )
+            else:
+                proc = subprocess.Popen(
+                    args,
+                    cwd=resolved_cwd,
+                    env=run_env,
+                    shell=self._shell_enabled,
+                    stdin=subprocess.PIPE if input_bytes is not None else None,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                )
+            if max_capture_bytes is None and containment is None:
                 try:
                     stdout_bytes, stderr_bytes = proc.communicate(
                         input=input_bytes, timeout=timeout_seconds
@@ -217,7 +240,7 @@ class CommandRunner:
                 stderr_total = len(stderr_bytes or b"")
             else:
                 # Bounded capture: always drain, retain head+tail only.
-                cap = max(1024, int(max_capture_bytes))
+                cap = max(1024, int(max_capture_bytes or 262_144))
                 out_sink = _CappedStream(cap)
                 err_sink = _CappedStream(cap)
                 out_reader = _reader_thread(proc.stdout, out_sink)
@@ -228,7 +251,23 @@ class CommandRunner:
                     else None
                 )
                 try:
-                    proc.wait(timeout=timeout_seconds)
+                    if containment is not None:
+                        if not containment.wait_contained(proc, timeout_seconds):
+                            timed_out = True
+                            error = (
+                                f"command timed out after {timeout_seconds:g}s: "
+                                + " ".join(args[:4])
+                            )
+                            try:
+                                proc.terminate()
+                            except (OSError, ValueError):
+                                pass
+                            if not containment.wait_contained(
+                                proc, _TERMINATE_GRACE_SECONDS
+                            ):
+                                containment.kill_contained()
+                    else:
+                        proc.wait(timeout=timeout_seconds)
                 except subprocess.TimeoutExpired:
                     timed_out = True
                     self._terminate_then_kill(proc)
@@ -237,6 +276,23 @@ class CommandRunner:
                         f"command timed out after {timeout_seconds:g}s: "
                         + " ".join(args[:4])
                     )
+                if containment is not None:
+                    # Containment contract: descendants may never outlive the
+                    # contained window, and the caller's POST verification must
+                    # not run until the whole tree is gone.
+                    containment.kill_contained()
+                    try:
+                        proc.wait(timeout=_TERMINATE_GRACE_SECONDS)
+                    except Exception:
+                        pass
+                    if not containment.all_contained_processes_dead(30.0):
+                        containment_error = (
+                            "contained Codex process tree did not terminate "
+                            "within the containment deadline"
+                        )
+                    else:
+                        containment_all_dead = True
+                    containment.close()
                 out_reader.join(timeout=30.0)
                 err_reader.join(timeout=30.0)
                 if writer is not None:
@@ -269,6 +325,9 @@ class CommandRunner:
             stderr_bytes_total=stderr_total,
             stdout_truncated=stdout_truncated,
             stderr_truncated=stderr_truncated,
+            containment=containment_name,
+            containment_all_dead=containment_all_dead,
+            containment_error=containment_error,
         )
 
     @staticmethod
@@ -304,6 +363,7 @@ class CommandRunner:
         env: Mapping[str, str] | None = None,
         env_remove: Sequence[str] | None = None,
         max_capture_bytes: int | None = None,
+        containment=None,
     ) -> CommandResult:
         binary = self.run_bytes(
             argv,
@@ -313,6 +373,7 @@ class CommandRunner:
             env=env,
             env_remove=env_remove,
             max_capture_bytes=max_capture_bytes,
+            containment=containment,
         )
         return CommandResult(
             command=binary.command,
@@ -327,4 +388,7 @@ class CommandRunner:
             stderr_bytes_total=binary.stderr_bytes_total,
             stdout_truncated=binary.stdout_truncated,
             stderr_truncated=binary.stderr_truncated,
+            containment=binary.containment,
+            containment_all_dead=binary.containment_all_dead,
+            containment_error=binary.containment_error,
         )

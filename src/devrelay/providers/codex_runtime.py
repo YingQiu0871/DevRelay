@@ -151,6 +151,14 @@ class CodexRuntimeUnsupportedError(CodexRuntimeError):
     code = "codex_runtime_unsupported"
 
 
+class CodexContainmentUnsupportedError(CodexRuntimeUnsupportedError):
+    """Structured runtime requires strong descendant containment that this host
+    cannot provide; refusing pre-flight (0 provider calls) instead of running a
+    guard that a detached descendant could outlive."""
+
+    code = "codex_process_containment_unsupported"
+
+
 class CodexResultError(CodexRuntimeError):
     """Structured result problem (missing/malformed/oversized/unsupported)."""
 

@@ -425,6 +425,29 @@ def doctor(
             )
         if wiring.codex.runtime_mode == "structured" and repo_config:
             problems.append("repository Codex config is not supported in structured mode")
+    # v0.2-C: strong containment is a hard precondition of the structured
+    # runtime (the POST control-plane check is only meaningful when nothing the
+    # Codex child spawned can still be alive), so it is reported explicitly.
+    from devrelay.workspace.containment import containment_support
+
+    containment_ok, containment_diagnostic = containment_support()
+    if wiring.codex.runtime_mode == "structured":
+        typer.echo(
+            "  Process containment: "
+            + ("OK" if containment_ok else "UNAVAILABLE")
+            + f" — {containment_diagnostic}"
+        )
+        if not containment_ok:
+            problems.append(
+                "structured runtime requires strong process containment "
+                "(set codex.runtime_mode: text explicitly to use the uncontained "
+                "legacy runtime)"
+            )
+    else:
+        typer.echo(
+            "  Process containment: not used by the legacy text runtime "
+            "(no structured contract, no control-plane guard)"
+        )
     scrubbed = sorted(
         name for name in CODEX_CHILD_ENV_DENYLIST if os.environ.get(name)
     )
