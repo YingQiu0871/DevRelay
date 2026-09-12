@@ -102,6 +102,62 @@ fake providers (no real Codex invocation, no real reviewer endpoint).
   generation. Orphan evidence is never deleted, never overwritten and never
   treated as applied.
 
+## Unreleased - v0.2-C candidate (structured Codex runtime)
+
+Structured, isolated, tamper-evident and replayable Codex runtime. **Not
+released**: version stays `0.1.0`, nothing is pushed/merged/tagged/published, and
+everything below is validated offline with a stub Codex CLI (no model call, no
+network).
+
+### Added
+
+- Structured implementer contract: `--output-schema` + `--output-last-message`
+  with a validated `ImplementationResult` (`schema_version = 1`); `--json` events
+  are observational only and never required for a run to count.
+- Transient raw result staging under `.devrelay/tmp/runtime/<attempt-id>/`:
+  bounded read, `raw_result_sha256`, sanitized immutable `result.json` (create-new
+  writers), best-effort removal, stale-staging cleanup-or-refuse policy.
+- DevRelay-owned Codex argv: `exec`, `--sandbox workspace-write` (exactly once),
+  `--ignore-user-config`, `--ignore-rules`, `--json`, schema/result flags, cwd and
+  stdin prompt. `-p/--profile`, user `--sandbox`, `--add-dir`, `--cd`,
+  `--skip-git-repo-check`, `--approve-for-me`, bypass flags, output-path flags and
+  unsafe `-c` namespaces are rejected; a repository Codex config fails structured
+  mode closed (`codex.runtime_mode: text` is the explicit opt-out).
+- Codex child environment scrub (reviewer + enumerated LLM provider credentials),
+  honestly documented as an explicit denylist, not general secret isolation.
+- Control-plane guard: in-memory PRE manifest, POST verification before any state
+  re-read, `codex_control_plane_violation` fail-closed path, metadata-only
+  violation evidence (no raw tampered content), durable hold with
+  verification-gated recovery (`--acknowledge-control-plane-violation`,
+  `--restore-state-from-pre`).
+- Durable implementer milestones (`PROCESS_EXITED` … `COMPLETION_READY` …
+  `COMPLETION_APPLIED`) with idempotent application; `attempt_in_flight` is only
+  cleared once a replay-safe verdict exists.
+- Completion replay: a `COMPLETION_READY` attempt with matching identities is
+  applied locally with **0 external calls**; drift blocks as
+  `implementer_replay_workspace_changed` / `replay_control_state_changed`;
+  `devrelay unblock --replay-completion` applies it explicitly after a human
+  restored the workspace.
+- Two-stage reconciliation (`implementation-reconciliation.json`,
+  `test-reconciliation-NN.json`) surfacing claimed-vs-observed files, rejected
+  traversal claims, unknown result field names and test-claim disagreements.
+- Baseline root hardening: `baseline.json`/`manifest.json`/`tracked.patch` are
+  content-hashed by the guard and untracked blobs are verified against their
+  declared SHA-256 before use.
+- Bounded, deadlock-free process capture (always-drain reader threads, head+tail
+  retention) with truncation evidence, `env_remove` support and terminate→kill
+  fallback.
+- `doctor` reports the effective runtime mode, structured capability and the
+  scrubbed credential names; `status`/`usage` show runtime milestones and results.
+
+### Changed
+
+- `state_schema_version` 5 → 6 (durable milestones, workspace/control-plane
+  identity, runtime evidence), reusing the existing migration/backup/too-new
+  machinery; v0.2-B tasks keep loading and read-only commands still never migrate.
+- Bumped `MAX_SUPPORTED_STATE_SCHEMA` accordingly; a v0.2-B binary refuses v6 with
+  `state_schema_too_new` instead of guessing.
+
 ## Unreleased - v0.2-A candidate (audit remediation, closure audit pending)
 
 Automatic review loop with an enforced execution budget, plus the remediation of

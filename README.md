@@ -599,6 +599,47 @@ carries a blocking finding does not pass, blocking findings route to
 `FIX_REQUIRED` / `BLOCKED`, and the final gate stays manual
 (`devrelay final approve`) with zero provider calls.
 
+## Structured Codex runtime (v0.2-C candidate)
+
+The implementer step can run in a structured runtime that wraps the official
+Codex CLI (still the user's own ChatGPT-authenticated session) with a stronger
+contract:
+
+* `--output-schema` + `--output-last-message` produce a validated
+  `ImplementationResult` (`schema_version = 1`); `--json` events are observational
+  only. The model writes to a transient staging file which DevRelay reads with a
+  hard cap, hashes, validates, sanitizes and only then persists as immutable
+  evidence (`runtime/<attempt-id>/result.json`).
+* **DevRelay owns the runtime flags**: `exec`, `--sandbox workspace-write` (once),
+  `--ignore-user-config`, `--ignore-rules`, `--json`, the schema/result paths, the
+  working directory and the stdin prompt. `-p/--profile`, user `--sandbox`,
+  `--add-dir`, `--cd`, bypass flags and unsafe `-c` namespaces are rejected; a
+  repository Codex config fails structured mode closed (`codex.runtime_mode: text`
+  is the explicit opt-out). The Codex child also never sees the reviewer key or
+  enumerated LLM provider credentials (an explicit denylist - not a general
+  secret sandbox).
+* **Control-plane guard**: a Codex child may change project code, never DevRelay
+  state. The authoritative PRE identity lives in parent memory during the run;
+  after the child exits DevRelay verifies every protected `.devrelay` path before
+  trusting anything. Any unexpected change fails closed
+  (`codex_control_plane_violation`): no `TESTING`, no rerun, no rollback, no blind
+  overwrite, metadata-only evidence, and a durable hold that can only be cleared
+  once the flagged paths match their trusted values again.
+* **Crash-safe completion**: `COMPLETION_READY` is durable enough to be replayed
+  locally with **0 external calls** when the worktree tree, Git guard, task delta,
+  baseline, protected control plane and `state.json` hash all still match; drift
+  blocks (`implementer_replay_workspace_changed` / `replay_control_state_changed`)
+  and never triggers a second Codex call.
+* **Advisory self-report**: claimed files/tests/status are reconciled against
+  DevRelay's own delta, guard and test runs (`implementation-reconciliation.json`,
+  `test-reconciliation-NN.json`) and surfaced to the reviewer. The workspace
+  delta, Git guard and DevRelay tests remain the only authorities.
+
+`codex.runtime_mode: structured` is the default; `text` is the explicit,
+visible compatibility opt-out for older CLIs. `devrelay doctor` shows the
+effective mode, structured capability and which credentials are scrubbed from the
+Codex child.
+
 ## Policy (default profile)
 
 The YAML below is the packaged default **policy**

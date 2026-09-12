@@ -7,7 +7,7 @@
 | **A** | Automatic review loop (budget, review lifecycle, reviewer evidence, CLI visibility) | **CURRENT — candidate, not reviewed-closed** |
 | **A.1** | Audit remediation of the `fe4b044` candidate (P1-01, P2-01..03, P3-01..06) | **CURRENT — awaiting closure audit** |
 | B | Project profiles | **NOT STARTED** |
-| C | Structured Codex runtime | **NOT STARTED** |
+| C | Structured Codex runtime (v0.2-C: contract, control plane, milestones, replay) | **CURRENT — implemented, awaiting independent review** |
 | D | General release pipeline | **NOT STARTED** |
 | E | v0.2 RC / release | **NOT STARTED** |
 
