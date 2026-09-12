@@ -18,7 +18,7 @@ from devrelay.errors import (
     StateSchemaTooNewError,
     TaskNotFoundError,
 )
-from devrelay.models import MAX_SUPPORTED_STATE_SCHEMA, TaskRun
+from devrelay.models import MAX_SUPPORTED_STATE_SCHEMA, TaskRun, utcnow_iso
 
 
 def encode_lf(text: str) -> bytes:
@@ -144,6 +144,90 @@ class ArtifactStore:
 
     def policy_dir(self, task_id: str) -> Path:
         return self._sub(task_id, "policy")
+
+    # -- v0.2-C runtime / control-plane paths -----------------------------
+    def tmp_dir(self) -> Path:
+        """Transient workspace (`.devrelay/tmp`): never evidence, never durable.
+
+        Lives inside the workspace so a ``workspace-write`` sandboxed child can
+        write its staging file, but inside ``.devrelay`` so it can never appear
+        in a baseline, task delta or reviewer diff.
+        """
+        path = self.devrelay_dir / "tmp"
+        path.mkdir(parents=True, exist_ok=True)
+        return path
+
+    def attempt_staging_dir(self, task_id: str, attempt_id: str) -> Path:
+        """Child-writable staging directory for exactly one attempt."""
+        return self.tmp_dir() / "runtime" / attempt_id
+
+    def task_runtime_dir(self, task_id: str, attempt_id: str) -> Path:
+        """Parent-written immutable runtime evidence for one attempt."""
+        return self._sub(task_id, "runtime") / attempt_id
+
+    def control_state_dir(self, task_id: str) -> Path:
+        return self._sub(task_id, "policy") / "control-state"
+
+    def control_plane_hold_path(self, task_id: str) -> Path:
+        return self.task_dir(task_id) / "CONTROL_PLANE_HOLD.json"
+
+    def read_control_plane_hold(self, task_id: str) -> dict[str, Any] | None:
+        """Read the hold record if present (never raises on corrupt JSON)."""
+        path = self.control_plane_hold_path(task_id)
+        if not path.is_file():
+            return None
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return {"corrupt": True, "path": str(path)}
+        return data if isinstance(data, dict) else {"corrupt": True, "path": str(path)}
+
+    def write_control_plane_hold(self, task_id: str, record: dict[str, Any]) -> Path:
+        """Create the hold immutably (refuse to replace an existing hold)."""
+        return self.write_json_new(self.control_plane_hold_path(task_id), record)
+
+    def clear_control_plane_hold(self, task_id: str, *, reason: str) -> Path:
+        """Move the hold into the audit trail; never delete it."""
+        path = self.control_plane_hold_path(task_id)
+        if not path.is_file():
+            raise DevRelayError(f"no control-plane hold exists for {task_id}")
+        stamp = utcnow_iso().replace(":", "-")
+        target = self.control_state_dir(task_id) / f"hold-cleared-{stamp}.json"
+        target.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            path.replace(target)
+        except OSError as exc:  # pragma: no cover - defensive
+            raise DevRelayError(f"cannot archive control-plane hold: {exc}") from exc
+        return target
+
+    def write_json_new(self, path: str | Path, data: Any) -> Path:
+        return self.write_text_new(
+            path,
+            json.dumps(data, indent=2, ensure_ascii=False, sort_keys=True),
+        )
+
+    # -- bounded I/O helpers (v0.2-C) -------------------------------------
+    @staticmethod
+    def read_bytes_bounded(path: str | Path, max_bytes: int) -> tuple[bytes, int, bool]:
+        """Read at most ``max_bytes`` (+1 to detect overflow) — never more.
+
+        Returns ``(data, size, truncated)``; ``truncated`` is true when the file
+        is larger than the cap, in which case ``data`` holds only ``max_bytes``.
+        A stat race cannot cause an unbounded allocation because the read itself
+        is bounded.
+        """
+        full = Path(path)
+        cap = max(0, int(max_bytes))
+        try:
+            size = full.stat().st_size
+        except OSError:
+            raise
+        with open(full, "rb") as handle:
+            data = handle.read(cap + 1)
+        truncated = size > cap or len(data) > cap
+        if len(data) > cap:
+            data = data[:cap]
+        return data, size, truncated
 
     # -- task persistence -------------------------------------------------
     def write_task(self, task: TaskRun) -> None:
