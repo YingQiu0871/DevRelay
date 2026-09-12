@@ -760,7 +760,12 @@ class DevRelayEngine:
     # provider attempt lifecycle (AUD-02)
     # ------------------------------------------------------------------ #
     def _write_attempt(
-        self, task: TaskRun, record: ProviderAttempt, *, digest: bool = False
+        self,
+        task: TaskRun,
+        record: ProviderAttempt,
+        *,
+        digest: bool = False,
+        attempt_in_flight: bool | None = None,
     ) -> str:
         """Upsert the attempt in task state + evidence artifacts.
 
@@ -769,9 +774,29 @@ class DevRelayEngine:
         durable attempt id, so a failed attempt's evidence survives the retry
         that reuses the same logical pass number.
 
+        Before writing, the accounting facts owned by earlier writes are merged
+        in from the latest persisted state (provider calls + identity sequences).
+        A caller-held object captured before the call intent must never be able
+        to erase a consumed call from ``provider_calls``/budget usage (P1-D).
+
         With ``digest=True`` the SHA-256 of the exact persisted ``state.json``
         bytes is returned (v0.2-C COMPLETION_READY identity).
         """
+        latest = self._load(task.task_id)
+        task.provider_calls = list(latest.provider_calls)
+        task.next_provider_call_sequence = max(
+            int(task.next_provider_call_sequence), int(latest.next_provider_call_sequence)
+        )
+        task.next_provider_attempt_sequence = max(
+            int(task.next_provider_attempt_sequence),
+            int(latest.next_provider_attempt_sequence),
+        )
+        task.next_review_attempt_sequence = max(
+            int(task.next_review_attempt_sequence),
+            int(latest.next_review_attempt_sequence),
+        )
+        if attempt_in_flight is not None:
+            task.attempt_in_flight = bool(attempt_in_flight)
         for index, existing in enumerate(task.attempts):
             if existing.attempt_id == record.attempt_id:
                 task.attempts[index] = record
@@ -2046,8 +2071,9 @@ class DevRelayEngine:
             parent_attempt_id=attempt_id,
         )
         record.call_ids.append(call_id)
-        task.attempt_in_flight = True
-        self._write_attempt(task, record)
+        # Merge into the LATEST state: a stale object must never be written back
+        # over facts persisted by an earlier write.
+        self._write_attempt(task, record, attempt_in_flight=True)
         self._record_provider_call(task.task_id, call_record)
         events.append(
             f"[{task.task_id}] implementing (attempt {attempt}, "
@@ -2071,7 +2097,9 @@ class DevRelayEngine:
             )
             return False
         record.pre_snapshot = pre_snapshot
-        self._write_attempt(task, record)  # PRE persisted before the provider run
+        # PRE persisted before the provider run - merged into the latest state so
+        # the call intent recorded above survives this write.
+        self._write_attempt(task, record)
         if not self._preflight_index_check(task, record, pre_snapshot, events):
             return False
 
