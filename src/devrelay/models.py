@@ -171,6 +171,12 @@ class CommandResult(BaseModel):
     duration_seconds: float = 0.0
     timed_out: bool = False
     error: str | None = None
+    # Bounded-capture evidence (v0.2-C): totals and truncation flags make a
+    # capped stream auditable instead of silently shortened.
+    stdout_bytes_total: int = 0
+    stderr_bytes_total: int = 0
+    stdout_truncated: bool = False
+    stderr_truncated: bool = False
 
     @property
     def success(self) -> bool:
@@ -192,6 +198,10 @@ class BinaryCommandResult(BaseModel):
     stdout: bytes = b""
     stderr: bytes = b""
     duration_seconds: float = 0.0
+    stdout_bytes_total: int = 0
+    stderr_bytes_total: int = 0
+    stdout_truncated: bool = False
+    stderr_truncated: bool = False
     timed_out: bool = False
     error: str | None = None
 
