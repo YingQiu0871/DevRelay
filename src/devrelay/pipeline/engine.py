@@ -492,6 +492,7 @@ class DevRelayEngine:
         never deleted or overwritten by a retry, and it is never interpreted as
         applied merely because a JSON/YAML file exists.
         """
+        self._assert_no_control_plane_hold(task_id)
         task = self._load(task_id)
         check = self.snapshot_check(task)
         # Repairing a snapshot that is not valid IS an integrity recovery, no
@@ -917,6 +918,7 @@ class DevRelayEngine:
         return task
 
     def import_plan(self, task_id: str, packet: TaskPacket) -> TaskRun:
+        self._assert_no_control_plane_hold(task_id)
         task = self._load(task_id)
         if task.state not in (PipelineState.PLAN_REQUIRED,):
             raise StateConflictError(
@@ -942,6 +944,7 @@ class DevRelayEngine:
     # continue: one automatic push as far as policy allows
     # ------------------------------------------------------------------ #
     def continue_task(self, task_id: str) -> list[str]:
+        self._assert_no_control_plane_hold(task_id)
         events: list[str] = []
         max_steps = 10 + self._policy_for(self._load(task_id)).max_fix_iterations * 4
         steps = 0
@@ -1079,6 +1082,7 @@ class DevRelayEngine:
         pre_manifest: ControlPlaneManifest,
         record: ProviderAttempt,
         events: list[str],
+        pre_state_bytes: bytes = b"",
     ) -> bool:
         """Compare POST against the in-memory PRE; True = violation handled.
 
@@ -1100,6 +1104,7 @@ class DevRelayEngine:
                 call_id=call_id,
                 pre_manifest=pre_manifest,
                 post_manifest=None,
+                pre_state_bytes=pre_state_bytes,
                 differences=[],
                 detail=f"control plane could not be verified after the run: {exc}",
                 state_sha_at_pre=state_sha,
@@ -1115,8 +1120,8 @@ class DevRelayEngine:
             record.runtime = evidence.model_copy(
                 update={
                     "runtime_mode": self._runtime_mode(),
-                    "control_plane_pre_sha256": pre_manifest.sha256,
-                    "control_plane_post_sha256": post.sha256,
+                    "control_plane_pre_sha256": pre_manifest.protected_sha256,
+                    "control_plane_post_sha256": post.protected_sha256,
                     "control_plane_changes": 0,
                 }
             )
@@ -1131,6 +1136,7 @@ class DevRelayEngine:
             differences=differences,
             detail="unexpected control-plane mutation by the Codex child",
             state_sha_at_pre=state_sha,
+            pre_state_bytes=pre_state_bytes,
         )
         events.append(
             f"[{task_id}] BLOCKED: codex_control_plane_violation - "
@@ -1157,6 +1163,7 @@ class DevRelayEngine:
         differences: list,
         detail: str,
         state_sha_at_pre: str = "",
+        pre_state_bytes: bytes = b"",
     ) -> None:
         """Persist metadata-only violation evidence plus the hold.
 
@@ -1182,6 +1189,17 @@ class DevRelayEngine:
             self.store.control_state_dir(task_id) / f"{attempt_id}-violation.json",
             report,
         )
+        if pre_state_bytes:
+            # Parent-held pre-run copy: normal DevRelay state (never raw model
+            # output), retained only for an explicit, hash-validated restore.
+            try:
+                self.store.write_bytes_new(
+                    self.store.control_state_dir(task_id)
+                    / f"{attempt_id}-state.pre.json",
+                    pre_state_bytes,
+                )
+            except DevRelayError:
+                pass
         state_sha = state_sha_at_pre or self._state_sha256(task_id)
         try:
             self.store.write_control_plane_hold(
@@ -1193,7 +1211,7 @@ class DevRelayEngine:
                     "code": "codex_control_plane_violation",
                     "created_at": utcnow_iso(),
                     "trust": "parent-post-mortem",
-                    "trusted_pre_manifest_sha256": pre_manifest.sha256,
+                    "trusted_pre_manifest_sha256": pre_manifest.protected_sha256,
                     "trusted_state_sha256": state_sha,
                     "staging_dir": pre_manifest.staging_dir,
                     "allowed_staging_files": list(pre_manifest.allowed_files),
@@ -1547,6 +1565,237 @@ class DevRelayEngine:
         value = payload.get("state_sha256_at_ready")
         return value if isinstance(value, str) else ""
 
+    def _completion_evidence(self, task_id: str, attempt_id: str) -> dict:
+        path = self.store.task_runtime_dir(task_id, attempt_id) / "completion.json"
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return {}
+        return payload if isinstance(payload, dict) else {}
+
+    def recover_pending_implementation(
+        self, task: TaskRun, events: list[str]
+    ) -> bool | None:
+        """Replay a READY-but-unapplied completion locally, or return ``None``.
+
+        Replay requires *all* recorded identities to still match: worktree tree,
+        Git guard identity, task-relative delta identity, baseline integrity and
+        the control-plane + state hash recorded at READY.  Any drift blocks with
+        zero provider calls - the workspace (or the control state) changed after
+        the completion, so the decision must be a human's.
+        """
+        last = task.attempts[-1] if task.attempts else None
+        if last is None or not last.completion_ready or last.completion_applied:
+            return None
+        attempt_id = last.attempt_id
+        evidence = self._completion_evidence(task.task_id, attempt_id)
+        if not evidence:
+            self._block(
+                task,
+                "implementer_completion_evidence_missing",
+                f"attempt {attempt_id} is marked COMPLETION_READY but its durable "
+                "completion evidence is missing; DevRelay will not replay or "
+                "re-run Codex automatically. Manual acknowledgement is required "
+                "('devrelay unblock --reason \"...\"').",
+            )
+            events.append(
+                f"[{task.task_id}] BLOCKED: completion evidence missing for "
+                f"{attempt_id} (no automatic replan, no automatic re-run)"
+            )
+            return False
+        identity = last.workspace_identity or WorkspaceIdentity()
+        recorded_sha = evidence.get("state_sha256_at_ready") or ""
+        current_sha = self._state_sha256(task.task_id)
+        if recorded_sha and current_sha and recorded_sha != current_sha:
+            self._block(
+                task,
+                "replay_control_state_changed",
+                "the persisted task state was modified after COMPLETION_READY "
+                f"(expected state {recorded_sha[:12]}, found {current_sha[:12]}); "
+                "DevRelay will not replay a completion onto externally changed "
+                "control state. Manual acknowledgement is required.",
+            )
+            events.append(
+                f"[{task.task_id}] BLOCKED: replay_control_state_changed"
+            )
+            return False
+        if not identity.worktree_tree_sha:
+            return None  # no baseline: replay is impossible by design
+        service = self._baseline_service()
+        try:
+            service.validate_baseline(task.task_id)
+        except BaselineError as exc:
+            self._block(task, "baseline_error", str(exc))
+            events.append(f"[{task.task_id}] BLOCKED: baseline integrity failed")
+            return False
+        try:
+            delta = self._require_task_delta(task)
+            post = service.post_snapshot()
+        except BaselineError as exc:
+            self._block(task, "baseline_error", str(exc))
+            events.append(f"[{task.task_id}] BLOCKED: baseline error during replay")
+            return False
+        drift: list[str] = []
+        if (delta.to_tree or "") != identity.worktree_tree_sha:
+            drift.append("worktree tree")
+        if delta_identity(delta) != identity.delta_identity:
+            drift.append("task delta")
+        if guard_identity(post) != identity.guard_identity:
+            drift.append("git guard state")
+        recorded_cp = (evidence.get("control_plane") or {}).get("post_sha256") or ""
+        if recorded_cp:
+            try:
+                manifest = build_manifest(
+                    self.store.devrelay_dir,
+                    staging_dir=Path(
+                        self.store.attempt_staging_dir(task.task_id, attempt_id)
+                    ),
+                    allowed_files=self._control_plane_allowed_files(),
+                )
+            except ControlPlaneError as exc:
+                self._block(task, "codex_control_plane_unavailable", str(exc))
+                events.append(
+                    f"[{task.task_id}] BLOCKED: control plane unreadable during replay"
+                )
+                return False
+            if manifest.protected_sha256 != recorded_cp:
+                self._block(
+                    task,
+                    "replay_control_state_changed",
+                    "protected DevRelay control state changed after "
+                    "COMPLETION_READY; refusing to replay the completion",
+                )
+                events.append(
+                    f"[{task.task_id}] BLOCKED: replay_control_state_changed "
+                    "(control-plane manifest drift)"
+                )
+                return False
+        if drift:
+            self._block(
+                task,
+                "implementer_replay_workspace_changed",
+                "a completed Codex attempt is waiting to be applied, but the "
+                "workspace changed afterwards ("
+                + ", ".join(drift)
+                + f"). Attempt {attempt_id} is preserved as evidence; DevRelay "
+                "does not roll the workspace back and does not re-run Codex "
+                "automatically. Either restore the workspace and run "
+                "'devrelay unblock --reason \"...\" --replay-completion', or "
+                "acknowledge with 'devrelay unblock --reason \"...\"' to run a "
+                "new attempt.",
+            )
+            events.append(
+                f"[{task.task_id}] BLOCKED: implementer_replay_workspace_changed "
+                f"({', '.join(drift)})"
+            )
+            return False
+        events.append(
+            f"[{task.task_id}] replaying completion {attempt_id} locally "
+            "(0 external calls)"
+        )
+        return self._apply_completion(
+            self._load(task.task_id), attempt_id, events, attempt=last.iteration
+        )
+
+    def _control_plane_hold(self, task_id: str) -> dict | None:
+        """Read a control-plane hold without trusting the workspace index."""
+        return self.store.read_control_plane_hold(task_id)
+
+    def _protected_manifest_sha256(self, task_id: str, *, attempt_id: str) -> str:
+        """Protected-plane identity (excluding the staging subtree).
+
+        The staging directory is not evidence and is cleaned after a run, so the
+        replay/recovery identity covers only the protected control paths.
+        """
+        manifest = build_manifest(
+            self.store.devrelay_dir,
+            staging_dir=self.store.attempt_staging_dir(task_id, attempt_id),
+            allowed_files=self._control_plane_allowed_files(),
+        )
+        return manifest.protected_sha256
+
+    def control_plane_recovery_divergences(self, task_id: str) -> list[str]:
+        """Paths that still differ from the trusted PRE identity (empty = clean)."""
+        hold = self.store.read_control_plane_hold(task_id)
+        if hold is None or hold.get("corrupt"):
+            return ["corrupt or missing hold record"]
+        attempt_id = str(hold.get("attempt_id") or "")
+        divergences: list[str] = []
+        trusted_state = hold.get("trusted_state_sha256") or ""
+        if trusted_state and self._state_sha256(task_id) != trusted_state:
+            divergences.append(f"{task_id}/state.json")
+        trusted_manifest = hold.get("trusted_pre_manifest_sha256") or ""
+        if trusted_manifest and attempt_id:
+            try:
+                current = self._protected_manifest_sha256(
+                    task_id, attempt_id=attempt_id
+                )
+            except ControlPlaneError:
+                divergences.append("(control plane unreadable)")
+            else:
+                if current != trusted_manifest:
+                    divergences.extend(hold.get("diverging_paths") or [])
+        return sorted(set(divergences))
+
+    def restore_state_from_pre(self, task_id: str, *, reason: str) -> bool:
+        """Explicitly restore the parent-held pre-run state bytes (audited).
+
+        Only honored when the diagnostic copy still matches the trusted hash
+        recorded in the hold; otherwise nothing is written.
+        """
+        hold = self.store.read_control_plane_hold(task_id)
+        if hold is None or hold.get("corrupt"):
+            raise StateConflictError(
+                f"task {task_id} has no usable control-plane hold to recover"
+            )
+        attempt_id = str(hold.get("attempt_id") or "")
+        trusted = hold.get("trusted_state_sha256") or ""
+        source = (
+            self.store.control_state_dir(task_id) / f"{attempt_id}-state.pre.json"
+        )
+        if not source.is_file():
+            raise StateConflictError(
+                "no parent-held pre-run state copy exists for this violation; "
+                "restore the control plane manually and acknowledge"
+            )
+        data = source.read_bytes()
+        if trusted and hashlib.sha256(data).hexdigest() != trusted:
+            raise StateConflictError(
+                "the parent-held pre-run state copy does not match the trusted "
+                "hash (it may itself have been tampered with); refusing to restore"
+            )
+        self.store.write_bytes(self.store.state_path(task_id), data)
+        task = self.store.read_task(task_id)
+        task.audit.append(
+            TransitionEvent(
+                from_state=task.state.value,
+                to_state=task.state.value,
+                note=f"control-plane recovery: restored pre-run state ({reason})",
+                by="human",
+            )
+        )
+        self._persist(task)
+        return True
+
+    def _assert_no_control_plane_hold(self, task_id: str) -> None:
+        hold = self._control_plane_hold(task_id)
+        if hold is None:
+            return
+        if hold.get("corrupt"):
+            raise StateConflictError(
+                f"task {task_id} has a corrupt control-plane hold record; "
+                "mutating operations are refused until a human resolves it"
+            )
+        raise StateConflictError(
+            "task "
+            f"{task_id} is under a control-plane hold ({hold.get('code')}): "
+            + ", ".join((hold.get("diverging_paths") or [])[:5])
+            + ". Protected state must match the trusted PRE identity again "
+            "before anything may run; see "
+            f"{hold.get('violation_report')} and use "
+            "'devrelay unblock --reason \"...\" --acknowledge-control-plane-violation'."
+        )
+
     # ------------------------------------------------------------------ #
     # implementation stage
     # ------------------------------------------------------------------ #
@@ -1563,6 +1812,14 @@ class DevRelayEngine:
             raise StateConflictError(
                 f"task {task.task_id} has no Task Packet; import a plan first"
             )
+        # v0.2-C: a control-plane hold blocks every provider run.
+        self._assert_no_control_plane_hold(task.task_id)
+        # v0.2-C: a READY-but-unapplied completion is replayed locally (0 calls)
+        # when its identities still match; drift blocks instead of re-running.
+        if not task.attempt_in_flight:
+            replayed = self.recover_pending_implementation(task, events)
+            if replayed is not None:
+                return replayed
         # Fail closed: a previous attempt may have modified the workspace and
         # never completed its post-run verification (hard kill, crash).
         if task.attempt_in_flight:
@@ -1716,8 +1973,13 @@ class DevRelayEngine:
             self._block(current, "codex_runtime_error", str(exc))
             events.append(f"[{task.task_id}] BLOCKED: {exc}")
             return False
+        pre_state_bytes = b""
         if runtime_plan is not None:
             context.plan = runtime_plan
+            try:
+                pre_state_bytes = self.store.state_path(task.task_id).read_bytes()
+            except OSError:
+                pre_state_bytes = b""
             try:
                 control_plane_pre = self._control_plane_snapshot(
                     task.task_id,
@@ -1737,7 +1999,7 @@ class DevRelayEngine:
             events.append(
                 f"[{task.task_id}] control-plane PRE captured in memory "
                 f"({len(control_plane_pre.entries)} entries, "
-                f"{control_plane_pre.sha256[:12]})"
+                f"{control_plane_pre.protected_sha256[:12]})"
             )
 
         # ---- provider execution (exceptions are captured, never guessed) ---
@@ -1770,6 +2032,7 @@ class DevRelayEngine:
                 pre_manifest=control_plane_pre,
                 record=record,
                 events=events,
+                pre_state_bytes=pre_state_bytes,
             )
             if violation:
                 return False
@@ -1966,6 +2229,84 @@ class DevRelayEngine:
     # ------------------------------------------------------------------ #
     # test stage
     # ------------------------------------------------------------------ #
+    def _write_test_reconciliation(
+        self, task: TaskRun, attempt: int, evidence: list[str], all_ok: bool
+    ) -> None:
+        """Second reconciliation stage: model test claims vs DevRelay's own run.
+
+        Written only *after* DevRelay ran the tests itself, indexed per run so a
+        re-run (e.g. after a crash) never overwrites an earlier file.
+        """
+        latest = task.attempts[-1] if task.attempts else None
+        if latest is None or not latest.completion_ready:
+            return
+        runtime_dir = self.store.task_runtime_dir(task.task_id, latest.attempt_id)
+        existing = sorted(runtime_dir.glob("test-reconciliation-*.json"))
+        index = len(existing) + 1
+        claimed = []
+        result_path = runtime_dir / "result.json"
+        if result_path.is_file():
+            try:
+                payload = json.loads(result_path.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError):
+                payload = {}
+            for claim in payload.get("tests_run", []) or []:
+                if isinstance(claim, dict):
+                    claimed.append(
+                        {
+                            "command": sanitize(str(claim.get("command", "")))[:500],
+                            "result": sanitize(str(claim.get("result", "")))[:16],
+                        }
+                    )
+        actual = {
+            "passed": bool(all_ok),
+            "commands": [sanitize(line)[:500] for line in evidence],
+        }
+        disagreements = [
+            claim
+            for claim in claimed
+            if claim.get("result") == "PASS" and not all_ok
+        ]
+        warnings: list[str] = []
+        if disagreements:
+            warnings.append(
+                "test_claim_disagreement: the model claimed PASS while DevRelay "
+                "tests failed"
+            )
+        path = write_json_new(
+            runtime_dir / f"test-reconciliation-{index:02d}.json",
+            {
+                "attempt_id": latest.attempt_id,
+                "stage": "tests",
+                "run_index": index,
+                "created_at": utcnow_iso(),
+                "claimed_tests": claimed,
+                "actual": actual,
+                "claim_disagreement": disagreements,
+                "warnings": warnings,
+            },
+        )
+        updated = latest.model_copy(
+            update={
+                "runtime": (
+                    latest.runtime
+                    or AttemptRuntimeEvidence()
+                ).model_copy(
+                    update={
+                        "test_reconciliation_paths": list(
+                            (latest.runtime.test_reconciliation_paths if latest.runtime else [])
+                        )
+                        + [self.store.rel_path(path)]
+                    }
+                )
+            }
+        )
+        for position, stored in enumerate(task.attempts):
+            if stored.attempt_id == latest.attempt_id:
+                task.attempts[position] = updated
+                break
+        self._persist(task)
+
     def _do_tests(self, task: TaskRun, events: list[str]) -> bool:
         """Runs configured targeted tests (+ full regression for release risk).
         True = tests passed and state moved to REVIEWING."""
@@ -2050,6 +2391,7 @@ class DevRelayEngine:
         if not evidence:
             evidence.append("no test commands configured in profile")
             task.test_evidence.extend(evidence)
+        self._write_test_reconciliation(task, attempt, evidence, all_ok)
         self._move(task, PipelineState.REVIEWING, note="tests passed")
         self._persist(task)
         events.append(f"[{task.task_id}] tests passed -> REVIEWING")
@@ -2789,6 +3131,7 @@ class DevRelayEngine:
         return path
 
     def import_manual_review(self, task_id: str, review: ReviewResult) -> list[str]:
+        self._assert_no_control_plane_hold(task_id)
         task = self._load(task_id)
         if task.state != PipelineState.REVIEWING:
             raise StateConflictError(
@@ -2908,9 +3251,48 @@ class DevRelayEngine:
         *,
         refresh_policy: bool = False,
         force: bool = False,
+        acknowledge_control_plane: bool = False,
+        restore_control_plane_state: bool = False,
+        replay_completion: bool = False,
     ) -> TaskRun:
         if not reason or not reason.strip():
             raise DevRelayError("unblock requires a non-empty --reason")
+        # ---- v0.2-C control-plane hold recovery ---------------------------
+        hold = self._control_plane_hold(task_id)
+        if hold is not None:
+            if not (acknowledge_control_plane or replay_completion):
+                self._assert_no_control_plane_hold(task_id)
+            if restore_control_plane_state:
+                self.restore_state_from_pre(task_id, reason=reason.strip())
+            divergences = self.control_plane_recovery_divergences(task_id)
+            if divergences:
+                raise StateConflictError(
+                    "control-plane hold cannot be cleared: protected state still "
+                    "differs from the trusted PRE identity ("
+                    + ", ".join(divergences[:5])
+                    + "). Restore the control plane (or use "
+                    "--restore-state-from-pre when a parent-held copy exists) and "
+                    "acknowledge again; there is no 'accept tampered state' path."
+                )
+            self.store.clear_control_plane_hold(task_id, reason=reason.strip())
+            if replay_completion:
+                task = self._load(task_id)
+                events: list[str] = []
+                replayed = self.recover_pending_implementation(task, events)
+                if replayed is None:
+                    raise StateConflictError(
+                        "no COMPLETION_READY attempt is pending replay"
+                    )
+                return self._load(task_id)
+        elif replay_completion:
+            task = self._load(task_id)
+            events = []
+            replayed = self.recover_pending_implementation(task, events)
+            if replayed is None:
+                raise StateConflictError(
+                    "no COMPLETION_READY attempt is pending replay"
+                )
+            return self._load(task_id)
         task = self._load(task_id)
         if task.state not in (PipelineState.BLOCKED, PipelineState.FAILED):
             # Integrity recovery does not require a blocked task: the classifier
@@ -3087,6 +3469,17 @@ class DevRelayEngine:
             )
         else:
             review_one_line = "-"
+        mode = self._runtime_mode()
+        last_impl = task.attempts[-1] if task.attempts else None
+        if last_impl is None:
+            runtime_one_line = mode
+        else:
+            parts = [mode, last_impl.milestone.value]
+            if last_impl.runtime and last_impl.runtime.result_status:
+                parts.append(f"result {last_impl.runtime.result_status}")
+            if last_impl.completion_ready and not last_impl.completion_applied:
+                parts.append("READY, not applied")
+            runtime_one_line = ", ".join(parts)
         return {
             "task_id": task.task_id,
             "title": task.title,
@@ -3108,6 +3501,7 @@ class DevRelayEngine:
             + (" (IN FLIGHT)" if task.attempt_in_flight else ""),
             "budget": budget_one_line,
             "review": review_one_line,
+            "runtime": runtime_one_line,
             "policy_source": policy_source,
             "policy_display": readout.display,
             "policy_integrity": readout.integrity,
@@ -3184,6 +3578,39 @@ class DevRelayEngine:
                     "applied_state": attempt.applied_state,
                 }
                 for attempt in task.review_attempts
+            ],
+            "implementer_attempts": [
+                {
+                    "attempt_id": attempt.attempt_id,
+                    "iteration": attempt.iteration,
+                    "phase": attempt.phase,
+                    "status": attempt.status.value,
+                    "milestone": attempt.milestone.value,
+                    "completion_ready": attempt.completion_ready,
+                    "completion_applied": attempt.completion_applied,
+                    "workspace_tree": (
+                        attempt.workspace_identity.worktree_tree_sha
+                        if attempt.workspace_identity
+                        else ""
+                    ),
+                    "runtime_mode": (
+                        attempt.runtime.runtime_mode if attempt.runtime else ""
+                    ),
+                    "result_status": (
+                        attempt.runtime.result_status if attempt.runtime else ""
+                    ),
+                    "result_schema_version": (
+                        attempt.runtime.result_schema_version
+                        if attempt.runtime
+                        else None
+                    ),
+                    "control_plane_changes": (
+                        attempt.runtime.control_plane_changes
+                        if attempt.runtime
+                        else 0
+                    ),
+                }
+                for attempt in task.attempts
             ],
             "last_review_attempt": (
                 last_attempt.status.value if last_attempt is not None else "-"

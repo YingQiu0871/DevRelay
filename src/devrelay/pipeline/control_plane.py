@@ -166,6 +166,29 @@ class ControlPlaneManifest:
             "entries": [entry.to_json() for entry in self.entries],
         }
 
+    @property
+    def protected_sha256(self) -> str:
+        """Identity over protected paths only (staging subtree excluded).
+
+        Used for replay/recovery: the staging directory is transient by design
+        and is cleaned after a run, so it must not participate in an identity
+        that has to be recomputable later.
+        """
+        staging = self.staging_dir.replace("\\", "/").rstrip("/")
+        prefix = staging + "/"
+        entries = [
+            entry.to_json()
+            for entry in self.entries
+            if entry.rel_path.replace("\\", "/") != staging
+            and not entry.rel_path.replace("\\", "/").startswith(prefix)
+        ]
+        payload = json.dumps(
+            {"version": self.version, "entries": entries},
+            sort_keys=True,
+            separators=(",", ":"),
+        )
+        return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
     def compute_sha256(self) -> str:
         payload = json.dumps(
             {

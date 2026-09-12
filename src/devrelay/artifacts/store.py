@@ -186,6 +186,26 @@ class ArtifactStore:
         """Create the hold immutably (refuse to replace an existing hold)."""
         return self.write_json_new(self.control_plane_hold_path(task_id), record)
 
+    def list_control_plane_holds(self) -> list[dict[str, Any]]:
+        """Scan task directories for holds *without* trusting the workspace index.
+
+        ``.devrelay/state.json`` (the index) is itself child-writable, so hold
+        discovery must work even when the index is corrupt or lies.
+        """
+        tasks_dir = self.devrelay_dir / "tasks"
+        holds: list[dict[str, Any]] = []
+        if not tasks_dir.is_dir():
+            return holds
+        for task_dir in sorted(tasks_dir.iterdir()):
+            if not task_dir.is_dir():
+                continue
+            record = self.read_control_plane_hold(task_dir.name)
+            if record is None:
+                continue
+            record.setdefault("task_id", task_dir.name)
+            holds.append(record)
+        return holds
+
     def clear_control_plane_hold(self, task_id: str, *, reason: str) -> Path:
         """Move the hold into the audit trail; never delete it."""
         path = self.control_plane_hold_path(task_id)

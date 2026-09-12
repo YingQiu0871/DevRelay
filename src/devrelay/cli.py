@@ -87,6 +87,36 @@ def _unexpected(exc: Exception) -> None:
 # shared context helpers
 # ---------------------------------------------------------------------------
 
+def _echo_control_plane_holds(holds: list) -> None:
+    """Print control-plane hold records (metadata only, never file contents)."""
+    typer.echo("CONTROL-PLANE HOLD — DevRelay authoritative state was modified")
+    typer.echo("")
+    for hold in holds:
+        typer.echo(f"Task: {hold.get('task_id')}")
+        typer.echo(f"  code:      {hold.get('code')}")
+        typer.echo(f"  attempt:   {hold.get('attempt_id')}")
+        typer.echo(f"  detected:  {hold.get('created_at')}")
+        paths = hold.get("diverging_paths") or []
+        if paths:
+            typer.echo("  changed:   " + ", ".join(str(p) for p in paths[:10]))
+        if hold.get("violation_report"):
+            typer.echo(f"  report:    {hold['violation_report']}")
+        if hold.get("corrupt"):
+            typer.echo("  (the hold record itself is unreadable)")
+    typer.echo("")
+    typer.echo(
+        "Protected state must match the trusted PRE identity again before "
+        "anything may run:"
+    )
+    typer.echo(
+        "  devrelay unblock --reason \"...\" --acknowledge-control-plane-violation"
+    )
+    typer.echo(
+        "  (optionally --restore-state-from-pre when a parent-held copy exists)"
+    )
+    typer.echo("")
+
+
 def _resolve_root() -> Path:
     try:
         return require_root(Path.cwd())
@@ -370,6 +400,38 @@ def doctor(
     )
     for warning in codex.unknown_arg_warnings():
         typer.echo(f"  Warning: {warning}")
+    # v0.2-C structured runtime diagnostics (help probes only - never a model).
+    from devrelay.providers.codex_runtime import (
+        CODEX_CHILD_ENV_DENYLIST,
+        detect_capabilities,
+        detect_repo_codex_config,
+    )
+
+    typer.echo(f"  Runtime mode: {wiring.codex.runtime_mode}")
+    if ok:
+        capabilities = detect_capabilities(codex.runner, wiring.codex.executable)
+        typer.echo(f"  {capabilities.describe()}")
+        if wiring.codex.runtime_mode == "structured" and not capabilities.structured_supported:
+            problems.append("structured runtime unsupported by the installed CLI")
+        repo_config = detect_repo_codex_config(Path(root))
+        if repo_config:
+            typer.echo(
+                "  Repository Codex config: " + ", ".join(repo_config)
+                + (" (blocked in structured mode)" if wiring.codex.runtime_mode == "structured" else "")
+            )
+        if wiring.codex.runtime_mode == "structured" and repo_config:
+            problems.append("repository Codex config is not supported in structured mode")
+    scrubbed = sorted(
+        name for name in CODEX_CHILD_ENV_DENYLIST if os.environ.get(name)
+    )
+    typer.echo(
+        "  Codex child env scrub: "
+        + (", ".join(scrubbed) if scrubbed else "(no known credentials present)")
+    )
+    typer.echo(
+        "  Note: ambient non-listed secrets stay visible to the Codex child "
+        "(not a general secret sandbox)."
+    )
     typer.echo(f"Reviewer provider: {wiring.review_provider}")
     if wiring.review_provider == "openai_compatible":
         from devrelay.providers.openai_compatible import (
@@ -513,7 +575,19 @@ def status(
     """Show the current task and stage status."""
     root = _resolve_root()
     store = _store(root)
-    task_id = _task_id(store, task)
+    # v0.2-C: control-plane holds are discovered by scanning task directories,
+    # never by trusting .devrelay/state.json (which a Codex child could write).
+    holds = store.list_control_plane_holds()
+    try:
+        task_id = _task_id(store, task)
+    except Exception:
+        if holds:
+            _echo_control_plane_holds(holds)
+            raise typer.Exit(1)
+        raise
+    hold = next((h for h in holds if h.get("task_id") == task_id), None)
+    if hold is not None:
+        _echo_control_plane_holds([hold])
     run = _read_task(store, task_id)
     # State-only: status never resolves live profiles and never rewrites state.
     engine = _engine(
@@ -538,6 +612,7 @@ def status(
         ("Attempt", "attempt"),
         ("Budget", "budget"),
         ("Review", "review"),
+        ("Runtime", "runtime"),
         ("Policy", "policy_source"),
     ):
         if key == "policy_source":
@@ -912,6 +987,30 @@ def unblock(
             "blocked nor failed and whose snapshot is intact."
         ),
     ),
+    acknowledge_control_plane: bool = typer.Option(
+        False,
+        "--acknowledge-control-plane-violation",
+        help=(
+            "Acknowledge a v0.2-C control-plane hold. The hold is cleared only "
+            "when protected state matches the trusted PRE identity again."
+        ),
+    ),
+    restore_control_plane_state: bool = typer.Option(
+        False,
+        "--restore-state-from-pre",
+        help=(
+            "With --acknowledge-control-plane-violation: restore the parent-held "
+            "pre-run state.json (hash-validated) before verification."
+        ),
+    ),
+    replay_completion: bool = typer.Option(
+        False,
+        "--replay-completion",
+        help=(
+            "Apply a COMPLETION_READY attempt locally (0 provider calls) when "
+            "all recorded identities still match."
+        ),
+    ),
     task: Optional[str] = typer.Option(None, "--task"),
 ) -> None:
     """Manually recover a BLOCKED/FAILED task (never skips findings silently)."""
@@ -952,6 +1051,9 @@ def unblock(
             to=to,
             refresh_policy=refresh_policy,
             force=force,
+            acknowledge_control_plane=acknowledge_control_plane,
+            restore_control_plane_state=restore_control_plane_state,
+            replay_completion=replay_completion,
         )
     except DevRelayError as exc:
         _fail(str(exc))
