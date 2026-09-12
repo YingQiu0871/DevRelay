@@ -121,6 +121,13 @@ def build_implementation_prompt(context: ImplementerContext) -> str:
         "TEST_RESULTS",
         "KNOWN_RISKS",
         "UNRESOLVED_ITEMS",
+        "",
+        "The structured result schema handed to you with --output-schema is",
+        "strict: every field is required and unknown fields are rejected. Emit",
+        "every field, using [] for empty lists (changed_files, tests_run,",
+        "unresolved_items, known_risks), \"\" for an empty summary or note, and",
+        "one of the allowed status values. --output-schema is the authority; do",
+        "not invent fields.",
     ]
     return "\n".join(lines)
 

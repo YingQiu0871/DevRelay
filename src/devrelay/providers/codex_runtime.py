@@ -435,17 +435,37 @@ def build_invocation(
 # result schema + parsing
 # ---------------------------------------------------------------------------
 def result_json_schema() -> dict[str, Any]:
-    """The JSON Schema handed to Codex (tolerant: extras never break a run)."""
+    """The STRICT transport JSON Schema handed to Codex via ``--output-schema``.
+
+    The real Codex/OpenAI Structured Outputs endpoint refuses non-strict object
+    schemas (``invalid_json_schema``: "'additionalProperties' is required to be
+    supplied and to be false"), and the one approved real smoke failed exactly
+    on the previous tolerant schema.  Every object node is therefore closed and
+    lists every declared field in ``required``: optionality is never expressed
+    by omitting a field, only by deterministic empty values (``[]`` / ``""``).
+
+    This is the *transport* contract only.  Local post-parse validation
+    (``normalize_result_payload``) stays defensive: caps, claim-path rejection
+    and unknown-field recording are unchanged.
+    """
     return {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "title": "DevRelay ImplementationResult",
         "type": "object",
-        "additionalProperties": True,
-        "required": ["schema_version", "status", "summary"],
+        "additionalProperties": False,
+        "required": [
+            "schema_version",
+            "status",
+            "summary",
+            "changed_files",
+            "tests_run",
+            "unresolved_items",
+            "known_risks",
+        ],
         "properties": {
             "schema_version": {
                 "type": "integer",
-                "const": IMPLEMENTATION_RESULT_SCHEMA_VERSION,
+                "enum": [IMPLEMENTATION_RESULT_SCHEMA_VERSION],
             },
             "status": {"type": "string", "enum": list(RESULT_STATUSES)},
             "summary": {"type": "string"},
@@ -454,8 +474,8 @@ def result_json_schema() -> dict[str, Any]:
                 "type": "array",
                 "items": {
                     "type": "object",
-                    "additionalProperties": True,
-                    "required": ["command", "result"],
+                    "additionalProperties": False,
+                    "required": ["command", "result", "notes"],
                     "properties": {
                         "command": {"type": "string"},
                         "result": {
