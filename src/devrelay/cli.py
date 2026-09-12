@@ -614,6 +614,7 @@ def status(
         ("Final Gate", "final_gate"),
         ("Baseline", "baseline"),
         ("Attempt", "attempt"),
+        ("Runtime", "runtime_mode"),
         ("Budget", "budget"),
         ("Review", "review"),
         ("Runtime", "runtime"),

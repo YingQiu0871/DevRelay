@@ -1022,9 +1022,22 @@ class DevRelayEngine:
     # v0.2-C structured runtime + control plane
     # ------------------------------------------------------------------ #
     def _runtime_mode(self) -> str:
-        """Effective Codex runtime mode (live wiring, not frozen policy)."""
-        codex_config = getattr(self.config, "codex", None)
-        return getattr(codex_config, "runtime_mode", "text") or "text"
+        """Effective Codex runtime mode: LIVE runtime wiring, never task policy.
+
+        The frozen ``PolicyDocument``/snapshot decides *policy*; the mode in
+        which the Codex CLI is executed is environment wiring and therefore
+        always comes from :class:`WiringConfig`.  Reading it from anywhere else
+        silently downgraded structured runs to text (dropping the structured
+        contract, the environment scrub and the control-plane guard) on every
+        frozen-task CLI path.
+        """
+        codex_config = getattr(self.runtime_config, "codex", None)
+        mode = getattr(codex_config, "runtime_mode", None)
+        if mode in ("structured", "text"):
+            return mode
+        # No wiring available: fall back to the declared CodexConfig default
+        # rather than downgrading silently (a mis-wired engine fails pre-flight).
+        return "structured"
 
     def _settle_call(
         self,
@@ -3630,6 +3643,8 @@ class DevRelayEngine:
                 {"name": ref.name, "sha256": ref.sha256} for ref in readout.profiles
             ],
             "blocked": task.blocked_code or "",
+            # Live runtime wiring (never task policy): what `continue` will use.
+            "runtime_mode": self._runtime_mode(),
         }
 
     def usage_block(self, task_id: str) -> dict[str, object]:
