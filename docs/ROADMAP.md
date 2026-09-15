@@ -42,7 +42,7 @@ Status: 🧪 Implemented in development history, not released on `main` as a pub
 
 Status: 🧪 + ⏸
 
-Current development evidence reports:
+Implemented development evidence includes:
 
 - structured result contract
 - strict output schema
@@ -55,9 +55,21 @@ Current development evidence reports:
 - explicit external-call accounting
 - offline regression suite passing
 
-The final schema-hygiene review approved the candidate for **one replacement real Codex smoke**. That smoke remains pending because the Codex provider is currently unavailable. This is an external availability block, not permission to silently waive the smoke.
+A single authorized replacement real Codex smoke was executed against candidate `4790ca3`. The real endpoint accepted the reviewed annotation-free schema and did **not** return `invalid_json_schema`, directly verifying that the previous schema regression is fixed.
 
-当前开发证据显示 v0.2-C 已完成结构化结果、严格 schema、暂存、进程捕获、控制面保护、completion replay、reconciliation 与调用记账等工作。最终 schema hygiene 复审批准进行 **一次 replacement real Codex smoke**；由于 Codex 当前不可用，该 smoke 仍为待完成项，不能被视为自动豁免。
+一次授权的 replacement real Codex smoke 已针对候选版本 `4790ca3` 执行。真实端点接受了复审后的 annotation-free schema，且未返回 `invalid_json_schema`，因此原 schema 回归问题已经被真实端点直接证明修复。
+
+However, the provider usage limit was reached before `--output-last-message` produced the structured result file. Therefore the following remain pending:
+
+- end-to-end real structured-result delivery;
+- real staging/persistence/reconciliation on a successful turn;
+- `COMPLETION_APPLIED` on the real provider path.
+
+因此 v0.2-C 尚未完全闭环。此次失败不再归因于 schema，但完整真实 E2E 路径仍未得到证明。
+
+The smoke also surfaced a separate Windows-host P2: Codex shell `exec_command` was rejected by policy around the WindowsApps `pwsh.exe` alias. This should be investigated **offline first**, without spending another real provider call. A later real E2E smoke should only be attempted after quota is available and the Windows compatibility issue is understood.
+
+Smoke 还暴露了一个独立 Windows P2：Codex shell `exec_command` 因 WindowsApps 的 `pwsh.exe` alias 相关 policy 被拒绝。应先进行**离线调查**，不要消耗新的真实 provider 调用；只有额度恢复且 Windows 兼容性问题得到理解后，才安排下一次真实 E2E smoke。
 
 ## v0.3 — OpenCode orchestration foundation / OpenCode 编排基础
 
@@ -267,6 +279,14 @@ Potential directions / 潜在方向：
 - Windows Credential Manager / macOS Keychain / Linux Secret Service integration
 - optional auto-update channel
 - installation via package managers such as winget/scoop where practical
+
+## Immediate next steps / 当前最近步骤
+
+1. Resume and complete **v0.3-A OpenCode Session Bridge**.
+2. Independently review v0.3-A before starting v0.3-B.
+3. Investigate the v0.2-C Windows Codex shell-policy P2 offline in parallel, without another real Codex call.
+4. When Codex quota becomes available again, authorize a later minimal E2E smoke only after the Windows issue is understood.
+5. Keep the public release at v0.1.0 until unreleased milestones are reviewed and intentionally promoted.
 
 ## Long-term product goal / 长期产品目标
 
