@@ -501,6 +501,8 @@ def workspace_policy_overrides(root_or_path: str | Path) -> dict[str, Any]:
     data = _parse_yaml_bytes(path.read_bytes(), str(path))
     data.pop("profiles", None)
     data.pop("codex", None)
+    # v0.3-A: the OpenCode bridge is runtime wiring, never task policy.
+    data.pop("opencode", None)
     review = data.get("review")
     if isinstance(review, dict):
         review.pop("provider", None)
@@ -523,8 +525,9 @@ def load_policy_snapshot(
     ``strict=True`` is the schema-5 rule: the document must be exactly a policy
     document (any unknown key fails closed).  ``strict=False`` is the approved
     legacy tolerance for digest-less v0.2-A snapshots, which were a full
-    workspace-config dump: only the known wiring keys ``codex``, ``profiles``
-    and ``review.provider`` are dropped - any other unknown key still fails.
+    workspace-config dump: only the known wiring keys ``codex``, ``opencode``,
+    ``profiles`` and ``review.provider`` are dropped - any other unknown key
+    still fails.
     """
     if isinstance(data_or_path, (str, Path)):
         path = Path(data_or_path)
@@ -538,6 +541,10 @@ def load_policy_snapshot(
         if "codex" in doc:
             doc.pop("codex")
             dropped.append("codex")
+        if "opencode" in doc:
+            # v0.3-A wiring section: a legacy full-config dump may contain it.
+            doc.pop("opencode")
+            dropped.append("opencode")
         if "profiles" in doc:
             doc.pop("profiles")
             dropped.append("profiles")
