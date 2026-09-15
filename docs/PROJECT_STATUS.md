@@ -25,7 +25,7 @@ The public repository currently supports the v0.1 CLI-centric workflow. Later mi
 | Manual planner/reviewer import/export / 手动规划与审阅导入导出 | ✅ | Existing | v0.1 |
 | OpenAI-compatible reviewer / OpenAI-compatible reviewer | ✅ | Existing | v0.1 |
 | Structured Codex runtime / 结构化 Codex runtime | ❌ | 🧪 Implemented offline | v0.2-C candidate |
-| Strict structured schema / 严格结构化 schema | ❌ | 🧪 Offline verified | Real replacement smoke pending |
+| Strict structured schema / 严格结构化 schema | ❌ | ✅ Real endpoint acceptance verified | Replacement smoke confirmed no `invalid_json_schema`; full E2E delivery still pending |
 | Completion replay / Completion replay | ❌ | 🧪 Implemented offline | v0.2-C candidate |
 | Control-plane PRE/POST guard / 控制面 PRE/POST guard | ❌ | 🧪 Implemented offline | v0.2-C candidate |
 | OpenCode session bridge / OpenCode session bridge | ❌ | 🚧 In progress | v0.3-A |
@@ -39,17 +39,45 @@ The public repository currently supports the v0.1 CLI-centric workflow. Later mi
 
 ## v0.2-C status / v0.2-C 状态
 
-The latest development review reports the structured Codex runtime candidate as offline-clean and ready for one replacement real smoke. The schema hygiene review found no new P0/P1/P2 blockers and approved one real smoke.
+The replacement real Codex smoke was executed once against candidate `4790ca3` with the reviewed schema SHA-256 `1a28d999f4b50003315fe6c9d292dee45d52a6eb59673df00ffe8442b72d18bf`.
 
-最新开发复审报告认为 v0.2-C structured Codex runtime 候选版本离线验证通过，并允许进行一次 replacement real smoke。Schema hygiene 最终复审未发现新的 P0/P1/P2 阻塞项。
+一次 replacement real Codex smoke 已针对候选版本 `4790ca3` 执行，使用的 schema SHA-256 与复审值一致：`1a28d999f4b50003315fe6c9d292dee45d52a6eb59673df00ffe8442b72d18bf`。
 
-Current unresolved acceptance item / 当前唯一关键未闭环项：
+What is now proven / 当前已证明：
 
-- one replacement real Codex smoke against the real provider endpoint.
+- exactly one real Codex call was issued;
+- the reviewed annotation-free schema was accepted by the real endpoint;
+- the previous `invalid_json_schema` regression is fixed;
+- no real reviewer API call occurred;
+- control-plane PRE/POST comparison remained clean;
+- no hidden retry or repair call occurred.
 
-Because Codex is currently unavailable to the project owner, this item is **externally blocked**. It must stay explicitly pending; documentation must not silently convert it to PASS.
+What remains unproven / 尚未证明：
 
-由于项目当前无法使用 Codex，该项处于 **外部条件阻塞** 状态。文档必须继续明确标记为待完成，不能把它静默改写成 PASS。
+- full end-to-end structured-result delivery through `--output-last-message`;
+- result staging, persistence and reconciliation against a successful real turn;
+- real completion reaching `COMPLETION_APPLIED`.
+
+The real turn ended with provider usage-limit failure before the structured result file was produced. Therefore v0.2-C is **not fully closed**, but the schema defect itself is no longer an open blocker.
+
+真实调用在结构化结果文件写出前因 provider 使用额度耗尽而失败。因此 v0.2-C **尚未完全闭环**，但原有 schema 缺陷已经被真实端点证明修复。
+
+### New Windows runtime P2 / 新增 Windows runtime P2
+
+The smoke also surfaced a separate Windows-host issue: Codex shell `exec_command` operations were rejected by policy when resolving the WindowsApps `pwsh.exe` alias. This was not authorized for repair during the smoke and remains an investigation item.
+
+本次 smoke 还暴露了一个独立的 Windows 主机问题：Codex 的 shell `exec_command` 在解析 WindowsApps 的 `pwsh.exe` alias 时被 policy 拒绝。Smoke 阶段未授权修改，因此该问题作为独立调查项保留。
+
+Current classification / 当前分类：
+
+- P0: none attributable to DevRelay
+- P1: real end-to-end structured delivery remains unproven
+- P2: Windows shell policy / `pwsh.exe` execution compatibility requires offline investigation before the next real implementation smoke
+- P3: model-quality artifact observed during smoke, not treated as a DevRelay defect
+
+No additional real Codex call should be attempted until quota is available and the Windows P2 has first been investigated offline.
+
+在额度恢复且 Windows P2 先完成离线调查之前，不应再次进行真实 Codex 调用。
 
 ## v0.3-A status / v0.3-A 状态
 
@@ -140,8 +168,9 @@ A feature should be marked **released** only after it is merged into the release
 
 ## Next gates / 下一步门槛
 
-1. Complete v0.3-A implementation report.
+1. Resume and complete v0.3-A implementation report.
 2. Independently review v0.3-A before v0.3-B begins.
-3. Keep v0.2-C real Codex smoke pending until provider access returns.
-4. Only after v0.3-A is accepted, design the ChatGPT/MCP tool surface.
-5. Only after v0.3-B is accepted, add explicit implementer/reviewer role routing.
+3. Investigate the Windows Codex shell-policy P2 offline; do not spend another real Codex call on diagnosis.
+4. Keep v0.2-C E2E closure pending until provider quota returns and a later authorized smoke can reach structured-result delivery.
+5. Only after v0.3-A is accepted, design the ChatGPT/MCP tool surface.
+6. Only after v0.3-B is accepted, add explicit implementer/reviewer role routing.
