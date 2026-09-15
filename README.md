@@ -640,6 +640,49 @@ visible compatibility opt-out for older CLIs. `devrelay doctor` shows the
 effective mode, structured capability and which credentials are scrubbed from the
 Codex child.
 
+## OpenCode session bridge (v0.3-A candidate)
+
+DevRelay can talk to **one explicitly configured, already running** OpenCode
+server through a narrow, provider-contained bridge — no port scanning, no
+process discovery, no shell, no orchestration:
+
+```yaml
+opencode:
+  base_url: "http://127.0.0.1:4096"   # required to enable the bridge
+  workspace: ""                       # defaults to this repository root
+  default_session: ""                 # convenience only
+  timeout_seconds: 30                 # per HTTP request
+  idle_timeout_seconds: 300           # bound for the idle wait
+  max_response_bytes: 1048576         # larger responses fail closed
+```
+
+```bash
+devrelay opencode health              # capability probe (no session data)
+devrelay opencode sessions            # sessions + ownership verdict
+devrelay opencode show   --session <id>
+devrelay opencode read   --session <id> [--cursor <message-id>]
+devrelay opencode send   --session <id> --prompt "..." [--wait]
+devrelay opencode wait   --session <id> [--timeout 120]
+devrelay opencode interrupt --session <id>
+devrelay opencode calls               # durable call ledger (accounting evidence)
+```
+
+Every operation is scoped to one endpoint, one workspace and one explicitly
+selected session: a session that belongs to another workspace is refused
+(`opencode_session_workspace_mismatch`), an unknown session is refused, and a
+session that reports no workspace fails closed unless
+`allow_unknown_workspace` is explicitly enabled. Provider conditions are returned
+as explicit states (`PROVIDER_UNAVAILABLE`, `TIMED_OUT`, `MALFORMED_RESPONSE`,
+`INTERRUPTED`, …) rather than raised, so a failed call can never look like
+success; each issued HTTP request is recorded once in
+`.devrelay/opencode/calls/` with a monotonic id, and there are **no hidden
+retries**. The token, when needed, comes from `DEVRELAY_OPENCODE_TOKEN` and is
+never persisted.
+
+v0.3-A deliberately does **not** perform role routing (DeepSeek → GLM), review
+loops, approval decisions or ChatGPT/MCP exposure; see
+`docs/v0.3/V03A_SPEC.md`.
+
 ## Policy (default profile)
 
 The YAML below is the packaged default **policy**

@@ -102,6 +102,47 @@ fake providers (no real Codex invocation, no real reviewer endpoint).
   generation. Orphan evidence is never deleted, never overwritten and never
   treated as applied.
 
+## Unreleased - v0.3-A candidate (OpenCode session bridge)
+
+A narrow, provider-contained bridge to one explicitly configured, already running
+OpenCode server. **Not released**: version stays `0.1.0`, nothing is pushed,
+merged, tagged or published, and every test is offline (deterministic stub
+server, no real OpenCode call, no network).
+
+### Added
+
+- `devrelay/opencode/`: normalized DevRelay-owned models (`OpenCodeSession`,
+  `OpenCodeMessage`/`OpenCodeMessagePart`, `OpenCodeMessagePage`,
+  `OpenCodeHealth`, `OpenCodeOperationResult`, `OpenCodeCallRecord`), an explicit
+  operation/call state vocabulary, an HTTP transport with one configured endpoint
+  (never port scanning) and bounded response reads, a durable per-request call
+  ledger (`.devrelay/opencode/calls/<call-id>.json`, monotonic `OC-NNNN` ids) and
+  the `OpenCodeBridge` capability surface: `health`, `list_sessions`,
+  `get_session`, `read_messages`, `send_prompt`, `wait_idle`, `interrupt`.
+- Workspace/session ownership enforcement: the configured workspace must match the
+  session's reported workspace; unknown sessions and cross-workspace reuse are
+  hard failures, and a session that reports no workspace fails closed unless the
+  unsafe opt-in is set explicitly.
+- Bounded `wait_idle` (idle/terminal or `TIMED_OUT`, no retry) and interrupt that
+  reports `interrupt_unsupported` instead of pretending a cancellation happened.
+- `opencode:` runtime wiring in the workspace config (explicit `base_url`,
+  workspace, optional session/agent/model, timeouts, response/message caps) plus
+  `DEVRELAY_OPENCODE_TOKEN` read from the environment only. The section is never
+  task policy: it is excluded from the frozen policy projection and tolerated as
+  a known wiring key in legacy full-config snapshots.
+- `devrelay opencode health|sessions|show|read|send|wait|interrupt|calls` — thin
+  CLI wrappers that print normalized results (no OpenCode logic in the CLI).
+- `tests/opencode_stub.py` + `tests/test_v03a_opencode.py`: deterministic offline
+  coverage of discovery, selection, reading, one prompt, idle completion, provider
+  failure, malformed response, timeout, interrupt, unknown session,
+  workspace/session mismatch, cursor replay and accounting.
+
+### Documentation
+
+- `docs/v0.3/V03A_SPEC.md`, `docs/v0.3/V03A_ACCEPTANCE.md`,
+  `docs/v0.3/V03_PLAN.md`, and `docs/BACKLOG.md` (which carries the pending
+  v0.2-C real Codex smoke and a separate Windows Codex shell P2 investigation).
+
 ## Unreleased - v0.2-C candidate (structured Codex runtime)
 
 Structured, isolated, tamper-evident and replayable Codex runtime. **Not
