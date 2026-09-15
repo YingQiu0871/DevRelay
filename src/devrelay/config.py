@@ -472,7 +472,12 @@ def load_wiring_config(root_or_path: str | Path) -> WiringConfig:
     if isinstance(review, dict) and "provider" in review:
         provider = review["provider"]
     try:
-        return WiringConfig(review_provider=provider, codex=data.get("codex", {}))
+        return WiringConfig(
+            review_provider=provider,
+            codex=data.get("codex", {}),
+            # v0.3-A wiring section (never policy).
+            opencode=data.get("opencode", {}),
+        )
     except Exception as exc:
         raise ConfigError(f"Invalid DevRelay runtime wiring in {path}: {exc}") from exc
 

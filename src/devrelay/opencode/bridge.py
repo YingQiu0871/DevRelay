@@ -232,12 +232,15 @@ class OpenCodeBridge:
     ) -> OpenCodeOperationResult:
         """Read the message window; cursor semantics are explicit."""
         session_id = self._require_session_id(session_id)
-        self._assert_ownership(self.get_session(session_id).session)
+        _session, failure, probe = self._probe_ownership("read_messages", session_id)
+        if failure is not None:
+            return failure
         result, response = self._request(
             "read_messages",
             "GET",
             self.paths.messages_path(session_id),
             session_id=session_id,
+            result=probe,
         )
         if not response.ok:
             if response.status == 404:
@@ -294,7 +297,9 @@ class OpenCodeBridge:
         session_id = self._require_session_id(session_id)
         if not prompt or not prompt.strip():
             raise OpenCodeConfigError("send_prompt requires a non-empty prompt")
-        self._assert_ownership(self.get_session(session_id).session)
+        _session, failure, probe = self._probe_ownership("send_prompt", session_id)
+        if failure is not None:
+            return failure
         body: dict[str, Any] = {
             "parts": [{"type": "text", "text": prompt}],
         }
@@ -311,6 +316,7 @@ class OpenCodeBridge:
             prompt=prompt,
             agent=agent,
             model=model,
+            result=probe,
         )
         if not response.ok:
             if response.status == 404:
@@ -342,17 +348,21 @@ class OpenCodeBridge:
     ) -> OpenCodeOperationResult:
         """Poll until the session is idle/terminal or the bound expires."""
         session_id = self._require_session_id(session_id)
-        self._assert_ownership(self.get_session(session_id).session)
+        _session, failure, probe = self._probe_ownership("wait_idle", session_id)
+        if failure is not None:
+            return failure
         budget = float(self.idle_timeout_seconds if timeout is None else timeout)
         deadline = self._monotonic() + max(0.0, budget)
-        result = OpenCodeOperationResult(
-            operation="wait_idle",
-            state=OpenCodeOperationState.IN_FLIGHT,
-            session_id=session_id,
+        result = probe.model_copy(
+            update={
+                "operation": "wait_idle",
+                "state": OpenCodeOperationState.IN_FLIGHT,
+                "session": None,
+            }
         )
         last_session: OpenCodeSession | None = None
         while True:
-            step, response = self._request(
+            result, response = self._request(
                 "wait_idle",
                 "GET",
                 self.paths.session_path(session_id),
@@ -364,23 +374,23 @@ class OpenCodeBridge:
                     raise OpenCodeSessionNotFoundError(
                         f"session {session_id} disappeared while waiting"
                     )
-                return self._failure(step, response)
+                return self._failure(result, response)
             payload = response.data
             if isinstance(payload, dict) and isinstance(payload.get("session"), dict):
                 payload = payload["session"]
             if not isinstance(payload, dict):
-                return self._malformed(step, response, "session payload is not an object")
+                return self._malformed(result, response, "session payload is not an object")
             session = self._normalize_session(payload)
             if not session.session_id:
                 session = session.model_copy(update={"session_id": session_id})
             last_session = session
             if session.state.terminal:
                 return self._complete(
-                    step, response, session=session, state=OpenCodeOperationState.COMPLETED
+                    result, response, session=session, state=OpenCodeOperationState.COMPLETED
                 )
             if self._monotonic() >= deadline:
                 finished = self._settle(
-                    step,
+                    result,
                     response,
                     state=OpenCodeCallState.COMPLETED,
                     http_status=response.status,
@@ -407,9 +417,15 @@ class OpenCodeBridge:
     def interrupt(self, session_id: str) -> OpenCodeOperationResult:
         """Abort an in-flight operation (capability must be supported)."""
         session_id = self._require_session_id(session_id)
-        self._assert_ownership(self.get_session(session_id).session)
+        _session, failure, probe = self._probe_ownership("interrupt", session_id)
+        if failure is not None:
+            return failure
         result, response = self._request(
-            "interrupt", "POST", self.paths.abort_path(session_id), session_id=session_id
+            "interrupt",
+            "POST",
+            self.paths.abort_path(session_id),
+            session_id=session_id,
+            result=probe,
         )
         if response.status in (404, 405, 501):
             settle = self._settle(
@@ -459,6 +475,30 @@ class OpenCodeBridge:
             return str(Path(text).resolve()), True
         except OSError:  # pragma: no cover - defensive
             return text, True
+
+    def _probe_ownership(
+        self, operation: str, session_id: str
+    ) -> tuple[
+        OpenCodeSession | None, OpenCodeOperationResult | None, OpenCodeOperationResult
+    ]:
+        """Validate ownership; propagate a provider condition instead of guessing.
+
+        Returns ``(session, None)`` when the session is owned by this workspace,
+        ``(None, failure_result)`` when the probe itself hit a provider condition
+        (the failure keeps its own call accounting and state), and raises for
+        hard validation failures (unknown session / workspace mismatch).
+        """
+        probe = self.get_session(session_id)
+        if probe.ok and probe.session is not None:
+            return probe.session, None, probe
+        failure = probe.model_copy(
+            update={
+                "operation": operation,
+                "session_id": session_id,
+                "completed_at": probe.completed_at or utcnow_iso(),
+            }
+        )
+        return None, failure, probe
 
     def _assert_ownership(self, session: OpenCodeSession | None) -> None:
         """Hard failure: a session must belong to the configured workspace."""
@@ -684,11 +724,12 @@ class OpenCodeBridge:
     def _failure(
         self, result: OpenCodeOperationResult, response: TransportResponse
     ) -> OpenCodeOperationResult:
-        state = (
-            OpenCodeOperationState.TIMED_OUT
-            if response.state is OpenCodeCallState.TIMED_OUT
-            else OpenCodeOperationState.PROVIDER_UNAVAILABLE
-        )
+        if response.state is OpenCodeCallState.TIMED_OUT:
+            state = OpenCodeOperationState.TIMED_OUT
+        elif response.state is OpenCodeCallState.MALFORMED_RESPONSE:
+            state = OpenCodeOperationState.MALFORMED_RESPONSE
+        else:
+            state = OpenCodeOperationState.PROVIDER_UNAVAILABLE
         return result.model_copy(
             update={
                 "state": state,

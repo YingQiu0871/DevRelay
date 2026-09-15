@@ -1099,6 +1099,9 @@ profile_app = typer.Typer(
     help="Project profile inspection (raw, works with a broken selector).",
     no_args_is_help=True,
 )
+from devrelay.cli_opencode import opencode_app  # noqa: E402  (v0.3-A bridge)
+
+app.add_typer(opencode_app, name="opencode")
 app.add_typer(profile_app, name="profile")
 
 config_app = typer.Typer(
