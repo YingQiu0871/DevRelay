@@ -13,7 +13,7 @@ DevRelay 是一个本地运行、可审计的多模型软件开发编排层。�
 | --- | --- |
 | Public release / 当前公开版本 | **v0.1.0** |
 | `main` branch / 主分支 | v0.1.x public codebase |
-| v0.2-C structured runtime | Implemented and offline-verified in local development; one replacement real Codex smoke remains pending because the provider is currently unavailable / 已在本地开发中实现并完成离线验证；因 Codex 当前不可用，尚缺一次真实 replacement smoke |
+| v0.2-C structured runtime | Implemented and offline-verified. A real Codex replacement smoke confirmed the schema regression is fixed, but the turn hit the provider usage limit before end-to-end structured-result delivery; E2E closure remains pending / 已实现并完成离线验证。一次真实 Codex replacement smoke 已确认 schema 回归问题修复，但 provider 使用额度在结构化结果完整交付前耗尽，因此 E2E 闭环仍待完成 |
 | v0.3-A OpenCode Session Bridge | **In progress / 开发中** |
 | OpenCode-first orchestration | Planned, not yet released / 已确定方向，尚未发布 |
 | ChatGPT/MCP integration | Planned / 计划中 |
