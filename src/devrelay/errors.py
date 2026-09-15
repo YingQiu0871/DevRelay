@@ -219,3 +219,48 @@ class ProfileKeyForbiddenError(ProfileError):
 
 class ProfileSelectorError(ProfileError):
     code = "profile_selector_unresolved"
+
+
+# ---------------------------------------------------------------------------
+# v0.3-A OpenCode session bridge
+# ---------------------------------------------------------------------------
+class OpenCodeError(CodedError):
+    """OpenCode bridge failure (v0.3-A)."""
+
+    code = "opencode_error"
+
+
+class OpenCodeConfigError(OpenCodeError):
+    """The OpenCode bridge is not configured consistently."""
+
+    code = "opencode_config_invalid"
+
+
+class OpenCodeUnavailableError(OpenCodeError):
+    """The configured OpenCode server could not be reached or answered."""
+
+    code = "opencode_unavailable"
+
+
+class OpenCodeProtocolError(OpenCodeError):
+    """The OpenCode server answered with an unexpected/malformed shape."""
+
+    code = "opencode_protocol_error"
+
+
+class OpenCodeSessionNotFoundError(OpenCodeError):
+    """The explicitly selected session does not exist on this server."""
+
+    code = "opencode_session_not_found"
+
+
+class OpenCodeSessionWorkspaceMismatchError(OpenCodeError):
+    """The selected session does not belong to the configured workspace."""
+
+    code = "opencode_session_workspace_mismatch"
+
+
+class OpenCodeUnsupportedError(OpenCodeError):
+    """The configured server does not support a requested capability."""
+
+    code = "opencode_unsupported"

@@ -122,6 +122,33 @@ class CodexConfig(BaseModel):
         return self
 
 
+class OpenCodeConfig(BaseModel):
+    """v0.3-A OpenCode session bridge wiring (never task policy).
+
+    The endpoint is explicit by design: DevRelay never scans ports or processes.
+    The access token is read from the environment (``DEVRELAY_OPENCODE_TOKEN``)
+    and never persisted in this document or in any artifact.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    base_url: str = ""
+    workspace: str = ""            # defaults to the DevRelay workspace root
+    default_session: str = ""
+    agent: str = ""
+    model: str = ""
+    timeout_seconds: float = Field(default=30.0, gt=0)
+    idle_timeout_seconds: float = Field(default=300.0, gt=0)
+    poll_interval_seconds: float = Field(default=1.0, gt=0)
+    max_response_bytes: int = Field(default=1_048_576, ge=1_024, le=33_554_432)
+    max_messages: int = Field(default=50, ge=1, le=500)
+    allow_unknown_workspace: bool = False
+
+    @property
+    def configured(self) -> bool:
+        return bool(self.base_url.strip())
+
+
 class DevRelayConfig(BaseModel):
     """Validated DevRelay configuration (workspace .devrelay/config.yaml)."""
 
@@ -135,6 +162,7 @@ class DevRelayConfig(BaseModel):
     git: GitPolicyConfig = Field(default_factory=GitPolicyConfig)
     baseline: BaselineConfig = Field(default_factory=BaselineConfig)
     codex: CodexConfig = Field(default_factory=CodexConfig)
+    opencode: OpenCodeConfig = Field(default_factory=OpenCodeConfig)
 
     @model_validator(mode="after")
     def _hard_git_boundaries(self) -> "DevRelayConfig":
@@ -206,10 +234,15 @@ class WiringConfig(BaseModel):
 
     review_provider: Literal["manual", "openai_compatible"] = "manual"
     codex: CodexConfig = Field(default_factory=CodexConfig)
+    opencode: OpenCodeConfig = Field(default_factory=OpenCodeConfig)
 
     @classmethod
     def from_workspace_config(cls, config: "DevRelayConfig") -> "WiringConfig":
-        return cls(review_provider=config.review.provider, codex=config.codex)
+        return cls(
+            review_provider=config.review.provider,
+            codex=config.codex,
+            opencode=config.opencode,
+        )
 
 
 class PolicyDocument(BaseModel):
@@ -544,6 +577,22 @@ profiles: []
 review:
   # manual | openai_compatible
   provider: manual
+
+# v0.3-A: OpenCode session bridge (disabled until base_url is set).
+# The access token, when needed, comes from DEVRELAY_OPENCODE_TOKEN and is never
+# written to this file.
+opencode:
+  base_url: ""                      # e.g. http://127.0.0.1:4096 (explicit endpoint)
+  workspace: ""                     # defaults to this repository root
+  default_session: ""
+  agent: ""
+  model: ""
+  timeout_seconds: 30
+  idle_timeout_seconds: 300
+  poll_interval_seconds: 1.0
+  max_response_bytes: 1048576
+  max_messages: 50
+  allow_unknown_workspace: false
 
 codex:
   executable: codex
