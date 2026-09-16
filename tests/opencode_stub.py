@@ -77,6 +77,16 @@ class StubOpenCodeServer:
         oversize: bool = False,
         prompt_reply: dict[str, Any] | None = None,
         prompt_ack_only: bool = False,
+        prompt_raw_reply: Any = None,
+        prompt_http_status: int | None = None,
+        prompt_error_body: str | None = None,
+        vanish_after_prompt: bool = False,
+        session_http_status_after_prompt: int | None = None,
+        session_error_body_after_prompt: str | None = None,
+        session_id_override: str | None = None,
+        abort_status: int | None = None,
+        abort_body: str | None = None,
+        abort_removes_session: bool = False,
         health_healthy: bool = True,
     ) -> None:
         self.workspace = workspace
@@ -105,6 +115,18 @@ class StubOpenCodeServer:
         self.oversize = oversize
         self.prompt_reply = prompt_reply
         self.prompt_ack_only = prompt_ack_only
+        # P1-3 scenarios: a raw (non-message) POST payload, a session that
+        # vanishes right after acceptance, and a failing follow-up read.
+        self.prompt_raw_reply = prompt_raw_reply
+        self.prompt_http_status = prompt_http_status
+        self.prompt_error_body = prompt_error_body
+        self.vanish_after_prompt = vanish_after_prompt
+        self.session_http_status_after_prompt = session_http_status_after_prompt
+        self.session_error_body_after_prompt = session_error_body_after_prompt
+        self.session_id_override = session_id_override
+        self.abort_status = abort_status
+        self.abort_body = abort_body
+        self.abort_removes_session = abort_removes_session
         self.health_healthy = health_healthy
 
         # observations
@@ -146,9 +168,16 @@ class StubOpenCodeServer:
                 return self._json({"sessions": {"unexpected": True}})
             return self._json({"sessions": self.sessions})
         if parts[:1] == ["session"] and len(parts) == 2:
+            if self.prompts and self.session_http_status_after_prompt:
+                return httpx.Response(
+                    self.session_http_status_after_prompt,
+                    text=self.session_error_body_after_prompt or '{"error":"boom"}',
+                )
             session = self._find(parts[1])
             if session is None:
                 return httpx.Response(404, text="not found")
+            if self.session_id_override:
+                session = {**session, "id": self.session_id_override}
             if self.state_sequence:
                 index = min(self.next_state_index, len(self.state_sequence) - 1)
                 self.next_state_index += 1
@@ -165,6 +194,15 @@ class StubOpenCodeServer:
             if session is None:
                 return httpx.Response(404, text="not found")
             body = json.loads(request.content.decode("utf-8") or "{}")
+            if self.prompt_http_status is not None:
+                self.prompts.append(body)
+                session["state"] = "busy"
+                return httpx.Response(
+                    self.prompt_http_status,
+                    text=self.prompt_error_body
+                    if self.prompt_error_body is not None
+                    else '{"error":"boom"}',
+                )
             self.prompts.append(body)
             text = ""
             for part in body.get("parts", []):
@@ -173,15 +211,34 @@ class StubOpenCodeServer:
             reply = self.prompt_reply or _message(
                 f"msg_{self._message_counter:02d}", "assistant", f"echo: {text}"
             )
+            if self.prompt_raw_reply is not None:
+                self._message_counter += 1
+                session["state"] = "busy"
+                if self.vanish_after_prompt:
+                    self.sessions = [s for s in self.sessions if s is not session]
+                return self._json(self.prompt_raw_reply)
             self._message_counter += 1
             self.messages.append(reply)
             session["state"] = "busy"
+            if self.vanish_after_prompt:
+                self.sessions = [s for s in self.sessions if s is not session]
             if self.prompt_ack_only:
                 return self._json({"ok": True})
             return self._json({"message": reply})
         if parts[:1] == ["session"] and parts[2:] == ["abort"]:
             if self._find(parts[1]) is None:
                 return httpx.Response(404, text="not found")
+            if self.abort_removes_session:
+                self.sessions = [s for s in self.sessions if s.get("id") != parts[1]]
+            if self.abort_status is not None:
+                if self.abort_status == 204:
+                    return httpx.Response(204)
+                return httpx.Response(
+                    self.abort_status,
+                    text=self.abort_body
+                    if self.abort_body is not None
+                    else '{"error":"boom"}',
+                )
             if not self.abort_supported:
                 return httpx.Response(405, text="abort unsupported")
             self._find(parts[1])["state"] = "idle"

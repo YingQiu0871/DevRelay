@@ -18,7 +18,7 @@ import typer
 from devrelay.config import OpenCodeConfig
 from devrelay.errors import DevRelayError, OpenCodeConfigError
 from devrelay.opencode import OpenCodeBridge
-from devrelay.opencode.models import OpenCodeOperationResult
+from devrelay.opencode.models import OpenCodeOperationResult, OpenCodeOperationState
 
 opencode_app = typer.Typer(
     help="OpenCode session bridge (explicit endpoint, explicit session).",
@@ -52,10 +52,42 @@ def _bridge(root: Path, wiring) -> OpenCodeBridge:
     )
 
 
+#: States that mean "the command did what the caller asked for".
+#: ``INTERRUPTED`` is success *for the interrupt command*: it means the abort
+#: request was accepted (and is explicitly not a verified terminal state).
+_SUCCESS_STATES = (
+    OpenCodeOperationState.COMPLETED,
+    OpenCodeOperationState.INTERRUPTED,
+)
+
+
+def _exit_code_for(result: OpenCodeOperationResult) -> int:
+    """Failure is a failure in both output modes.
+
+    ``--json`` changes the *rendering* only; scripts and CI must still be able to
+    detect a failed operation through the exit status, so the code is derived
+    from the result, never from the output format.
+
+    ``reply_pending`` is not success either: the prompt was accepted, but the
+    caller asked for a reply and did not get one, so it must not look like a
+    clean run.
+    """
+    if result.state in _SUCCESS_STATES and not result.reply_pending:
+        return 0
+    return 2
+
+
 def _emit(result: OpenCodeOperationResult, *, json_output: bool) -> None:
     if json_output:
         typer.echo(json.dumps(result.model_dump(mode="json"), indent=2, ensure_ascii=False))
-        return
+    else:
+        _emit_human(result)
+    code = _exit_code_for(result)
+    if code:
+        raise typer.Exit(code)
+
+
+def _emit_human(result: OpenCodeOperationResult) -> None:
     typer.echo(f"{result.operation}: {result.state.value}")
     if result.session_id:
         typer.echo(f"  session    {result.session_id}")
@@ -98,8 +130,6 @@ def _emit(result: OpenCodeOperationResult, *, json_output: bool) -> None:
         typer.echo(f"  [{message.role}] {message.message_id}")
         for line in (text or "").splitlines():
             typer.echo(f"    {line}")
-    if not result.ok:
-        raise typer.Exit(2)
 
 
 @opencode_app.command("health")
@@ -210,10 +240,15 @@ def opencode_send(
         raise typer.Exit(1)
     _emit(result, json_output=json_output)
     if wait and result.ok:
-        waited = bridge.wait_idle(session_id or "", timeout)
+        # The submitted prompt is passed as an in-memory redaction literal so a
+        # provider echo in a later error snippet can never persist it (P2-D).
+        waited = bridge.wait_idle(session_id or "", timeout, redact_values=(text,))
         _emit(waited, json_output=json_output)
         if waited.ok:
-            fresh = bridge.read_messages(session_id or "", result.messages[-1].message_id if result.messages else None)
+            cursor = result.messages[-1].message_id if result.messages else None
+            fresh = bridge.read_messages(
+                session_id or "", cursor, redact_values=(text,)
+            )
             _emit(fresh, json_output=json_output)
 
 

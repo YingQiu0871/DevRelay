@@ -110,6 +110,9 @@ FORBIDDEN_CONFIG_PREFIXES = (
 # documented as outside the v0.2-C boundary.
 CODEX_CHILD_ENV_DENYLIST = (
     "DEVRELAY_REVIEWER_API_KEY",
+    # v0.3-A: the OpenCode bearer credential must never be inherited by a Codex
+    # child (a subprocess holding it could bypass the bridge entirely).
+    "DEVRELAY_OPENCODE_TOKEN",
     "DEVRELAY_REVIEWER_BASE_URL",
     "DEVRELAY_REVIEWER_MODEL",
     "OPENAI_API_KEY",

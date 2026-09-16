@@ -258,13 +258,35 @@ class OpenCodeBridge:
     # 4. read_messages
     # ------------------------------------------------------------------
     def read_messages(
-        self, session_id: str, cursor: str | None = None
+        self,
+        session_id: str,
+        cursor: str | None = None,
+        *,
+        prior: OpenCodeOperationResult | None = None,
+        accounting: list[OpenCodeOperationResult] | None = None,
+        redact_values: Sequence[str] = (),
     ) -> OpenCodeOperationResult:
-        """Read the message window (newest messages win; cursor is explicit)."""
+        """Read the message window (newest messages win; cursor is explicit).
+
+        ``prior``/``accounting`` exist for the internal follow-up read of
+        :meth:`send_prompt`: ``accounting`` always receives the newest merged
+        result, including immediately before a typed failure is raised, so an
+        attempt that issued requests can never lose them from the operation's
+        accounting (P1-3: operation accounting == ledger accounting).
+
+        ``redact_values`` are in-memory literals (typically the prompt that was
+        just submitted) that must never survive a provider echo into a persisted
+        error snippet (P2-D).  They are never stored anywhere.
+        """
         session_id = self._require_session_id(session_id)
         session, failure, merged, _response = self._fetch_session(
-            "read_messages", session_id
+            "read_messages",
+            session_id,
+            result=prior,
+            redact_values=redact_values,
         )
+        if accounting is not None:
+            accounting.append(merged)
         if session is None and failure is not None:
             return failure
         if session is None:
@@ -277,7 +299,10 @@ class OpenCodeBridge:
             self.paths.messages_path(session_id),
             session_id=session_id,
             result=merged,
+            extra_redactions=redact_values,
         )
+        if accounting is not None:
+            accounting.append(result)
         if not response.ok:
             if response.status == 404:
                 raise OpenCodeSessionNotFoundError(
@@ -396,7 +421,9 @@ class OpenCodeBridge:
             )
 
         # ---- ack-only / asynchronous: one explicit follow-up read ------------
-        follow_up = self._read_after_prompt(session_id, boundary_cursor, result)
+        follow_up = self._read_after_prompt(
+            session_id, boundary_cursor, result, prompt
+        )
         if follow_up.state is OpenCodeOperationState.MALFORMED_RESPONSE:
             return follow_up
         if not follow_up.ok:
@@ -445,28 +472,49 @@ class OpenCodeBridge:
         )
 
     def _read_after_prompt(
-        self, session_id: str, boundary_cursor: str, prior: OpenCodeOperationResult
+        self,
+        session_id: str,
+        boundary_cursor: str,
+        prior: OpenCodeOperationResult,
+        prompt: str,
     ) -> OpenCodeOperationResult:
         """One explicit follow-up read whose accounting always merges (P1-3)."""
+        # Even a follow-up that fails after issuing requests must be accounted
+        # for: the ledger recorded them, so the operation result must too.
+        accounting: list[OpenCodeOperationResult] = []
         try:
-            follow_up = self.read_messages(session_id, boundary_cursor or None)
+            follow_up = self.read_messages(
+                session_id,
+                boundary_cursor or None,
+                prior=prior,
+                accounting=accounting,
+                redact_values=(prompt,),
+            )
         except OpenCodeSessionNotFoundError as exc:
             # Post-acceptance: a vanished session is a follow-up condition, not a
             # "your prompt was never submitted" failure.
-            return prior.model_copy(
+            merged = accounting[-1] if accounting else prior
+            return merged.model_copy(
                 update={
                     "operation": "send_prompt",
+                    "session_id": session_id,
                     "state": OpenCodeOperationState.PROVIDER_UNAVAILABLE,
                     "completed_at": utcnow_iso(),
+                    "duration_ms": self._elapsed_ms(merged),
+                    "reply_pending": True,
+                    "reply_boundary": boundary_cursor,
+                    "follow_up_state": OpenCodeOperationState.PROVIDER_UNAVAILABLE.value,
                     "error_type": "follow_up_session_not_found",
                     "error": str(exc),
                 }
             )
+        # ``follow_up`` was seeded with ``prior``, so it *already* carries the
+        # merged accounting: adding ``prior`` again would double-count every
+        # call the prompt operation has made so far.
         return follow_up.model_copy(
             update={
-                "call_ids": list(prior.call_ids) + list(follow_up.call_ids),
-                "request_count": prior.request_count + follow_up.request_count,
                 "completed_at": follow_up.completed_at or utcnow_iso(),
+                "duration_ms": self._elapsed_ms(follow_up),
             }
         )
 
@@ -474,7 +522,11 @@ class OpenCodeBridge:
     # 6. wait_idle
     # ------------------------------------------------------------------
     def wait_idle(
-        self, session_id: str, timeout: float | None = None
+        self,
+        session_id: str,
+        timeout: float | None = None,
+        *,
+        redact_values: Sequence[str] = (),
     ) -> OpenCodeOperationResult:
         """Poll until idle/terminal or the whole-operation deadline expires.
 
@@ -498,7 +550,11 @@ class OpenCodeBridge:
         if remaining <= 0:
             return self._idle_timeout(result, None, budget)
         session, failure, result, _response = self._fetch_session(
-            "wait_idle", session_id, result=result, timeout_seconds=remaining
+            "wait_idle",
+            session_id,
+            result=result,
+            timeout_seconds=remaining,
+            redact_values=redact_values,
         )
         if session is None and failure is not None:
             return failure
@@ -521,6 +577,7 @@ class OpenCodeBridge:
                 session_id=session_id,
                 result=result,
                 timeout_seconds=remaining,
+                extra_redactions=redact_values,
             )
             if not response.ok:
                 if response.status == 404:
@@ -832,6 +889,7 @@ class OpenCodeBridge:
         result: OpenCodeOperationResult | None = None,
         timeout_seconds: float | None = None,
         expect_json: bool = True,
+        extra_redactions: Sequence[str] = (),
     ) -> tuple[OpenCodeOperationResult, TransportResponse]:
         """Issue exactly one request, recording it before it leaves the machine."""
         call_id = self.ledger.allocate_call_id()
@@ -857,7 +915,9 @@ class OpenCodeBridge:
             path,
             json_body=json_body,
             timeout_seconds=timeout_seconds,
-            redact_values=(prompt,) if prompt else (),
+            redact_values=(
+                tuple(extra_redactions) + ((prompt,) if prompt else ())
+            ),
             expect_json=expect_json,
         )
         settled = record.model_copy(
@@ -897,6 +957,7 @@ class OpenCodeBridge:
         *,
         result: OpenCodeOperationResult | None = None,
         timeout_seconds: float | None = None,
+        redact_values: Sequence[str] = (),
     ) -> tuple[
         OpenCodeSession | None,
         OpenCodeOperationResult | None,
@@ -916,6 +977,7 @@ class OpenCodeBridge:
             session_id=session_id,
             result=result,
             timeout_seconds=timeout_seconds,
+            extra_redactions=redact_values,
         )
         if response.status == 404:
             return None, None, merged, response

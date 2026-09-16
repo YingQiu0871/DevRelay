@@ -8,11 +8,12 @@ from pathlib import Path
 from typing import Any, Literal, Optional
 
 import yaml
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from devrelay.artifacts.store import encode_lf
 from devrelay.errors import ConfigError
 from devrelay.models import PolicyProvenance, Severity
+from devrelay.opencode.models import MAX_MESSAGES as OPENCODE_HARD_MAX_MESSAGES
 
 # The packaged default policy file (the only default authority).
 DEFAULT_PROFILE_NAME = "default.yaml"
@@ -141,8 +142,48 @@ class OpenCodeConfig(BaseModel):
     idle_timeout_seconds: float = Field(default=300.0, gt=0)
     poll_interval_seconds: float = Field(default=1.0, gt=0)
     max_response_bytes: int = Field(default=1_048_576, ge=1_024, le=33_554_432)
-    max_messages: int = Field(default=50, ge=1, le=500)
+    # The wire-level window cap lives in the bridge (MAX_MESSAGES); a
+    # configuration above it could never be honoured, so it fails here instead
+    # of being silently clamped at request time.
+    max_messages: int = Field(default=50, ge=1, le=OPENCODE_HARD_MAX_MESSAGES)
     allow_unknown_workspace: bool = False
+
+    @field_validator("base_url")
+    @classmethod
+    def _validate_base_url(cls, value: str) -> str:
+        """An explicit, unambiguous endpoint - or nothing at all.
+
+        The endpoint is a live control channel carrying a bearer token, so a
+        value DevRelay cannot honour exactly (unknown scheme, embedded
+        credentials, a path prefix that request construction would silently
+        drop) is rejected here rather than mis-called at request time.
+        """
+        value = (value or "").strip()
+        if not value:
+            return ""
+        from urllib.parse import urlsplit
+
+        parts = urlsplit(value)
+        if parts.scheme not in ("http", "https"):
+            raise ValueError(
+                "opencode.base_url must use http:// or https:// "
+                f"(got {parts.scheme or 'no scheme'!r})"
+            )
+        if not parts.hostname:
+            raise ValueError("opencode.base_url must include a host")
+        if parts.username is not None or parts.password is not None:
+            raise ValueError(
+                "opencode.base_url must not embed credentials; the bearer token "
+                "comes from DEVRELAY_OPENCODE_TOKEN"
+            )
+        if parts.query or parts.fragment:
+            raise ValueError("opencode.base_url must not contain a query or fragment")
+        if parts.path.rstrip("/"):
+            raise ValueError(
+                "opencode.base_url must not contain a path prefix: v0.3-A issues "
+                "requests at the server root, so a prefix would be dropped silently"
+            )
+        return value.rstrip("/")
 
     @property
     def configured(self) -> bool:
@@ -397,6 +438,23 @@ def _deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any
     return merged
 
 
+def _drop_null_known_sections(merged: dict[str, Any]) -> dict[str, Any]:
+    """A *known* section written as an empty/null YAML body means "not set".
+
+    ``opencode:`` with nothing under it parses as ``None``; that is a normal way
+    to leave a documented section commented out, so it must fall back to the
+    field default instead of failing validation.  Only schema fields are
+    dropped: an unknown key stays in the document so ``extra="forbid"`` still
+    rejects it (a typo must never be silently ignored).
+    """
+    known = set(WorkspaceFile.model_fields)
+    return {
+        key: value
+        for key, value in merged.items()
+        if not (value is None and key in known)
+    }
+
+
 def _parse_yaml(text: str, source: str) -> dict[str, Any]:
     try:
         data = yaml.safe_load(text)
@@ -421,7 +479,7 @@ def _merge_bundled_defaults(user_path: Path | None) -> dict[str, Any]:
     defaults = _parse_yaml(bundled_default_yaml(), "bundled default profile")
     if user_path is not None and user_path.is_file():
         user = _parse_yaml(user_path.read_text(encoding="utf-8"), str(user_path))
-        return _deep_merge(defaults, user)
+        return _drop_null_known_sections(_deep_merge(defaults, user))
     return defaults
 
 
@@ -475,8 +533,9 @@ def load_wiring_config(root_or_path: str | Path) -> WiringConfig:
         return WiringConfig(
             review_provider=provider,
             codex=data.get("codex", {}),
-            # v0.3-A wiring section (never policy).
-            opencode=data.get("opencode", {}),
+            # v0.3-A wiring section (never policy).  An empty/null YAML body
+            # means "not configured", never "None".
+            opencode=data.get("opencode") or {},
         )
     except Exception as exc:
         raise ConfigError(f"Invalid DevRelay runtime wiring in {path}: {exc}") from exc
@@ -504,6 +563,8 @@ def workspace_policy_overrides(root_or_path: str | Path) -> dict[str, Any]:
     if not path.is_file():
         return {}
     data = _parse_yaml_bytes(path.read_bytes(), str(path))
+    # A section whose body is empty parses as None and is "not written".
+    data = {key: value for key, value in data.items() if value is not None}
     data.pop("profiles", None)
     data.pop("codex", None)
     # v0.3-A: the OpenCode bridge is runtime wiring, never task policy.

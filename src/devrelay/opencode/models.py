@@ -274,5 +274,15 @@ class OpenCodeCallRecord(BaseModel):
 
 
 def prompt_digest(prompt: str) -> str:
-    """Hash of the exact prompt text (the text itself is never persisted)."""
+    """Identity fingerprint of the exact prompt text (never the text itself).
+
+    Honest scope: this is an **unsalted** SHA-256 of the prompt, so it is an
+    *identifier*, not a secrecy mechanism - anyone holding the ledger who can
+    guess the prompt can confirm the guess by hashing it.  It exists so a call
+    can be correlated with the prompt that produced it without persisting the
+    prompt, and it must never be described as protecting prompt confidentiality.
+    Prompts stay out of artifacts by not being stored at all, and provider
+    echoes of a prompt are scrubbed from error snippets before persistence (see
+    ``OpenCodeTransport.request``).
+    """
     return hashlib.sha256(prompt.encode("utf-8")).hexdigest()
