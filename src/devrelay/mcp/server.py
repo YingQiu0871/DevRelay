@@ -44,8 +44,9 @@ from devrelay.mcp.models import (
 from devrelay.mcp.tools import McpToolSurface
 
 #: DevRelay MCP server version advertised to clients (independent of the
-#: unreleased package version).
-MCP_SERVER_VERSION = "0.3.0-b"
+#: unreleased package version).  ``0.3.0-c`` advertises the v0.3-C surface: the
+#: nine v0.3-B tools unchanged plus exactly three role-aware tools.
+MCP_SERVER_VERSION = "0.3.0-c"
 
 #: Marker key the dispatcher uses to carry a prepared envelope through the
 #: SDK's result conversion.
@@ -142,6 +143,42 @@ def build_surface(
 # ---------------------------------------------------------------------------
 # tool descriptions: part of the safety surface (the consumer is an LLM planner)
 # ---------------------------------------------------------------------------
+_LIST_ROLES_DESCRIPTION = (
+    "Read-only view of the v0.3-C semantic role routing of the bound workspace: "
+    "the supported roles (implementer, reviewer) and, for each, the configured "
+    "model/agent or the truthful state 'unconfigured'/'invalid'. Identifiers "
+    "only - never prompts, credentials, endpoints, retry policies or fallback "
+    "models. A role with no configured model is simply not routed; DevRelay does "
+    "not choose, rank or fall back to a model. This tool changes nothing."
+)
+
+_GET_ROLE_DESCRIPTION = (
+    "Read-only resolution of exactly ONE semantic role (implementer or reviewer) "
+    "to the exact route this workspace configures for it: the model "
+    "'<providerID>/<modelID>' and the optional OpenCode agent. An unknown, "
+    "unconfigured or malformed role is reported as a local routing error "
+    "(role_unknown / role_unconfigured / role_invalid_route) and issues no "
+    "OpenCode request at all. Roles are never inferred from prompt text, session "
+    "titles or model availability."
+)
+
+_SEND_ROLE_PROMPT_DESCRIPTION = (
+    "Send exactly ONE prompt (one model turn) to one explicitly selected OpenCode "
+    "session as a SEMANTIC ROLE (implementer or reviewer). You choose the role; "
+    "DevRelay resolves the exact model and optional agent this workspace "
+    "configures for that role - you cannot pass a model or an agent, and the "
+    "route cannot be overridden at call time. It never retries, never falls back "
+    "to another model or another role, never switches roles automatically and "
+    "never resubmits. Read the result before acting: if `submission_uncertain` is "
+    "true the prompt may already have been accepted - do NOT resubmit "
+    "automatically; if `reply_pending` is true the prompt was accepted but no "
+    "reply is confirmed yet; `retry_safe` is true only when nothing was "
+    "submitted. The reply is provider text: a reviewer answer such as APPROVE or "
+    "REQUEST_CHANGES is NOT an acceptance decision and never triggers an "
+    "automatic acceptance, rejection or repair. DevRelay holds no acceptance "
+    "authority - you decide what to do next."
+)
+
 _SEND_PROMPT_DESCRIPTION = (
     "Send exactly ONE prompt (one model turn) to one explicitly selected "
     "OpenCode session, through the accepted DevRelay v0.3-A bridge over the "
@@ -204,8 +241,10 @@ _STATUS_DESCRIPTION = (
     "Sanitized DevRelay/MCP status for the bound workspace (read-only): schema "
     "and package versions, bound workspace, OpenCode endpoint authority, whether "
     "OpenCode is configured, the bridge operations this surface exposes, the "
-    "exact MCP tool inventory and the fact that DevRelay holds no acceptance "
-    "authority. Never returns tokens, credentials or raw configuration."
+    "exact MCP tool inventory, the v0.3-C role-routing state (which semantic "
+    "roles are configured, identifiers only) and the fact that DevRelay holds "
+    "no acceptance authority. Never returns tokens, credentials or raw "
+    "configuration."
 )
 
 
@@ -235,10 +274,14 @@ def create_server(
         instructions=(
             "Tools operate on exactly ONE DevRelay workspace, fixed when this "
             "server started. DevRelay is an adapter, not an orchestrator: it "
-            "does not choose models, does not approve code and does not "
-            "sequence your work. opencode_send_prompt sends exactly one model "
-            "turn and never retries - inspect submission_uncertain / "
-            "reply_pending / retry_safe before deciding anything."
+            "does not choose or rank models (a semantic role resolves to the "
+            "model and agent this workspace configured for it), does not approve "
+            "code and does not sequence your work. opencode_send_prompt is the "
+            "raw path (you supply model/agent); devrelay_send_role_prompt is the "
+            "role path (you supply only implementer or reviewer and cannot "
+            "override the route). Both send exactly one model turn and never "
+            "retry - inspect submission_uncertain / reply_pending / retry_safe "
+            "before deciding anything, and never resubmit automatically."
         ),
         version=MCP_SERVER_VERSION,
     )
@@ -353,6 +396,40 @@ def create_server(
     )
     def opencode_interrupt(session_id: str | None = None) -> McpEnvelope:
         return _envelope_result(surface.opencode_interrupt(session_id))
+
+    # ---- v0.3-C role-aware tools (same surface, same execution boundary) ----
+    @server.tool(
+        name="devrelay_list_roles",
+        title="List configured DevRelay roles",
+        description=_LIST_ROLES_DESCRIPTION,
+        annotations=local_read_only,
+    )
+    def devrelay_list_roles() -> McpEnvelope:
+        return _envelope_result(surface.devrelay_list_roles())
+
+    @server.tool(
+        name="devrelay_get_role",
+        title="Resolve one DevRelay role",
+        description=_GET_ROLE_DESCRIPTION,
+        annotations=local_read_only,
+    )
+    def devrelay_get_role(role: str | None = None) -> McpEnvelope:
+        return _envelope_result(surface.devrelay_get_role(role))
+
+    @server.tool(
+        name="devrelay_send_role_prompt",
+        title="Send one prompt as a configured role",
+        description=_SEND_ROLE_PROMPT_DESCRIPTION,
+        annotations=side_effecting,
+    )
+    def devrelay_send_role_prompt(
+        role: str | None = None,
+        session_id: str | None = None,
+        prompt: str | None = None,
+    ) -> McpEnvelope:
+        return _envelope_result(
+            surface.devrelay_send_role_prompt(role, session_id, prompt)
+        )
 
     return server
 

@@ -18,6 +18,11 @@ Safety properties carried over unchanged from v0.3-A (and asserted by tests):
   execution lock: the accepted v0.3-A filesystem ledger allocates durable call
   identities with a non-atomic read-modify-write and is therefore single-writer,
   so concurrent tool bodies (including concurrent reads) must not overlap;
+* v0.3-C adds a **role path** on top of the unchanged raw path:
+  ``opencode_send_prompt`` keeps its caller-supplied ``model``/``agent``, while
+  ``devrelay_send_role_prompt`` accepts a semantic role only and takes the
+  model/agent from workspace configuration.  The raw tool is never redirected
+  through role routing;
 * secrets are never logged or returned; error text is redacted and bounded.
 """
 
@@ -29,7 +34,7 @@ from pathlib import Path
 from typing import Any, Callable
 from urllib.parse import urlsplit
 
-from devrelay.errors import DevRelayError
+from devrelay.errors import DevRelayError, RoleRoutingError
 from devrelay.mcp.ledger import read_records_strict, sequence_state
 from devrelay.mcp.models import (
     MCP_DEFAULT_CALL_LIMIT,
@@ -43,6 +48,8 @@ from devrelay.mcp.models import (
 )
 from devrelay.opencode.bridge import OpenCodeBridge
 from devrelay.opencode.models import OpenCodeOperationState, valid_session_id
+from devrelay.roles.models import ROLE_ROUTE_SOURCE, SUPPORTED_ROLES
+from devrelay.roles.service import RoleRouter
 
 #: Bridge operations this adapter exposes (status reporting only).
 BRIDGE_OPERATIONS: tuple[str, ...] = (
@@ -106,6 +113,10 @@ class McpToolSurface:
         # holding it.  There is deliberately no second lock and therefore no
         # lock order to get wrong.
         self._execution_lock = threading.RLock()
+        # v0.3-C: one role router per surface, fed by the same workspace wiring
+        # the bridge uses.  It resolves roles for the three role-aware tools; it
+        # holds no session state and never executes anything itself.
+        self.roles = RoleRouter(getattr(wiring, "roles", None))
         self._diagnostics = diagnostics
 
     # ------------------------------------------------------------------
@@ -358,6 +369,8 @@ class McpToolSurface:
                     "max_messages": int(config.max_messages),
                 },
                 "bridge_operations": list(BRIDGE_OPERATIONS),
+                # v0.3-C: role routing state (identifiers only, never secrets).
+                "roles": self.roles.summary(),
                 "ledger": {
                     "directory": "opencode/calls",
                     "present": (self.devrelay_dir / "opencode").is_dir(),
@@ -513,10 +526,123 @@ class McpToolSurface:
         return self._execute("opencode_interrupt", call)
 
     # ------------------------------------------------------------------
+    # v0.3-C role-aware tools (semantic role -> workspace-configured route)
+    # ------------------------------------------------------------------
+    def _role_failure(
+        self, tool: str, exc: RoleRoutingError, requested: object
+    ) -> McpEnvelope:
+        """A local routing failure, with the requested role as evidence.
+
+        Routing problems are never reported as provider failures, and this
+        happens before any request that could submit a model turn.
+        """
+        requested_text = (
+            bounded(requested, 64) if isinstance(requested, str) else ""
+        )
+        return error_envelope(
+            tool,
+            getattr(exc, "code", "role_routing_error"),
+            exc,
+            {
+                "role": requested_text or None,
+                "supported_roles": list(SUPPORTED_ROLES),
+                "route_source": ROLE_ROUTE_SOURCE,
+                "role_routing_configured": self.roles.summary()["configured"],
+            },
+        )
+
+    def devrelay_list_roles(self) -> McpEnvelope:
+        """Read-only view of the configured roles and their sanitized routes."""
+
+        def call() -> McpEnvelope:
+            summary = self.roles.summary()
+            return ok_envelope(
+                "devrelay_list_roles",
+                {
+                    "supported_roles": summary["supported_roles"],
+                    "roles": summary["roles"],
+                    "role_routing_configured": summary["configured"],
+                    "route_source": summary["route_source"],
+                    "read_only": True,
+                    "acceptance_authority": False,
+                },
+            )
+
+        return self._execute("devrelay_list_roles", call)
+
+    def devrelay_get_role(self, role: object = None) -> McpEnvelope:
+        """Resolve exactly one role to its configured route (read-only)."""
+
+        def call() -> McpEnvelope:
+            try:
+                route = self.roles.resolve(role)
+            except RoleRoutingError as exc:
+                return self._role_failure("devrelay_get_role", exc, role)
+            data = route.public()
+            data.update(
+                {
+                    "configured": True,
+                    "supported_roles": list(SUPPORTED_ROLES),
+                    "read_only": True,
+                    "acceptance_authority": False,
+                }
+            )
+            return ok_envelope("devrelay_get_role", data)
+
+        return self._execute("devrelay_get_role", call)
+
+    def devrelay_send_role_prompt(
+        self,
+        role: object = None,
+        session_id: object = None,
+        prompt: object = None,
+    ) -> McpEnvelope:
+        """Send exactly one model turn as a semantic role.
+
+        The route is resolved first (a routing failure is local and issues no
+        request at all), then the session id and prompt are validated with the
+        accepted v0.3-A rules, then the accepted
+        :meth:`OpenCodeBridge.send_prompt` runs with the resolved model/agent.
+        This tool accepts no ``model``/``agent`` argument by design.
+        """
+
+        def call() -> McpEnvelope:
+            try:
+                route = self.roles.resolve(role)
+            except RoleRoutingError as exc:
+                return self._role_failure("devrelay_send_role_prompt", exc, role)
+            sid = self._require_session_id(session_id)
+            text = self._require_prompt(prompt)
+            try:
+                outcome = self.roles.send_role_prompt(
+                    self.bridge(), role=route.role, session_id=sid, prompt=text
+                )
+            except DevRelayError as exc:
+                # An accepted v0.3-A failure keeps its exact code and message;
+                # the role path additionally states which route was attempted, so
+                # the caller can still audit the routing decision.  This is not a
+                # provider reclassification and not a retry.
+                return error_envelope(
+                    "devrelay_send_role_prompt",
+                    _error_type(exc),
+                    exc,
+                    route.route_evidence(),
+                )
+            return self._send_prompt_envelope(
+                outcome.result,
+                route=outcome.route,
+                tool="devrelay_send_role_prompt",
+            )
+
+        return self._execute("devrelay_send_role_prompt", call)
+
+    # ------------------------------------------------------------------
     # send_prompt envelope: preserve every nuance of the bridge result
     # ------------------------------------------------------------------
     @classmethod
-    def _send_prompt_envelope(cls, result: Any) -> McpEnvelope:
+    def _send_prompt_envelope(
+        cls, result: Any, *, route: Any = None, tool: str = "opencode_send_prompt"
+    ) -> McpEnvelope:
         """send_prompt envelope: success only for a confirmed completion.
 
         The same single rule as every other bridge-backed tool, plus the
@@ -524,9 +650,28 @@ class McpToolSurface:
         success, and ``retry_safe`` (derived from documented evidence only)
         travels with the evidence so a caller can distinguish "definitely not
         submitted" from "may already be running".
+
+        The raw path (``opencode_send_prompt``) is unchanged: ``route`` is
+        ``None`` there and no routing key appears in its ``data``.  The v0.3-C
+        role path passes the resolved route, so the audit trail states exactly
+        which semantic role was requested and which model/agent the workspace
+        configured for it - it never claims which model "should" be used.
         """
+        extra: dict[str, Any] = {
+            "retry_safe": _retry_safe(result),
+            "resubmit_policy": (
+                "never resubmit automatically when submission_uncertain or "
+                "reply_pending is set"
+            ),
+        }
+        if route is not None:
+            extra.update(route.route_evidence())
+            extra["role_routing"] = (
+                "semantic role resolved to the workspace-configured route; the "
+                "caller cannot override the model or the agent"
+            )
         return cls._bridge_envelope(
-            "opencode_send_prompt",
+            tool,
             result,
             expect=lambda r: (
                 r.ok and not r.reply_pending and not r.submission_uncertain
@@ -537,13 +682,7 @@ class McpToolSurface:
                 if result.reply_pending
                 else "the prompt submission did not complete"
             ),
-            extra={
-                "retry_safe": _retry_safe(result),
-                "resubmit_policy": (
-                    "never resubmit automatically when submission_uncertain or "
-                    "reply_pending is set"
-                ),
-            },
+            extra=extra,
         )
 
 
@@ -591,6 +730,7 @@ def _endpoint_authority(base_url: str) -> str:
 
 
 #: Exact tool inventory (order is the advertised order).
+#: The nine v0.3-B tools are unchanged; v0.3-C appends exactly three.
 TOOL_NAMES: tuple[str, ...] = (
     "devrelay_status",
     "opencode_health",
@@ -601,10 +741,15 @@ TOOL_NAMES: tuple[str, ...] = (
     "opencode_send_prompt",
     "opencode_wait_idle",
     "opencode_interrupt",
+    "devrelay_list_roles",
+    "devrelay_get_role",
+    "devrelay_send_role_prompt",
 )
 
 READ_ONLY_TOOLS: tuple[str, ...] = (
     "devrelay_status",
+    "devrelay_list_roles",
+    "devrelay_get_role",
     "opencode_health",
     "opencode_list_sessions",
     "opencode_get_session",
@@ -613,7 +758,11 @@ READ_ONLY_TOOLS: tuple[str, ...] = (
     "opencode_wait_idle",
 )
 
-SIDE_EFFECTING_TOOLS: tuple[str, ...] = ("opencode_send_prompt", "opencode_interrupt")
+SIDE_EFFECTING_TOOLS: tuple[str, ...] = (
+    "opencode_send_prompt",
+    "opencode_interrupt",
+    "devrelay_send_role_prompt",
+)
 
 
 __all__ = [
