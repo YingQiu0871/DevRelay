@@ -14,6 +14,7 @@ from devrelay.artifacts.store import encode_lf
 from devrelay.errors import ConfigError
 from devrelay.models import PolicyProvenance, Severity
 from devrelay.opencode.models import MAX_MESSAGES as OPENCODE_HARD_MAX_MESSAGES
+from devrelay.roles.models import RolesConfig
 from devrelay.redact import redact_text
 
 # The packaged default policy file (the only default authority).
@@ -263,6 +264,10 @@ class DevRelayConfig(BaseModel):
     baseline: BaselineConfig = Field(default_factory=BaselineConfig)
     codex: CodexConfig = Field(default_factory=CodexConfig)
     opencode: OpenCodeConfig = Field(default_factory=OpenCodeConfig)
+    # v0.3-C: semantic role routing.  Runtime wiring (which model plays which
+    # role), never task policy; an absent/empty section is valid and only
+    # role-aware tools report the missing route.
+    roles: RolesConfig = Field(default_factory=RolesConfig)
 
     @model_validator(mode="after")
     def _hard_git_boundaries(self) -> "DevRelayConfig":
@@ -335,6 +340,8 @@ class WiringConfig(BaseModel):
     review_provider: Literal["manual", "openai_compatible"] = "manual"
     codex: CodexConfig = Field(default_factory=CodexConfig)
     opencode: OpenCodeConfig = Field(default_factory=OpenCodeConfig)
+    #: v0.3-C role routes: environment-specific wiring, never frozen policy.
+    roles: RolesConfig = Field(default_factory=RolesConfig)
 
     @classmethod
     def from_workspace_config(cls, config: "DevRelayConfig") -> "WiringConfig":
@@ -342,6 +349,7 @@ class WiringConfig(BaseModel):
             review_provider=config.review.provider,
             codex=config.codex,
             opencode=config.opencode,
+            roles=config.roles,
         )
 
 
@@ -595,6 +603,8 @@ def load_wiring_config(root_or_path: str | Path) -> WiringConfig:
             # v0.3-A wiring section (never policy).  An empty/null YAML body
             # means "not configured", never "None".
             opencode=data.get("opencode") or {},
+            # v0.3-C role routing (never policy; same "not configured" rule).
+            roles=data.get("roles") or {},
         )
     except Exception as exc:
         raise ConfigError(f"Invalid DevRelay runtime wiring in {path}: {exc}") from exc
@@ -628,6 +638,10 @@ def workspace_policy_overrides(root_or_path: str | Path) -> dict[str, Any]:
     data.pop("codex", None)
     # v0.3-A: the OpenCode bridge is runtime wiring, never task policy.
     data.pop("opencode", None)
+    # v0.3-C: role -> model/agent routes are runtime wiring too (which model
+    # plays which role is environment-specific and must never be frozen into a
+    # task's policy snapshot).
+    data.pop("roles", None)
     review = data.get("review")
     if isinstance(review, dict):
         review.pop("provider", None)
@@ -670,6 +684,10 @@ def load_policy_snapshot(
             # v0.3-A wiring section: a legacy full-config dump may contain it.
             doc.pop("opencode")
             dropped.append("opencode")
+        if "roles" in doc:
+            # v0.3-C wiring section: same tolerance for full-config dumps.
+            doc.pop("roles")
+            dropped.append("roles")
         if "profiles" in doc:
             doc.pop("profiles")
             dropped.append("profiles")
@@ -725,6 +743,20 @@ opencode:
   max_response_bytes: 1048576
   max_messages: 50
   allow_unknown_workspace: false
+
+# v0.3-C: semantic role routing (optional; uncomment to enable).  A role is a
+# name DevRelay understands (implementer | reviewer); the workspace decides which
+# provider/model plays it.  Identifiers only - never prompts, credentials,
+# endpoints, retry policies, fallback models or candidate lists.  While this
+# section is absent (or a model is empty) the role-aware tools fail locally with
+# role_unconfigured and every raw v0.3-B tool keeps working unchanged.
+# roles:
+#   implementer:
+#     model: "provider/model"       # e.g. the workspace's implementer route
+#     agent: null                   # optional: accepted v0.3-A agent semantics
+#   reviewer:
+#     model: "provider/model"       # e.g. the workspace's reviewer route
+#     agent: null
 
 codex:
   executable: codex

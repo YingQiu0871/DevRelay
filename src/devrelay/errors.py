@@ -275,3 +275,39 @@ class OpenCodeLedgerError(OpenCodeError):
     """
 
     code = "opencode_ledger_error"
+
+
+# ---------------------------------------------------------------------------
+# v0.3-C: semantic role routing (semantic role -> exact configured route)
+#
+# These are *local* routing failures: they are raised before any request that
+# could submit a model turn, and they are never mislabeled as provider failures.
+# ---------------------------------------------------------------------------
+
+
+class RoleRoutingError(CodedError):
+    """Base class for v0.3-C role-routing failures (never a provider state)."""
+
+    code = "role_routing_error"
+
+
+class RoleUnknownError(RoleRoutingError):
+    """The requested role is not one of the supported semantic roles.
+
+    Also raised when the role is omitted or blank: v0.3-C never infers a role
+    from prompt text, session title, ordering or model availability.
+    """
+
+    code = "role_unknown"
+
+
+class RoleUnconfiguredError(RoleRoutingError):
+    """The role is supported, but this workspace configures no route for it."""
+
+    code = "role_unconfigured"
+
+
+class RoleInvalidRouteError(RoleRoutingError):
+    """The configured route for this role is malformed (model/agent grammar)."""
+
+    code = "role_invalid_route"
