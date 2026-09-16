@@ -141,12 +141,15 @@ class FilesystemOpenCodeLedger:
         record = record.model_copy(
             update={"error": sanitize(record.error)[:500] if record.error else ""}
         )
-        self._records.append(record)
         self.calls_dir.mkdir(parents=True, exist_ok=True)
         target = self._path(record.call_id)
         data = json.dumps(
             record.model_dump(mode="json"), indent=2, ensure_ascii=False
         ).encode("utf-8")
+        # PART II-F: the durable record comes first.  Appending to the in-memory
+        # collection before a refused create-new would leave a phantom call that
+        # inflates elapsed totals and readback for an identity that does not
+        # exist on disk (and was never issued).
         try:
             with open(target, "xb") as handle:
                 handle.write(data)
@@ -155,6 +158,7 @@ class FilesystemOpenCodeLedger:
                 f"refusing to reuse existing OpenCode call identity "
                 f"{record.call_id} ({target} already exists)"
             ) from exc
+        self._records.append(record)
 
     def finish(self, record: OpenCodeCallRecord) -> None:
         record = record.model_copy(

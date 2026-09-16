@@ -318,7 +318,10 @@ class OpenCodeBridge:
         messages = [
             message
             for message in (
-                self._normalize_message(item) for item in raw[: MAX_MESSAGES * 10]
+                # P1-C: the anti-DoS pre-cap keeps the *newest* entries; a head
+                # cap would hide the true tail (and break reply correlation for
+                # large sessions) while still reporting the full provider count.
+                self._normalize_message(item) for item in raw[-MAX_MESSAGES * 10 :]
             )
             if message is not None and message.message_id
         ]
@@ -379,17 +382,18 @@ class OpenCodeBridge:
         # Boundary BEFORE submission: everything already visible is "old".
         boundary_result = self.read_messages(session_id)
         if not boundary_result.ok:
-            return self._as_operation(boundary_result, "send_prompt", session_id)
+            # The probe already issued a call: it stays part of this operation's
+            # accounting even though the boundary read failed (PART II-A).
+            return self._as_operation(
+                self._merge_accounting(boundary_result, merged),
+                "send_prompt",
+                session_id,
+            )
         known_ids = {message.message_id for message in boundary_result.messages}
         boundary_cursor = (
             boundary_result.page.next_cursor if boundary_result.page is not None else ""
         )
-        merged = merged.model_copy(
-            update={
-                "call_ids": list(merged.call_ids) + list(boundary_result.call_ids),
-                "request_count": merged.request_count + boundary_result.request_count,
-            }
-        )
+        merged = self._merge_accounting(boundary_result, merged)
         body: dict[str, Any] = {"parts": [{"type": "text", "text": prompt}]}
         if agent:
             body["agent"] = agent
@@ -406,15 +410,33 @@ class OpenCodeBridge:
             model=model,
             result=merged,
         )
-        if not response.ok:
+        accepted = 200 <= (response.status or 0) < 300
+        if not accepted:
             if response.status == 404:
                 raise OpenCodeSessionNotFoundError(
                     f"session {session_id} has no prompt endpoint on {self.base_url}"
                 )
             return self._failure(result, response)
 
+        # P1-B: a 2xx status is submission acceptance, independently of whether
+        # the body can be used as an inline reply.  An unusable body (204/empty,
+        # invalid JSON, oversized) is recorded as evidence, and the operation
+        # continues as a *post-acceptance* result: the prompt may already be
+        # running on the server, so it is never reported as "not submitted" and
+        # never resubmitted.
+        submission_body = "" if response.ok else (response.error_type or "unusable_body")
+        # Evidence about the POST itself: it is carried on every return path,
+        # because the follow-up read legitimately overwrites ``http_status``.
+        post_evidence: dict[str, Any] = {
+            "submission_body": submission_body,
+            "submission_status": response.status,
+        }
+        result = result.model_copy(update=post_evidence)
+
         # ---- inline candidate: only an explicit, *new* assistant message -----
-        candidate = self._assistant_from_payload(response.data)
+        candidate = (
+            self._assistant_from_payload(response.data) if response.ok else None
+        )
         if candidate is not None and candidate.message_id not in known_ids:
             return self._complete(
                 result, messages=[candidate], reply_boundary=boundary_cursor
@@ -425,7 +447,19 @@ class OpenCodeBridge:
             session_id, boundary_cursor, result, prompt
         )
         if follow_up.state is OpenCodeOperationState.MALFORMED_RESPONSE:
-            return follow_up
+            # PART II-B: a malformed follow-up is a post-acceptance condition of
+            # *this* send, never a `read_messages` operation.
+            return follow_up.model_copy(
+                update={
+                    "operation": "send_prompt",
+                    "session_id": session_id,
+                    "reply_pending": True,
+                    "reply_boundary": boundary_cursor,
+                    "follow_up_state": follow_up.state.value,
+                    **post_evidence,
+                    "messages": [],
+                }
+            )
         if not follow_up.ok:
             # The prompt WAS accepted: never suggest it was not submitted, never
             # encourage a transparent resubmission.
@@ -436,6 +470,7 @@ class OpenCodeBridge:
                     "reply_pending": True,
                     "reply_boundary": boundary_cursor,
                     "follow_up_state": follow_up.state.value,
+                    **post_evidence,
                 }
             )
         fresh = [
@@ -451,8 +486,19 @@ class OpenCodeBridge:
                     "reply_pending": False,
                     "reply_boundary": boundary_cursor,
                     "follow_up_state": follow_up.state.value,
+                    **post_evidence,
                     "messages": [fresh[-1]],
                 }
+            )
+        detail = (
+            "the prompt was accepted but no new assistant message was "
+            "visible yet; DevRelay does not substitute a stale reply and "
+            "does not resubmit automatically"
+        )
+        if submission_body:
+            detail += (
+                f" (the submission response body was unusable: {submission_body}; "
+                "the server may still be processing the submitted prompt)"
             )
         return follow_up.model_copy(
             update={
@@ -461,12 +507,9 @@ class OpenCodeBridge:
                 "reply_pending": True,
                 "reply_boundary": boundary_cursor,
                 "follow_up_state": follow_up.state.value,
+                **post_evidence,
                 "error_type": "reply_pending",
-                "error": (
-                    "the prompt was accepted but no new assistant message was "
-                    "visible yet; DevRelay does not substitute a stale reply and "
-                    "does not resubmit automatically"
-                ),
+                "error": detail,
                 "messages": [],
             }
         )
@@ -910,16 +953,34 @@ class OpenCodeBridge:
             model=_clean(model, 128),
         )
         self.ledger.begin(record)
-        response = self.transport.request(
-            method,
-            path,
-            json_body=json_body,
-            timeout_seconds=timeout_seconds,
-            redact_values=(
-                tuple(extra_redactions) + ((prompt,) if prompt else ())
-            ),
-            expect_json=expect_json,
-        )
+        try:
+            response = self.transport.request(
+                method,
+                path,
+                json_body=json_body,
+                timeout_seconds=timeout_seconds,
+                redact_values=(
+                    tuple(extra_redactions) + ((prompt,) if prompt else ())
+                ),
+                expect_json=expect_json,
+            )
+        except (ValueError, RecursionError) as exc:
+            # P1-E: untrusted response content can defeat the parser in ways the
+            # transport already normalizes; this is the last line of defence, so
+            # the durable record still settles instead of staying ISSUED forever.
+            # Only parsing-shaped failures are caught: a programming error in
+            # DevRelay's own code must keep propagating.
+            response = TransportResponse(
+                state=OpenCodeCallState.MALFORMED_RESPONSE,
+                error_type=(
+                    "json_too_deep" if isinstance(exc, RecursionError)
+                    else "json_unparsable"
+                ),
+                error=(
+                    "provider response could not be interpreted "
+                    f"({type(exc).__name__}); the attempt is settled as malformed"
+                ),
+            )
         settled = record.model_copy(
             update={
                 "state": response.state,
@@ -993,15 +1054,32 @@ class OpenCodeBridge:
                 merged,
                 response,
             )
+        # PART II-D: identity is compared on the *raw* provider value, before any
+        # truncation to the supported length.  Truncating first would make
+        # ``requested_id + EXTRA`` compare equal to ``requested_id``.
+        raw_id = _first(payload, "id", "session_id", "sessionID")
+        raw_id_text = "" if raw_id is None else str(raw_id).strip()
+        if len(raw_id_text) > MAX_ID_CHARS:
+            return (
+                None,
+                self._malformed(
+                    merged,
+                    response,
+                    f"server returned a session id longer than {MAX_ID_CHARS} "
+                    "characters; refusing to compare it against the requested id",
+                ),
+                merged,
+                response,
+            )
         session = self._normalize_session(payload)
-        if session.session_id and session.session_id != session_id:
+        if raw_id_text and raw_id_text != session_id:
             # The endpoint contract supplied an id that is not the requested one.
             return (
                 None,
                 self._malformed(
                     merged,
                     response,
-                    f"server returned session {session.session_id!r} for request "
+                    f"server returned session {raw_id_text!r} for request "
                     f"{session_id!r}",
                 ),
                 merged,
@@ -1092,6 +1170,26 @@ class OpenCodeBridge:
         if interrupt_verified is not None:
             update["interrupt_verified"] = interrupt_verified
         return result.model_copy(update=update)
+
+    def _merge_accounting(
+        self,
+        later: OpenCodeOperationResult,
+        earlier: OpenCodeOperationResult,
+    ) -> OpenCodeOperationResult:
+        """Combine two *independent* accounting chains (call ids stay unique).
+
+        Used when a later step (a boundary read, a follow-up) was issued as its
+        own sequence: the earlier calls must survive into the returned result, so
+        a validation failure after a probe can never make the operation look
+        cheaper than the ledger (PART II-A).
+        """
+        ids = list(dict.fromkeys([*earlier.call_ids, *later.call_ids]))
+        return later.model_copy(
+            update={
+                "call_ids": ids,
+                "request_count": earlier.request_count + later.request_count,
+            }
+        )
 
     def _as_operation(
         self, result: OpenCodeOperationResult, operation: str, session_id: str

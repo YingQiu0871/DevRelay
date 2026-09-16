@@ -45,13 +45,21 @@ SESSION_ID_MAX = 200
 
 
 def valid_session_id(value: object) -> bool:
-    """True when *value* is safe to interpolate into a URL path."""
+    """True when *value* is safe to interpolate into a URL path.
+
+    ``.``/``..``/``...`` are technically made of unreserved characters, but a
+    dot *segment* is special in URL resolution (HTTP clients normalize
+    ``/session/.`` to ``/session/``), so a dot-only identifier is refused as
+    well as any other traversal-shaped value (PART II-C).
+    """
     if not isinstance(value, str):
         return False
     if not SESSION_ID_RE.match(value):
         return False
+    if set(value) == {"."}:
+        return False
     # Belt and braces: refuse traversal-shaped identifiers even if the grammar
-    # ever changes (``..`` is technically two unreserved characters).
+    # ever changes.
     return ".." not in value
 
 
@@ -71,6 +79,9 @@ class OpenCodeSessionState(str, Enum):
 class OpenCodeOperationState(str, Enum):
     """Explicit lifecycle state of one bridge operation."""
 
+    # Reserved: v0.3-A never emits this.  A locally invalid request (empty
+    # prompt, unusable session id) is a hard configuration error, not a state, so
+    # no caller can mistake "nothing was sent" for an operation outcome.
     ACCEPTED_LOCALLY = "ACCEPTED_LOCALLY"
     ISSUED = "ISSUED"
     IN_FLIGHT = "IN_FLIGHT"
@@ -213,6 +224,13 @@ class OpenCodeOperationResult(BaseModel):
     reply_pending: bool = False
     reply_boundary: str = ""
     follow_up_state: str = ""
+    # P1-B: the submission was accepted by HTTP status but its body could not be
+    # used as an inline reply (``""`` = usable).  The prompt may already have been
+    # accepted by the server, so this is evidence, never a "not submitted" claim.
+    submission_body: str = ""
+    #: HTTP status of the submission POST itself (``http_status`` describes the
+    #: most recent request, which may be the follow-up read).
+    submission_status: int | None = None
     # interrupt (P2-C): an accepted abort request is not a verified terminal
     # state, and v0.3-A says exactly that.
     interrupt_verified: bool = False

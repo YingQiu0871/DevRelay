@@ -14,6 +14,7 @@ from devrelay.artifacts.store import encode_lf
 from devrelay.errors import ConfigError
 from devrelay.models import PolicyProvenance, Severity
 from devrelay.opencode.models import MAX_MESSAGES as OPENCODE_HARD_MAX_MESSAGES
+from devrelay.redact import redact_text
 
 # The packaged default policy file (the only default authority).
 DEFAULT_PROFILE_NAME = "default.yaml"
@@ -148,6 +149,32 @@ class OpenCodeConfig(BaseModel):
     max_messages: int = Field(default=50, ge=1, le=OPENCODE_HARD_MAX_MESSAGES)
     allow_unknown_workspace: bool = False
 
+    @model_validator(mode="before")
+    @classmethod
+    def _hide_embedded_credentials(cls, data: Any) -> Any:
+        """Never let a URL password reach an error message or a log.
+
+        Pydantic echoes the offending input value in validation errors, and the
+        config layer wraps those errors into ``ConfigError`` (which the CLI
+        prints).  A ``user:password@host`` authority must therefore be defanged
+        *before* any validation runs: the credential segment is replaced by a
+        placeholder here, so every later error/echo only ever contains the
+        placeholder.  The value is still rejected by
+        :meth:`_validate_base_url` (the placeholder is itself userinfo).
+        """
+        if not isinstance(data, dict):
+            return data
+        value = data.get("base_url")
+        if not isinstance(value, str) or "@" not in value:
+            return data
+        scheme, separator, rest = value.partition("://")
+        if not separator or "@" not in rest:
+            return data
+        host = rest.rpartition("@")[2]
+        # A plain placeholder (no brackets): brackets would make urlparse treat
+        # it as an IPv6 literal and hide the real reason for the failure.
+        return {**data, "base_url": f"{scheme}://redacted@{host}"}
+
     @field_validator("base_url")
     @classmethod
     def _validate_base_url(cls, value: str) -> str:
@@ -156,14 +183,28 @@ class OpenCodeConfig(BaseModel):
         The endpoint is a live control channel carrying a bearer token, so a
         value DevRelay cannot honour exactly (unknown scheme, embedded
         credentials, a path prefix that request construction would silently
-        drop) is rejected here rather than mis-called at request time.
+        drop, a malformed authority that httpx would reject later) is refused
+        here rather than mis-called at request time.  Every failure is a
+        configuration error - never an unexpected ``httpx.InvalidURL``.
         """
         value = (value or "").strip()
         if not value:
             return ""
         from urllib.parse import urlsplit
 
-        parts = urlsplit(value)
+        if any(
+            char.isspace() or ord(char) < 0x20 or ord(char) == 0x7F for char in value
+        ):
+            raise ValueError(
+                "opencode.base_url must not contain whitespace or control "
+                "characters"
+            )
+        try:
+            parts = urlsplit(value)
+        except ValueError as exc:
+            raise ValueError(
+                f"opencode.base_url is not a valid URL ({redact_text(str(exc))})"
+            ) from None
         if parts.scheme not in ("http", "https"):
             raise ValueError(
                 "opencode.base_url must use http:// or https:// "
@@ -176,6 +217,24 @@ class OpenCodeConfig(BaseModel):
                 "opencode.base_url must not embed credentials; the bearer token "
                 "comes from DEVRELAY_OPENCODE_TOKEN"
             )
+        if "%" in parts.netloc:
+            # A percent-encoded separator inside the authority is exactly the
+            # ambiguity that turns one authority into another after decoding.
+            raise ValueError(
+                "opencode.base_url must not percent-encode characters in the "
+                "authority"
+            )
+        try:
+            # ``.port`` is the explicit authority check: a non-numeric,
+            # duplicated or out-of-range port raises here (PART II-E).
+            port = parts.port
+        except ValueError as exc:
+            raise ValueError(
+                "opencode.base_url has an invalid authority "
+                f"({redact_text(str(exc))})"
+            ) from None
+        if port is not None and not 1 <= port <= 65_535:  # pragma: no cover - urlsplit
+            raise ValueError("opencode.base_url port must be between 1 and 65535")
         if parts.query or parts.fragment:
             raise ValueError("opencode.base_url must not contain a query or fragment")
         if parts.path.rstrip("/"):

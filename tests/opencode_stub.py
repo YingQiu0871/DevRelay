@@ -79,11 +79,15 @@ class StubOpenCodeServer:
         prompt_ack_only: bool = False,
         prompt_raw_reply: Any = None,
         prompt_http_status: int | None = None,
+        prompt_append: dict[str, Any] | None = None,
         prompt_error_body: str | None = None,
         vanish_after_prompt: bool = False,
         session_http_status_after_prompt: int | None = None,
         session_error_body_after_prompt: str | None = None,
         session_id_override: str | None = None,
+        messages_http_status: int | None = None,
+        messages_error_body: str | None = None,
+        malformed_after_prompt: str = "",
         abort_status: int | None = None,
         abort_body: str | None = None,
         abort_removes_session: bool = False,
@@ -119,11 +123,17 @@ class StubOpenCodeServer:
         # vanishes right after acceptance, and a failing follow-up read.
         self.prompt_raw_reply = prompt_raw_reply
         self.prompt_http_status = prompt_http_status
+        # A message appended when the prompt is received even though the response
+        # body itself is unusable (P1-B: accepted + reply correlated later).
+        self.prompt_append = prompt_append
         self.prompt_error_body = prompt_error_body
         self.vanish_after_prompt = vanish_after_prompt
         self.session_http_status_after_prompt = session_http_status_after_prompt
         self.session_error_body_after_prompt = session_error_body_after_prompt
         self.session_id_override = session_id_override
+        self.messages_http_status = messages_http_status
+        self.messages_error_body = messages_error_body
+        self.malformed_after_prompt = malformed_after_prompt
         self.abort_status = abort_status
         self.abort_body = abort_body
         self.abort_removes_session = abort_removes_session
@@ -153,6 +163,14 @@ class StubOpenCodeServer:
             return httpx.Response(200, text="{not json")
         if self.malformed == "empty":
             return httpx.Response(200, text="")
+        if self.malformed == "deep_json":
+            # P1-E parser bomb: extreme nesting raises RecursionError in json.
+            return httpx.Response(200, text="[" * 200_000 + "]" * 200_000)
+        if self.malformed == "huge_int":
+            # P1-E parser bomb: a 5000-digit integer exceeds CPython's limit.
+            return httpx.Response(200, text="9" * 5_000)
+        if self.malformed == "not_object":
+            return self._json(["not", "an", "object"])
 
         parts = [p for p in path.split("/") if p]
         if path == "/global/health":
@@ -176,6 +194,10 @@ class StubOpenCodeServer:
             session = self._find(parts[1])
             if session is None:
                 return httpx.Response(404, text="not found")
+            if self.prompts and self.malformed_after_prompt:
+                if self.malformed_after_prompt == "not_object":
+                    return self._json(["not", "an", "object"])
+                return httpx.Response(200, text="{not json")
             if self.session_id_override:
                 session = {**session, "id": self.session_id_override}
             if self.state_sequence:
@@ -186,6 +208,13 @@ class StubOpenCodeServer:
         if parts[:1] == ["session"] and parts[2:] == ["message"]:
             if self._find(parts[1]) is None:
                 return httpx.Response(404, text="not found")
+            if self.messages_http_status is not None:
+                return httpx.Response(
+                    self.messages_http_status,
+                    text=self.messages_error_body
+                    if self.messages_error_body is not None
+                    else '{"error":"boom"}',
+                )
             if self.malformed == "messages_not_array":
                 return self._json({"messages": "nope"})
             return self._json({"messages": self.messages})
@@ -196,6 +225,9 @@ class StubOpenCodeServer:
             body = json.loads(request.content.decode("utf-8") or "{}")
             if self.prompt_http_status is not None:
                 self.prompts.append(body)
+                if self.prompt_append is not None:
+                    self._message_counter += 1
+                    self.messages.append(self.prompt_append)
                 session["state"] = "busy"
                 return httpx.Response(
                     self.prompt_http_status,
