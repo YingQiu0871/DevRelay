@@ -1,10 +1,13 @@
 # DevRelay v0.3-C — agent role routing
 
-Status: **candidate implementation complete — ready for independent review**
-(unreleased candidate work; package version stays `0.1.0`; public release remains
-`v0.1.0`).  Accepted baselines this stage builds on: v0.3-A OpenCode session
-bridge (`bcf9627…`) and v0.3-B MCP tool surface (`d058d62…`, documentation
-closeout `c883bab…`).  Branch: `v0.3-c-agent-role-routing`.
+Status: **ACCEPTED / CLOSED / UNRELEASED** — `ACCEPT — DEVRELAY v0.3-C AGENT
+ROLE ROUTING` (accepted internally; package version stays `0.1.0`; public release
+remains `v0.1.0`; next stage `v0.3-D` not started).  Accepted functional
+candidate: `eabb667d1bd9e379d3b7105d72b6a2751bc2a32b`, verified by two bounded real
+role-routing runs (implementer → `opencode-go/deepseek-v4.1-flash`, reviewer →
+`opencode-go/glm-5.3-flash`).  Accepted baselines this stage builds on: v0.3-A
+OpenCode session bridge (`bcf9627…`) and v0.3-B MCP tool surface (`d058d62…`,
+documentation closeout `c883bab…`).  Branch: `v0.3-c-agent-role-routing`.
 
 ## 1. Objective and boundary
 
@@ -263,17 +266,45 @@ The role router never imports MCP; the accepted bridge never imports roles and
 contains no role/vendor knowledge.  Asserted by AST import analysis in
 `tests/test_v03c_roles.py`.
 
-## 15. What is not verified yet
+## 15. Verified in the real role-routing smoke, and what stays out of scope
 
-* **No real model call was made in this round**: real role-routed model calls = 0.
-  Every suite is offline (deterministic stub over `httpx.MockTransport`) or uses
-  the real stdio subprocess against a loopback fake OpenCode server.
-* No real role-routing smoke against a real OpenCode server has been performed:
-  that requires independent review first (`P0 = 0`, `P1 = 0`, no smoke-blocking
-  P2) and a separate authorization.
-* Out of scope and not implemented: orchestration/sequencing, automatic
-  acceptance or rejection, WebUI, HTTP control API, multi-workspace serving,
-  generic role taxonomies, session provisioning.
+Verified by two bounded real runs (one explicit role turn each; see
+`docs/v0.3/V03C_ACCEPTANCE.md` sections I.1-I.3):
+
+* the two semantic roles and the `roles:` workspace wiring (exact
+  `<providerID>/<modelID>` routes, optional agent, absent section valid);
+* exact, deterministic route resolution and the local error taxonomy;
+* the role-aware MCP send over the **official stdio MCP boundary** (12 tools,
+  real `initialize`/`tools/list`/`tools/call`, `execution_serialized: true`);
+* **call-time route override resistance** on the real path (the effective route
+  came from configuration, never from a caller-supplied field);
+* truthful role metadata (`role`, `resolved_model`, `resolved_model_identity`,
+  `resolved_agent`, `route_source`) agreeing with the provider log;
+* **exactly one submission per role call** with no retry, no fallback and no
+  alternative model;
+* **no orchestration**: an implementer completion did not invoke the reviewer, and
+  the reviewer completion triggered nothing;
+* **two distinct real provider/model routes**: implementer →
+  `opencode-go/deepseek-v4.1-flash`, reviewer → `opencode-go/glm-5.3-flash`.
+
+Honest note about message text: a real provider assistant message may contain both
+a reasoning part and the answer part, and the accepted v0.3-A normalization
+currently maps `reasoning` content into the normalized `kind="text"` view, so a
+normalized assistant message can carry reasoning text next to the answer text
+(recorded as P3-5 in `docs/BACKLOG.md`).  Nothing in this contract claims that the
+whole normalized assistant text equals any particular string.
+
+Not verified, unchanged non-claims (no product contract is added by the smoke):
+
+* no orchestration or sequencing (no automatic implementer → reviewer call, no
+  repair loops), no automatic acceptance or rejection, no merge decision, no
+  Planner role inside DevRelay, no session creation/provisioning;
+* no HTTP/SSE MCP transport, no WebUI, no HTTP control API, no multi-workspace
+  serving;
+* no generic role taxonomy or role registry (exactly `implementer` and
+  `reviewer`);
+* the automated suite still makes **0** real network/model calls: the real runs
+  above were bounded manual smokes, not a repeatable CI job.
 
 ## 16. Minimal local setup
 

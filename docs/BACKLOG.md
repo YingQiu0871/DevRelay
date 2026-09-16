@@ -100,16 +100,61 @@ authorizes code changes; each item names its own scope and owner stage.
 * a fresh idle session may appear as `state: UNKNOWN` in list/get while
   `wait_idle` resolves idle through the `/session/status` absence semantics.
 
-## 5. Deferred follow-ups from v0.3-C agent role routing (recorded; **non-blocking for v0.3-C review**)
+## 5. Deferred follow-ups from v0.3-C agent role routing (recorded; **non-blocking for v0.3-C acceptance**)
 
 | Item | Note |
 | --- | --- |
-| Real role-routed model smoke against a real OpenCode server | requires independent review first (`P0 = 0`, `P1 = 0`, no smoke-blocking P2) and a separate authorization; the v0.3-C implementation round makes **0 real model calls** (all evidence is offline or over the real stdio boundary against a deterministic loopback fake) |
+| Real role-routed model smoke against a real OpenCode server | **done before acceptance**: two bounded runs - implementer → `opencode-go/deepseek-v4.1-flash` and reviewer → `opencode-go/glm-5.3-flash`, one explicit role turn and one `POST /session/{id}/message` each, three-way route agreement; a first two-role harness run is preserved as `FAIL` because its exact-whole-message condition was too strict for the provider-part normalization model |
 | Generic / arbitrary role taxonomy and a role registry | v0.3-C ships exactly `implementer` and `reviewer` on purpose: a configurable role registry, role inheritance or per-role capability sets would freeze a taxonomy before the orchestration stage needs one; the internal model type is reusable so migration stays cheap |
 | Session policy per role (session-per-role provisioning, binding or inference) | explicitly out of scope for v0.3-C: every role-aware send requires an explicit `session_id`, no session is created, bound, inferred or remembered, and a reviewer session is never derived from an implementer session |
 | Role-level prompt templates / personas / system instructions | deliberately unsupported: role configuration carries identifiers only, so a role can never smuggle policy, prompts or credentials into a submission |
 | Orchestration (automatic implementer -> reviewer sequencing, repair loops, bounded loops) | v0.3-D territory; v0.3-C routes and stops there |
 | Role-aware cancellation leaves the same evidence as the raw path (no envelope, settled ledger record) | accepted v0.3-A behavior preserved on purpose; a future stage could add an explicit "role send in flight" reporting surface |
+
+### Carried findings at v0.3-C acceptance (**non-blocking for v0.3-C acceptance**)
+
+**v0.3-C-specific (from the independent review and the bounded real smokes)**
+
+* **P3-1** — extra protocol members (`model`, `agent`, `endpoint`, `workspace`,
+  `retry`) on `devrelay_send_role_prompt` are **accepted and silently discarded**
+  by the SDK argument binding; they cannot influence the effective route.  Docs
+  and descriptions must keep saying *ignored*, never *rejected*.
+* **P3-2** — the role is resolved twice internally (MCP tool path and
+  `RoleRouter`/service path).  Deterministic and harmless, but redundant; the
+  tool-local route object is used only for the failure-envelope evidence.
+* **P3-3** — caller-supplied role text may be echoed in bounded routing errors
+  (recognized secret shapes such as `sk-…` are redacted).  Caller-input feedback,
+  not a prompt/credential channel.
+* **P3-4** — surrounding whitespace around a role name is trimmed, and the
+  accepted model grammar stays somewhat lenient because the role path
+  intentionally shares the accepted v0.3-A parser (identical raw/role outcomes).
+* **P3-5** — **normalization fidelity / message-part typing**: real provider
+  assistant messages contain distinct `reasoning` and `text` parts, but the
+  accepted v0.3-A normalization currently maps `reasoning` content into the
+  normalized `kind="text"` representation, so a normalized assistant message can
+  mix model reasoning with the actual answer.  This explained the first v0.3-C
+  implementer smoke's apparent extra preamble.  Possible future remediation:
+  preserve reasoning as its own normalized kind instead of conflating it with
+  answer text.  This is a **v0.3-A normalization item, not a role-routing
+  defect**, and it must not be fixed without a separately authorized change.
+
+**Inherited from v0.3-B (unchanged, still open)**
+
+* SDK argument-schema errors may reflect the caller-provided `input_value`
+  (documentation must not claim universal redaction on that path);
+* a post-POST unexpected exception may collapse the convenient MCP evidence to
+  `data={}` while the durable ledger remains the recovery evidence;
+* the filesystem ledger remains single-writer (no multi-process concurrency);
+* a long `wait_idle` serializes subsequent MCP calls in the same process;
+* `retry_safe` is absent rather than explicit `false` for some pre-bridge
+  failures;
+* bound-root vs `config.workspace` reporting nuance in `devrelay_status`;
+* `opencode_interrupt` queues behind an active send;
+* non-prompt route prompt-echo edge cases;
+* parser / test-id / dead-symbol cleanup items (dead `_ENVELOPE_KEY`,
+  `ServerMiddleware` protocol-check import, stale comment wording, `%TEMP%`
+  hygiene note);
+* provider `created_at` is passed through as a text/object representation.
 
 ## 6. Deferred follow-ups after v0.3-A acceptance (recorded; **do not block acceptance**)
 

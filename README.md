@@ -19,7 +19,7 @@ Source: <https://github.com/YingQiu0871/DevRelay> -
 | --- | --- |
 | v0.3-A OpenCode Session Bridge | **accepted / unreleased** — closed at candidate `bcf9627e92ef839abb756810e3c615e6d01b6576`; real OpenCode `1.18.11` smoke passed (one prompt → `DEVRELAY_A33_OK`) |
 | v0.3-B ChatGPT/MCP tool surface | **accepted / unreleased** — closed at accepted candidate `d058d62341a173414bdba88fe357b08c236c8bb4`; final real MCP smoke `PASS — V0.3-B LOCAL REAL MCP SMOKE` |
-| v0.3-C Agent Role Routing | **candidate implementation complete / unreleased** — ready for independent review; semantic role routing only, **0 real model calls**, no orchestration |
+| v0.3-C Agent Role Routing | **accepted / unreleased** — closed at accepted candidate `eabb667d1bd9e379d3b7105d72b6a2751bc2a32b`; real routing verified for both roles (implementer `opencode-go/deepseek-v4.1-flash`, reviewer `opencode-go/glm-5.3-flash`), routing only, no orchestration |
 
 Neither stage is part of the `v0.1.0` release, the package version stays `0.1.0`,
 and nothing is pushed, tagged or published.  Spec/acceptance for v0.3-B:
@@ -38,7 +38,7 @@ turn (exactly one `POST /session/{id}/message`, reply `DEVRELAY_V03B_MCP_OK`).
 There is **no** HTTP/SSE MCP transport, **no** WebUI, **no** multi-workspace
 serving, and ChatGPT product-native distribution/installation is **not** released.
 
-### Role routing (v0.3-C candidate, unreleased)
+### Role routing (v0.3-C, accepted internally, unreleased)
 
 v0.3-C lets an MCP caller select a **semantic role** instead of a model.  The
 workspace decides which provider/model plays each role, and the caller cannot
@@ -59,6 +59,14 @@ caller-supplied model/agent.  A role resolves to exactly one configured route -
 no default model, no fallback, no alternate-model retry, no caller override, no
 fuzzy role selection - and an unresolvable role fails **before** any model POST.
 
+Verified end-to-end (two bounded real runs, one role turn each): a local MCP
+planner can explicitly call the semantic role `implementer` or `reviewer` and
+DevRelay deterministically routes it to the model configured for that role —
+`opencode-go/deepseek-v4.1-flash` for the implementer run and
+`opencode-go/glm-5.3-flash` for the reviewer run — while preserving the
+exactly-one-submission rule and the workspace/accounting boundaries.  DevRelay
+never decides **when** a role is invoked.
+
 v0.3-C **routes**; it does not orchestrate.  The external planner still decides
 which role to call, when, and what to do with the answer: a reviewer reply such
 as `APPROVE`/`REQUEST_CHANGES` is provider text, never an automatic acceptance,
@@ -67,8 +75,9 @@ rejection or repair.  Spec and matrix: `docs/v0.3/V03C_SPEC.md`,
 
 ### Next stage
 
-`v0.3-D Orchestration` — **not started** (automatic implementer -> reviewer
-sequencing and repair loops; no automatic DeepSeek/GLM routing exists yet).
+`v0.3-D Bounded Orchestration` — **NEXT / not started** (automatic implementer ->
+reviewer sequencing and repair loops remain unimplemented; DevRelay still never
+decides when to invoke a role, and no automatic DeepSeek/GLM routing exists).
 
 > **v0.2-A candidate (unreleased)**: the automatic review loop described under
 > [Automatic review loop (v0.2-A)](#automatic-review-loop-v02-a) is implemented
@@ -1051,12 +1060,15 @@ not downgrade the binary inside a workspace that v0.2-B has already written.
   stable result envelope, honest read-only / side-effecting annotations and one
   process-wide execution lock over the accepted single-writer filesystem ledger.
   Still no HTTP/SSE MCP transport, no multi-workspace serving
-- **v0.3-C** - Agent Role Routing - **candidate implementation complete
-  (unreleased, ready for independent review)**: semantic role routing over the
-  accepted v0.3-B surface (three new tools, 12 in total), where the workspace
-  pins which model/agent plays `implementer`/`reviewer`.  Routing only - the
-  planner still sequences the work, and no real model call was made in this round
-- **v0.3-D** - Orchestration (automatic sequencing / repair loops) - not started
+- **v0.3-C** - Agent Role Routing - **accepted internally (unreleased)** at
+  candidate `eabb667…` after two bounded real runs verified both routes
+  (implementer `opencode-go/deepseek-v4.1-flash`, reviewer
+  `opencode-go/glm-5.3-flash`): semantic role routing over the accepted v0.3-B
+  surface (three new tools, 12 in total), where the workspace pins which
+  model/agent plays `implementer`/`reviewer`.  Routing only - the planner still
+  sequences the work
+- **v0.3-D** - Bounded Orchestration (automatic sequencing / repair loops) -
+  **NEXT, not started**
 - **later** - optional release automation with explicit approvals
 
 ## Development

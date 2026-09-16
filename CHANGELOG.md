@@ -4,15 +4,46 @@ All notable changes to DevRelay are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## Unreleased - v0.3-C candidate (agent role routing)
+## Unreleased - v0.3-C accepted (agent role routing)
 
 Explicit, deterministic **role -> route resolution** on top of the accepted
 v0.3-B MCP surface: an MCP caller selects a semantic role and DevRelay supplies
-the exact workspace-configured model (and optional OpenCode agent).  **Candidate
-implementation complete, awaiting independent review and unreleased**: the
-package version stays `0.1.0`, the supported public release remains `v0.1.0`,
-nothing is pushed, merged, tagged or published, and this stage makes **0 real
-model calls**.
+the exact workspace-configured model (and optional OpenCode agent).  **Accepted
+internally / unreleased**: the accepted functional candidate is
+`eabb667d1bd9e379d3b7105d72b6a2751bc2a32b`, the package version stays `0.1.0`, the
+supported public release remains `v0.1.0`, nothing is pushed, merged, tagged or
+published, and no public v0.3 release exists.
+
+### Accepted (real role-routing smoke)
+
+- Semantic roles are exactly `implementer` and `reviewer`, resolved from an
+  immutable workspace `roles:` wiring section (`model` + optional `agent`;
+  identifiers only - no prompts, credentials, endpoints, retries, fallbacks or
+  candidate lists).
+- The caller cannot influence the configured route: the role tool accepts only
+  `role`, `session_id` and `prompt`; extra protocol members are ignored, and the
+  effective route always comes from configuration (no default route, no fallback,
+  no role switching).
+- Three role-aware MCP tools (`devrelay_list_roles`, `devrelay_get_role`,
+  `devrelay_send_role_prompt`) - total MCP inventory **12** - all routed through
+  the one accepted global execution-serialization boundary.
+- The raw `opencode_send_prompt` path is preserved unchanged, including its
+  caller-supplied model/agent semantics.
+- Real routing verified by two bounded runs: implementer →
+  `opencode-go/deepseek-v4.1-flash` and reviewer → `opencode-go/glm-5.3-flash`,
+  each with exactly one `devrelay_send_role_prompt`, exactly one real inference
+  (OpenCode `1.18.11` provider log) and exactly one
+  `POST /session/{id}/message`; three-way route agreement
+  (`devrelay_get_role` = response `resolved_model_identity` = provider log);
+  `ok=true`, `isError=false`, `submission_uncertain=false`,
+  `reply_pending=false`, `retry_safe=false`; no retry, no fallback, no alternate
+  model.
+- No automatic acceptance, no review loops and no orchestration: an implementer
+  completion did not invoke the reviewer, and the reviewer completion triggered
+  nothing - each role ran only because it was explicitly invoked.
+- Complete containment and cleanup in both runs: disposable workspace unchanged,
+  disposable sessions deleted, dedicated OpenCode stopped, MCP process exited,
+  evidence kept outside the repository.
 
 ### Added
 
@@ -68,8 +99,12 @@ model calls**.
   under the same one per-surface execution lock (no role lock, no scheduler), so
   the accepted single-writer filesystem ledger never sees concurrent access.
 - `MCP_SERVER_VERSION` is `0.3.0-c` (the advertised surface changed from nine to
-  twelve tools).  A real role-routed model smoke remains deferred until after
-  independent review and a separate authorization.
+  twelve tools).  The real role-routed model smoke is **done** (see "Accepted
+  (real role-routing smoke)" above); a first two-role harness run failed only
+  because it required the whole normalized assistant text to equal a sentinel -
+  real providers also return a reasoning part that the accepted v0.3-A
+  normalization currently presents as `kind="text"` (recorded as a non-blocking
+  P3 in `docs/BACKLOG.md`).  That history is preserved, not rewritten.
 
 ## Unreleased - v0.2-B project profiles (candidate under independent review)
 

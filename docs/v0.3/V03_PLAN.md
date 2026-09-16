@@ -6,8 +6,8 @@
 | --- | --- | --- |
 | **A** | OpenCode session bridge (explicit endpoint, session select/read, one prompt, bounded wait, interrupt, accounting) | **COMPLETE / ACCEPTED** — candidate `bcf9627e92ef839abb756810e3c615e6d01b6576`, real A33 smoke `PASS` against OpenCode `1.18.11` |
 | B | ChatGPT/MCP tool surface (local stdio MCP adapter over the accepted v0.3-A bridge) | **COMPLETE / ACCEPTED** — accepted candidate `d058d62341a173414bdba88fe357b08c236c8bb4`, real MCP smoke `PASS — V0.3-B LOCAL REAL MCP SMOKE` (accepted internally, **unreleased**) |
-| C | Agent role routing (semantic role -> workspace-configured model/agent; routing only, no orchestration) | **CANDIDATE IMPLEMENTATION COMPLETE — ready for independent review** (unreleased) |
-| D | Orchestration (automatic implementer -> reviewer sequencing, repair loops) | **NOT STARTED** (not designed yet) |
+| C | Agent role routing (semantic role -> workspace-configured model/agent; routing only, no orchestration) | **COMPLETE / ACCEPTED / UNRELEASED** — accepted candidate `eabb667d1bd9e379d3b7105d72b6a2751bc2a32b`; real routing verified by two bounded runs (implementer `opencode-go/deepseek-v4.1-flash`, reviewer `opencode-go/glm-5.3-flash`) |
+| D | Bounded orchestration (automatic implementer -> reviewer sequencing, repair loops) | **NEXT / NOT STARTED** (not designed yet) |
 
 v0.3-A is accepted and its runtime implementation is frozen at the accepted
 candidate (`bcf9627…`); v0.3-A sources were not modified by v0.3-B.
@@ -22,19 +22,25 @@ evidence includes one separately authorized real MCP smoke
 one explicit `opencode-go/deepseek-v4.1-flash` turn, exactly one
 `POST /session/{id}/message`, reply `DEVRELAY_V03B_MCP_OK`).
 
-v0.3-C (agent role routing) is implemented as an **unreleased candidate** on
-branch `v0.3-c-agent-role-routing`, based on the v0.3-B acceptance closeout
-`c883bab…`: see `docs/v0.3/V03C_SPEC.md` and `docs/v0.3/V03C_ACCEPTANCE.md`.  It
-routes a semantic role (`implementer` | `reviewer`) to the exact model/agent the
-workspace configures and adds exactly three MCP tools (12 in total); it does
-**not** orchestrate anything.  It makes **0 real model calls** and awaits
-independent review before any real role-routing smoke is even considered.
+v0.3-C (agent role routing) is **accepted internally and closed** at candidate
+`eabb667d1bd9e379d3b7105d72b6a2751bc2a32b` on branch
+`v0.3-c-agent-role-routing`, based on the v0.3-B acceptance closeout `c883bab…`:
+see `docs/v0.3/V03C_SPEC.md` and `docs/v0.3/V03C_ACCEPTANCE.md`.  It routes a
+semantic role (`implementer` | `reviewer`) to the exact model/agent the workspace
+configures and adds exactly three MCP tools (12 in total); it does **not**
+orchestrate anything.  Real routing was verified by two bounded runs: implementer
+→ `opencode-go/deepseek-v4.1-flash` and reviewer → `opencode-go/glm-5.3-flash`,
+one explicit model turn and one `POST /session/{id}/message` each, with
+three-way route agreement (`devrelay_get_role`, response metadata, OpenCode
+provider log).  The package version stays `0.1.0` and the public release remains
+`v0.1.0`.
 
-v0.3-D (orchestration: automatic sequencing, repair loops, acceptance decisions)
-has **not** started; it must not begin without a separate authorization.  See
-`docs/BACKLOG.md` for deferred, non-blocking follow-ups.
+v0.3-D (bounded orchestration: automatic sequencing, repair loops, acceptance
+decisions) is **NEXT** and has **not** started; it must not begin without a
+separate authorization.  See `docs/BACKLOG.md` for deferred, non-blocking
+follow-ups.
 
-## v0.3-C scope (implemented, candidate)
+## v0.3-C scope (implemented, accepted)
 
 1. `src/devrelay/roles/models.py` — the role vocabulary (`implementer`,
    `reviewer`), the frozen `RoleRoute` value object and the `RolesConfig` wiring
