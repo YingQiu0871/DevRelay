@@ -1,7 +1,9 @@
 # DevRelay v0.3-B — MCP tool surface
 
-Status: **candidate implementation complete — not released** (package version
-stays `0.1.0`).  Accepted v0.3-A baseline: `bcf9627…` (documentation closeout
+Status: **candidate implementation + gate remediation — not accepted, not
+released** (package version stays `0.1.0`).  This document reflects the
+remediation of the independent review's `REQUEST_CHANGES — V0.3-B MCP TOOL
+SURFACE` findings.  Accepted v0.3-A baseline: `bcf9627…` (documentation closeout
 `f4c92f3…`).  Branch: `v0.3-b-mcp-tool-surface`.
 
 ## 1. Objective and boundary
@@ -46,8 +48,17 @@ devrelay mcp serve --workspace <absolute-path-to-a-DevRelay-workspace>
   pipe between the client and this process);
 * the process exits cleanly on EOF/client disconnect and leaves no background
   worker or polling thread;
-* malformed MCP input cannot crash the process: the SDK answers with a protocol
-  error and DevRelay never emits a traceback as protocol output.
+* malformed MCP input cannot crash the process, and the observed behaviour is
+  recorded exactly (verified against the real stdio server, mcp 2.2.0):
+  * a frame that is not parseable JSON, not JSON-RPC shaped, or a request without
+    a `method` receives **no reply at all** - the SDK drops it, the process stays
+    alive and keeps serving later requests;
+  * an unknown method answers a JSON-RPC error `-32601 Method not found`;
+  * a request with invalid/missing params answers `-32602 Invalid request
+    parameters`.
+  DevRelay does **not** emit its own protocol-error response for unparseable
+  frames (it never claims one), and no traceback is ever produced as protocol
+  output.
 
 Streamable HTTP/SSE transport is deliberately **not** implemented in v0.3-B.
 
@@ -75,7 +86,7 @@ One MCP server process is bound to **exactly one** DevRelay workspace:
 | `opencode_list_sessions` | read-only | idem | sessions + ownership verdict (bound workspace only by default) |
 | `opencode_get_session` | read-only | idem | one explicitly selected session |
 | `opencode_read_messages` | read-only | idem | normalized message window + cursor semantics |
-| `opencode_calls` | read-only, local | `openWorldHint=false` | durable call ledger, strict about corruption |
+| `opencode_calls` | read-only, local | `openWorldHint=false` | durable call ledger, strict about corruption, numerically ordered |
 | `opencode_send_prompt` | **side-effecting** | `readOnlyHint=false`, `destructiveHint=false`, `idempotentHint=false` | exactly one model turn through the accepted bridge |
 | `opencode_wait_idle` | read-only | idempotent | bounded wait on `GET /session/status` |
 | `opencode_interrupt` | **side-effecting** | `destructiveHint=true` | explicit abort request (never described as verified termination) |
@@ -93,7 +104,7 @@ ledger deletion, session deletion or token retrieval.
 | `opencode_list_sessions` | `include_other_workspaces: bool` (default false) |
 | `opencode_get_session` | `session_id: string` |
 | `opencode_read_messages` | `session_id: string`, `cursor: string` (opaque message id) |
-| `opencode_calls` | `limit: integer` (1..200, default 20) |
+| `opencode_calls` | `limit: integer` (1..200, default 20); records are ordered by **call number** (`OC-9999` sorts before `OC-10000`), and a file whose name does not follow `OC-<number>` is reported as a ledger error instead of being ranked |
 | `opencode_send_prompt` | `session_id: string`, `prompt: string`, `agent: string`, `model: string` (`<providerID>/<modelID>`) |
 | `opencode_wait_idle` | `session_id: string`, `timeout_seconds: number` |
 | `opencode_interrupt` | `session_id: string` |
@@ -137,6 +148,15 @@ finite in-bounds wait; the "never unlimited" property is unaffected.
 Failure keeps the same shape with `ok: false` and
 `error: {"type": "<stable code>", "message": "<sanitized, bounded>"}`.
 
+* **Envelope truthfulness (gate P1).** `ok` is true **only** when the accepted
+  v0.3-A operation reached the success state that tool is defined to achieve -
+  by default the bridge's own `result.ok` (`state is COMPLETED`), and for
+  `opencode_interrupt` the accepted abort (`INTERRUPTED`, still carrying
+  `interrupt_verified: false`).  Every bridge-backed tool derives its envelope
+  from **one** rule in the tool layer (`McpToolSurface._bridge_envelope`), so a
+  provider failure (HTTP error, malformed body, unreachable endpoint) can never
+  be reported as `ok: true`, and `server.py` never special-cases `isError` per
+  tool.  The protocol flag is mechanical: `isError == not envelope.ok`.
 * `ok` describes **this tool call**, never a softened view of bridge state: an
   uncertain submission is `ok: false` with `data.submission_uncertain: true` and
   `data.reply_pending: true`.
@@ -149,6 +169,10 @@ Failure keeps the same shape with `ok: false` and
   without an HTTP response and without submission uncertainty (the v0.3-A
   "definitely not submitted" class).  An accepted submission (2xx, usable body or
   not), an uncertain submission and a pending reply are **never** `retry_safe`.
+  The full truth table is asserted (`read`/`write` timeout, `read`/`write` error,
+  remote protocol error, connect error, connect timeout, pool timeout, rejected
+  status, `text/html` 2xx, accepted-unusable body, accepted pending, inline
+  success, and a probe failure that never issued a POST).
 * No tool ever returns a verdict such as "approved", "review passed" or "ready to
   merge": DevRelay v0.3-B has no acceptance authority, and the planner/arbiter
   stays outside this tool layer.
@@ -169,6 +193,14 @@ and `reply_pending` and to **not resubmit automatically**.
 
 ## 7. Concurrency, cancellation, logging, secrets
 
+* **Test-harness candidate pinning**: every stdio child process is launched with
+  `PYTHONPATH` pinned to the **checkout under test** (`<repo>/src`, absolute) and
+  an environment stripped of `DEVRELAY_*`/`PYTHONPATH`/`PYTHONHOME`/
+  `PYTHONSTARTUP`, so the suite can never silently exercise an ambient editable
+  installation.  A mutation-propagation test copies the package, changes its
+  server version and adds a marker to `devrelay_status`, and asserts the child
+  advertises both - proving the executed tool code comes from the tree the
+  harness points at.
 * **Concurrency**: v0.3-B serializes side-effecting operations
   (`opencode_send_prompt`, `opencode_interrupt`) per MCP server process with one
   narrow lock; read tools are not serialized and there is no scheduler.  Two
@@ -212,6 +244,11 @@ and `reply_pending` and to **not resubmit automatically**.
 * No real MCP → OpenCode model call has been made in this round: real network /
   model calls = 0.  A later, separately authorized acceptance step can connect an
   actual MCP client and a disposable OpenCode session.
+* Cancellation semantics are asserted at the boundary (no POST before the gate ⇒
+  nothing recorded; cancellation around an issued POST ⇒ durable evidence stays
+  inspectable, `retry_safe` is never claimed, no automatic resubmit, no automatic
+  `interrupt`, and the side-effect lock is released so a later legitimate call
+  completes).
 * Multi-process concurrency, Streamable HTTP/SSE transport, multi-workspace
   serving and any orchestration remain out of scope.
 

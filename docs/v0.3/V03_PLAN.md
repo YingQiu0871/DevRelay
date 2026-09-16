@@ -5,7 +5,7 @@
 | Stage | Description | Status |
 | --- | --- | --- |
 | **A** | OpenCode session bridge (explicit endpoint, session select/read, one prompt, bounded wait, interrupt, accounting) | **COMPLETE / ACCEPTED** — candidate `bcf9627e92ef839abb756810e3c615e6d01b6576`, real A33 smoke `PASS` against OpenCode `1.18.11` |
-| B | ChatGPT/MCP tool surface (local stdio MCP adapter over the accepted v0.3-A bridge) | **CANDIDATE IMPLEMENTATION COMPLETE — awaiting independent review** (unreleased) |
+| B | ChatGPT/MCP tool surface (local stdio MCP adapter over the accepted v0.3-A bridge) | **CANDIDATE + GATE REMEDIATION COMPLETE — ready for re-gate** (unreleased) |
 | C | (not designed yet) | **NOT STARTED** |
 
 v0.3-A is accepted and its runtime implementation is frozen at the accepted

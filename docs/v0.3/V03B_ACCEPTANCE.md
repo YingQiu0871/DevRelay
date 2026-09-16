@@ -1,7 +1,11 @@
 # DevRelay v0.3-B acceptance matrix — MCP tool surface
 
-Status: **candidate implementation complete — ready for independent review**
+Status: **candidate implementation + gate remediation — ready for re-gate**
 (unreleased; package version stays `0.1.0`; public release remains `v0.1.0`).
+This matrix includes the remediation of the independent review's
+`REQUEST_CHANGES — V0.3-B MCP TOOL SURFACE` findings (envelope truthfulness,
+stdio candidate pinning, malformed-input truth, ledger ordering, cancelled-call
+evidence) and the hardening tests added with it.
 
 Baseline: accepted v0.3-A at `bcf9627…` (documentation closeout `f4c92f3…`),
 branch `v0.3-b-mcp-tool-surface`.  All evidence below is **offline**: the
@@ -23,7 +27,7 @@ indirectly · **DEFERRED** = documented, not automated in this stage.
 | B4 | No dangerous low-level tool (HTTP/shell/subprocess/file/git/config/env/delete/token) | COVERED | `test_no_dangerous_low_level_tools` |
 | B5 | No tool accepts a workspace path/cwd/directory | COVERED | `test_no_tool_accepts_a_workspace_path` |
 | B6 | Multiple sequential calls in one session use the same bound workspace; clean exit on EOF; no stdout contamination | COVERED | `tests/test_v03b_mcp_stdio.py::test_stdio_initialize_discovery_and_sequential_calls`, `…::test_stdio_stdout_is_protocol_only`, `…::test_stdio_raw_protocol_lines_and_clean_eof_exit` |
-| B7 | Malformed MCP input never crashes the process | COVERED | `tests/test_v03b_mcp_stdio.py::test_stdio_reports_errors_as_envelopes_without_tracebacks` |
+| B7 | Malformed MCP input never crashes the process; the **actual** SDK behaviour is recorded (unparseable / non-JSON-RPC / method-less frames are silently dropped with no reply, unknown methods answer `-32601`, invalid params answer `-32602`, and the session keeps serving) | COVERED | `tests/test_v03b_mcp_stdio.py::test_stdio_malformed_frames_actual_behaviour[invalid]`, `…[False]` |
 
 ## B. Bound workspace
 
@@ -96,7 +100,20 @@ indirectly · **DEFERRED** = documented, not automated in this stage.
 | B42 | Full offline suite green with isolated `TEMP`/`TMP`/`TMPDIR`, count increased by the v0.3-B tests | COVERED | full-suite run recorded in the implementation report |
 | B43 | No external model/OpenCode/network call required for acceptance | COVERED | every suite runs against `httpx.MockTransport`, a loopback fake or no HTTP at all |
 
-## I. Deferred (non-blocking, recorded)
+## I. Gate remediation (independent review `REQUEST_CHANGES — V0.3-B`)
+
+| # | Criterion | Status | Evidence |
+| --- | --- | --- | --- |
+| B48 | **Envelope truthfulness (P1)**: for every bridge-backed read tool, `ok == true` only on success; HTTP 500, malformed provider response and unreachable endpoint all yield `ok: false` **and** `isError: true`, with sanitized operation evidence preserved | COVERED | `test_read_tools_report_success_truthfully`, `test_read_tools_report_failure_truthfully` (4 tools x success/500/malformed/unreachable), `test_get_session_failure_keeps_the_full_evidence` |
+| B49 | The fix lives in the tool layer (one shared bridge-result rule); `server.py` has no per-tool `isError` special case | COVERED | `test_read_tools_report_failure_truthfully` asserts `isError == (not ok)` for every row; `test_stdio_reports_errors_as_envelopes_without_tracebacks` asserts it over the wire |
+| B50 | `retry_safe` truth table: true only for the "definitely not submitted" classes (connect error/timeout, pool timeout, probe failure before any POST); false for read/write timeout, read/write error, remote protocol error, `text/html` 2xx, accepted-unusable body, accepted pending, accepted success | COVERED | `test_retry_safe_truth_table` (14 cases) |
+| B51 | A foreign session is non-actionable through **every** acting tool (get/read/send/wait/interrupt) and no acting request is issued for it | COVERED | `test_foreign_session_is_non_actionable_through_every_tool` |
+| B52 | Ledger ordering is numeric across width boundaries (`OC-9998/9999/10000/10001`), `limit` keeps the numerically newest records, and a non-`OC-<number>` file is reported instead of ranked | COVERED | `test_calls_orders_numerically_across_the_width_boundary`, `test_calls_rejects_a_non_numeric_call_id_instead_of_ranking_it` |
+| B53 | Cancellation hardening: before the submission gate nothing is recorded; around an issued POST the durable record stays inspectable and settled, no `retry_safe` claim exists, no automatic resubmit, no automatic `interrupt`, and the side-effect lock is released (a later legitimate call completes) | COVERED | `test_cancellation_before_submission_records_nothing`, `test_cancellation_after_submission_preserves_evidence_without_safe_retry` |
+| B54 | The stdio harness pins the candidate checkout for every child, and a copied-tree mutation (server version + `devrelay_status` marker) demonstrably changes what the child executes | COVERED | `tests/test_v03b_mcp_stdio.py::test_stdio_child_executes_the_candidate_checkout`, `…::test_stdio_every_child_launch_pins_the_candidate_src` |
+| B55 | Stdio error branches assert concrete invariants (`schema_version == 1`, expected tool, `ok == false`, `isError == true`, expected error type, no traceback marker, no secret sentinel, text fallback ≡ structured envelope) | COVERED | `tests/test_v03b_mcp_stdio.py::test_stdio_reports_errors_as_envelopes_without_tracebacks` |
+
+## J. Deferred (non-blocking, recorded)
 
 | # | Item | Why deferred |
 | --- | --- | --- |

@@ -136,6 +136,32 @@ published, and no real model/OpenCode call is made by this stage.
   deterministic stub) and a real stdio subprocess suite driven by the official
   MCP client and a raw JSON-RPC probe against a loopback fake OpenCode server.
 
+### Fixed (independent-review gate remediation)
+
+- **Envelope truthfulness (P1)**: `opencode_get_session` reported `ok: true` /
+  `isError: false` for HTTP 500, malformed provider responses and unreachable
+  endpoints.  Every bridge-backed tool now derives its envelope from one shared
+  rule in the tool layer (`McpToolSurface._bridge_envelope`): `ok` is true only
+  when the accepted operation reached that tool's success state, and the protocol
+  flag is mechanical (`isError == not ok`, no per-tool special case in the
+  server).  Sanitized operation evidence is always preserved in `data`.
+- **stdio harness candidate pinning**: every child MCP process is launched with
+  `PYTHONPATH` pinned to the checkout under test and a stripped environment, so
+  the suite can no longer silently exercise an ambient editable installation; a
+  mutation-propagation test proves the executed tree is the one the harness
+  points at.
+- **Malformed MCP input**: the documented behaviour now matches the observed SDK
+  behaviour - unparseable / non-JSON-RPC / method-less frames are silently
+  dropped (no reply, process alive), unknown methods answer `-32601`, invalid
+  params answer `-32602`; DevRelay never claims a protocol error it does not emit.
+- **Ledger ordering**: `opencode_calls` orders records by numeric call sequence
+  (`OC-9999` before `OC-10000`) and reports a non-`OC-<number>` file instead of
+  ranking it.
+- **Cancellation evidence**: strengthened tests prove no submission is recorded
+  before the gate, an already-issued POST leaves an inspectable settled record
+  with no `retry_safe` claim, no automatic resubmit/interrupt happens, and the
+  side-effect lock is released for later calls.
+
 ### Notes
 
 - v0.3-A sources, semantics and tests are unchanged; every v0.3-A guarantee
