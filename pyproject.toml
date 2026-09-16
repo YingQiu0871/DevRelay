@@ -37,7 +37,11 @@ Issues = "https://github.com/YingQiu0871/DevRelay/issues"
 Changelog = "https://github.com/YingQiu0871/DevRelay/blob/main/CHANGELOG.md"
 
 [project.optional-dependencies]
-dev = ["pytest>=8.0"]
+# v0.3-B MCP tool surface: the official Model Context Protocol Python SDK.
+# Constrained (not floor-only) because the 1.x -> 2.x rename of FastMCP to
+# MCPServer changes the public API this adapter is written against.
+mcp = ["mcp>=2.2,<3"]
+dev = ["pytest>=8.0", "mcp>=2.2,<3"]
 
 [project.scripts]
 devrelay = "devrelay.cli:app"

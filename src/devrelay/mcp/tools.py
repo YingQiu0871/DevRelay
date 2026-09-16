@@ -1,0 +1,551 @@
+"""The DevRelay MCP tool surface: adapters over the accepted v0.3-A bridge.
+
+Everything here is an **adapter**: each tool validates its arguments with the
+accepted v0.3-A rules, calls exactly one :class:`~devrelay.opencode.bridge.OpenCodeBridge`
+method (or the strict ledger view) and wraps the normalized result in the stable
+MCP envelope.  No HTTP client, no retry, no orchestration, no acceptance
+authority, no second validator for session ids or model overrides.
+
+Safety properties carried over unchanged from v0.3-A (and asserted by tests):
+
+* exactly one submission POST per ``opencode_send_prompt`` - never a retry, never
+  a model fallback, never an automatic resubmission;
+* read/write timeouts stay *submission-uncertain*, connect failures stay
+  *definitely not submitted* (the envelope carries ``retry_safe`` derived from
+  documented bridge evidence only);
+* a pending/uncertain result never substitutes a stale reply;
+* side-effecting tools are serialized per MCP server process (one narrow lock);
+* secrets are never logged or returned; error text is redacted and bounded.
+"""
+
+from __future__ import annotations
+
+import math
+import threading
+from pathlib import Path
+from typing import Any, Callable
+from urllib.parse import urlsplit
+
+from devrelay.errors import DevRelayError
+from devrelay.mcp.ledger import read_records_strict, sequence_state
+from devrelay.mcp.models import (
+    MCP_DEFAULT_CALL_LIMIT,
+    MCP_MAX_CALL_LIMIT,
+    MCP_MAX_WAIT_SECONDS,
+    MCP_PROMPT_MAX_CHARS,
+    McpEnvelope,
+    bounded,
+    error_envelope,
+    ok_envelope,
+)
+from devrelay.opencode.bridge import OpenCodeBridge
+from devrelay.opencode.models import OpenCodeOperationState, valid_session_id
+
+#: Bridge operations this adapter exposes (status reporting only).
+BRIDGE_OPERATIONS: tuple[str, ...] = (
+    "health",
+    "list_sessions",
+    "get_session",
+    "read_messages",
+    "send_prompt",
+    "wait_idle",
+    "interrupt",
+)
+
+#: Cursor values are opaque provider message ids; bound them defensively.
+_CURSOR_MAX_CHARS = 200
+_AGENT_MAX_CHARS = 64
+
+
+class McpArgumentError(DevRelayError):
+    """An MCP tool argument failed DevRelay-side validation."""
+
+    code = "mcp_invalid_argument"
+
+    def __init__(self, message: str) -> None:
+        super().__init__(f"{self.code}: {message}")
+
+
+class McpToolSurface:
+    """Bound-workspace MCP tool surface over the accepted v0.3-A bridge.
+
+    One instance is bound to exactly one workspace (resolved once by the
+    caller); no tool accepts a workspace path, a ``cwd`` or any other way to
+    reach outside it.
+    """
+
+    def __init__(
+        self,
+        *,
+        workspace_root: Path,
+        wiring: Any,
+        devrelay_dir: Path,
+        bridge_factory: Callable[[], OpenCodeBridge] | None = None,
+        package_version: str = "",
+        mcp_server_version: str = "",
+        diagnostics: Callable[[str], None] | None = None,
+    ) -> None:
+        self.workspace_root = Path(workspace_root)
+        self.wiring = wiring
+        self.devrelay_dir = Path(devrelay_dir)
+        self.package_version = package_version
+        self.mcp_server_version = mcp_server_version
+        self._bridge_factory = bridge_factory
+        self._bridge: OpenCodeBridge | None = None
+        self._bridge_lock = threading.Lock()
+        # §16: v0.3-B serializes side-effecting operations per server process.
+        self._side_effect_lock = threading.Lock()
+        self._diagnostics = diagnostics
+
+    # ------------------------------------------------------------------
+    # infrastructure
+    # ------------------------------------------------------------------
+    @property
+    def opencode_config(self) -> Any:
+        return self.wiring.opencode
+
+    def bridge(self) -> OpenCodeBridge:
+        """The one bridge instance for this bound workspace (built lazily)."""
+        with self._bridge_lock:
+            if self._bridge is None:
+                if self._bridge_factory is not None:
+                    self._bridge = self._bridge_factory()
+                else:
+                    self._bridge = self._build_bridge()
+            return self._bridge
+
+    def _build_bridge(self) -> OpenCodeBridge:
+        import os
+
+        config = self.opencode_config
+        return OpenCodeBridge(
+            base_url=config.base_url,
+            workspace_root=config.workspace or self.workspace_root,
+            token=os.environ.get("DEVRELAY_OPENCODE_TOKEN", ""),
+            timeout_seconds=config.timeout_seconds,
+            idle_timeout_seconds=config.idle_timeout_seconds,
+            poll_interval_seconds=config.poll_interval_seconds,
+            max_response_bytes=config.max_response_bytes,
+            max_messages=config.max_messages,
+            allow_unknown_workspace=config.allow_unknown_workspace,
+            devrelay_dir=self.devrelay_dir,
+        )
+
+    def _diag(self, message: str) -> None:
+        if self._diagnostics is not None:
+            self._diagnostics(bounded(message))
+
+    def _execute(self, tool: str, call: Callable[[], McpEnvelope]) -> McpEnvelope:
+        """Run one tool body, normalizing every failure to a structured envelope.
+
+        ``DevRelayError`` (including validation and bridge/provider errors) keeps
+        its stable code; anything else is an internal DevRelay error: it is
+        diagnosed (bounded, sanitized) on stderr and reported generically - it is
+        never translated into a provider failure.
+        """
+        try:
+            return call()
+        except DevRelayError as exc:
+            return error_envelope(tool, _error_type(exc), exc)
+        except Exception as exc:  # pragma: no cover - defensive boundary
+            self._diag(f"{tool}: internal error {type(exc).__name__}")
+            return error_envelope(
+                tool,
+                "internal_error",
+                "internal DevRelay error while handling this tool call; "
+                "see the MCP server diagnostics on stderr",
+            )
+
+    # ------------------------------------------------------------------
+    # validation (reuses the accepted v0.3-A rules; no second grammar)
+    # ------------------------------------------------------------------
+    @staticmethod
+    def _require_session_id(session_id: object) -> str:
+        if session_id is None or not isinstance(session_id, str) or not valid_session_id(
+            session_id.strip()
+        ):
+            raise McpArgumentError(
+                "session_id must be an explicit opaque OpenCode identifier "
+                "(unreserved characters [A-Za-z0-9._~-], 1-200 chars)"
+            )
+        return session_id.strip()
+
+    @staticmethod
+    def _require_prompt(prompt: object) -> str:
+        if prompt is None or not isinstance(prompt, str):
+            raise McpArgumentError("prompt must be a non-empty string")
+        if not prompt.strip():
+            raise McpArgumentError("prompt must not be empty or whitespace-only")
+        if len(prompt) > MCP_PROMPT_MAX_CHARS:
+            raise McpArgumentError(
+                f"prompt exceeds the documented MCP input bound of "
+                f"{MCP_PROMPT_MAX_CHARS} characters"
+            )
+        return prompt
+
+    @staticmethod
+    def _require_model(model: object) -> str:
+        if model is None or model == "":
+            return ""
+        if not isinstance(model, str):
+            raise McpArgumentError("model must be a string '<providerID>/<modelID>'")
+        # The accepted v0.3-A grammar is the only authority: reuse it verbatim so
+        # the MCP layer can never parse a model differently from the bridge.
+        try:
+            OpenCodeBridge._model_identity(model)  # noqa: SLF001 - single grammar
+        except DevRelayError as exc:
+            # Reuse the accepted message, but do not stack two stable codes.
+            detail = str(exc)
+            prefix = f"{getattr(exc, 'code', '')}: "
+            if prefix.strip(": ") and detail.startswith(prefix):
+                detail = detail[len(prefix):]
+            raise McpArgumentError(detail) from exc
+        return model
+
+    @staticmethod
+    def _require_agent(agent: object) -> str:
+        if agent is None or agent == "":
+            return ""
+        if not isinstance(agent, str):
+            raise McpArgumentError("agent must be a string")
+        if len(agent) > _AGENT_MAX_CHARS:
+            raise McpArgumentError(
+                f"agent exceeds {_AGENT_MAX_CHARS} characters"
+            )
+        return agent
+
+    @staticmethod
+    def _require_cursor(cursor: object) -> str | None:
+        if cursor is None or cursor == "":
+            return None
+        if not isinstance(cursor, str):
+            raise McpArgumentError("cursor must be a string message id")
+        if len(cursor) > _CURSOR_MAX_CHARS:
+            raise McpArgumentError(
+                f"cursor exceeds {_CURSOR_MAX_CHARS} characters"
+            )
+        return cursor
+
+    @staticmethod
+    def _require_bool(value: object, name: str, *, default: bool = False) -> bool:
+        if value is None:
+            return default
+        if not isinstance(value, bool):
+            raise McpArgumentError(f"{name} must be a boolean")
+        return value
+
+    def _require_limit(self, limit: object) -> int:
+        if limit is None:
+            return MCP_DEFAULT_CALL_LIMIT
+        if isinstance(limit, bool) or not isinstance(limit, int):
+            raise McpArgumentError("limit must be an integer")
+        if limit < 1 or limit > MCP_MAX_CALL_LIMIT:
+            raise McpArgumentError(
+                f"limit must be between 1 and {MCP_MAX_CALL_LIMIT}"
+            )
+        return limit
+
+    def _require_timeout(self, timeout_seconds: object) -> float | None:
+        """Finite, positive and inside the configured/documented bounds."""
+        if timeout_seconds is None:
+            return None
+        if isinstance(timeout_seconds, bool) or not isinstance(
+            timeout_seconds, (int, float)
+        ):
+            raise McpArgumentError("timeout_seconds must be a finite number")
+        value = float(timeout_seconds)
+        if not math.isfinite(value) or value <= 0:
+            raise McpArgumentError("timeout_seconds must be finite and positive")
+        configured = float(self.opencode_config.idle_timeout_seconds)
+        ceiling = min(configured, MCP_MAX_WAIT_SECONDS)
+        if value > ceiling:
+            raise McpArgumentError(
+                f"timeout_seconds must not exceed {ceiling:g}s "
+                "(the configured idle_timeout_seconds / documented MCP bound; "
+                "an unlimited wait is not available)"
+            )
+        return value
+
+    # ------------------------------------------------------------------
+    # read-only tools
+    # ------------------------------------------------------------------
+    def devrelay_status(self) -> McpEnvelope:
+        config = self.opencode_config
+        data: dict[str, Any] = {
+            "schema_version": 1,
+            "package_version": self.package_version,
+            "workspace": str(self.workspace_root),
+            "opencode": {
+                "configured": bool(config.configured),
+                "endpoint_authority": _endpoint_authority(config.base_url),
+                "token_source": "DEVRELAY_OPENCODE_TOKEN (environment only)",
+                "allow_unknown_workspace": bool(config.allow_unknown_workspace),
+                "timeout_seconds": float(config.timeout_seconds),
+                "idle_timeout_seconds": float(config.idle_timeout_seconds),
+                "max_messages": int(config.max_messages),
+            },
+            "bridge_operations": list(BRIDGE_OPERATIONS),
+            "ledger": {
+                "directory": "opencode/calls",
+                "present": (self.devrelay_dir / "opencode").is_dir(),
+            },
+            "mcp": {
+                "server": "devrelay",
+                "server_version": self.mcp_server_version,
+                "transport": "stdio",
+                "tools": list(TOOL_NAMES),
+                "side_effects_serialized": True,
+            },
+            "acceptance_authority": False,
+        }
+        return self._execute("devrelay_status", lambda: ok_envelope("devrelay_status", data))
+
+    def opencode_health(self) -> McpEnvelope:
+        def call() -> McpEnvelope:
+            result = self.bridge().health()
+            data = result.model_dump(mode="json")
+            if not result.ok:
+                return error_envelope(
+                    "opencode_health",
+                    result.error_type or "provider_unavailable",
+                    result.error or "OpenCode health probe failed",
+                    data,
+                )
+            return ok_envelope("opencode_health", data)
+
+        return self._execute("opencode_health", call)
+
+    def opencode_list_sessions(
+        self, include_other_workspaces: bool | None = None
+    ) -> McpEnvelope:
+        def call() -> McpEnvelope:
+            include = self._require_bool(
+                include_other_workspaces, "include_other_workspaces"
+            )
+            result = self.bridge().list_sessions(include_other_workspaces=include)
+            data = result.model_dump(mode="json")
+            if not result.ok:
+                return error_envelope(
+                    "opencode_list_sessions",
+                    result.error_type or "provider_unavailable",
+                    result.error or "session listing failed",
+                    data,
+                )
+            return ok_envelope("opencode_list_sessions", data)
+
+        return self._execute("opencode_list_sessions", call)
+
+    def opencode_get_session(self, session_id: str | None = None) -> McpEnvelope:
+        def call() -> McpEnvelope:
+            sid = self._require_session_id(session_id)
+            result = self.bridge().get_session(sid)
+            data = result.model_dump(mode="json")
+            return ok_envelope("opencode_get_session", data)
+
+        return self._execute("opencode_get_session", call)
+
+    def opencode_read_messages(
+        self, session_id: str | None = None, cursor: str | None = None
+    ) -> McpEnvelope:
+        def call() -> McpEnvelope:
+            sid = self._require_session_id(session_id)
+            position = self._require_cursor(cursor)
+            result = self.bridge().read_messages(sid, position)
+            data = result.model_dump(mode="json")
+            if not result.ok:
+                return error_envelope(
+                    "opencode_read_messages",
+                    result.error_type or "provider_unavailable",
+                    result.error or "message read failed",
+                    data,
+                )
+            return ok_envelope("opencode_read_messages", data)
+
+        return self._execute("opencode_read_messages", call)
+
+    def opencode_calls(self, limit: int | None = None) -> McpEnvelope:
+        def call() -> McpEnvelope:
+            bound = self._require_limit(limit)
+            sequence = sequence_state(self.devrelay_dir)
+            records = read_records_strict(self.devrelay_dir, limit=bound)
+            data = {
+                "limit": bound,
+                "count": len(records),
+                "sequence": sequence,
+                "records": records,
+            }
+            return ok_envelope("opencode_calls", data)
+
+        return self._execute("opencode_calls", call)
+
+    # ------------------------------------------------------------------
+    # side-effecting tools (serialized per process)
+    # ------------------------------------------------------------------
+    def opencode_send_prompt(
+        self,
+        session_id: str | None = None,
+        prompt: str | None = None,
+        agent: str | None = None,
+        model: str | None = None,
+    ) -> McpEnvelope:
+        def call() -> McpEnvelope:
+            sid = self._require_session_id(session_id)
+            text = self._require_prompt(prompt)
+            agent_value = self._require_agent(agent)
+            model_value = self._require_model(model)
+            with self._side_effect_lock:
+                result = self.bridge().send_prompt(
+                    sid, text, agent=agent_value, model=model_value
+                )
+            return self._send_prompt_envelope(result)
+
+        return self._execute("opencode_send_prompt", call)
+
+    def opencode_wait_idle(
+        self, session_id: str | None = None, timeout_seconds: float | None = None
+    ) -> McpEnvelope:
+        def call() -> McpEnvelope:
+            sid = self._require_session_id(session_id)
+            timeout = self._require_timeout(timeout_seconds)
+            result = self.bridge().wait_idle(sid, timeout)
+            data = result.model_dump(mode="json")
+            if result.state is not OpenCodeOperationState.COMPLETED:
+                return error_envelope(
+                    "opencode_wait_idle",
+                    result.error_type or "not_idle",
+                    result.error
+                    or "session did not become idle/terminal inside the bound",
+                    data,
+                )
+            return ok_envelope("opencode_wait_idle", data)
+
+        return self._execute("opencode_wait_idle", call)
+
+    def opencode_interrupt(self, session_id: str | None = None) -> McpEnvelope:
+        def call() -> McpEnvelope:
+            sid = self._require_session_id(session_id)
+            with self._side_effect_lock:
+                result = self.bridge().interrupt(sid)
+            data = result.model_dump(mode="json")
+            data["interrupt_semantics"] = (
+                "an accepted abort request is not a verified terminal state"
+            )
+            if result.state is not OpenCodeOperationState.INTERRUPTED:
+                return error_envelope(
+                    "opencode_interrupt",
+                    result.error_type or "interrupt_not_accepted",
+                    result.error or "the abort request was not accepted",
+                    data,
+                )
+            return ok_envelope("opencode_interrupt", data)
+
+        return self._execute("opencode_interrupt", call)
+
+    # ------------------------------------------------------------------
+    # send_prompt envelope: preserve every nuance of the bridge result
+    # ------------------------------------------------------------------
+    @staticmethod
+    def _send_prompt_envelope(result: Any) -> McpEnvelope:
+        data = result.model_dump(mode="json")
+        data["retry_safe"] = _retry_safe(result)
+        data["resubmit_policy"] = (
+            "never resubmit automatically when submission_uncertain or "
+            "reply_pending is set"
+        )
+        ok = (
+            result.state is OpenCodeOperationState.COMPLETED
+            and not result.reply_pending
+            and not result.submission_uncertain
+        )
+        if ok:
+            return ok_envelope("opencode_send_prompt", data)
+        message = result.error or (
+            "the prompt was accepted but no reply was confirmed"
+            if result.reply_pending
+            else "the prompt submission did not complete"
+        )
+        return error_envelope(
+            "opencode_send_prompt",
+            result.error_type or "submission_not_confirmed",
+            message,
+            data,
+        )
+
+
+def _retry_safe(result: Any) -> bool:
+    """True only when DevRelay can prove nothing was submitted.
+
+    Derived from documented bridge evidence, never from a guess:
+
+    * no submission POST was issued at all (the probe/boundary failed first); or
+    * the POST failed without any HTTP response *and* without submission
+      uncertainty (the v0.3-A "definitely not submitted" class: connect/pool
+      timeout, connect error, local refusal).
+
+    An accepted submission (2xx, unusable body or not), an uncertain submission
+    and a pending reply are never ``retry_safe``.
+    """
+    if not result.submission_attempted:
+        return True
+    return (
+        result.submission_status is None
+        and result.http_status is None
+        and not result.submission_uncertain
+        and not result.reply_pending
+    )
+
+
+def _error_type(exc: DevRelayError) -> str:
+    code = getattr(exc, "code", "") or ""
+    if code:
+        return str(code)
+    return type(exc).__name__
+
+
+def _endpoint_authority(base_url: str) -> str:
+    """``scheme://host[:port]`` only - never credentials, path or query."""
+    if not base_url:
+        return ""
+    parts = urlsplit(base_url)
+    if not parts.scheme or not parts.hostname:
+        return ""
+    authority = f"{parts.scheme}://{parts.hostname}"
+    if parts.port:
+        authority += f":{parts.port}"
+    return authority
+
+
+#: Exact tool inventory (order is the advertised order).
+TOOL_NAMES: tuple[str, ...] = (
+    "devrelay_status",
+    "opencode_health",
+    "opencode_list_sessions",
+    "opencode_get_session",
+    "opencode_read_messages",
+    "opencode_calls",
+    "opencode_send_prompt",
+    "opencode_wait_idle",
+    "opencode_interrupt",
+)
+
+READ_ONLY_TOOLS: tuple[str, ...] = (
+    "devrelay_status",
+    "opencode_health",
+    "opencode_list_sessions",
+    "opencode_get_session",
+    "opencode_read_messages",
+    "opencode_calls",
+    "opencode_wait_idle",
+)
+
+SIDE_EFFECTING_TOOLS: tuple[str, ...] = ("opencode_send_prompt", "opencode_interrupt")
+
+
+__all__ = [
+    "BRIDGE_OPERATIONS",
+    "McpArgumentError",
+    "McpToolSurface",
+    "READ_ONLY_TOOLS",
+    "SIDE_EFFECTING_TOOLS",
+    "TOOL_NAMES",
+]
