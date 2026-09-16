@@ -59,7 +59,12 @@ opencode:
 * `base_url` must be unambiguous, because it is a bearer-token control channel:
   `http`/`https` only, a host is required, embedded credentials are refused (the
   token comes from the environment), and a path prefix, query or fragment is
-  refused rather than silently dropped.  A trailing `/` is normalized away; an
+  refused rather than silently dropped.  The authority is validated explicitly:
+  a non-numeric, duplicated or out-of-range port, whitespace/control characters
+  and percent-encoding inside the authority are configuration errors - never an
+  `httpx.InvalidURL` at request time.  Embedded credentials are removed from the
+  value *before* validation, so no error message, log or console line can echo a
+  password.  A trailing `/` is normalized away; an
   empty value means "not configured" (the section is inert until it is set).
 * Numeric limits fail closed at load time instead of being clamped at request
   time: `timeout_seconds`/`idle_timeout_seconds`/`poll_interval_seconds` must be
@@ -69,11 +74,22 @@ opencode:
 * An empty YAML body (`opencode:` with nothing under it) means "not configured"
   and falls back to the field defaults.  An unknown key inside the section is
   still rejected (`extra="forbid"`): a typo must never be ignored.
+* Provider error snippets are scrubbed of the bearer token and of the prompt that
+  was just submitted - in their literal form *and* in the encodings a provider
+  realistically echoes (JSON-escaped, backslash-escaped, percent-encoded and their
+  once/twice-escaped forms).  This applies to the submission POST, the follow-up
+  read and every wait/poll request, and it happens *before* the snippet can reach
+  the ledger, the result or the console.
 * `DEVRELAY_OPENCODE_TOKEN` (environment only) is sent as a bearer token when set.
   It is never written to the config, the policy snapshot, the call ledger or any
   artifact, and `doctor` reports presence, not value.
-* The token is also in `CODEX_CHILD_ENV_DENYLIST`: a Codex child process never
-  inherits it (a child holding the credential could bypass the bridge entirely).
+* The token is also in `CODEX_CHILD_ENV_DENYLIST`: **every** Codex child process
+  never inherits it.  The scrub is centralized in a runner adapter
+  (`CodexChildRunner`) that the Codex provider spawns through, so the legacy text
+  runtime, the probes (`--version`, `exec --help`), capability detection and the
+  doctor path are all covered without each call site remembering it - and the
+  parent DevRelay process keeps its credentials.  A child holding the credential
+  could bypass the bridge entirely.
 * The section is runtime wiring: `devrelay init` writes it disabled (empty
   `base_url`), and it is excluded from the frozen task policy exactly like
   `codex:` is (a legacy full-config snapshot may still contain it; the policy
@@ -86,8 +102,8 @@ opencode:
 | `health()` | probe the endpoint; returns normalized `OpenCodeHealth` (healthy/version/capabilities). No session data. |
 | `list_sessions(include_other_workspaces=False)` | normalized sessions, each carrying its ownership verdict; other-workspace sessions are hidden unless explicitly requested. |
 | `get_session(session_id)` | read one explicitly selected session; unknown id → `opencode_session_not_found`; wrong workspace → `opencode_session_workspace_mismatch` (hard failures); a session id the server answers with that is not the requested one → `MALFORMED_RESPONSE` (never "adopt" another session). |
-| `read_messages(session_id, cursor=None)` | normalized message window + explicit cursor semantics (`next_cursor`, `cursor_unknown`, `replayed`).  The **newest** messages win: the window is `messages[-max_messages:]`, and `provider_message_count`/`window_truncated` report what the payload actually contained. |
-| `send_prompt(session_id, prompt, agent="", model="")` | exactly one prompt to exactly one session.  A reply is correlated **only** as a new assistant message (inline candidate, or exactly one explicit follow-up read); an ack with no visible new reply yields `reply_pending: true` and an empty message list - never a stale reply, never an automatic resubmission. |
+| `read_messages(session_id, cursor=None)` | normalized message window + explicit cursor semantics (`next_cursor`, `cursor_unknown`, `replayed`).  The **newest** messages win at every level: the anti-DoS pre-cap keeps the newest `2000` provider entries and the window is the newest `max_messages` of those, while `provider_message_count`/`window_truncated` report what the payload actually contained. |
+| `send_prompt(session_id, prompt, agent="", model="")` | exactly one prompt to exactly one session.  **Submission acceptance is the HTTP status**: any 2xx means the server may have accepted the prompt, so an unusable body (`204`, empty `200`, invalid JSON, oversized) is recorded as evidence (`submission_body`, `submission_status`) and the operation continues as a post-acceptance result - never as "not submitted", never resubmitted.  A reply is correlated **only** as a new assistant message (inline candidate, or exactly one explicit follow-up read); no visible new reply yields `reply_pending: true` with an empty message list - never a stale reply. |
 | `wait_idle(session_id, timeout=None, *, redact_values=())` | bounded polling until idle/terminal; the deadline is established **before** the ownership probe and every request (probe included) is clamped to the remaining budget; `TIMED_OUT` on expiry — no retry, no continued polling. |
 | `interrupt(session_id)` | abort request; 2xx (including an empty `204`) → `INTERRUPTED` with `interrupt_verified: false` (accepted is not verified), `404` → `interrupt_session_not_found`, `405`/`501` → `interrupt_unsupported`, any other failure → the provider error, and an oversized/unusable body → `MALFORMED_RESPONSE` (never "unsupported"). |
 
@@ -111,7 +127,8 @@ artifact; the raw transcript is never persisted.
 Operation states (explicit, never inferred):
 
 ```
-ACCEPTED_LOCALLY      validated locally, nothing issued
+ACCEPTED_LOCALLY      reserved - never emitted (local validity failures are hard
+                      errors, not a state)
 ISSUED                an external request has been sent
 IN_FLIGHT             still running on the server (wait_idle)
 COMPLETED             terminal/idle outcome reached
@@ -128,6 +145,13 @@ Split of responsibilities, deliberately:
 * **Hard validation failures raise**: missing configuration
   (`opencode_config_invalid`), unknown session (`opencode_session_not_found`),
   workspace mismatch (`opencode_session_workspace_mismatch`).
+* **Untrusted response content never escapes** as a Python exception: invalid
+  JSON (`invalid_json`), extreme nesting (`json_too_deep`, `RecursionError`) and
+  unparsable values such as an over-long integer literal (`json_unparsable`,
+  `ValueError`) all normalize into `MALFORMED_RESPONSE`, and the durable call
+  record is settled in every case (it is never left `ISSUED`).  A programming
+  error in DevRelay's own code still propagates: only provider-controlled
+  parsing failures are normalized.
 
 Per-request call states: `ISSUED → COMPLETED | TIMED_OUT |
 PROVIDER_UNAVAILABLE | MALFORMED_RESPONSE`.
@@ -186,8 +210,14 @@ PROVIDER_UNAVAILABLE | MALFORMED_RESPONSE`.
 * Allocation fails closed: a corrupt/torn `sequence.json` raises
   `opencode_ledger_error` instead of restarting numbering, a missing sequence is
   recovered from the existing records (`max(existing) + 1`), each record is
-  opened create-new (an identity is never overwritten), and a crash gap is
-  acceptable while reuse is not.
+  opened create-new *before* it is added to the in-memory view (a refused
+  identity leaves no phantom call that could inflate elapsed totals), and a crash
+  gap is acceptable while reuse is not.
+* Call ids are unique and monotonic under the supported **single-process** model:
+  there is no cross-process locking, so two DevRelay processes writing the same
+  `.devrelay/opencode/` directory concurrently are outside the v0.3-A contract.
+* `duration_ms` is the sum of the accounted calls' durations, so it measures time
+  spent in requests and deliberately excludes the local inter-poll sleeps.
 * The persisted `prompt_sha256` is an **unsalted** digest: an identifier for
   correlating a call with the prompt that produced it, not a secrecy mechanism (a
   guessable prompt is confirmable from the ledger).  Prompt confidentiality comes
@@ -208,7 +238,23 @@ PROVIDER_UNAVAILABLE | MALFORMED_RESPONSE`.
   or advance a task, and it makes no decisions.
 * No MCP/ChatGPT exposure, no role routing, no orchestration (see non-goals).
 * `read_messages` has no server-side pagination: the local window is the newest
-  `max_messages` (hard cap 200) and truncation is reported, not worked around.
+  `max_messages` (hard cap 200, anti-DoS pre-cap 2000 provider entries) and
+  truncation is reported, not worked around.
+* Message ordering is assumed to be the provider's own order (newest last) -
+  DevRelay does not re-sort messages by timestamp, so a provider that returns
+  them in another order would be reported as-is; cursor semantics stay honest
+  (`cursor_unknown`) instead of guessing.
+* `interrupt_verified: false` always means "the abort request was accepted", not
+  "a terminal state was observed"; v0.3-A performs no post-abort verification
+  polling.
+* Call ids are only guaranteed unique under the single-process model (see Call
+  accounting); cross-process locking is deferred.
+* Provider-error scrubbing is bounded by construction: literal plus JSON/
+  backslash/percent encodings up to two escaping levels.  A provider that
+  paraphrases, fragments or differently encodes a secret is outside this
+  boundary.
+* Wire paths (`OpenCodePaths`) are code-level defaults, not configuration keys:
+  v0.3-A exposes no `opencode.paths` setting.
 * Prompt/credential scrubbing of provider error snippets is **literal-value**
   based: DevRelay removes the values it knows (the bearer token, and the prompt it
   just submitted - including in post-submission follow-up reads and polls), so a

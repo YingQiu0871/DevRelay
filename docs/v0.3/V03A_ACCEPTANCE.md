@@ -30,7 +30,7 @@ indirectly · **DEFERRED** = documented, not automated in this stage.
 | A19 | Agent/model selection forwarded when supported | COVERED | `test_send_prompt_agent_and_model_selection_are_forwarded` |
 | A20 | Ack-only server: exactly one explicit follow-up read | COVERED | `test_send_prompt_ack_only_server_is_followed_by_one_read` |
 | A21 | HTTP error body sanitized (no credential/secret leakage) | COVERED | `test_send_prompt_provider_error_is_sanitized` |
-| A22 | Empty prompt refused locally (`ACCEPTED_LOCALLY` semantics) | COVERED | `test_send_prompt_requires_non_empty_prompt` |
+| A22 | Empty prompt refused locally with a hard error (`ACCEPTED_LOCALLY` is reserved and never emitted) | COVERED | `test_send_prompt_requires_non_empty_prompt` |
 | A23 | Bounded idle wait completes on idle with every poll accounted | COVERED | `test_wait_idle_completes_when_session_becomes_idle` |
 | A24 | Idle wait timeout is explicit and final (no retry) | COVERED | `test_wait_idle_times_out_without_retrying` |
 | A25 | Terminal session error is surfaced, not swallowed | COVERED | `test_wait_idle_returns_terminal_error_state` |
@@ -64,14 +64,37 @@ restatement of existing coverage; the 8 that already passed are marked *(guard)*
 | R10 | P2-F `--json` keeps a failing exit status; exit codes reflect the operation, not the renderer | COVERED | `test_cli_json_mode_keeps_a_failing_exit_status`, `test_cli_json_mode_succeeds_only_when_the_operation_does`, `test_cli_reports_a_pending_reply_as_a_non_zero_but_honest_result` |
 | R11 | PART III config coverage: defaults, bounds, `extra="forbid"`, `opencode: null`, base-URL scheme/userinfo/path, policy projection, legacy snapshot, `allow_unknown_workspace` | COVERED | `test_opencode_config_defaults_and_bounds`, `test_opencode_base_url_must_be_unambiguous`, `test_opencode_base_url_normalizes_trailing_slash`, `test_null_opencode_section_means_not_configured`, `test_invalid_opencode_wiring_in_the_workspace_file_fails_closed`, `test_opencode_section_is_projected_out_of_the_policy` *(guard)*, `test_legacy_full_config_snapshot_tolerates_opencode_only_when_lenient` *(guard)*, `test_allow_unknown_workspace_controls_the_ownership_verdict` |
 
+## Second independent-review remediation (S-rows)
+
+All S-rows live in `tests/test_v03a_second_remediation.py` (offline OpenCode stub,
+offline Codex stub spawned as a real child process, no network).  **36 of its 49
+tests fail against `f5d487d`** for the actual failure mechanism (verified by
+temporarily reverting the seven remediated source files and restoring them
+byte-identically); the 13 that already passed are guards.
+
+| # | Finding | Status | Evidence |
+| --- | --- | --- | --- |
+| S1 | P1-A every Codex child process (legacy text runtime, `--version`, `exec --help`, capability detection, doctor) is spawned through a centralized credential scrub; the parent keeps its credentials | COVERED | `test_every_codex_child_path_is_scrubbed` (real child env captured per invocation), `test_provider_probes_pass_the_denylist_to_the_runner`, `test_doctor_codex_probes_are_scrubbed` |
+| S2 | P1-B a 2xx submission with an unusable body (`204`, empty `200`, invalid JSON, oversized) is post-acceptance: one POST, no resubmission, follow-up attempted, `reply_pending`, POST evidence preserved, accounting == ledger | COVERED | `test_2xx_with_an_unusable_body_is_post_acceptance` (4 cases), `test_2xx_with_an_unusable_body_still_correlates_a_later_reply`, `test_4xx_submission_is_still_a_failed_operation` |
+| S3 | P1-C the anti-DoS pre-cap keeps the true newest tail (>2000 entries), with honest counts/cursor/replay and working reply correlation on large sessions | COVERED | `test_large_payloads_keep_the_true_newest_messages` (2100, 2300), `test_large_payload_cursor_and_replay_semantics_are_honest`, `test_send_prompt_sees_a_reply_appended_to_a_large_session` |
+| S4 | P1-D JSON/backslash/percent-escaped provider echoes of the prompt or token never reach the result, CLI output or any durable record (POST, follow-up and poll paths) | COVERED | `test_post_failure_echo_is_scrubbed_in_every_encoding`, `test_follow_up_and_poll_echoes_are_scrubbed_in_every_encoding`, `test_cli_output_never_renders_a_recoverable_echo` |
+| S5 | P1-E parser bombs (extreme nesting, over-long integer, invalid JSON) normalize into `MALFORMED_RESPONSE`, settle the ledger record, and never traceback in the CLI; programming errors still propagate | COVERED | `test_parser_bombs_are_malformed_and_settled` (6 cases), `test_parser_bomb_does_not_traceback_in_the_cli`, `test_programming_errors_still_propagate` |
+| S6 | PART II-A a failing ownership/boundary probe keeps the calls it already issued | COVERED | `test_boundary_failure_keeps_the_probe_accounting`, `test_probe_failure_keeps_its_own_call` |
+| S7 | PART II-B a malformed follow-up keeps the `send_prompt` identity with embedded follow-up status | COVERED | `test_malformed_follow_up_keeps_the_send_identity` |
+| S8 | PART II-C dot-segment session ids are refused before URL construction | COVERED | `test_dot_segment_session_ids_issue_zero_requests`, `test_dotted_ids_that_are_not_dot_segments_still_work` |
+| S9 | PART II-D the full returned session id is compared (no truncation-equal collision) | COVERED | `test_returned_id_suffix_cannot_hide_behind_truncation`, `test_returned_id_mismatch_is_still_detected` |
+| S10 | PART II-E malformed authorities/ports/control characters/percent-encoded authorities are configuration errors before httpx, and config errors never echo an embedded password | COVERED | `test_malformed_urls_are_configuration_errors`, `test_malformed_authority_never_reaches_httpx`, `test_config_errors_never_echo_an_embedded_password`, `test_accepted_urls_construct_a_transport` |
+| S11 | PART II-F a refused create-new leaves no phantom in-memory ledger record | COVERED | `test_refused_create_new_leaves_no_phantom_record` |
+
 ## Call accounting totals recorded by the suite
 
 Every test above asserts exact counts where a count is meaningful
 (`request_count`, `call_ids`, one record per issued request). The suite is
 deterministic; there is no retry, no background work and no network.
 
-Accounting totals asserted by the remediation suite: an ack-only `send_prompt`
+Accounting totals asserted by the remediation suites: an ack-only `send_prompt`
 with a follow-up read is `6` requests (probe + boundary session + boundary
-messages + POST + follow-up session + follow-up messages), and the same operation
-with a failing follow-up is still `5 == len(ledger.read_records())`, because a
-failed follow-up merges the calls it already issued.
+messages + POST + follow-up session + follow-up messages); the same operation
+with a failing follow-up is still `5 == len(ledger.read_records())`; an unusable
+2xx submission body is also `6`; a failing boundary read is `3` (probe + boundary
+session + failing message read); and no record is ever left `ISSUED`.

@@ -182,6 +182,40 @@ pre-remediation source):
   `docs/v0.3/V03_PLAN.md`, and `docs/BACKLOG.md` (which carries the pending
   v0.2-C real Codex smoke and a separate Windows Codex shell P2 investigation).
 
+### Fixed (second independent-review remediation)
+
+Second remediation pass on `f5d487d` (36 of the 49 new tests in
+`tests/test_v03a_second_remediation.py` fail against it), still entirely offline:
+
+- **P1** every Codex child process - legacy text runtime, `--version`,
+  `exec --help`, capability detection, doctor probes - now spawns through one
+  centralized credential-scrubbing adapter, so the OpenCode token and the other
+  denylisted provider credentials can no longer reach any Codex child (the parent
+  process keeps its credentials).
+- **P1** a 2xx prompt submission with an unusable body (`204`, empty `200`,
+  invalid JSON, oversized) is a *post-acceptance* result, not a failed
+  submission: `submission_body`/`submission_status` record the evidence, the
+  bounded follow-up read still runs, `reply_pending` stays honest and nothing is
+  resubmitted.
+- **P1** the anti-DoS pre-cap on provider message lists keeps the true newest
+  tail (previously `raw[:2000]` could hide the newest messages of a large session
+  and break reply correlation).
+- **P1** provider echoes of the prompt/token are now scrubbed in their JSON-,
+  backslash- and percent-escaped forms (two escaping levels) on the POST, the
+  follow-up read and every wait/poll request, before anything reaches the ledger,
+  the result or the console.
+- **P1** parser bombs (extreme JSON nesting, over-long integer literals) and
+  invalid JSON normalize into `MALFORMED_RESPONSE` with a specific error type,
+  and the durable call record is always settled - a provider body can no longer
+  strand a record at `ISSUED` or traceback the CLI. Programming errors still
+  propagate.
+- **Adjacent** operation accounting survives a failing ownership/boundary probe;
+  a malformed follow-up keeps the `send_prompt` identity; dot-segment session ids
+  are refused; the full (untruncated) returned session id is compared; malformed
+  URL authorities are configuration errors before httpx and config errors no
+  longer echo an embedded password; a refused create-new leaves no phantom
+  in-memory ledger record.
+
 ## Unreleased - v0.2-C candidate (structured Codex runtime)
 
 Structured, isolated, tamper-evident and replayable Codex runtime. **Not

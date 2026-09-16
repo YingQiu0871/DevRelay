@@ -29,6 +29,9 @@ Do not begin v0.3-B before v0.3-A is independently reviewed.
 8. `tests/test_v03a_remediation.py` — focused regression tests for the
    independent-review findings (R1–R11 in `V03A_ACCEPTANCE.md`); 58 of its 66
    tests fail against the pre-remediation source.
+9. `tests/test_v03a_second_remediation.py` — focused regression tests for the
+   second independent review (S1–S11 in `V03A_ACCEPTANCE.md`); 36 of its 49 tests
+   fail against `f5d487d`.
 
 ## Explicit non-goals (v0.3-A)
 
@@ -40,7 +43,8 @@ against the v0.2 provider budget. See `docs/v0.3/V03A_SPEC.md`.
 ## Verification order used in this stage
 
 1. Focused offline tests (`tests/test_v03a_opencode.py`,
-   `tests/test_v03a_remediation.py`) throughout.
+   `tests/test_v03a_remediation.py`, `tests/test_v03a_second_remediation.py`)
+   throughout.
 2. Full suite (`python -m pytest`) at the end, run with an isolated temporary
    directory — see the implementation report.  (Note: the suite's shared-`%TEMP%`
    hygiene item in `docs/BACKLOG.md` is pre-existing and out of scope here.)

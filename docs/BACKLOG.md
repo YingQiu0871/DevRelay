@@ -15,7 +15,7 @@ authorizes code changes; each item names its own scope and owner stage.
 | Why it stopped | Codex hit the provider **usage limit** before producing the structured result |
 | Constraint | Do **not** modify v0.2-C to work around the block; do **not** spend another real Codex call; do **not** treat the partial run as a pass |
 | Evidence | left exactly as produced (historical smoke directory and artifacts untouched by v0.3-A) |
-| Next step | a replacement single-call smoke once Codex provider availability returns; the offline suite (338 tests) already covers everything except real-provider delivery |
+| Next step | a replacement single-call smoke once Codex provider availability returns; the offline suite already covers everything except real-provider delivery |
 
 ## 2. Windows Codex shell P2 — `exec_command` rejected around the WindowsApps `pwsh.exe` alias
 
@@ -33,17 +33,34 @@ authorizes code changes; each item names its own scope and owner stage.
   discovery, no fan-out, no cross-workspace reuse.
 * No automatic retry of any kind; a failed request stays failed and visible.
 * `wait_idle` is polling-based (bounded, no streaming/SSE subscription yet).
-* The wire paths in `OpenCodePaths` are configurable defaults; the exact server
-  contract is only confirmable by a real smoke (separately proposed).
+* The wire paths in `OpenCodePaths` are code-level defaults (there is no
+  `opencode.paths` configuration key); the exact server contract is only
+  confirmable by a real smoke (separately proposed).
+* Message ordering is taken from the provider as-is (newest last); no timestamp
+  re-sorting.  Call ids are unique under the single-process model only.
+* Provider-error scrubbing covers literal plus JSON/backslash/percent encodings up
+  to two escaping levels; paraphrased or fragmented secrets are out of scope.
 * The bridge is **not** wired into the pipeline: it neither implements nor routes
   any implementer/reviewer role.
 
-## 4. Pre-existing test-environment hygiene: shared `%TEMP%` residue
+## 4. Deferred beyond the second v0.3-A remediation (recorded, not started)
+
+| Item | Why it is deferred |
+| --- | --- |
+| Cross-process ledger locking / multi-process call-id allocation | v0.3-A is a single-process bridge; a locking protocol needs its own design (and a decision about the supported concurrency model) |
+| Call-id lexical ordering beyond `OC-9999` | the `OC-%04d` format is documented; changing the width would affect durable evidence compatibility |
+| SSE/streaming instead of `wait_idle` polling, server-side pagination | explicitly out of the v0.3-A contract |
+| Cross-host/container workspace path mapping | ownership is compared in DevRelay's namespace; a mapping would weaken the check and needs its own design |
+| Proxy/CA configuration mechanism | ambient routing is disabled outright today; a reviewed mechanism is a separate feature |
+| Post-abort verification polling (`interrupt_verified`) | accepted-but-unverified is the documented v0.3-A semantic |
+| Attachment/tool-argument modeling | deliberately dropped in v0.3-A |
+
+## 5. Pre-existing test-environment hygiene: shared `%TEMP%` residue
 
 | Field | Value |
 | --- | --- |
 | Status | **OPEN (test hygiene, pre-existing)** — explicitly **not** fixed in the v0.3-A remediation |
 | Symptom | `tests/test_baseline_ignored_self.py::test_real_index_bytes_unchanged_and_temp_index_cleaned` can fail when the shared `%TEMP%` already contains leftover `devrelay-index-*` directories from other runs |
-| Evidence | the independent review demonstrated shared `%TEMP%` residue and that an isolated temporary directory restores the suite to 390/390 |
+| Evidence | the independent review demonstrated shared `%TEMP%` residue and that an isolated temporary directory restores the full suite to green (the suite is run with fresh `TEMP`/`TMP`/`TMPDIR` for every reported result) |
 | Impact | environment-dependent test flake only; no production behaviour involved |
 | Scope note | unrelated to the OpenCode bridge; must be handled as its own hygiene task (unique per-run temp roots or a tolerant assertion) |

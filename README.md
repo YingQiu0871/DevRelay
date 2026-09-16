@@ -686,11 +686,19 @@ verified terminal state.
 `--json` prints the normalized result and never hides a failure: the exit code is
 `0` only when the command achieved what was asked (`COMPLETED`, or an accepted
 `INTERRUPTED` for `interrupt`) and `2` otherwise — including `reply_pending` —
-in both output modes.
+in both output modes. An accepted submission (any 2xx) is never reported as "not
+submitted" just because its body was unusable (`204`, empty, invalid JSON,
+oversized): the prompt may already be running, so DevRelay reports
+`submission_body`/`submission_status`, keeps `reply_pending` honest and never
+resubmits.
 
 The token, when needed, comes from `DEVRELAY_OPENCODE_TOKEN`, is never persisted,
-and is scrubbed from every Codex child environment (it is in the v0.2-C child
-denylist), so a subprocess cannot bypass the bridge with it.
+and is scrubbed from **every** Codex child process - the legacy text runtime, the
+`--version`/`exec --help` probes, capability detection and the doctor path all
+spawn through one credential-scrubbing adapter. Provider error snippets are
+scrubbed of the token and of the submitted prompt in their literal *and* common
+escaped (JSON/backslash/percent) forms before they can reach the ledger or the
+console.
 
 v0.3-A deliberately does **not** perform role routing (DeepSeek → GLM), review
 loops, approval decisions or ChatGPT/MCP exposure; see
@@ -927,9 +935,13 @@ not downgrade the binary inside a workspace that v0.2-B has already written.
   independent review)
 - **v0.2-C** - structured Codex event output (`codex exec --json`),
   improved provider adapters / state-driven UI
-- **v0.3** - MCP server
-- **v0.4** - ChatGPT integration / plugin
-- **v0.5** - optional release automation with explicit approvals
+- **v0.3-A** - OpenCode session bridge: one explicitly configured, already
+  running OpenCode server (select/read one session, one prompt, bounded wait,
+  interrupt, durable call accounting) - candidate under independent review
+- **v0.3-B** - not designed yet (the next v0.3 stage starts only after v0.3-A is
+  approved)
+- **later** - MCP server, ChatGPT integration / plugin, optional release
+  automation with explicit approvals
 
 ## Development
 
@@ -938,9 +950,10 @@ python -m pip install -e ".[dev]"
 python -m pytest
 ```
 
-227 tests run fully offline with mocked subprocesses/HTTP where needed and
-real (tiny) git repositories for baseline/guard/recovery coverage - no real
-Codex, DeepSeek or network required. Coverage includes: state transitions and
+The full test suite runs offline with mocked subprocesses/HTTP where needed, an
+offline Codex stub spawned as a real child process, and real (tiny) git
+repositories for baseline/guard/recovery coverage - no real Codex, OpenCode,
+DeepSeek or network required. Coverage includes: state transitions and
 rejected invalid transitions; max-iteration blocking; P0/P1/P2 ->
 FIX_REQUIRED; P3-only pass policy; Codex missing/success/failure/timeout;
 stdin transport (long/Unicode/shell-metacharacter prompts stay on stdin, and
