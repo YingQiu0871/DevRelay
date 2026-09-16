@@ -25,6 +25,7 @@ from devrelay.errors import ProviderUnavailableError
 from devrelay.models import ProviderExecutionResult, TaskPacket
 from devrelay.providers.base import ImplementerContext, ImplementerProvider, RuntimePlan
 from devrelay.providers.codex_runtime import (
+    CodexChildRunner,
     CodexContainmentUnsupportedError,
     CodexResultError,
     CodexRuntimeUnsupportedError,
@@ -144,7 +145,9 @@ class CodexCLIProvider(ImplementerProvider):
         workspace_root: str | Path | None = None,
     ) -> None:
         self.config = config
-        self.runner = runner or CommandRunner()
+        # P1-A: every Codex child (probes included) is spawned through the
+        # scrubbing adapter, so no call site can forget the credential denylist.
+        self.runner = CodexChildRunner(runner or CommandRunner())
         self.workspace_root = str(Path(workspace_root).resolve()) if workspace_root else None
         self._availability: tuple[bool, str] | None = None
         self._help_flags: set[str] | None = None

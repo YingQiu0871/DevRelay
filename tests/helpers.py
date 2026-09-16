@@ -100,13 +100,23 @@ class FakeCommandRunner:
         self.calls: list[dict] = []
         self.which_map: dict[str, str | None] = {}
 
-    def run(self, argv, cwd=None, timeout_seconds=900.0, input_text=None, env=None):
+    def run(
+        self,
+        argv,
+        cwd=None,
+        timeout_seconds=900.0,
+        input_text=None,
+        env=None,
+        env_remove=None,
+    ):
         self.calls.append(
             {
                 "argv": list(argv),
                 "cwd": str(cwd) if cwd is not None else None,
                 "input": input_text,
                 "timeout": timeout_seconds,
+                "env": env,
+                "env_remove": list(env_remove or []),
             }
         )
         result = self.results.get(" ".join(argv))
@@ -599,6 +609,16 @@ def main() -> int:
     args = sys.argv[1:]
     config_path = Path(__file__).with_name("stub-config.json")
     cfg = json.loads(config_path.read_text(encoding="utf-8")) if config_path.is_file() else {}
+    # Capture *before* the probe early-returns: `--version` and `exec --help` are
+    # real Codex child processes and must be auditable too (P1-A).
+    if cfg.get("invocation_log"):
+        entry = {
+            "argv": list(args),
+            "env": {name: bool(os.environ.get(name)) for name in cfg.get("env_names", [])},
+            "env_present": sorted(os.environ),
+        }
+        with open(cfg["invocation_log"], "a", encoding="utf-8") as handle:
+            handle.write(json.dumps(entry) + chr(10))
     if "--version" in args:
         print("codex-cli 9.9.9-stub")
         return 0

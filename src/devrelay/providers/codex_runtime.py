@@ -246,6 +246,48 @@ def parse_help_flags(help_text: str) -> frozenset[str]:
     return frozenset(flags)
 
 
+def merge_child_env_removals(names: Sequence[str] | None = None) -> list[str]:
+    """The Codex child denylist plus any extra caller-requested removals."""
+    merged = list(CODEX_CHILD_ENV_DENYLIST)
+    for name in names or ():
+        if name not in merged:
+            merged.append(name)
+    return merged
+
+
+class CodexChildRunner:
+    """Runner adapter that scrubs the credential denylist from every child.
+
+    Every Codex subprocess - capability probes (``--version``, ``exec --help``),
+    availability checks, doctor probes, the legacy text runtime and the
+    structured runtime - goes through this adapter, so a new call site cannot
+    forget the scrub (P1-A).  It only ever affects *child* processes: the parent
+    DevRelay process keeps its credentials, and values are never read, logged or
+    persisted (``CommandRunner`` deletes the names from the child environment).
+
+    A caller-supplied ``env_remove`` is merged, never replaced, so a future
+    caller cannot narrow the denylist by accident.
+    """
+
+    def __init__(self, runner) -> None:
+        self._runner = runner
+
+    def __getattr__(self, name: str):
+        # ``which``, ``env_overrides`` and anything else stay available.
+        return getattr(self._runner, name)
+
+    def run(self, argv, **kwargs):
+        kwargs["env_remove"] = merge_child_env_removals(kwargs.get("env_remove"))
+        return self._runner.run(argv, **kwargs)
+
+    def run_bytes(self, argv, **kwargs):
+        kwargs["env_remove"] = merge_child_env_removals(kwargs.get("env_remove"))
+        return self._runner.run_bytes(argv, **kwargs)
+
+    def __repr__(self) -> str:  # pragma: no cover - diagnostics only
+        return f"CodexChildRunner({self._runner!r})"
+
+
 def detect_capabilities(
     runner, executable: str, launcher_args: Sequence[str] = ()
 ) -> CodexCapabilities:
@@ -257,7 +299,11 @@ def detect_capabilities(
     prefix = [executable, *launcher_args]
     if not runner.which(executable):
         return CodexCapabilities(present=False, diagnostic="executable not found")
-    version = runner.run([*prefix, "--version"], timeout_seconds=30)
+    version = runner.run(
+        [*prefix, "--version"],
+        timeout_seconds=30,
+        env_remove=merge_child_env_removals(),
+    )
     text = (version.stdout or "").strip()
     if not version.success:
         return CodexCapabilities(
@@ -267,7 +313,11 @@ def detect_capabilities(
                 + ((version.stderr or version.error or "").strip()[:200])
             ),
         )
-    help_result = runner.run([*prefix, "exec", "--help"], timeout_seconds=60)
+    help_result = runner.run(
+        [*prefix, "exec", "--help"],
+        timeout_seconds=60,
+        env_remove=merge_child_env_removals(),
+    )
     flags = parse_help_flags(help_result.stdout or "") if help_result.success else frozenset()
     return CodexCapabilities(present=True, version=text, flags=flags)
 
