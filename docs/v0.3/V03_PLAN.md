@@ -26,6 +26,9 @@ Do not begin v0.3-B before v0.3-A is independently reviewed.
    (`health`, `sessions`, `show`, `read`, `send`, `wait`, `interrupt`, `calls`).
 7. `tests/opencode_stub.py` + `tests/test_v03a_opencode.py` — deterministic
    offline coverage of every acceptance criterion (A1–A32).
+8. `tests/test_v03a_remediation.py` — focused regression tests for the
+   independent-review findings (R1–R11 in `V03A_ACCEPTANCE.md`); 58 of its 66
+   tests fail against the pre-remediation source.
 
 ## Explicit non-goals (v0.3-A)
 
@@ -36,7 +39,10 @@ against the v0.2 provider budget. See `docs/v0.3/V03A_SPEC.md`.
 
 ## Verification order used in this stage
 
-1. Focused offline tests (`tests/test_v03a_opencode.py`) throughout.
-2. Full suite (`python -m pytest`) at the end — see the implementation report.
+1. Focused offline tests (`tests/test_v03a_opencode.py`,
+   `tests/test_v03a_remediation.py`) throughout.
+2. Full suite (`python -m pytest`) at the end, run with an isolated temporary
+   directory — see the implementation report.  (Note: the suite's shared-`%TEMP%`
+   hygiene item in `docs/BACKLOG.md` is pre-existing and out of scope here.)
 3. Self-audit that no v0.3-B functionality leaked in.
 4. Local commits only on `v0.3-a-opencode-bridge`; **no push, merge, tag, release**.

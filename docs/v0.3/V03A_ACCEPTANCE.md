@@ -7,7 +7,7 @@ no network, no model call is required (or used) by any test below.
 Legend: **COVERED** = automated test asserts it · **PARTIAL** = covered
 indirectly · **DEFERRED** = documented, not automated in this stage.
 
-| # | Criterion | Status | Evidence (`tests/test_v03a_opencode.py` unless noted) |
+| # | Criterion | Status | Evidence (`tests/test_v03a_opencode.py`, plus `tests/test_v03a_remediation.py` for the R-rows) |
 | --- | --- | --- | --- |
 | A1 | Explicit endpoint required; unset `base_url` fails closed with a clear error | COVERED | `test_bridge_requires_an_explicit_endpoint`, `test_cli_opencode_requires_configuration` |
 | A2 | Health probe returns normalized capability view | COVERED | `test_health_reports_capabilities` |
@@ -39,12 +39,39 @@ indirectly · **DEFERRED** = documented, not automated in this stage.
 | A28 | Durable, unique, monotonic call ids; one record per issued request; no prompt text persisted | COVERED | `test_call_accounting_is_explicit_and_durable` |
 | A29 | No hidden retries: a failed operation issues exactly one request | COVERED | `test_no_hidden_retries_on_failure` |
 | A30 | CLI surface is thin: `health`, `sessions`, `calls` work through the bridge | COVERED | `test_cli_opencode_health_and_sessions` |
-| A31 | OpenCode section is wiring only (never task policy); legacy snapshots tolerate it | COVERED | `tests/test_v02b_snapshot_integrity.py` (policy projection), `tests/test_config.py` (schema), plus the full suite |
+| A31 | OpenCode section is wiring only (never task policy); legacy snapshots tolerate it | COVERED | `test_opencode_section_is_projected_out_of_the_policy` (real `resolve_policy_config` + `workspace_policy_overrides`), `test_legacy_full_config_snapshot_tolerates_opencode_only_when_lenient` (`opencode`/`codex`/`profiles`/`review.provider` dropped only in lenient mode; strict mode still fails) |
 | A32 | No v0.3-B functionality (role routing / orchestration / approval / MCP) | COVERED (negative) | self-audit + absence of any pipeline import in `devrelay/opencode/**`; documented non-goals |
 | A33 | Real OpenCode smoke | DEFERRED | proposed separately after independent review of this offline implementation |
+
+## Independent-review remediation (R-rows)
+
+All R-rows live in `tests/test_v03a_remediation.py` (offline stub + fake clock +
+spy transport).  58 of its 66 tests fail against the pre-remediation source of
+`71feaff`, so each one is a regression test for a specific finding rather than a
+restatement of existing coverage; the 8 that already passed are marked *(guard)*.
+
+| # | Finding | Status | Evidence |
+| --- | --- | --- | --- |
+| R1 | P1-1 whole-operation idle budget: deadline set before the ownership probe, every request clamped to the remaining budget, no request after expiry, honest duration evidence | COVERED | `test_wait_idle_keeps_probe_and_polls_inside_the_declared_budget`, `test_wait_idle_explicit_timeout_wins_over_the_configured_default`, `test_wait_idle_probe_alone_cannot_outlive_a_tiny_budget`, `test_wait_idle_with_an_exhausted_budget_issues_no_request_at_all`, `test_wait_idle_records_every_poll_as_its_own_ledger_call` *(guard)* |
+| R2 | P1-2 message window keeps the newest messages; truncation and cursor honesty; config bound | COVERED | `test_message_window_keeps_the_newest_and_reports_truncation`, `test_message_window_cursor_near_the_tail_is_not_reported_as_nothing_new`, `test_message_window_cursor_outside_the_window_is_flagged_not_dropped`, `test_message_window_configuration_above_the_hard_max_fails_closed` |
+| R3 | P1-3 reply correlation: no stale reply, no id-bearing envelope, ack + later reply, follow-up 404/500 honest, accounting == ledger, no resubmission | COVERED | `test_send_prompt_never_substitutes_a_stale_assistant_reply`, `test_send_prompt_never_accepts_an_id_bearing_envelope_as_a_reply`, `test_send_prompt_ack_then_reply_correlates_only_the_new_message`, `test_send_prompt_follow_up_404_is_an_honest_post_acceptance_result`, `test_send_prompt_follow_up_failure_is_surfaced_not_swallowed` |
+| R4 | P1-4 the OpenCode bearer token is denylisted for Codex children (real child process) and reported by `doctor` without its value | COVERED | `test_opencode_token_is_in_the_codex_child_denylist`, `test_codex_child_never_receives_the_opencode_token`, `test_doctor_reports_the_scrubbed_opencode_token` |
+| R5 | P2-A ambient proxy/CA environment cannot reroute the control channel | COVERED | `test_transport_ignores_ambient_proxy_configuration` |
+| R6 | P2-B session-id grammar + returned-id mismatch, zero requests for invalid ids | COVERED | `test_invalid_session_ids_issue_zero_requests`, `test_returned_session_id_must_match_the_requested_one`, `test_returned_id_mismatch_blocks_acting_operations`, `test_valid_opaque_session_id_is_accepted` *(guard)* |
+| R7 | P2-C interrupt semantics: 204/JSON success, 404, 405/501, provider error, oversized body | COVERED | `test_interrupt_accepts_an_empty_204_without_claiming_verification`, `test_interrupt_accepts_a_json_success_body`, `test_interrupt_of_a_vanished_session_is_not_reported_as_unsupported`, `test_interrupt_unsupported_statuses_fail_closed`, `test_interrupt_provider_error_is_not_mislabelled_as_unsupported`, `test_interrupt_oversized_response_is_malformed_not_unsupported` |
+| R8 | P2-D prompt/token echoes never reach the ledger or the console; snippets bounded; digest honestly documented as a fingerprint | COVERED | `test_prompt_and_token_echo_never_reach_the_ledger`, `test_follow_up_echo_is_scrubbed_and_bounded`, `test_prompt_digest_is_an_identifier_not_a_secrecy_mechanism` *(guard)* |
+| R9 | P2-E ledger fails closed: corrupt/malformed sequence, deleted sequence recovery, crash gap, identity collision | COVERED | `test_corrupt_sequence_with_records_fails_closed`, `test_malformed_sequence_payload_fails_closed`, `test_deleted_sequence_recovers_from_the_existing_ledger`, `test_allocation_after_a_crash_gap_never_reuses_an_identity`, `test_existing_call_identity_is_never_overwritten` |
+| R10 | P2-F `--json` keeps a failing exit status; exit codes reflect the operation, not the renderer | COVERED | `test_cli_json_mode_keeps_a_failing_exit_status`, `test_cli_json_mode_succeeds_only_when_the_operation_does`, `test_cli_reports_a_pending_reply_as_a_non_zero_but_honest_result` |
+| R11 | PART III config coverage: defaults, bounds, `extra="forbid"`, `opencode: null`, base-URL scheme/userinfo/path, policy projection, legacy snapshot, `allow_unknown_workspace` | COVERED | `test_opencode_config_defaults_and_bounds`, `test_opencode_base_url_must_be_unambiguous`, `test_opencode_base_url_normalizes_trailing_slash`, `test_null_opencode_section_means_not_configured`, `test_invalid_opencode_wiring_in_the_workspace_file_fails_closed`, `test_opencode_section_is_projected_out_of_the_policy` *(guard)*, `test_legacy_full_config_snapshot_tolerates_opencode_only_when_lenient` *(guard)*, `test_allow_unknown_workspace_controls_the_ownership_verdict` |
 
 ## Call accounting totals recorded by the suite
 
 Every test above asserts exact counts where a count is meaningful
 (`request_count`, `call_ids`, one record per issued request). The suite is
 deterministic; there is no retry, no background work and no network.
+
+Accounting totals asserted by the remediation suite: an ack-only `send_prompt`
+with a follow-up read is `6` requests (probe + boundary session + boundary
+messages + POST + follow-up session + follow-up messages), and the same operation
+with a failing follow-up is still `5 == len(ledger.read_records())`, because a
+failed follow-up merges the calls it already issued.

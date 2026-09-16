@@ -37,3 +37,13 @@ authorizes code changes; each item names its own scope and owner stage.
   contract is only confirmable by a real smoke (separately proposed).
 * The bridge is **not** wired into the pipeline: it neither implements nor routes
   any implementer/reviewer role.
+
+## 4. Pre-existing test-environment hygiene: shared `%TEMP%` residue
+
+| Field | Value |
+| --- | --- |
+| Status | **OPEN (test hygiene, pre-existing)** — explicitly **not** fixed in the v0.3-A remediation |
+| Symptom | `tests/test_baseline_ignored_self.py::test_real_index_bytes_unchanged_and_temp_index_cleaned` can fail when the shared `%TEMP%` already contains leftover `devrelay-index-*` directories from other runs |
+| Evidence | the independent review demonstrated shared `%TEMP%` residue and that an isolated temporary directory restores the suite to 390/390 |
+| Impact | environment-dependent test flake only; no production behaviour involved |
+| Scope note | unrelated to the OpenCode bridge; must be handled as its own hygiene task (unique per-run temp roots or a tolerant assertion) |

@@ -137,6 +137,45 @@ server, no real OpenCode call, no network).
   failure, malformed response, timeout, interrupt, unknown session,
   workspace/session mismatch, cursor replay and accounting.
 
+### Fixed (independent-review remediation)
+
+Remediation of the `REQUEST_CHANGES - V0.3-A` findings, still entirely offline
+(58 of the 66 new tests in `tests/test_v03a_remediation.py` fail against the
+pre-remediation source):
+
+- **P1** `wait_idle` now establishes the whole-operation deadline *before* the
+  ownership probe and clamps every request (probe included) and the inter-poll
+  sleep to the remaining budget, so the declared/idle timeout is genuinely
+  enforced and nothing runs after the return.
+- **P1** `read_messages` keeps the **newest** messages (`messages[-max:]`) and
+  reports `provider_message_count`/`window_truncated` instead of head-truncating
+  a large payload and calling it a complete replay; `max_messages` is bounded to
+  the 200-message wire maximum in config validation.
+- **P1** `send_prompt` correlates a reply only as a *new assistant* message
+  (inline candidate or one explicit follow-up read): no stale reply, no
+  id-bearing envelope treated as a reply, `reply_pending` when nothing new is
+  visible, a follow-up `404`/`500` reported as a post-acceptance condition
+  (never "your prompt was not submitted"), merged accounting on every path, and
+  no automatic resubmission.
+- **P1** `DEVRELAY_OPENCODE_TOKEN` joined `CODEX_CHILD_ENV_DENYLIST`: a Codex
+  child process never inherits the OpenCode bearer credential.
+- **P2** `trust_env=False` on the control-channel client (ambient proxy/CA
+  variables cannot reroute it); strict session-id grammar plus a returned-id
+  mismatch check (invalid ids issue zero requests); explicit interrupt semantics
+  (`204`/JSON accepted → `INTERRUPTED` with `interrupt_verified: false`, `404` →
+  `interrupt_session_not_found`, `405`/`501` → `interrupt_unsupported`, otherwise
+  the real provider error or `MALFORMED_RESPONSE`); provider echoes of the prompt
+  or token are scrubbed from error snippets in the submission *and* in
+  post-submission reads/polls (literal-value scrubbing, documented as such, with
+  the unsalted prompt SHA-256 documented as an identifier and not as secrecy);
+  ledger allocation fails closed (corrupt sequence, identity collision) and
+  recovers from existing records otherwise; `--json` keeps a non-zero exit status
+  for a failed operation in both output modes.
+- Config hardening: base-URL validation (scheme/host/embedded credentials/path
+  prefix/query/fragment), fail-closed numeric bounds, `extra="forbid"` preserved,
+  and an empty (`null`) section body now means "not configured" instead of a
+  validation error.
+
 ### Documentation
 
 - `docs/v0.3/V03A_SPEC.md`, `docs/v0.3/V03A_ACCEPTANCE.md`,

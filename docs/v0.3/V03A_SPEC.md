@@ -51,14 +51,29 @@ opencode:
   idle_timeout_seconds: 300    # bound for wait_idle
   poll_interval_seconds: 1.0   # wait_idle polling cadence
   max_response_bytes: 1048576  # hard cap: larger responses fail closed, never truncated-and-parsed
-  max_messages: 50             # read window size
+  max_messages: 50             # read window size (1..200, the wire-level hard maximum)
   allow_unknown_workspace: false   # true = accept sessions that report no workspace (unsafe, documented)
 ```
 
 * The endpoint is **explicit**; DevRelay never scans ports or processes.
+* `base_url` must be unambiguous, because it is a bearer-token control channel:
+  `http`/`https` only, a host is required, embedded credentials are refused (the
+  token comes from the environment), and a path prefix, query or fragment is
+  refused rather than silently dropped.  A trailing `/` is normalized away; an
+  empty value means "not configured" (the section is inert until it is set).
+* Numeric limits fail closed at load time instead of being clamped at request
+  time: `timeout_seconds`/`idle_timeout_seconds`/`poll_interval_seconds` must be
+  `> 0`, `max_response_bytes` is bounded to `1 KiB .. 32 MiB`, and `max_messages`
+  is bounded to `1 .. 200` (200 is the wire-level window; there is no server
+  pagination in v0.3-A, so a larger window could not be honoured).
+* An empty YAML body (`opencode:` with nothing under it) means "not configured"
+  and falls back to the field defaults.  An unknown key inside the section is
+  still rejected (`extra="forbid"`): a typo must never be ignored.
 * `DEVRELAY_OPENCODE_TOKEN` (environment only) is sent as a bearer token when set.
   It is never written to the config, the policy snapshot, the call ledger or any
   artifact, and `doctor` reports presence, not value.
+* The token is also in `CODEX_CHILD_ENV_DENYLIST`: a Codex child process never
+  inherits it (a child holding the credential could bypass the bridge entirely).
 * The section is runtime wiring: `devrelay init` writes it disabled (empty
   `base_url`), and it is excluded from the frozen task policy exactly like
   `codex:` is (a legacy full-config snapshot may still contain it; the policy
@@ -70,11 +85,11 @@ opencode:
 | --- | --- |
 | `health()` | probe the endpoint; returns normalized `OpenCodeHealth` (healthy/version/capabilities). No session data. |
 | `list_sessions(include_other_workspaces=False)` | normalized sessions, each carrying its ownership verdict; other-workspace sessions are hidden unless explicitly requested. |
-| `get_session(session_id)` | read one explicitly selected session; unknown id → `opencode_session_not_found`; wrong workspace → `opencode_session_workspace_mismatch` (hard failures). |
-| `read_messages(session_id, cursor=None)` | normalized message window + explicit cursor semantics (`next_cursor`, `cursor_unknown`, `replayed`). |
-| `send_prompt(session_id, prompt, agent="", model="")` | exactly one prompt to exactly one session; returns the normalized assistant reply when the server provides one (ack-only servers trigger exactly one explicit follow-up read). |
-| `wait_idle(session_id, timeout=None)` | bounded polling until idle/terminal; `TIMED_OUT` on expiry — no retry, no unbounded wait. |
-| `interrupt(session_id)` | abort; `INTERRUPTED` on success, `PROVIDER_UNAVAILABLE` + `interrupt_unsupported` when the server cannot abort (never claims a cancellation that did not happen). |
+| `get_session(session_id)` | read one explicitly selected session; unknown id → `opencode_session_not_found`; wrong workspace → `opencode_session_workspace_mismatch` (hard failures); a session id the server answers with that is not the requested one → `MALFORMED_RESPONSE` (never "adopt" another session). |
+| `read_messages(session_id, cursor=None)` | normalized message window + explicit cursor semantics (`next_cursor`, `cursor_unknown`, `replayed`).  The **newest** messages win: the window is `messages[-max_messages:]`, and `provider_message_count`/`window_truncated` report what the payload actually contained. |
+| `send_prompt(session_id, prompt, agent="", model="")` | exactly one prompt to exactly one session.  A reply is correlated **only** as a new assistant message (inline candidate, or exactly one explicit follow-up read); an ack with no visible new reply yields `reply_pending: true` and an empty message list - never a stale reply, never an automatic resubmission. |
+| `wait_idle(session_id, timeout=None, *, redact_values=())` | bounded polling until idle/terminal; the deadline is established **before** the ownership probe and every request (probe included) is clamped to the remaining budget; `TIMED_OUT` on expiry — no retry, no continued polling. |
+| `interrupt(session_id)` | abort request; 2xx (including an empty `204`) → `INTERRUPTED` with `interrupt_verified: false` (accepted is not verified), `404` → `interrupt_session_not_found`, `405`/`501` → `interrupt_unsupported`, any other failure → the provider error, and an oversized/unusable body → `MALFORMED_RESPONSE` (never "unsupported"). |
 
 `devrelay opencode health|sessions|show|read|send|wait|interrupt|calls` are thin
 wrappers over these methods; `send --wait` composes send → wait → read without
@@ -129,13 +144,27 @@ PROVIDER_UNAVAILABLE | MALFORMED_RESPONSE`.
   never rewritten, never "adopted".
 * `list_sessions` shows the verdict per session and hides foreign sessions unless
   `--all-workspaces` is passed.
+* Session ids are treated as **opaque**: `[A-Za-z0-9._~-]{1,200}` with `..`
+  refused, since the id is interpolated into a URL path.  Anything that could
+  change that path (`/`, `?`, `#`, whitespace, control characters, traversal,
+  overlong values) is rejected before a request is constructed → no request is
+  issued at all.  Every acting operation additionally verifies that the session
+  the server answers with is the session that was requested (a mismatch is
+  `MALFORMED_RESPONSE`, never "adopt the session you got").
 
 ## Timeout semantics
 
-* `timeout_seconds` bounds every single HTTP request (connect+read).
-* `idle_timeout_seconds` (or `--timeout`) bounds the whole `wait_idle` operation;
-  expiry yields `TIMED_OUT` with the last observed session state, and **no**
-  automatic retry or continued polling.
+* `timeout_seconds` bounds every single HTTP request (connect+read) when a caller
+  issues one directly (`health`, `sessions`, `show`, `read`, `send`, `interrupt`).
+* `idle_timeout_seconds` (or the explicit `timeout=`) bounds the **whole**
+  `wait_idle` operation, enforced from before the ownership probe: the deadline is
+  computed first, every request (the probe included) receives at most the
+  remaining budget as its per-request timeout, and the inter-poll sleep is clamped
+  to what is left.  No request can outlive the deadline, and no request is issued
+  once the remaining budget is exhausted (a zero budget issues no request at all).
+* Expiry yields `TIMED_OUT` with the last observed session state, the actual
+  whole-operation `duration_ms` (the sum of the accounted calls) and **no**
+  automatic retry or continued polling after the return.
 * A request that times out is recorded as `TIMED_OUT` in the ledger and counts as
   one issued request.
 
@@ -150,8 +179,19 @@ PROVIDER_UNAVAILABLE | MALFORMED_RESPONSE`.
   credentials — only operation, method/path, session id, state, counts, timings,
   http status, error type/sanitized error and a prompt hash/length.
 * `OpenCodeOperationResult.request_count` counts **every** request the operation
-  issued (ownership probe + submission + explicit follow-up read + every
-  `wait_idle` poll), and `call_ids` lists them.
+  issued (ownership probe + boundary read + submission + explicit follow-up read
+  + every `wait_idle` poll), and `call_ids` lists them.  A follow-up that fails
+  *after* issuing requests still merges those calls, so operation accounting and
+  ledger accounting always agree.
+* Allocation fails closed: a corrupt/torn `sequence.json` raises
+  `opencode_ledger_error` instead of restarting numbering, a missing sequence is
+  recovered from the existing records (`max(existing) + 1`), each record is
+  opened create-new (an identity is never overwritten), and a crash gap is
+  acceptable while reuse is not.
+* The persisted `prompt_sha256` is an **unsalted** digest: an identifier for
+  correlating a call with the prompt that produced it, not a secrecy mechanism (a
+  guessable prompt is confirmable from the ledger).  Prompt confidentiality comes
+  from never storing the text.
 * **No hidden retries**: exactly one attempt per request, no automatic retry of a
   failed or timed-out operation, and v0.3-A does not touch the implementer/
   reviewer provider budget (`ProviderCallRecord` remains the only budget
@@ -167,3 +207,23 @@ PROVIDER_UNAVAILABLE | MALFORMED_RESPONSE`.
 * The bridge is not wired into the pipeline: it cannot implement, review, approve
   or advance a task, and it makes no decisions.
 * No MCP/ChatGPT exposure, no role routing, no orchestration (see non-goals).
+* `read_messages` has no server-side pagination: the local window is the newest
+  `max_messages` (hard cap 200) and truncation is reported, not worked around.
+* Prompt/credential scrubbing of provider error snippets is **literal-value**
+  based: DevRelay removes the values it knows (the bearer token, and the prompt it
+  just submitted - including in post-submission follow-up reads and polls), so a
+  provider that *paraphrases* a prompt in an error body is out of scope.
+* Workspace ownership compares paths in DevRelay's own namespace.  A provider that
+  reports a different namespace (container, remote host, Windows drive mapping)
+  cannot be matched automatically; such a session fails closed unless
+  `allow_unknown_workspace` is set explicitly.
+* `base_url` must not contain a path prefix, so a reverse-proxy prefix needs an
+  explicit, reviewed change instead of a silently dropped path.
+* Ambient proxy/CA environment variables (`HTTP_PROXY`, `HTTPS_PROXY`,
+  `SSL_CERT_FILE`, ...) are ignored outright for the control channel
+  (`trust_env=False`); DevRelay has no reviewed proxy configuration mechanism, so
+  there is nothing to configure yet.
+* CLI exit codes: `0` means the command achieved what was asked (`COMPLETED`, or
+  `INTERRUPTED` for `interrupt`), `2` means any other outcome - including
+  `reply_pending`, where the prompt was accepted but no reply was visible - in
+  both human and `--json` output.
