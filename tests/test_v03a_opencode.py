@@ -361,3 +361,36 @@ def test_cli_opencode_requires_configuration(tmp_path, monkeypatch):
     result = runner.invoke(app, ["opencode", "health"])
     assert result.exit_code == 1
     assert "base_url" in result.output
+
+def test_token_never_reaches_durable_artifacts(tmp_path):
+    """The bearer token lives in the request header only - never on disk."""
+    import httpx
+
+    token = "oc-secret-TOKEN-must-not-persist"
+    seen = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen["auth"] = request.headers.get("authorization", "")
+        return StubOpenCodeServer._json({"healthy": True, "version": "stub"})
+
+    stub = StubOpenCodeServer()
+    ledger = FilesystemOpenCodeLedger(tmp_path / ".devrelay")
+    transport = stub.transport(
+        token=token,
+        client=httpx.Client(
+            transport=httpx.MockTransport(handler), base_url="http://opencode.invalid"
+        ),
+    )
+    bridge = OpenCodeBridge(
+        base_url="http://opencode.invalid",
+        workspace_root=WS,
+        token=token,
+        ledger=ledger,
+        transport=transport,
+    )
+    assert bridge.health().ok
+    assert seen["auth"] == f"Bearer {token}"          # sent to the server
+    calls_dir = tmp_path / ".devrelay" / "opencode"
+    for path in calls_dir.rglob("*"):
+        if path.is_file():
+            assert token not in path.read_text(encoding="utf-8", errors="replace")
