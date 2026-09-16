@@ -102,6 +102,51 @@ fake providers (no real Codex invocation, no real reviewer endpoint).
   generation. Orphan evidence is never deleted, never overwritten and never
   treated as applied.
 
+## Unreleased - v0.3-B candidate (MCP tool surface)
+
+A narrow local **Model Context Protocol adapter** over the accepted v0.3-A
+OpenCode bridge, so an MCP-capable client (for example a ChatGPT planner) can
+invoke DevRelay programmatically.  **Candidate implementation complete, awaiting
+independent review and still unreleased**: the package version stays `0.1.0`,
+the supported public release remains v0.1.0, nothing is pushed, merged, tagged or
+published, and no real model/OpenCode call is made by this stage.
+
+### Added
+
+- `devrelay mcp serve --workspace <absolute-path>`: a local **stdio** MCP server
+  bound to exactly one DevRelay workspace.  stdout carries MCP protocol frames
+  only, diagnostics go to stderr, there is no HTTP listener and no LAN exposure;
+  an invalid workspace fails closed (exit 2) before any tool is served.
+- Nine high-level tools over the accepted v0.3-A bridge: `devrelay_status`,
+  `opencode_health`, `opencode_list_sessions`, `opencode_get_session`,
+  `opencode_read_messages`, `opencode_calls`, `opencode_send_prompt`,
+  `opencode_wait_idle`, `opencode_interrupt`.  No dangerous low-level tool
+  (HTTP/shell/file/git/config/env/delete/token) is exposed.
+- One stable result envelope (`schema_version 1`, `ok`/`tool`/`data`/`error`) with
+  `structuredContent` plus a JSON text fallback; a failed call also sets the
+  protocol `isError` flag while keeping the full envelope.
+- Honest MCP tool annotations: read-only hints for read tools, side-effecting for
+  `send_prompt`/`interrupt`, no false idempotency claim, and planner-oriented
+  descriptions that say "exactly one prompt, never retries, do not resubmit when
+  `submission_uncertain`/`reply_pending`".
+- Strict `<providerID>/<modelID>` model grammar, bounded prompt/timeout/limit
+  validation, and a strict read-only ledger view that reports corruption instead
+  of returning an empty list.
+- Offline acceptance harness: an in-process tool matrix (real bridge over the
+  deterministic stub) and a real stdio subprocess suite driven by the official
+  MCP client and a raw JSON-RPC probe against a loopback fake OpenCode server.
+
+### Notes
+
+- v0.3-A sources, semantics and tests are unchanged; every v0.3-A guarantee
+  (exactly one submission POST, no retry/fallback, submission-uncertainty
+  distinction, stale-reply suppression, durable accounting, credential/prompt
+  containment) holds through the MCP layer.
+- Side-effecting tools are serialized per server process; cancelling a local MCP
+  request never implies "not submitted" and never triggers an automatic abort.
+- Deferred: a real MCP-client smoke (after review), Streamable HTTP/SSE
+  transport, multi-process/multi-workspace serving.
+
 ## Unreleased - v0.3-A accepted (OpenCode session bridge)
 
 A narrow, provider-contained bridge to one explicitly configured, already running

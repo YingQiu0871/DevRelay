@@ -45,7 +45,16 @@ authorizes code changes; each item names its own scope and owner stage.
 * The bridge is **not** wired into the pipeline: it neither implements nor routes
   any implementer/reviewer role.
 
-## 4. Deferred follow-ups after v0.3-A acceptance (recorded; **do not block acceptance**)
+## 4. Deferred follow-ups from the v0.3-B MCP tool surface (recorded; **do not block v0.3-B review**)
+
+| Item | Note |
+| --- | --- |
+| Real MCP-client smoke (ChatGPT or another host) → disposable OpenCode session | deliberately **after** independent review; the v0.3-B implementation round makes 0 real model calls, so native-client interoperability is not yet verified |
+| Streamable HTTP/SSE MCP transport | out of scope for v0.3-B (local stdio only); needs its own design (auth, exposure, session lifetime) |
+| Multi-process concurrency / multi-workspace serving | v0.3-B is one process bound to one workspace with serialized side effects; a scheduler/locking design is a later stage |
+| Tool-level progress notifications, MCP resources/prompts | not needed for the adapter surface in v0.3-B |
+
+## 5. Deferred follow-ups after v0.3-A acceptance (recorded; **do not block acceptance**)
 
 v0.3-A was accepted on the strength of the final real A33 smoke (see
 `docs/v0.3/V03A_ACCEPTANCE.md`).  Every item below is explicitly **non-blocking**
@@ -68,7 +77,7 @@ referencing a provider disabled by the same configuration) is an
 **environment/user configuration issue** — recorded here for context only, not a
 DevRelay defect and not a backlog item.
 
-## 5. Deferred beyond the second v0.3-A remediation (recorded, not started)
+## 6. Deferred beyond the second v0.3-A remediation (recorded, not started)
 
 | Item | Why it is deferred |
 | --- | --- |
@@ -80,7 +89,7 @@ DevRelay defect and not a backlog item.
 | Post-abort verification polling (`interrupt_verified`) | accepted-but-unverified is the documented v0.3-A semantic |
 | Attachment/tool-argument modeling | deliberately dropped in v0.3-A |
 
-## 6. Pre-existing test-environment hygiene: shared `%TEMP%` residue
+## 7. Pre-existing test-environment hygiene: shared `%TEMP%` residue
 
 | Field | Value |
 | --- | --- |

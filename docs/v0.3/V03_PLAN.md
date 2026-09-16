@@ -5,13 +5,38 @@
 | Stage | Description | Status |
 | --- | --- | --- |
 | **A** | OpenCode session bridge (explicit endpoint, session select/read, one prompt, bounded wait, interrupt, accounting) | **COMPLETE / ACCEPTED** — candidate `bcf9627e92ef839abb756810e3c615e6d01b6576`, real A33 smoke `PASS` against OpenCode `1.18.11` |
-| B | ChatGPT/MCP tool surface | **NEXT — NOT STARTED** |
+| B | ChatGPT/MCP tool surface (local stdio MCP adapter over the accepted v0.3-A bridge) | **CANDIDATE IMPLEMENTATION COMPLETE — awaiting independent review** (unreleased) |
 | C | (not designed yet) | **NOT STARTED** |
 
 v0.3-A is accepted and its runtime implementation is frozen at the accepted
-candidate.  v0.3-B has **not** started and must not begin without a separate
-authorization.  See `docs/v0.3/V03A_ACCEPTANCE.md` for the final decision and the
-A33 evidence summary, and `docs/BACKLOG.md` for deferred, non-blocking follow-ups.
+candidate (`bcf9627…`); v0.3-A sources were not modified by v0.3-B.
+
+v0.3-B (MCP tool surface) is implemented on `v0.3-b-mcp-tool-surface` as a
+candidate for independent review: see `docs/v0.3/V03B_SPEC.md` and
+`docs/v0.3/V03B_ACCEPTANCE.md`.  It is **unreleased** and makes **no** real model
+call; a real MCP-client smoke is explicitly deferred until after review.
+
+v0.3-C (role routing / orchestration) has **not** started and must not begin
+without a separate authorization.  See `docs/BACKLOG.md` for deferred,
+non-blocking follow-ups.
+
+## v0.3-B scope (implemented)
+
+1. `src/devrelay/mcp/models.py` — the one stable MCP envelope (`schema_version 1`)
+   and the documented MCP input bounds.
+2. `src/devrelay/mcp/ledger.py` — strict, bounded, read-only ledger projection
+   that reports corruption instead of hiding it.
+3. `src/devrelay/mcp/tools.py` — one adapter per capability over the accepted
+   `OpenCodeBridge` (health, list/get session, read messages, send_prompt,
+   wait_idle, interrupt, calls) with v0.3-A validation, `retry_safe` derived from
+   documented evidence, and one narrow lock for side-effecting tools.
+4. `src/devrelay/mcp/server.py` — bound-workspace startup (fail closed), the
+   exact nine-tool inventory with honest annotations and planner-oriented
+   descriptions, envelope-for-every-failure, stderr-only diagnostics, stdio run.
+5. `src/devrelay/cli_mcp.py` + one registration line — `devrelay mcp serve
+   --workspace <path>`.
+6. `tests/test_v03b_mcp_tools.py`, `tests/test_v03b_mcp_stdio.py` — the offline
+   in-process matrix and the real stdio subprocess harness.
 
 ## v0.3-A scope (implemented)
 

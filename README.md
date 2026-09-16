@@ -18,7 +18,15 @@ and real-smoke evidence:
 [docs/v0.3/V03A_SPEC.md](docs/v0.3/V03A_SPEC.md),
 [docs/v0.3/V03A_ACCEPTANCE.md](docs/v0.3/V03A_ACCEPTANCE.md).
 
-**Next development stage: v0.3-B ChatGPT/MCP tool surface — not started.**
+**Current development stage: v0.3-B MCP tool surface — candidate implementation
+complete, awaiting independent review, unreleased.** An MCP-capable client can
+invoke the accepted v0.3-A OpenCode bridge through a local stdio MCP server
+(`devrelay mcp serve --workspace <project>`); it is not released, no real MCP
+client has been connected yet and no HTTP transport is implemented.  Spec and
+acceptance matrix: [docs/v0.3/V03B_SPEC.md](docs/v0.3/V03B_SPEC.md),
+[docs/v0.3/V03B_ACCEPTANCE.md](docs/v0.3/V03B_ACCEPTANCE.md).
+
+**Not started: v0.3-C** (role routing / orchestration).
 
 > **v0.2-A candidate (unreleased)**: the automatic review loop described under
 > [Automatic review loop (v0.2-A)](#automatic-review-loop-v02-a) is implemented
@@ -716,6 +724,45 @@ v0.3-A deliberately does **not** perform role routing (DeepSeek → GLM), review
 loops, approval decisions or ChatGPT/MCP exposure; see
 `docs/v0.3/V03A_SPEC.md`.
 
+### MCP tool surface (v0.3-B candidate, unreleased)
+
+DevRelay can expose the OpenCode bridge above as **MCP tools** over a local
+stdio transport, so an MCP-capable client (for example a ChatGPT planner) can
+invoke it programmatically.  One server process is bound to exactly one
+workspace:
+
+```bash
+devrelay mcp serve --workspace /path/to/project
+```
+
+The command is meant to be launched by an MCP client as a stdio server: stdout
+carries MCP protocol frames only, diagnostics go to stderr, there is no HTTP
+listener and an invalid workspace fails closed before any tool is served.
+
+| Tool | What it does |
+| --- | --- |
+| `devrelay_status` | sanitized DevRelay/MCP status of the bound workspace |
+| `opencode_health` | OpenCode endpoint health/capabilities |
+| `opencode_list_sessions` | sessions + workspace-ownership verdict |
+| `opencode_get_session` | one explicitly selected session |
+| `opencode_read_messages` | normalized message window + cursor semantics |
+| `opencode_calls` | durable call ledger (reports corruption explicitly) |
+| `opencode_send_prompt` | **exactly one** model turn through the v0.3-A bridge |
+| `opencode_wait_idle` | bounded wait on the real `/session/status` |
+| `opencode_interrupt` | explicit abort request (accepted ≠ verified stop) |
+
+Every result uses one envelope (`schema_version`, `ok`, `tool`, `data`,
+`error`).  `opencode_send_prompt` never retries, never falls back to another
+model and never resubmits: read `submission_uncertain`, `reply_pending` and
+`retry_safe` before deciding anything - `submission_uncertain` means the prompt
+may already have been accepted, so **do not resubmit automatically**.  DevRelay
+holds no acceptance authority: no tool approves code or declares a review
+passed.  Side-effecting calls are serialized per process; cancelling a local MCP
+request never implies "not submitted" and never triggers an automatic abort.
+Spec: `docs/v0.3/V03B_SPEC.md`; acceptance matrix:
+`docs/v0.3/V03B_ACCEPTANCE.md`.  Requires the optional extra
+`pip install -e ".[mcp]"`.
+
 ## Policy (default profile)
 
 The YAML below is the packaged default **policy**
@@ -951,8 +998,12 @@ not downgrade the binary inside a workspace that v0.2-B has already written.
   running OpenCode server (select/read one session, one prompt, bounded wait,
   interrupt, durable call accounting) - **accepted internally** after a real
   OpenCode `1.18.11` smoke passed; unreleased
-- **v0.3-B** - ChatGPT/MCP tool surface - **NEXT, not started** (MCP is not
-  implemented yet; the roadmap entry describes the planned stage only)
+- **v0.3-B** - ChatGPT/MCP tool surface - **candidate implementation complete
+  (unreleased)**: a local stdio MCP adapter over the accepted v0.3-A bridge, with
+  nine high-level tools, a stable result envelope and honest read-only /
+  side-effecting annotations.  A real MCP-client smoke is deferred until after
+  independent review; no HTTP MCP transport yet
+- **v0.3-C** - role routing / orchestration - not started
 - **later** - optional release automation with explicit approvals
 
 ## Development
