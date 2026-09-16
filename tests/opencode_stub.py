@@ -1,7 +1,13 @@
 """Deterministic offline OpenCode server stub (v0.3-A tests).
 
-A tiny in-memory implementation of the documented OpenCode server shape, wired
-through ``httpx.MockTransport`` so every v0.3-A test runs offline and
+A tiny in-memory implementation of the **verified** OpenCode 1.18.11 server
+shape (see ``docs/v0.3/V03A_SPEC.md`` and the A33 evidence): the synchronous
+submission route is ``POST /session/{id}/message`` returning ``{info, parts}``,
+runtime state comes from ``GET /session/status``, and any *unmatched* path
+answers with the real SPA fallback (``200 text/html``) - including the
+nonexistent ``/prompt`` route, so an accidental regression to it is visible.
+
+Wired through ``httpx.MockTransport`` so every v0.3-A test runs offline and
 deterministically.  Failure modes are configured explicitly (never inferred).
 """
 
@@ -24,6 +30,14 @@ DEFAULT_WORKSPACE = str(Path(tempfile.gettempdir()) / "opencode-stub-ws")
 
 FAKE_SECRET = "sk-live-OPENCODESECRET1234567890ab"
 
+#: The real server answers unmatched routes with its SPA shell (200 text/html).
+#: A33 observed exactly this for the nonexistent `/session/{id}/prompt` route.
+SPA_FALLBACK_HTML = (
+    "<!doctype html>" + chr(10)
+    + '<html lang="en"><head><title>OpenCode</title></head>'
+    + '<body><div id="root"></div></body></html>' + chr(10)
+)
+
 #: Transport failures the stub can raise per route (third-review P1 tests).
 STUB_EXCEPTIONS = {
     "read_timeout": httpx.ReadTimeout,
@@ -43,12 +57,21 @@ def _session(
     state: str = "idle",
     title: str = "",
     include_workspace: bool = True,
+    include_state: bool = False,
 ) -> dict[str, Any]:
+    """A session object.
+
+    By default (``include_state=False``) this models the real OpenCode 1.18.11
+    session, which has no ``state``/``status`` field at all (A33 evidence):
+    runtime state must come from ``GET /session/status``.  ``include_state=True``
+    keeps a state-reporting provider available for the bridge's state mapping.
+    """
     payload: dict[str, Any] = {
         "id": session_id,
-        "state": state,
         "title": title or f"session {session_id}",
     }
+    if include_state:
+        payload["state"] = state
     if include_workspace:
         payload["directory"] = workspace
     return payload
@@ -105,6 +128,10 @@ class StubOpenCodeServer:
         abort_body: str | None = None,
         abort_removes_session: bool = False,
         health_healthy: bool = True,
+        status_map: dict[str, Any] | None = None,
+        status_sequence: list[Any] | None = None,
+        prompt_content_type: str = "application/json",
+        prompt_html_fallback: bool = False,
     ) -> None:
         self.workspace = workspace
         self.sessions = (
@@ -153,6 +180,15 @@ class StubOpenCodeServer:
         self.abort_body = abort_body
         self.abort_removes_session = abort_removes_session
         self.health_healthy = health_healthy
+        #: Real `/session/status` map (session id -> SessionStatus).  A session
+        #: that is not running is *absent* from the map, exactly like 1.18.11.
+        # Kept verbatim (a malformed payload must be testable as-is).
+        self.status_map = status_map if status_map is not None else {}
+        #: Successive answers for `/session/status` (the last one repeats).
+        self.status_sequence = list(status_sequence or [])
+        self.next_status_index = 0
+        self.prompt_content_type = prompt_content_type
+        self.prompt_html_fallback = prompt_html_fallback
 
         # observations
         self.requests: list[tuple[str, str]] = []
@@ -188,6 +224,13 @@ class StubOpenCodeServer:
             return self._json(["not", "an", "object"])
 
         parts = [p for p in path.split("/") if p]
+        if path == "/session/status":
+            # Real runtime-status map: only active/retrying sessions appear.
+            if self.status_sequence:
+                index = min(self.next_status_index, len(self.status_sequence) - 1)
+                self.next_status_index += 1
+                return self._json(self.status_sequence[index])
+            return self._json(self.status_map)
         if path == "/global/health":
             return self._json(
                 {
@@ -224,9 +267,19 @@ class StubOpenCodeServer:
                 self.next_state_index += 1
                 session = {**session, "state": self.state_sequence[index]}
             return self._json(session)
+        if parts[:1] == ["session"] and parts[2:] == ["prompt"]:
+            # Not a route on OpenCode 1.18.11: the real server answers unknown
+            # paths with its SPA shell.  Kept so a regression to the old path is
+            # both recorded and semantically visible (200 text/html).
+            return httpx.Response(
+                200, text=SPA_FALLBACK_HTML, headers={"content-type": "text/html"}
+            )
         if parts[:1] == ["session"] and parts[2:] == ["message"]:
-            if self._find(parts[1]) is None:
+            session = self._find(parts[1])
+            if session is None:
                 return httpx.Response(404, text="not found")
+            if request.method.upper() == "POST":
+                return self._handle_message_post(session, request)
             if self.messages_http_status is not None:
                 return httpx.Response(
                     self.messages_http_status,
@@ -237,54 +290,6 @@ class StubOpenCodeServer:
             if self.malformed == "messages_not_array":
                 return self._json({"messages": "nope"})
             return self._json({"messages": self.messages})
-        if parts[:1] == ["session"] and parts[2:] == ["prompt"]:
-            session = self._find(parts[1])
-            if session is None:
-                return httpx.Response(404, text="not found")
-            body = json.loads(request.content.decode("utf-8") or "{}")
-            if self.prompt_exception:
-                # The server received the prompt: record it (and any reply it
-                # produced) and then fail the way the transport would.
-                self.prompts.append(body)
-                if self.prompt_append is not None:
-                    self._message_counter += 1
-                    self.messages.append(self.prompt_append)
-                session["state"] = "busy"
-                raise STUB_EXCEPTIONS[self.prompt_exception]("stub prompt failure")
-            if self.prompt_http_status is not None:
-                self.prompts.append(body)
-                if self.prompt_append is not None:
-                    self._message_counter += 1
-                    self.messages.append(self.prompt_append)
-                session["state"] = "busy"
-                return httpx.Response(
-                    self.prompt_http_status,
-                    text=self.prompt_error_body
-                    if self.prompt_error_body is not None
-                    else '{"error":"boom"}',
-                )
-            self.prompts.append(body)
-            text = ""
-            for part in body.get("parts", []):
-                if isinstance(part, dict) and part.get("type") == "text":
-                    text = str(part.get("text", ""))
-            reply = self.prompt_reply or _message(
-                f"msg_{self._message_counter:02d}", "assistant", f"echo: {text}"
-            )
-            if self.prompt_raw_reply is not None:
-                self._message_counter += 1
-                session["state"] = "busy"
-                if self.vanish_after_prompt:
-                    self.sessions = [s for s in self.sessions if s is not session]
-                return self._json(self.prompt_raw_reply)
-            self._message_counter += 1
-            self.messages.append(reply)
-            session["state"] = "busy"
-            if self.vanish_after_prompt:
-                self.sessions = [s for s in self.sessions if s is not session]
-            if self.prompt_ack_only:
-                return self._json({"ok": True})
-            return self._json({"message": reply})
         if parts[:1] == ["session"] and parts[2:] == ["abort"]:
             if self._find(parts[1]) is None:
                 return httpx.Response(404, text="not found")
@@ -303,7 +308,68 @@ class StubOpenCodeServer:
                 return httpx.Response(405, text="abort unsupported")
             self._find(parts[1])["state"] = "idle"
             return self._json({"ok": True})
-        return httpx.Response(404, text="unknown route")
+        # Unmatched routes: the real server answers with its SPA shell (200
+        # text/html) - the behaviour A33 observed for `/session/{id}/prompt`.
+        return httpx.Response(
+            200, text=SPA_FALLBACK_HTML, headers={"content-type": "text/html"}
+        )
+
+    # ------------------------------------------------------------------
+    def _handle_message_post(self, session: dict[str, Any], request: httpx.Request):
+        """Real ``POST /session/{id}/message`` behaviour for one submission."""
+        body = json.loads(request.content.decode("utf-8") or "{}")
+        if self.prompt_exception:
+            # The server received the message: record it (and any reply it
+            # produced) and then fail the way the transport would.
+            self.prompts.append(body)
+            if self.prompt_append is not None:
+                self._message_counter += 1
+                self.messages.append(self.prompt_append)
+            session["state"] = "busy"
+            raise STUB_EXCEPTIONS[self.prompt_exception]("stub prompt failure")
+        if self.prompt_html_fallback:
+            self.prompts.append(body)
+            session["state"] = "busy"
+            return httpx.Response(
+                200, text=SPA_FALLBACK_HTML, headers={"content-type": "text/html"}
+            )
+        if self.prompt_http_status is not None:
+            self.prompts.append(body)
+            if self.prompt_append is not None:
+                self._message_counter += 1
+                self.messages.append(self.prompt_append)
+            session["state"] = "busy"
+            return httpx.Response(
+                self.prompt_http_status,
+                text=self.prompt_error_body
+                if self.prompt_error_body is not None
+                else '{"error":"boom"}',
+                headers={"content-type": self.prompt_content_type},
+            )
+        if self.prompt_raw_reply is not None:
+            self.prompts.append(body)
+            self._message_counter += 1
+            session["state"] = "busy"
+            if self.vanish_after_prompt:
+                self.sessions = [s for s in self.sessions if s is not session]
+            return self._json(self.prompt_raw_reply)
+        self.prompts.append(body)
+        text = ""
+        for part in body.get("parts", []):
+            if isinstance(part, dict) and part.get("type") == "text":
+                text = str(part.get("text", ""))
+        reply = self.prompt_reply or _message(
+            "msg_%02d" % self._message_counter, "assistant", "echo: " + text
+        )
+        self._message_counter += 1
+        self.messages.append(reply)
+        session["state"] = "busy"
+        if self.vanish_after_prompt:
+            self.sessions = [s for s in self.sessions if s is not session]
+        if self.prompt_ack_only:
+            return self._json({"ok": True})
+        # Real documented response: {info: AssistantMessage, parts: Part[]}
+        return self._json(reply)
 
     # ------------------------------------------------------------------
     def _find(self, session_id: str) -> dict[str, Any] | None:

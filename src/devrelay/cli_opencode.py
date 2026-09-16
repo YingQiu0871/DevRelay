@@ -101,6 +101,14 @@ def _submission_lines(result: OpenCodeOperationResult) -> list[str]:
     if not result.submission_attempted:
         return []
     if result.submission_uncertain:
+        if result.submission_contract.startswith("unexpected_media_type:"):
+            media = result.submission_contract.split(":", 1)[1] or "(unknown)"
+            return [
+                f"  submission uncertain: HTTP {result.submission_status} response "
+                f"contract was unexpected ({media}), so endpoint acceptance could "
+                "not be proven; the prompt may already have been accepted and the "
+                "request cannot be safely retried - do not resubmit automatically"
+            ]
         return [
             "  submission uncertain: the prompt may already have been accepted "
             f"({result.error_type or 'transport failure'}); "
@@ -272,7 +280,9 @@ def opencode_send(
     prompt: str = typer.Option(..., "--prompt", help="prompt text, or '-' for stdin"),
     session: Optional[str] = typer.Option(None, "--session"),
     agent: str = typer.Option("", "--agent"),
-    model: str = typer.Option("", "--model"),
+    model: str = typer.Option(
+        "", "--model", help="model override as <providerID>/<modelID>"
+    ),
     wait: bool = typer.Option(
         False, "--wait", help="wait for idle/terminal after sending (bounded)"
     ),

@@ -123,7 +123,8 @@ class _SpyTransport:
 
 
 def _busy_stub(**kwargs: Any) -> StubOpenCodeServer:
-    return StubOpenCodeServer(state_sequence=["busy"] * 8, **kwargs)
+    """Stub whose *real* runtime status is busy (GET /session/status)."""
+    return StubOpenCodeServer(status_map={"ses_match": {"type": "busy"}}, **kwargs)
 
 
 # ---------------------------------------------------------------------------
@@ -234,7 +235,13 @@ def test_wait_idle_with_an_exhausted_budget_issues_no_request_at_all(tmp_path):
 
 def test_wait_idle_records_every_poll_as_its_own_ledger_call(tmp_path):
     clock = _Clock()
-    stub = StubOpenCodeServer(state_sequence=["busy", "busy", "idle"])
+    stub = StubOpenCodeServer(
+        status_sequence=[
+            {"ses_match": {"type": "busy"}},
+            {"ses_match": {"type": "busy"}},
+            {},
+        ]
+    )
     spy = _SpyTransport(stub.transport(), clock, latency=0.5)
     ledger = _ledger(tmp_path)
     bridge = OpenCodeBridge(
@@ -383,7 +390,7 @@ def test_send_prompt_ack_then_reply_correlates_only_the_new_message(tmp_path):
     # + follow-up messages: every issued request, all settled exactly once.
     assert result.request_count == len(records) == 6
     assert set(result.call_ids) == {record.call_id for record in records}
-    assert sum(1 for _m, path in stub.requests if path.endswith("/prompt")) == 1
+    assert sum(1 for m, path in stub.requests if m == "POST" and path.endswith("/message")) == 1
 
 
 def test_send_prompt_follow_up_404_is_an_honest_post_acceptance_result(tmp_path):
@@ -402,7 +409,7 @@ def test_send_prompt_follow_up_404_is_an_honest_post_acceptance_result(tmp_path)
     records = ledger.read_records()
     assert result.request_count == len(records) == 5
     assert set(result.call_ids) == {record.call_id for record in records}
-    assert sum(1 for _m, path in stub.requests if path.endswith("/prompt")) == 1
+    assert sum(1 for m, path in stub.requests if m == "POST" and path.endswith("/message")) == 1
 
 
 def test_send_prompt_follow_up_failure_is_surfaced_not_swallowed(tmp_path):
@@ -563,7 +570,7 @@ def test_returned_id_mismatch_blocks_acting_operations():
     result = stub.bridge().send_prompt("ses_match", "hello")
     assert result.ok is False
     assert result.state is OpenCodeOperationState.MALFORMED_RESPONSE
-    assert not [path for _m, path in stub.requests if path.endswith("/prompt")]
+    assert not [path for m, path in stub.requests if m == "POST" and path.endswith("/message")]
 
 
 # ---------------------------------------------------------------------------
@@ -650,7 +657,7 @@ def test_prompt_and_token_echo_never_reach_the_ledger(tmp_path):
     assert record.http_status == 500
     assert record.error_type == "http_status"
     assert record.session_id == "ses_match"
-    assert record.path.endswith("/prompt")
+    assert record.path.endswith("/message")
     assert record.prompt_chars == len(prompt)
     assert record.prompt_sha256 == hashlib.sha256(prompt.encode("utf-8")).hexdigest()
     # and nothing on disk contains either literal

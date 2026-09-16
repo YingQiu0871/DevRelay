@@ -88,7 +88,7 @@ def _ledger(tmp_path: Path) -> FilesystemOpenCodeLedger:
 
 
 def _stub(prompt_status: int = 200, prompt_body: str | None = None, **kwargs: Any):
-    """OpenCode stub whose /prompt route answers with a raw status/body."""
+    """OpenCode stub whose message route answers with a raw status/body."""
     return StubOpenCodeServer(
         prompt_http_status=prompt_status,
         prompt_error_body=prompt_body,
@@ -367,10 +367,13 @@ def test_2xx_with_an_unusable_body_is_post_acceptance(
     result = _bridge(tmp_path, stub, **kwargs).send_prompt("ses_match", "hello")
 
     # exactly one POST, never a resubmission
-    posts = [path for _method, path in stub.requests if path.endswith("/prompt")]
-    assert posts == ["/session/ses_match/prompt"]
-    # the follow-up read was performed (the session still exists)
-    assert sum(1 for _m, path in stub.requests if path.endswith("/message")) == 2
+    posts = [path for method, path in stub.requests if method == "POST"]
+    assert posts == ["/session/ses_match/message"]
+    # the follow-up read was performed (the session still exists); GET reads only
+    assert (
+        sum(1 for m, path in stub.requests if m == "GET" and path.endswith("/message"))
+        == 2
+    )
     # the operation keeps its own identity and never claims "not submitted"
     assert result.operation == "send_prompt"
     assert result.state is OpenCodeOperationState.COMPLETED
@@ -411,7 +414,10 @@ def test_4xx_submission_is_still_a_failed_operation(tmp_path):
     assert result.reply_pending is False
     assert result.submission_body == ""
     assert result.error_type == "http_status"
-    assert sum(1 for _m, path in stub.requests if path.endswith("/prompt")) == 1
+    assert (
+        sum(1 for m, path in stub.requests if m == "POST" and path.endswith("/message"))
+        == 1
+    )
     assert result.request_count == len(_records(tmp_path)) == 4
 
 

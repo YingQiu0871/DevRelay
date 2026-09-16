@@ -30,14 +30,26 @@ MAX_ERROR_SNIPPET_CHARS = 500
 
 @dataclass
 class OpenCodePaths:
-    """Configurable wire paths (defaults follow the OpenCode server shape)."""
+    """Wire paths, verified against the installed OpenCode 1.18.11 ``/doc``.
+
+    ``prompt`` and ``messages`` are the *same* route with different methods: the
+    documented synchronous submission is ``POST /session/{id}/message`` ("Send
+    message ... streaming the AI response"), while ``GET /session/{id}/message``
+    lists the session's messages.  There is deliberately **no** ``/session/{id}/prompt``
+    route on OpenCode 1.18.11 (the A33 smoke proved the server answers unmatched
+    paths with a ``200 text/html`` SPA fallback) and no compatibility fallback:
+    a fallback would issue a second submission POST.
+    """
 
     health: str = "/global/health"
     sessions: str = "/session"
     session: str = "/session/{session_id}"
     messages: str = "/session/{session_id}/message"
-    prompt: str = "/session/{session_id}/prompt"
+    prompt: str = "/session/{session_id}/message"
     abort: str = "/session/{session_id}/abort"
+    #: Runtime status map for every session (``SessionStatus``), used by wait_idle
+    #: because OpenCode 1.18.11 session objects expose no state/status field.
+    status: str = "/session/status"
 
     def session_path(self, session_id: str) -> str:
         return self.session.format(session_id=session_id)
@@ -50,6 +62,10 @@ class OpenCodePaths:
 
     def abort_path(self, session_id: str) -> str:
         return self.abort.format(session_id=session_id)
+
+    @property
+    def status_path(self) -> str:
+        return self.status
 
 
 @dataclass
@@ -70,6 +86,11 @@ class TransportResponse:
     #: bytes may already have reached the server, so a caller must not treat the
     #: attempt as safely retryable (third-review blocker P1).
     submission_uncertain: bool = False
+    #: Response media type (lower-cased, parameters stripped).  A 2xx whose media
+    #: type is clearly not JSON (e.g. the SPA ``text/html`` fallback the real
+    #: server returns for an unmatched route) is *not* credible acceptance
+    #: evidence (A33 real-protocol finding).
+    content_type: str = ""
 
     @property
     def ok(self) -> bool:
@@ -259,6 +280,7 @@ class OpenCodeTransport:
                 body = self._read_bounded(response)
                 status = response.status_code
                 headers = {k.lower(): v for k, v in response.headers.items()}
+                media_type = headers.get("content-type", "").split(";")[0].strip().lower()
         except httpx.TransportError as exc:
             return transport_failure(
                 exc,
@@ -292,6 +314,7 @@ class OpenCodeTransport:
             return TransportResponse(
                 state=OpenCodeCallState.MALFORMED_RESPONSE,
                 status=status,
+                content_type=media_type,
                 error_type="response_too_large",
                 error=(
                     "response exceeded the configured "
@@ -306,6 +329,7 @@ class OpenCodeTransport:
             return TransportResponse(
                 state=OpenCodeCallState.PROVIDER_UNAVAILABLE,
                 status=status,
+                content_type=media_type,
                 error_type="http_status",
                 error=f"HTTP {status}: {self._snippet(payload_bytes, extra)}",
                 duration_ms=duration,
@@ -316,6 +340,7 @@ class OpenCodeTransport:
             return TransportResponse(
                 state=OpenCodeCallState.COMPLETED,
                 status=status,
+                content_type=media_type,
                 data=None,
                 duration_ms=duration,
                 response_bytes=len(body),
@@ -326,6 +351,7 @@ class OpenCodeTransport:
             return TransportResponse(
                 state=OpenCodeCallState.MALFORMED_RESPONSE,
                 status=status,
+                content_type=media_type,
                 error_type="empty_response",
                 error="server returned an empty body where JSON was expected",
                 duration_ms=duration,
@@ -338,6 +364,7 @@ class OpenCodeTransport:
             return TransportResponse(
                 state=OpenCodeCallState.MALFORMED_RESPONSE,
                 status=status,
+                content_type=media_type,
                 error_type="invalid_json",
                 error=f"invalid JSON response: {exc}",
                 duration_ms=duration,
@@ -350,6 +377,7 @@ class OpenCodeTransport:
             return TransportResponse(
                 state=OpenCodeCallState.MALFORMED_RESPONSE,
                 status=status,
+                content_type=media_type,
                 error_type="json_too_deep",
                 error=(
                     "provider JSON response is nested too deeply to parse; "
@@ -364,6 +392,7 @@ class OpenCodeTransport:
             return TransportResponse(
                 state=OpenCodeCallState.MALFORMED_RESPONSE,
                 status=status,
+                content_type=media_type,
                 error_type="json_unparsable",
                 error=f"provider JSON response could not be parsed ({exc})",
                 duration_ms=duration,
@@ -373,6 +402,7 @@ class OpenCodeTransport:
         return TransportResponse(
             state=OpenCodeCallState.COMPLETED,
             status=status,
+            content_type=media_type,
             data=data,
             duration_ms=duration,
             response_bytes=len(body),

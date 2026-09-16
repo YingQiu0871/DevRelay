@@ -87,7 +87,11 @@ def test_list_sessions_filters_other_workspaces():
 
 
 def test_get_session_reports_state():
-    stub = StubOpenCodeServer(sessions=[_session("ses_a", state="busy")])
+    # A provider that reports state is still mapped (the real 1.18.11 session
+    # object has no state field - see test_v03a_real_protocol.py for that case).
+    stub = StubOpenCodeServer(
+        sessions=[_session("ses_a", state="busy", include_state=True)]
+    )
     result = stub.bridge().get_session("ses_a")
     assert result.ok and result.session is not None
     assert result.session.state is OpenCodeSessionState.BUSY
@@ -181,10 +185,18 @@ def test_send_prompt_success_returns_normalized_reply():
 
 
 def test_send_prompt_agent_and_model_selection_are_forwarded():
+    # Real OpenCode request contract: `agent` is a string, `model` is a structured
+    # identity {providerID, modelID} - DevRelay's grammar is "<provider>/<model>".
     stub = StubOpenCodeServer()
-    stub.bridge().send_prompt("ses_match", "hi", agent="build", model="glm-4.6")
+    stub.bridge().send_prompt(
+        "ses_match", "hi", agent="build", model="zhipuai/glm-4.6"
+    )
     assert stub.prompts[0]["agent"] == "build"
-    assert stub.prompts[0]["model"] == "glm-4.6"
+    assert stub.prompts[0]["model"] == {"providerID": "zhipuai", "modelID": "glm-4.6"}
+    # optional members are omitted entirely when not requested
+    bare = StubOpenCodeServer()
+    bare.bridge().send_prompt("ses_match", "hi")
+    assert set(bare.prompts[0]) == {"parts"}
 
 
 def test_send_prompt_ack_only_server_is_followed_by_one_read():
@@ -215,9 +227,15 @@ def test_send_prompt_requires_non_empty_prompt():
 # bounded idle wait
 # ---------------------------------------------------------------------------
 def test_wait_idle_completes_when_session_becomes_idle():
+    # Real contract: runtime state comes from GET /session/status (busy -> absent
+    # means the session is idle again), not from a session state field.
     stub = StubOpenCodeServer(
-        sessions=[_session("ses_a", state="busy")],
-        state_sequence=["busy", "busy", "idle"],
+        sessions=[_session("ses_a")],
+        status_sequence=[
+            {"ses_a": {"type": "busy"}},
+            {"ses_a": {"type": "busy"}},
+            {},
+        ],
     )
     result = stub.bridge().wait_idle("ses_a", timeout=30)
     assert result.state is OpenCodeOperationState.COMPLETED
@@ -226,16 +244,25 @@ def test_wait_idle_completes_when_session_becomes_idle():
 
 
 def test_wait_idle_times_out_without_retrying():
-    stub = StubOpenCodeServer(sessions=[_session("ses_a", state="busy")])
+    stub = StubOpenCodeServer(
+        sessions=[_session("ses_a")], status_map={"ses_a": {"type": "busy"}}
+    )
     result = stub.bridge(idle_timeout_seconds=0.05).wait_idle("ses_a", timeout=0.05)
     assert result.state is OpenCodeOperationState.TIMED_OUT
     assert result.error_type == "idle_timeout"
-    assert result.session is not None and result.session.state is OpenCodeSessionState.BUSY
+    # Real-protocol evidence: the *status map* said busy (the session object has
+    # no state field on OpenCode 1.18.11).
+    assert result.status_detail == "busy"
+    assert result.session is not None
     assert result.request_count >= 1
 
 
 def test_wait_idle_returns_terminal_error_state():
-    stub = StubOpenCodeServer(sessions=[_session("ses_a", state="error")])
+    # A provider that *does* report a terminal state is still honoured: the
+    # ownership probe's normalized state short-circuits the wait.
+    stub = StubOpenCodeServer(
+        sessions=[_session("ses_a", state="error", include_state=True)]
+    )
     result = stub.bridge().wait_idle("ses_a", timeout=5)
     assert result.state is OpenCodeOperationState.COMPLETED
     assert result.session is not None and result.session.state is OpenCodeSessionState.ERROR

@@ -26,6 +26,7 @@ abort request from a verified terminal state.
 
 from __future__ import annotations
 
+import dataclasses
 import os
 import time
 from pathlib import Path
@@ -66,6 +67,7 @@ from devrelay.opencode.models import (
 )
 from devrelay.opencode.transport import OpenCodePaths, OpenCodeTransport, TransportResponse
 from devrelay.models import utcnow_iso
+from devrelay.redact import redact_text
 
 # Health capability names DevRelay understands (unknown names are ignored).
 CAP_INTERRUPT = "interrupt"
@@ -117,6 +119,67 @@ def _normalize_state(
         text = str(current or "").strip().lower()
         return _SESSION_STATE_MAP.get(text, OpenCodeSessionState.UNKNOWN), False
     return OpenCodeSessionState.UNKNOWN, True
+
+
+#: Media types that can credibly carry the documented JSON contract.
+_JSON_MEDIA_TYPES = ("application/json", "text/json")
+#: Provider runtime statuses (OpenCode 1.18.11 ``SessionStatus``).
+_STATUS_IDLE = "idle"
+_STATUS_BUSY = "busy"
+_STATUS_RETRY = "retry"
+
+
+def _is_json_media_type(media_type: str) -> bool:
+    """True when *media_type* may credibly carry the documented JSON body.
+
+    An absent media type is treated as JSON-capable: a JSON endpoint that omits
+    ``Content-Type`` must not be reclassified as an unexpected contract.
+    """
+    if not media_type:
+        return True
+    return media_type in _JSON_MEDIA_TYPES or media_type.endswith("+json")
+
+
+def _session_status(payload: Any, session_id: str) -> tuple[str, str, str]:
+    """Interpret the real ``GET /session/status`` map (OpenCode 1.18.11).
+
+    Returns ``(status, detail, malformed_reason)`` with ``status`` one of
+    ``idle``/``busy``/``retry``/``absent``.  The installed server returns ``{}``
+    for a session that is not running (verified against 1.18.11: an idle session
+    is simply *absent* from the map), so absence is normalized explicitly as
+    idle - never inferred from a field the real session object does not have.
+    Anything else is a malformed payload, not a guessed state.
+    """
+    if not isinstance(payload, dict):
+        return "", "", "session status payload is not an object"
+    if session_id not in payload:
+        # Documented/observed semantics: only active or retrying sessions appear.
+        return "absent", "", ""
+    entry = payload[session_id]
+    if not isinstance(entry, dict):
+        return "", "", "session status entry is not an object"
+    status_type = str(entry.get("type") or "").strip().lower()
+    if status_type == _STATUS_IDLE:
+        return _STATUS_IDLE, "", ""
+    if status_type == _STATUS_BUSY:
+        return _STATUS_BUSY, "busy", ""
+    if status_type == _STATUS_RETRY:
+        detail = "retry"
+        attempt = entry.get("attempt")
+        if isinstance(attempt, int) and not isinstance(attempt, bool):
+            detail += f" attempt {attempt}"
+        next_in = entry.get("next")
+        if isinstance(next_in, int) and not isinstance(next_in, bool):
+            detail += f" next {next_in}ms"
+        message = _clean(entry.get("message"), 200)
+        if message:
+            detail += f": {message}"
+        return _STATUS_RETRY, detail, ""
+    return (
+        "",
+        "",
+        f"unknown session status {status_type or '(missing type)'!r}",
+    )
 
 
 def _first(mapping: Mapping[str, Any], *keys: str) -> Any:
@@ -376,6 +439,9 @@ class OpenCodeBridge:
         session_id = self._require_session_id(session_id)
         if not prompt or not prompt.strip():
             raise OpenCodeConfigError("send_prompt requires a non-empty prompt")
+        if model:
+            # Fail locally: an unmappable override must never reach the wire.
+            self._model_identity(model)
         _session, failure, merged = self._probe_ownership("send_prompt", session_id)
         if failure is not None:
             return failure
@@ -400,11 +466,15 @@ class OpenCodeBridge:
         # would expose the previous assistant message as if it were the answer
         # (third-review smoke blocker P2).
         merged = merged.model_copy(update={"messages": [], "page": None})
+        # Real OpenCode 1.18.11 contract (`POST /session/{id}/message`): the only
+        # required member is `parts` (TextPartInput: required `type` + `text`);
+        # optional members are omitted entirely so the session/default
+        # configuration chooses the agent/model (A33 real-protocol remediation).
         body: dict[str, Any] = {"parts": [{"type": "text", "text": prompt}]}
         if agent:
             body["agent"] = agent
         if model:
-            body["model"] = model
+            body["model"] = self._model_identity(model)
         result, response = self._request(
             "send_prompt",
             "POST",
@@ -415,6 +485,7 @@ class OpenCodeBridge:
             agent=agent,
             model=model,
             result=merged,
+            submission=True,
         )
         accepted = 200 <= (response.status or 0) < 300
         # Evidence about the POST itself, carried on *every* return path: the
@@ -428,13 +499,41 @@ class OpenCodeBridge:
             if (accepted and not response.ok)
             else ""
         )
+        submission_contract = "json" if (accepted and not response.ok) else ""
         post_evidence: dict[str, Any] = {
             "submission_attempted": True,
             "submission_status": response.status,
             "submission_body": submission_body,
+            "submission_contract": submission_contract,
             "submission_uncertain": bool(response.submission_uncertain),
         }
         result = result.model_copy(update=post_evidence)
+
+        # ``_request`` already recorded the media-type verdict on the settled call
+        # record (submission=true), so the operation and the ledger agree.
+        unexpected_contract = accepted and not response.ok and response.submission_uncertain
+        if unexpected_contract:
+            # The A33 smoke proved an unmatched OpenCode route answers 200 with the
+            # SPA `text/html` body.  That is a POST that happened, but endpoint
+            # acceptance could not be proven: never confidently "accepted", never
+            # safely retryable either, so the operation continues as
+            # submission-uncertain (no fallback, no resubmission).
+            submission_contract = f"unexpected_media_type:{response.content_type}"
+            result = result.model_copy(
+                update={
+                    "submission_contract": submission_contract,
+                    "submission_uncertain": True,
+                }
+            )
+            return self._uncertain_submission(
+                session_id,
+                boundary_cursor,
+                result,
+                response,
+                prompt,
+                known_ids,
+                contract=submission_contract,
+            )
 
         if not accepted and not response.submission_uncertain:
             # A *definite* outcome: either the server answered with a non-2xx
@@ -564,6 +663,8 @@ class OpenCodeBridge:
         response: TransportResponse,
         prompt: str,
         known_ids: set[str],
+        *,
+        contract: str = "",
     ) -> OpenCodeOperationResult:
         """Result for a POST whose outcome cannot be proven (third review P1).
 
@@ -595,24 +696,44 @@ class OpenCodeBridge:
                     "reply_boundary": boundary_cursor,
                     "follow_up_state": follow_up.state.value,
                     "submission_attempted": True,
-                    "submission_status": None,
+                    "submission_status": response.status,
                     "submission_body": "",
+                    "submission_contract": contract,
                     "submission_uncertain": True,
                     "error_type": response.error_type,
                     "error": (
-                        f"the submission POST failed after it may have been sent "
-                        f"({response.error_type}); a new assistant reply was later "
-                        "correlated, but the submission itself remains unconfirmed"
+                        (
+                            "the submission POST returned a response whose contract "
+                            f"was unexpected ({contract}); a new assistant reply was "
+                            "later correlated, but endpoint acceptance remains "
+                            "unconfirmed"
+                        )
+                        if contract
+                        else (
+                            "the submission POST failed after it may have been sent "
+                            f"({response.error_type}); a new assistant reply was later "
+                            "correlated, but the submission itself remains unconfirmed"
+                        )
                     ),
                     "messages": [fresh[-1]],
                     "page": None,
                 }
             )
         detail = (
-            f"the submission POST failed after the request may already have "
-            f"reached the server ({response.error_type}); the prompt may have been "
-            "accepted, so DevRelay does not resubmit automatically and does not "
-            "report the submission as sent"
+            (
+                "the submission POST returned HTTP "
+                f"{response.status} with a response contract that was not credible "
+                f"for the documented endpoint ({contract}); the prompt may already "
+                "have been accepted, so DevRelay does not resubmit automatically "
+                "and does not report the submission as accepted"
+            )
+            if contract
+            else (
+                "the submission POST failed after the request may already have "
+                f"reached the server ({response.error_type}); the prompt may have "
+                "been accepted, so DevRelay does not resubmit automatically and does "
+                "not report the submission as sent"
+            )
         )
         if follow_up.error_type:
             detail += f"; the follow-up read also failed ({follow_up.error_type})"
@@ -631,8 +752,9 @@ class OpenCodeBridge:
                 "reply_boundary": boundary_cursor,
                 "follow_up_state": follow_up.state.value,
                 "submission_attempted": True,
-                "submission_status": None,
+                "submission_status": response.status,
                 "submission_body": "",
+                "submission_contract": contract,
                 "submission_uncertain": True,
                 "error_type": response.error_type,
                 "error": detail,
@@ -737,6 +859,8 @@ class OpenCodeBridge:
         if last_session.state.terminal:
             return self._complete(result, session=last_session)
 
+        # Real runtime state lives in `GET /session/status`; the session detail
+        # object has no state/status field on OpenCode 1.18.11 (A33 finding).
         while True:
             remaining = deadline - self._monotonic()
             if remaining <= 0:
@@ -744,35 +868,29 @@ class OpenCodeBridge:
             result, response = self._request(
                 "wait_idle",
                 "GET",
-                self.paths.session_path(session_id),
+                self.paths.status_path,
                 session_id=session_id,
                 result=result,
                 timeout_seconds=remaining,
                 extra_redactions=redact_values,
             )
             if not response.ok:
-                if response.status == 404:
-                    raise OpenCodeSessionNotFoundError(
-                        f"session {session_id} disappeared while waiting"
-                    )
                 return self._failure(result, response)
-            payload = response.data
-            if isinstance(payload, dict) and isinstance(payload.get("session"), dict):
-                payload = payload["session"]
-            if not isinstance(payload, dict):
-                return self._malformed(
-                    result, response, "session payload is not an object"
+            status, detail, malformed = _session_status(response.data, session_id)
+            if malformed:
+                return self._malformed(result, response, malformed)
+            if detail:
+                # Provider-controlled text: redact the values this operation knows
+                # about before it can reach a result or a ledger record.
+                result = result.model_copy(
+                    update={"status_detail": redact_text(detail, extra_values=redact_values)}
                 )
-            session = self._normalize_session(payload)
-            if not session.session_id:
-                session = session.model_copy(update={"session_id": session_id})
-            if session.state_overflow:
-                return self._malformed(
-                    result, response, "provider session state nested too deeply"
+            if status in (_STATUS_IDLE, "absent"):
+                observed = last_session.model_copy(
+                    update={"state": OpenCodeSessionState.IDLE}
                 )
-            last_session = session
-            if session.state.terminal:
-                return self._complete(result, session=session)
+                return self._complete(result, session=observed)
+            # busy / retry: still in flight, keep polling inside the deadline.
             remaining = deadline - self._monotonic()
             if remaining <= 0:
                 return self._idle_timeout(result, last_session, budget)
@@ -796,6 +914,11 @@ class OpenCodeBridge:
                 "error": (
                     f"session did not become idle/terminal within {budget:g}s; "
                     "no retry is attempted and no polling continues after return"
+                    + (
+                        f" (last observed status: {result.status_detail})"
+                        if result.status_detail
+                        else ""
+                    )
                 ),
             }
         )
@@ -855,6 +978,28 @@ class OpenCodeBridge:
     # ------------------------------------------------------------------
     # ownership / validation
     # ------------------------------------------------------------------
+    @staticmethod
+    def _model_identity(model: str) -> dict[str, str]:
+        """Map ``provider/model`` to OpenCode's ``{providerID, modelID}`` object.
+
+        The real request schema requires a structured model identity
+        (``providerID`` + ``modelID``, both required, ``additionalProperties:
+        false``).  DevRelay's public input is one string, so an explicit grammar is
+        supported: ``<providerID>/<modelID>`` (split at the *first* slash, so
+        ``openrouter/anthropic/claude`` maps to provider ``openrouter``).  A value
+        that cannot be mapped losslessly fails locally, before any request is
+        constructed - DevRelay never guesses a wire encoding.
+        """
+        provider, separator, model_id = (model or "").partition("/")
+        provider, model_id = provider.strip(), model_id.strip()
+        if not separator or not provider or not model_id:
+            raise OpenCodeConfigError(
+                "opencode model override must be given as '<providerID>/<modelID>' "
+                f"(got {model!r}): the real OpenCode request contract requires a "
+                "structured model identity, and DevRelay refuses to guess one"
+            )
+        return {"providerID": provider, "modelID": model_id}
+
     def _require_session_id(self, session_id: str) -> str:
         value = (session_id or "").strip()
         if not value:
@@ -1061,6 +1206,7 @@ class OpenCodeBridge:
         timeout_seconds: float | None = None,
         expect_json: bool = True,
         extra_redactions: Sequence[str] = (),
+        submission: bool = False,
     ) -> tuple[OpenCodeOperationResult, TransportResponse]:
         """Issue exactly one request, recording it before it leaves the machine."""
         call_id = self.ledger.allocate_call_id()
@@ -1109,6 +1255,14 @@ class OpenCodeBridge:
                     f"({type(exc).__name__}); the attempt is settled as malformed"
                 ),
             )
+        if submission and not response.ok and 200 <= (response.status or 0) < 300:
+            # A 2xx submission whose body is unusable is credible acceptance only
+            # if the media type could carry the documented JSON contract.  The real
+            # server answers an *unmatched* route with 200 text/html (the SPA
+            # shell - the A33 observation), and that must never be recorded as a
+            # confident acceptance, nor as a safely retryable failure.
+            if response.content_type and not _is_json_media_type(response.content_type):
+                response = dataclasses.replace(response, submission_uncertain=True)
         settled = record.model_copy(
             update={
                 "state": response.state,
@@ -1119,6 +1273,7 @@ class OpenCodeBridge:
                 "duration_ms": response.duration_ms,
                 "response_bytes": response.response_bytes,
                 "response_truncated": response.response_truncated,
+                "response_media_type": _clean(response.content_type, 128),
                 "submission_uncertain": bool(response.submission_uncertain),
             }
         )

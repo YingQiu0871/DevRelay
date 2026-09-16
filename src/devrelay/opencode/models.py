@@ -235,9 +235,17 @@ class OpenCodeOperationResult(BaseModel):
     #: True once the POST was actually issued (whether or not it succeeded).
     submission_attempted: bool = False
     #: True when the POST failure cannot prove the prompt was not accepted (a
-    #: read/write timeout or an equivalent mid-transfer failure): the caller must
-    #: not resubmit automatically.
+    #: read/write timeout or an equivalent mid-transfer failure), **or** when a 2xx
+    #: response did not match the expected media/body contract (e.g. the SPA
+    #: ``text/html`` fallback): the caller must not resubmit automatically.
     submission_uncertain: bool = False
+    #: Response contract evidence for the submission: ``""`` (usable JSON),
+    #: ``"json"`` (JSON endpoint, body unusable) or
+    #: ``"unexpected_media_type:<type>"`` (not credible acceptance evidence).
+    submission_contract: str = ""
+    #: Last observed provider runtime-status detail (wait_idle), sanitized and
+    #: clipped - e.g. ``retry attempt 2: rate limited``.
+    status_detail: str = ""
     # interrupt (P2-C): an accepted abort request is not a verified terminal
     # state, and v0.3-A says exactly that.
     interrupt_verified: bool = False
@@ -286,6 +294,9 @@ class OpenCodeCallRecord(BaseModel):
     #: True when the failure cannot prove the request was never submitted (third
     #: review P1): a later reader must know the prompt may already be running.
     submission_uncertain: bool = False
+    #: Response media type (sanitized, clipped): a 2xx ``text/html`` from an
+    #: unmatched route is not credible acceptance evidence (A33 finding).
+    response_media_type: str = ""
     prompt_sha256: str = ""
     prompt_chars: int = 0
     agent: str = ""

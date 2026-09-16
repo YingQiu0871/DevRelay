@@ -65,11 +65,21 @@ def _records(tmp_path: Path):
 
 
 def _post_count(stub: StubOpenCodeServer) -> int:
-    return sum(1 for _method, path in stub.requests if path.endswith("/prompt"))
+    """Model-submission POSTs only (the GET message list shares the route)."""
+    return sum(
+        1
+        for method, path in stub.requests
+        if method == "POST" and path.endswith("/message")
+    )
 
 
 def _message_reads(stub: StubOpenCodeServer) -> int:
-    return sum(1 for _method, path in stub.requests if path.endswith("/message"))
+    """Message *list* reads (GET on the shared route)."""
+    return sum(
+        1
+        for method, path in stub.requests
+        if method == "GET" and path.endswith("/message")
+    )
 
 
 def _assert_accounting_is_settled(tmp_path: Path, result) -> None:
