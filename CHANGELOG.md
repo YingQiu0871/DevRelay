@@ -102,14 +102,43 @@ fake providers (no real Codex invocation, no real reviewer endpoint).
   generation. Orphan evidence is never deleted, never overwritten and never
   treated as applied.
 
-## Unreleased - v0.3-B candidate (MCP tool surface)
+## Unreleased - v0.3-B accepted (MCP tool surface)
 
 A narrow local **Model Context Protocol adapter** over the accepted v0.3-A
 OpenCode bridge, so an MCP-capable client (for example a ChatGPT planner) can
-invoke DevRelay programmatically.  **Candidate implementation complete, awaiting
-independent review and still unreleased**: the package version stays `0.1.0`,
+invoke DevRelay programmatically.  **Accepted internally / unreleased**: the
+final real MCP smoke passed at accepted candidate
+`d058d62341a173414bdba88fe357b08c236c8bb4`, the package version stays `0.1.0`,
 the supported public release remains v0.1.0, nothing is pushed, merged, tagged or
-published, and no real model/OpenCode call is made by this stage.
+published, and no public v0.3 release exists.  The automated suite still makes no
+real network/model call; the real chain was one separately authorized one-shot
+smoke.
+
+### Accepted (final real MCP smoke)
+
+- Official MCP Python SDK **2.2** (`mcp>=2.2,<3`), stdio-only MCP server, exactly
+  nine bounded tools, one-workspace binding per server process.
+- Truthful structured envelopes (`schema_version 1`) with `structuredContent` plus
+  a JSON text fallback, and `isError` mechanically `not ok`.
+- Exact-one-submission semantics inherited unchanged from v0.3-A (never retries,
+  never falls back, never resubmits; `submission_uncertain`/`reply_pending` are
+  reported as evidence).
+- **Global serialized MCP execution** over the accepted filesystem ledger: one
+  process-wide re-entrant lock covers all nine tool bodies, because the accepted
+  ledger allocates call identities with a non-atomic read-modify-write.
+- Final real smoke `PASS — V0.3-B LOCAL REAL MCP SMOKE`: real `mcp 2.2.0` client
+  -> stdio -> `devrelay mcp serve --workspace <ws>` -> accepted v0.3-A bridge ->
+  real OpenCode `1.18.11` -> explicit `opencode-go/deepseek-v4.1-flash`.  Exactly
+  one MCP `opencode_send_prompt`, exactly one `POST /session/{id}/message`
+  (HTTP 200, no `/prompt`, no `prompt_async`, no retry, no fallback), provider
+  inference confirmed, `isError=false`, `ok=true`, `submission_uncertain=false`,
+  `reply_pending=false`, `retry_safe=false`, assistant reply exactly
+  `DEVRELAY_V03B_MCP_OK`, final history `user -> assistant`, 13 settled ledger
+  records with zero `ISSUED` and no raw prompt in durable evidence.
+- Complete containment and cleanup: disposable workspace unchanged (README hash,
+  clean `git status`, no model-created files), disposable session deleted
+  (`GET` -> 404), dedicated OpenCode stopped, MCP process exited, evidence kept
+  outside the repository.
 
 ### Added
 
@@ -190,8 +219,10 @@ published, and no real model/OpenCode call is made by this stage.
   one re-entrant execution lock, because the accepted v0.3-A filesystem ledger is
   a single-writer store; cancelling a local MCP request never implies "not
   submitted" and never triggers an automatic abort.
-- Deferred: a real MCP-client smoke (after review), Streamable HTTP/SSE
-  transport, multi-process/multi-workspace serving.
+- The real MCP-client smoke is **done** (see "Accepted (final real MCP smoke)"
+  above).  Still deferred: Streamable HTTP/SSE transport, multi-process /
+  multi-workspace serving, and any role routing or orchestration (v0.3-C, not
+  started).
 
 ## Unreleased - v0.3-A accepted (OpenCode session bridge)
 

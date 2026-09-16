@@ -1,22 +1,65 @@
 # DevRelay v0.3-B acceptance matrix — MCP tool surface
 
-Status: **candidate implementation + gate remediation — ready for re-gate**
-(unreleased; package version stays `0.1.0`; public release remains `v0.1.0`).
-This matrix includes the remediation of the independent review's
+Status: **ACCEPT — V0.3-B CHATGPT/MCP TOOL SURFACE** — functional development
+**CLOSED** (accepted internally; **UNRELEASED**).
+
+| Field | Value |
+| --- | --- |
+| Accepted functional candidate | `d058d62341a173414bdba88fe357b08c236c8bb4` (branch `v0.3-b-mcp-tool-surface`) |
+| Final real smoke | `PASS — V0.3-B LOCAL REAL MCP SMOKE` |
+| Functional development | `CLOSED` |
+| Release state | `UNRELEASED` (no public v0.3 release exists) |
+| Package version | `0.1.0` (unchanged) |
+| Public release | `v0.1.0` |
+| Findings at acceptance | P0 = 0 · P1 = 0 · smoke-blocking P2 = 0 (non-blocking P2/P3 carried forward in `docs/BACKLOG.md`) |
+| Next stage | `v0.3-C — NEXT / NOT STARTED` |
+
+This matrix covers the remediation of the independent review's
 `REQUEST_CHANGES — V0.3-B MCP TOOL SURFACE` findings (envelope truthfulness,
 stdio candidate pinning, malformed-input truth, ledger ordering, cancelled-call
 evidence), the hardening tests added with it, and the follow-up remediation of
 the single smoke-blocking P2 that survived the re-gate: **parallel MCP tool
-executions raced the accepted v0.3-A filesystem ledger**.  v0.3-B now serializes
+executions raced the accepted v0.3-A filesystem ledger**.  v0.3-B serializes
 **all** tool execution (reads included) in one MCP server process with one
-re-entrant execution lock; sections I.2 and B56-B65 record that evidence.
+re-entrant execution lock; sections I.2/B56-B65 record that evidence and section
+I.3 records the final real MCP smoke.
 
 Baseline: accepted v0.3-A at `bcf9627…` (documentation closeout `f4c92f3…`),
-branch `v0.3-b-mcp-tool-surface`.  All evidence below is **offline**: the
+branch `v0.3-b-mcp-tool-surface`.  The matrix evidence is **offline**: the
 deterministic v0.3-A stub over `httpx.MockTransport`, a real stdio MCP
 subprocess, and a deterministic loopback fake OpenCode HTTP server created
-inside the test process.  No external network, no model, no real OpenCode
-server.
+inside the test process — the automated suite still makes 0 network/model calls.
+The final real MCP chain (section I.3) was a separate, separately authorized
+one-shot smoke and is not part of the automated suite.
+
+### History (preserved as evidence; never rewritten as success)
+
+1. initial v0.3-B candidate `adfcd1b…`;
+2. first independent review: **`REQUEST_CHANGES`** — `opencode_get_session` could
+   return `ok:true / isError:false` for a provider failure;
+3. remediation: one shared truthful bridge envelope, malformed-input truth,
+   numeric ledger ordering, stdio harness candidate pinning;
+4. next re-gate: P1 closed, but **`REQUEST_CHANGES`** — concurrent MCP reads
+   raced the accepted v0.3-A filesystem ledger (7 of 8 parallel reads failed;
+   colliding `OC-0001` identities);
+5. concurrency remediation: candidate `d058d62…`, one re-entrant execution lock
+   serializing all nine MCP tool bodies (B56-B65);
+6. final concurrency re-gate: `APPROVE V0.3-B FOR ONE LOCAL REAL MCP SMOKE WITH
+   RECORDED P2/P3`;
+7. first smoke execution attempt: **`BLOCKED — V0.3-B LOCAL REAL MCP SMOKE`**
+   before provisioning/model submission (insufficient remaining execution-session
+   budget); the one authorized model prompt was **not** consumed;
+8. final dedicated real smoke: **`PASS — V0.3-B LOCAL REAL MCP SMOKE`** (section
+   I.3).
+
+### Harness deviation recorded truthfully (not a product defect)
+
+The first **read-only preflight** client attempt terminated before any model
+submission because the client script used `CallToolResult.isError` instead of the
+SDK attribute `is_error`.  That script had no `send_prompt` path, so the model
+call count stayed **zero**; the disposable state was reset, and the final real
+MCP chain then completed with exactly one model submission.  The history is kept
+as-is.
 
 Legend: **COVERED** = automated test asserts it · **PARTIAL** = covered
 indirectly · **DEFERRED** = documented, not automated in this stage.
@@ -101,7 +144,7 @@ indirectly · **DEFERRED** = documented, not automated in this stage.
 | # | Criterion | Status | Evidence |
 | --- | --- | --- | --- |
 | B41 | All v0.3-A suites unchanged and green (200 tests) | COVERED | `tests/test_v03a_opencode.py`, `tests/test_v03a_remediation.py`, `tests/test_v03a_second_remediation.py`, `tests/test_v03a_third_remediation.py`, `tests/test_v03a_real_protocol.py` |
-| B42 | Full offline suite green with isolated `TEMP`/`TMP`/`TMPDIR`, count increased by the v0.3-B tests | COVERED | full-suite run recorded in the implementation report |
+| B42 | Full offline suite green with isolated `TEMP`/`TMP`/`TMPDIR`, count increased by the v0.3-B tests | COVERED | implementation-report run plus the final closeout run at candidate `d058d62`: **669 passed**, 0 failed/errors/skipped/xfail |
 | B43 | No external model/OpenCode/network call required for acceptance | COVERED | every suite runs against `httpx.MockTransport`, a loopback fake or no HTTP at all |
 
 ## I. Gate remediation (independent review `REQUEST_CHANGES — V0.3-B`)
@@ -138,11 +181,38 @@ through it.
 | B64 | `retry_safe` truth table unchanged (14 cases) and still conservative in the concurrent path | COVERED | `test_retry_safe_truth_table` (untouched) + `…::test_parallel_reads_with_one_send_prompt_post_exactly_once` asserts `retry_safe is False` for the accepted submission |
 | B65 | Back-check: the new suite run against the pre-remediation candidate `59f81c0` fails 19 of 21 tests (only the two all-side-effecting pairs pass), including 7 of 8 parallel reads failing with colliding `OC-0001` identities | COVERED | recorded run in the remediation report (disposable `git archive` copy of `59f81c0` + the new test file) |
 
+## I.3 Final real MCP smoke (accepted evidence)
+
+Verified chain (one separately authorized one-shot smoke; no secrets or raw logs
+are copied into this document):
+
+```text
+official MCP Python client (mcp 2.2.0)
+    -> stdio
+DevRelay MCP server (devrelay mcp serve --workspace <workspace>)
+    ->
+accepted DevRelay v0.3-A bridge
+    -> HTTP
+OpenCode 1.18.11 (dedicated loopback instance)
+    ->
+opencode-go/deepseek-v4.1-flash
+```
+
+| # | Criterion | Status | Evidence |
+| --- | --- | --- | --- |
+| B66 | Real stdio MCP interoperability with the official Python MCP SDK: real `mcp 2.2.0` client (`ClientSession` + stdio transport) against the real candidate command `devrelay mcp serve --workspace <workspace>`; real `initialize` (`devrelay`, server `0.3.0-b`, protocol `2025-11-25`), real `tools/list` (exactly nine tools, expected order) and real `tools/call` returning `structuredContent` plus a JSON text fallback that matched it for every call | COVERED / PASS | final smoke run at candidate `d058d62` (report: `DEVRELAY v0.3-B LOCAL REAL MCP SMOKE REPORT`) |
+| B67 | Bound workspace and global serialization observed at runtime: `devrelay_status` reported the disposable workspace with `execution_serialized: true` and `transport: stdio`; `opencode_health` reached real OpenCode `1.18.11`; a prompt-free session provisioned with exactly one `POST /session` was visible with `workspace_match: true`; baseline history was empty (`provider_message_count: 0`) | COVERED / PASS | same run (preflight 13/13 checks) |
+| B68 | Exactly one submission: one MCP `opencode_send_prompt`, exactly one `POST /session/{id}/message` (ledger record `OC-0009`), no `/prompt`, no `prompt_async`, no retry, no fallback, no alternate model | COVERED / PASS | same run (ledger + provider-side history + one inference start) |
+| B69 | Envelope truthfulness on the real path: `isError=false`, `ok=true`, `submission_attempted=true`, `submission_status=200`, `submission_uncertain=false`, `reply_pending=false`, `retry_safe=false` | COVERED / PASS | same run |
+| B70 | Explicit model and real inference: `opencode-go/deepseek-v4.1-flash` registered (read-only `/config/providers`); dedicated OpenCode DEBUG log shows exactly one `message=stream providerID=opencode-go modelID=deepseek-v4.1-flash` plus `llm runtime selected … llm.provider=opencode-go`; zero `coding-plan`, zero `deepseek-v4-pro`, zero fallback, zero `ProviderModelNotFoundError` | COVERED / PASS | same run (sanitized log lines) |
+| B71 | Correlated reply, stable provider window, settled ledger: assistant reply exactly `DEVRELAY_V03B_MCP_OK`; final history `[user, assistant]` with `next_cursor` = assistant id, `cursor_unknown=false`, `replayed=false`, `provider_message_count=2`, `window_truncated=false`; `opencode_wait_idle` succeeded without submitting; ledger 13 records, all settled, zero `ISSUED`, unique/contiguous ids, only `prompt_sha256` + `prompt_chars` (no raw prompt, no credentials) | COVERED / PASS | same run |
+| B72 | Containment and cleanup, candidate frozen: disposable workspace README sha256 unchanged and `git status --porcelain` clean (no model-created files); disposable session deleted (`GET` -> 404); dedicated OpenCode stopped (port free); MCP child exited cleanly; the accepted runtime candidate stayed `d058d62` with no source/test/config change | COVERED / PASS | same run |
+
 ## J. Deferred (non-blocking, recorded)
 
 | # | Item | Why deferred |
 | --- | --- | --- |
-| B44 | Real MCP client smoke (ChatGPT/other host) against a disposable OpenCode session | explicitly **after** independent review; this round makes 0 real model calls |
+| B44 | Real MCP client smoke against a disposable OpenCode session | **done before acceptance** (section I.3): `PASS` with the real `mcp 2.2.0` client, real OpenCode `1.18.11` and one explicit model call; kept here so the original deferral stays visible |
 | B45 | Streamable HTTP/SSE MCP transport | out of scope for v0.3-B |
 | B46 | Multi-process concurrency / multi-workspace serving | v0.3-B is one process, one workspace, with **all** tool execution serialized; two `devrelay mcp serve` processes over one workspace are not serialized against each other (single-writer ledger hardening is required first, see BACKLOG) |
 | B47 | Tool-level progress notifications, resources, prompts | not needed for the adapter surface |

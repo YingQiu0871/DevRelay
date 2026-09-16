@@ -45,11 +45,11 @@ authorizes code changes; each item names its own scope and owner stage.
 * The bridge is **not** wired into the pipeline: it neither implements nor routes
   any implementer/reviewer role.
 
-## 4. Deferred follow-ups from the v0.3-B MCP tool surface (recorded; **do not block v0.3-B review**)
+## 4. Deferred follow-ups from the v0.3-B MCP tool surface (recorded; **non-blocking for v0.3-B acceptance**)
 
 | Item | Note |
 | --- | --- |
-| Real MCP-client smoke (ChatGPT or another host) → disposable OpenCode session | deliberately **after** independent review; the v0.3-B implementation round makes 0 real model calls, so native-client interoperability is not yet verified |
+| Real MCP-client smoke (ChatGPT or another host) → disposable OpenCode session | **done before acceptance**: real official MCP Python SDK 2.2.0 client over stdio against real OpenCode `1.18.11` with one explicit model call (`PASS — V0.3-B LOCAL REAL MCP SMOKE`, reply `DEVRELAY_V03B_MCP_OK`); kept for history |
 | Streamable HTTP/SSE MCP transport | out of scope for v0.3-B (local stdio only); needs its own design (auth, exposure, session lifetime) |
 | Multi-process concurrency / multi-workspace serving | v0.3-B is one process bound to one workspace with **all** tool execution serialized by one re-entrant lock; two `devrelay mcp serve` processes over one workspace share one ledger and are NOT serialized against each other |
 | Tool-level progress notifications, MCP resources/prompts | not needed for the adapter surface in v0.3-B |
@@ -62,6 +62,43 @@ authorizes code changes; each item names its own scope and owner stage.
 | `opencode_interrupt` queues behind an in-flight `send_prompt` | expected under the global serialization boundary (it is not an out-of-band abort) and documented; a second control channel would be a new design |
 | Provider error routes may echo the prompt on non-prompt operations | the prompt is never stored durably and the submission routes are covered; non-prompt error bodies are sanitized but not prompt-scrubbed |
 | Dead `_ENVELOPE_KEY` constant (and a `ServerMiddleware` import kept only as a protocol check) in `src/devrelay/mcp/server.py` | recorded at the v0.3-B gate; harmless leftovers from the abandoned middleware approach, deliberately not touched by the concurrency remediation (server.py envelope shaping is frozen) |
+
+### Carried findings at v0.3-B acceptance (**non-blocking for v0.3-B acceptance**)
+
+**P2 (recorded, non-blocking)**
+
+1. **SDK argument-schema validation may reflect caller-supplied `input_value`.**
+   When the MCP SDK's own JSON-schema check rejects an argument, the SDK emits its
+   own bounded error text *before* DevRelay's validation runs, and that text can
+   quote the offending caller value.  Therefore documentation must **not** claim
+   universal secret redaction for malformed **SDK-level** arguments; the
+   DevRelay-shaped paths (envelope, text fallback, diagnostics, durable evidence)
+   remain bounded and redacted.
+2. **Post-POST unexpected exception can collapse the convenient MCP response
+   evidence to `data={}`.**  The envelope still reports `ok: false`, but the
+   operation evidence is thinner than on a `DevRelayError` path; the durable
+   ledger remains the recovery evidence.
+
+**P3 / future hardening**
+
+* the execution lock is per MCP surface / server instance; the shipped `serve()`
+  constructs exactly one surface per process;
+* the accepted filesystem ledger remains single-writer and does not support
+  multi-process concurrency;
+* read concurrency is deferred until ledger hardening;
+* a long `opencode_wait_idle` serializes subsequent calls in the same process;
+* `retry_safe` is absent rather than an explicit `false` on some pre-bridge
+  failures;
+* bound root vs `config.workspace` reporting nuance in `devrelay_status`;
+* `opencode_interrupt` queues behind an in-flight `opencode_send_prompt`;
+* prompt-echo possibilities on some non-prompt error routes;
+* minor parser / test-id / dead-symbol items already recorded (dead
+  `_ENVELOPE_KEY` and the `ServerMiddleware` protocol-check import, stale comment
+  wording in an existing test, `%TEMP%` hygiene note);
+* provider `created_at` is currently passed through as a text/object
+  representation;
+* a fresh idle session may appear as `state: UNKNOWN` in list/get while
+  `wait_idle` resolves idle through the `/session/status` absence semantics.
 
 ## 5. Deferred follow-ups after v0.3-A acceptance (recorded; **do not block acceptance**)
 

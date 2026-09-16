@@ -8,25 +8,39 @@ reports the same version via `devrelay version`).
 Source: <https://github.com/YingQiu0871/DevRelay> -
 [Issues](https://github.com/YingQiu0871/DevRelay/issues)
 
-**Development status: v0.3-A OpenCode Session Bridge — accepted internally /
-unreleased.** The bridge is implemented and was verified against a real OpenCode
-`1.18.11` server (one real prompt → correlated reply `DEVRELAY_A33_OK`); it is
-not part of the v0.1.0 release, the version number is unchanged, and v0.3-A
-functional development is closed at candidate
-`bcf9627e92ef839abb756810e3c615e6d01b6576`. Specification, acceptance decision
-and real-smoke evidence:
+### Public release
+
+**`v0.1.0`** — the only supported release; the CLI reports it via
+`devrelay version`.
+
+### Internal development status (unreleased)
+
+| Stage | Status |
+| --- | --- |
+| v0.3-A OpenCode Session Bridge | **accepted / unreleased** — closed at candidate `bcf9627e92ef839abb756810e3c615e6d01b6576`; real OpenCode `1.18.11` smoke passed (one prompt → `DEVRELAY_A33_OK`) |
+| v0.3-B ChatGPT/MCP tool surface | **accepted / unreleased** — closed at accepted candidate `d058d62341a173414bdba88fe357b08c236c8bb4`; final real MCP smoke `PASS — V0.3-B LOCAL REAL MCP SMOKE` |
+
+Neither stage is part of the `v0.1.0` release, the package version stays `0.1.0`,
+and nothing is pushed, tagged or published.  Spec/acceptance for v0.3-B:
+[docs/v0.3/V03B_SPEC.md](docs/v0.3/V03B_SPEC.md),
+[docs/v0.3/V03B_ACCEPTANCE.md](docs/v0.3/V03B_ACCEPTANCE.md); for v0.3-A:
 [docs/v0.3/V03A_SPEC.md](docs/v0.3/V03A_SPEC.md),
 [docs/v0.3/V03A_ACCEPTANCE.md](docs/v0.3/V03A_ACCEPTANCE.md).
 
-**Current development stage: v0.3-B MCP tool surface — candidate implementation
-complete, awaiting independent review, unreleased.** An MCP-capable client can
-invoke the accepted v0.3-A OpenCode bridge through a local stdio MCP server
-(`devrelay mcp serve --workspace <project>`); it is not released, no real MCP
-client has been connected yet and no HTTP transport is implemented.  Spec and
-acceptance matrix: [docs/v0.3/V03B_SPEC.md](docs/v0.3/V03B_SPEC.md),
-[docs/v0.3/V03B_ACCEPTANCE.md](docs/v0.3/V03B_ACCEPTANCE.md).
+### Verified v0.3-B capability
 
-**Not started: v0.3-C** (role routing / orchestration).
+A local MCP-capable client can invoke DevRelay's bounded OpenCode bridge through
+stdio tools: `devrelay mcp serve --workspace <project>` exposes exactly nine
+tools over the official MCP Python SDK (`mcp 2.2.0`), verified end-to-end once
+against real OpenCode `1.18.11` with one explicit `opencode-go/deepseek-v4.1-flash`
+turn (exactly one `POST /session/{id}/message`, reply `DEVRELAY_V03B_MCP_OK`).
+There is **no** HTTP/SSE MCP transport, **no** WebUI, **no** multi-workspace
+serving, and ChatGPT product-native distribution/installation is **not** released.
+
+### Next stage
+
+`v0.3-C Agent Role Routing` — **not started** (no automatic DeepSeek/GLM routing
+exists yet).
 
 > **v0.2-A candidate (unreleased)**: the automatic review loop described under
 > [Automatic review loop (v0.2-A)](#automatic-review-loop-v02-a) is implemented
@@ -724,7 +738,7 @@ v0.3-A deliberately does **not** perform role routing (DeepSeek → GLM), review
 loops, approval decisions or ChatGPT/MCP exposure; see
 `docs/v0.3/V03A_SPEC.md`.
 
-### MCP tool surface (v0.3-B candidate, unreleased)
+### MCP tool surface (v0.3-B, accepted internally, unreleased)
 
 DevRelay can expose the OpenCode bridge above as **MCP tools** over a local
 stdio transport, so an MCP-capable client (for example a ChatGPT planner) can
@@ -1003,12 +1017,13 @@ not downgrade the binary inside a workspace that v0.2-B has already written.
   running OpenCode server (select/read one session, one prompt, bounded wait,
   interrupt, durable call accounting) - **accepted internally** after a real
   OpenCode `1.18.11` smoke passed; unreleased
-- **v0.3-B** - ChatGPT/MCP tool surface - **candidate implementation complete
-  (unreleased)**: a local stdio MCP adapter over the accepted v0.3-A bridge, with
-  nine high-level tools, a stable result envelope and honest read-only /
-  side-effecting annotations.  A real MCP-client smoke is deferred until after
-  independent review; no HTTP MCP transport yet
-- **v0.3-C** - role routing / orchestration - not started
+- **v0.3-B** - ChatGPT/MCP tool surface - **accepted internally (unreleased)**
+  at candidate `d058d62…` after the final real MCP smoke passed: a local stdio
+  MCP adapter over the accepted v0.3-A bridge, with nine high-level tools, a
+  stable result envelope, honest read-only / side-effecting annotations and one
+  process-wide execution lock over the accepted single-writer filesystem ledger.
+  Still no HTTP/SSE MCP transport, no multi-workspace serving
+- **v0.3-C** - Agent Role Routing - **NEXT, not started**
 - **later** - optional release automation with explicit approvals
 
 ## Development

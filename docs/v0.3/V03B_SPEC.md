@@ -1,10 +1,14 @@
 # DevRelay v0.3-B — MCP tool surface
 
-Status: **candidate implementation + gate remediation — not accepted, not
-released** (package version stays `0.1.0`).  This document reflects the
-remediation of the independent review's `REQUEST_CHANGES — V0.3-B MCP TOOL
-SURFACE` findings.  Accepted v0.3-A baseline: `bcf9627…` (documentation closeout
-`f4c92f3…`).  Branch: `v0.3-b-mcp-tool-surface`.
+Status: **ACCEPT — v0.3-B CHATGPT/MCP TOOL SURFACE — accepted internally /
+UNRELEASED; functional development CLOSED** (package version stays `0.1.0`;
+public release remains `v0.1.0`).  Accepted functional candidate:
+`d058d62341a173414bdba88fe357b08c236c8bb4`; final real MCP smoke:
+`PASS — V0.3-B LOCAL REAL MCP SMOKE`.  This document reflects the remediation of
+the independent review's `REQUEST_CHANGES — V0.3-B MCP TOOL SURFACE` findings
+plus the concurrency remediation that followed the second re-gate.  Accepted
+v0.3-A baseline: `bcf9627…` (documentation closeout `f4c92f3…`).  Branch:
+`v0.3-b-mcp-tool-surface`.  Next stage: `v0.3-C` (role routing) — not started.
 
 ## 1. Objective and boundary
 
@@ -129,7 +133,12 @@ text.  Documented bounds:
 
 A value the SDK's own JSON-schema check rejects (for example a JSON object where
 a string is required) is reported by the MCP SDK as a bounded validation error -
-no traceback, no secret.  Verified SDK fact (mcp 2.2.0): a JSON `true` sent for a
+no traceback.  Honest limit: that SDK-generated text is **not** DevRelay-shaped
+and may quote the offending caller-supplied value, so DevRelay does **not** claim
+universal secret redaction on that SDK-level argument-validation path (recorded
+as a non-blocking P2 in `docs/BACKLOG.md`); everything DevRelay itself shapes -
+envelope, text fallback, diagnostics, durable evidence - stays bounded and
+redacted.  Verified SDK fact (mcp 2.2.0): a JSON `true` sent for a
 numeric parameter is coerced to `1.0` by the advertised schema, which is a
 finite in-bounds wait; the "never unlimited" property is unaffected.
 
@@ -232,9 +241,12 @@ and `reply_pending` and to **not resubmit automatically**.
 * **Logging discipline**: stdout is MCP-only; stderr carries bounded, redacted
   operational diagnostics.  The MCP server invokes library APIs directly and
   never shells out to `devrelay opencode ...` (no CLI output parsing).
-* **Secret containment**: outputs never contain `DEVRELAY_OPENCODE_TOKEN`,
-  reviewer/provider API keys, `Authorization` headers, OpenCode Basic
-  credentials, environment values, or the raw prompt.  The prompt is supplied by
+* **Secret containment**: DevRelay-shaped outputs never contain
+  `DEVRELAY_OPENCODE_TOKEN`, reviewer/provider API keys, `Authorization` headers,
+  OpenCode Basic credentials, environment values, or the raw prompt.  (An
+  SDK-generated JSON-schema rejection is bounded SDK text outside that shaping
+  path; see the honest limit in section 4 and the recorded non-blocking P2 in
+  `docs/BACKLOG.md`.)  The prompt is supplied by
   the MCP client and DevRelay cannot prevent that client from knowing it; the
   guarantees are: DevRelay does not log it unnecessarily, durable DevRelay
   evidence never stores the raw prompt text, error responses reuse the accepted
@@ -255,14 +267,42 @@ and `reply_pending` and to **not resubmit automatically**.
 * Dependency direction: `devrelay.mcp` → `devrelay.opencode` (and config/models).
   `devrelay.opencode` must not import `devrelay.mcp`.
 
-## 9. What is *not* verified yet
+## 9. Verified in the final real smoke, and what stays out of scope
 
-* No real MCP client (ChatGPT or any other host) has been connected to this
-  server yet: the acceptance evidence is offline (in-process matrix plus a real
-  stdio subprocess against a deterministic loopback fake OpenCode server).
-* No real MCP → OpenCode model call has been made in this round: real network /
-  model calls = 0.  A later, separately authorized acceptance step can connect an
-  actual MCP client and a disposable OpenCode session.
+Verified end-to-end (one separately authorized one-shot smoke at candidate
+`d058d62…`; `PASS — V0.3-B LOCAL REAL MCP SMOKE`):
+
+* local **stdio MCP interoperability** with the official Python MCP SDK
+  (`mcp 2.2.0`) — real `initialize`, real `tools/list` (exactly nine tools, in
+  order) and real `tools/call`;
+* `structuredContent` plus the JSON text fallback, and the bound workspace, over
+  the wire;
+* global-per-surface serialized execution observed at runtime
+  (`execution_serialized: true`);
+* real delegation to the accepted v0.3-A bridge over HTTP to a real
+  **OpenCode 1.18.11** instance;
+* real model tool invocation with the explicit model
+  `opencode-go/deepseek-v4.1-flash` — exactly one MCP `opencode_send_prompt` and
+  exactly one `POST /session/{id}/message`, no `/prompt`, no `prompt_async`, no
+  retry, no fallback, provider inference confirmed by the provider log;
+* truthful envelopes on the real path (`isError=false`, `ok=true`,
+  `submission_uncertain=false`, `reply_pending=false`, `retry_safe=false`) with
+  the correlated reply `DEVRELAY_V03B_MCP_OK` and a stable read window;
+* real MCP ledger visibility (`opencode_calls`): every record settled, no
+  `ISSUED`, unique contiguous call ids, exactly one model POST, and no raw prompt
+  or credentials in durable evidence.
+
+Not verified, unchanged non-claims (no product contract is added by the smoke):
+
+* no HTTP/SSE MCP transport (stdio only), no WebUI, no multi-workspace serving,
+  no role routing, no orchestration, no autonomous review/fix loop;
+* ChatGPT product-native distribution/installation is **not** released, and no
+  automatic DeepSeek/GLM routing exists;
+* the automated suite still makes **0** real network/model calls; the real chain
+  above was a manual one-shot smoke, not a repeatable CI job.
+
+Boundary notes (unchanged by the smoke):
+
 * Cancellation semantics are asserted at the boundary (no POST before the gate ⇒
   nothing recorded; cancellation around an issued POST ⇒ durable evidence stays
   inspectable, `retry_safe` is never claimed, no automatic resubmit, no automatic

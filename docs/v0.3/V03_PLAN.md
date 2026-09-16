@@ -5,22 +5,27 @@
 | Stage | Description | Status |
 | --- | --- | --- |
 | **A** | OpenCode session bridge (explicit endpoint, session select/read, one prompt, bounded wait, interrupt, accounting) | **COMPLETE / ACCEPTED** — candidate `bcf9627e92ef839abb756810e3c615e6d01b6576`, real A33 smoke `PASS` against OpenCode `1.18.11` |
-| B | ChatGPT/MCP tool surface (local stdio MCP adapter over the accepted v0.3-A bridge) | **CANDIDATE + GATE REMEDIATION + CONCURRENCY REMEDIATION COMPLETE — ready for final re-gate** (unreleased) |
-| C | (not designed yet) | **NOT STARTED** |
+| B | ChatGPT/MCP tool surface (local stdio MCP adapter over the accepted v0.3-A bridge) | **COMPLETE / ACCEPTED** — accepted candidate `d058d62341a173414bdba88fe357b08c236c8bb4`, real MCP smoke `PASS — V0.3-B LOCAL REAL MCP SMOKE` (accepted internally, **unreleased**) |
+| C | Agent role routing / orchestration (not designed yet) | **NEXT — NOT STARTED** |
 
 v0.3-A is accepted and its runtime implementation is frozen at the accepted
 candidate (`bcf9627…`); v0.3-A sources were not modified by v0.3-B.
 
-v0.3-B (MCP tool surface) is implemented on `v0.3-b-mcp-tool-surface` as a
-candidate for independent review: see `docs/v0.3/V03B_SPEC.md` and
-`docs/v0.3/V03B_ACCEPTANCE.md`.  It is **unreleased** and makes **no** real model
-call; a real MCP-client smoke is explicitly deferred until after review.
+v0.3-B (MCP tool surface) is **accepted internally and closed** at candidate
+`d058d62341a173414bdba88fe357b08c236c8bb4` on branch `v0.3-b-mcp-tool-surface`:
+see `docs/v0.3/V03B_SPEC.md` and `docs/v0.3/V03B_ACCEPTANCE.md`.  It is
+**unreleased** (package version `0.1.0`, public release `v0.1.0`) and its final
+evidence includes one separately authorized real MCP smoke
+(`PASS — V0.3-B LOCAL REAL MCP SMOKE`: real official MCP Python SDK 2.2.0 client
+-> stdio -> this server -> the accepted v0.3-A bridge -> real OpenCode 1.18.11 ->
+one explicit `opencode-go/deepseek-v4.1-flash` turn, exactly one
+`POST /session/{id}/message`, reply `DEVRELAY_V03B_MCP_OK`).
 
-v0.3-C (role routing / orchestration) has **not** started and must not begin
-without a separate authorization.  See `docs/BACKLOG.md` for deferred,
+v0.3-C (role routing / orchestration) is **NEXT** and has **not** started; it must
+not begin without a separate authorization.  See `docs/BACKLOG.md` for deferred,
 non-blocking follow-ups.
 
-## v0.3-B scope (implemented)
+## v0.3-B scope (implemented, accepted)
 
 1. `src/devrelay/mcp/models.py` — the one stable MCP envelope (`schema_version 1`)
    and the documented MCP input bounds.
