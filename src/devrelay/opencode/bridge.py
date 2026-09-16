@@ -9,15 +9,24 @@ configured, already-running OpenCode server**:
 * explicit operation states, explicit per-request accounting, no retries, no
   autonomous orchestration, no approval decisions.
 
-Hard validation failures (bad configuration, unknown session, workspace
-mismatch, unsupported capability raised by the caller) raise; provider
-conditions (transport failure, timeout, HTTP error, malformed response) are
-returned as :class:`OpenCodeOperationResult` states so a caller can never mistake
-them for success.
+Two rules drive the error model:
+
+* **hard validation failures raise** (bad configuration, invalid session id,
+  unknown session, workspace mismatch) - they are user/programming errors;
+* **provider conditions are returned** as :class:`OpenCodeOperationResult` states
+  (unavailable, timeout, malformed, interrupt unsupported, reply still pending)
+  so a caller can never mistake them for success.
+
+v0.3-A remediation notes: ``wait_idle`` obeys a whole-operation deadline (every
+request is clamped to the remaining budget), ``read_messages`` keeps the *newest*
+messages of the provider payload, ``send_prompt`` correlates a reply against a
+boundary taken before submission, and ``interrupt`` distinguishes an accepted
+abort request from a verified terminal state.
 """
 
 from __future__ import annotations
 
+import os
 import time
 from pathlib import Path
 from typing import Any, Callable, Mapping, Sequence
@@ -26,7 +35,6 @@ from devrelay.errors import (
     OpenCodeConfigError,
     OpenCodeSessionNotFoundError,
     OpenCodeSessionWorkspaceMismatchError,
-    OpenCodeUnsupportedError,
 )
 from devrelay.opencode.accounting import (
     FilesystemOpenCodeLedger,
@@ -38,6 +46,7 @@ from devrelay.opencode.models import (
     MAX_MESSAGES,
     MAX_PARTS,
     MAX_SESSIONS,
+    MAX_STATE_DEPTH,
     MAX_TEXT_CHARS,
     MAX_TITLE_CHARS,
     MAX_WORKSPACE_CHARS,
@@ -53,6 +62,7 @@ from devrelay.opencode.models import (
     OpenCodeSessionState,
     _clean,
     prompt_digest,
+    valid_session_id,
 )
 from devrelay.opencode.transport import OpenCodePaths, OpenCodeTransport, TransportResponse
 from devrelay.models import utcnow_iso
@@ -61,6 +71,10 @@ from devrelay.models import utcnow_iso
 CAP_INTERRUPT = "interrupt"
 CAP_LIST_SESSIONS = "list_sessions"
 CAP_MESSAGES = "messages"
+
+#: The provider payload may deliver more messages than we keep; the newest ones
+#: always win.  This is a *local* window, not server pagination.
+HARD_MAX_MESSAGES = MAX_MESSAGES
 
 _SESSION_STATE_MAP = {
     "idle": OpenCodeSessionState.IDLE,
@@ -74,15 +88,35 @@ _SESSION_STATE_MAP = {
     "failed": OpenCodeSessionState.ERROR,
 }
 
+#: Role markers accepted as an assistant message (provider spellings).
+_ASSISTANT_ROLES = {"assistant", "ai", "model"}
 
-def _normalize_state(value: object) -> OpenCodeSessionState:
-    if isinstance(value, dict):
-        for key in ("state", "status", "type"):
-            if key in value:
-                return _normalize_state(value[key])
-        return OpenCodeSessionState.UNKNOWN
-    text = str(value or "").strip().lower()
-    return _SESSION_STATE_MAP.get(text, OpenCodeSessionState.UNKNOWN)
+#: Keys that indicate a non-message envelope even when it carries an ``id``.
+_ENVELOPE_KEYS = ("directory", "workspace", "cwd", "session_id", "worktree")
+
+
+def _normalize_state(
+    value: object, *, max_depth: int = MAX_STATE_DEPTH
+) -> tuple[OpenCodeSessionState, bool]:
+    """Bounded iterative unwrapping of provider state.
+
+    Returns ``(state, overflow)``; ``overflow`` is True when the provider nested
+    state deeper than ``max_depth`` (malformed/protocol condition) - never an
+    uncaught ``RecursionError``.
+    """
+    current = value
+    for _ in range(max_depth):
+        if isinstance(current, dict):
+            for key in ("state", "status", "type"):
+                if key in current:
+                    current = current[key]
+                    break
+            else:
+                return OpenCodeSessionState.UNKNOWN, False
+            continue
+        text = str(current or "").strip().lower()
+        return _SESSION_STATE_MAP.get(text, OpenCodeSessionState.UNKNOWN), False
+    return OpenCodeSessionState.UNKNOWN, True
 
 
 def _first(mapping: Mapping[str, Any], *keys: str) -> Any:
@@ -119,11 +153,19 @@ class OpenCodeBridge:
                 "opencode.base_url is required: configure the OpenCode server "
                 "endpoint explicitly (DevRelay never scans for servers)"
             )
+        if max_messages > HARD_MAX_MESSAGES:
+            # No server pagination is implemented in v0.3-A, so a larger window
+            # could not be honoured honestly.
+            raise OpenCodeConfigError(
+                f"opencode.max_messages must be <= {HARD_MAX_MESSAGES} "
+                "(v0.3-A has no server-side pagination; the provider payload is "
+                "windowed locally and the newest messages are kept)"
+            )
         self.base_url = str(base_url).strip().rstrip("/")
-        self.workspace_root = str(Path(workspace_root).resolve())
+        self.workspace_root = os.path.normpath(str(Path(workspace_root).resolve()))
         self.idle_timeout_seconds = float(idle_timeout_seconds)
         self.poll_interval_seconds = max(0.05, float(poll_interval_seconds))
-        self.max_messages = max(1, int(max_messages))
+        self.max_messages = max(1, min(int(max_messages), HARD_MAX_MESSAGES))
         self.allow_unknown_workspace = bool(allow_unknown_workspace)
         self.paths = paths or OpenCodePaths()
         self.transport = transport or OpenCodeTransport(
@@ -167,17 +209,14 @@ class OpenCodeBridge:
             capabilities=capabilities,
             detail=detail,
         )
-        return self._complete(
-            result,
-            response,
-            health=health,
-            session=None,
-        )
+        return self._complete(result, health=health)
 
     # ------------------------------------------------------------------
     # 2. list_sessions
     # ------------------------------------------------------------------
-    def list_sessions(self, *, include_other_workspaces: bool = False) -> OpenCodeOperationResult:
+    def list_sessions(
+        self, *, include_other_workspaces: bool = False
+    ) -> OpenCodeOperationResult:
         """List sessions; every session carries its ownership verdict."""
         result, response = self._request("list_sessions", "GET", self.paths.sessions)
         if not response.ok:
@@ -196,7 +235,7 @@ class OpenCodeBridge:
                 continue
             if include_other_workspaces or session.workspace_match:
                 sessions.append(session)
-        return self._complete(result, response, sessions=sessions)
+        return self._complete(result, sessions=sessions)
 
     # ------------------------------------------------------------------
     # 3. get_session
@@ -204,25 +243,16 @@ class OpenCodeBridge:
     def get_session(self, session_id: str) -> OpenCodeOperationResult:
         """Read one explicitly selected session (ownership validated)."""
         session_id = self._require_session_id(session_id)
-        result, response = self._request(
-            "get_session", "GET", self.paths.session_path(session_id), session_id=session_id
+        session, failure, merged, _response = self._fetch_session(
+            "get_session", session_id
         )
-        if not response.ok:
-            if response.status == 404:
-                raise OpenCodeSessionNotFoundError(
-                    f"session {session_id} does not exist on {self.base_url}"
-                )
-            return self._failure(result, response)
-        payload = response.data
-        if isinstance(payload, dict) and isinstance(payload.get("session"), dict):
-            payload = payload["session"]
-        if not isinstance(payload, dict):
-            return self._malformed(result, response, "session payload is not an object")
-        session = self._normalize_session(payload)
-        if not session.session_id:
-            session = session.model_copy(update={"session_id": session_id})
-        self._assert_ownership(session)
-        return self._complete(result, response, session=session)
+        if session is None:
+            if failure is not None:
+                return failure
+            raise OpenCodeSessionNotFoundError(
+                f"session {session_id} does not exist on {self.base_url}"
+            )
+        return self._complete(merged, session=session)
 
     # ------------------------------------------------------------------
     # 4. read_messages
@@ -230,17 +260,23 @@ class OpenCodeBridge:
     def read_messages(
         self, session_id: str, cursor: str | None = None
     ) -> OpenCodeOperationResult:
-        """Read the message window; cursor semantics are explicit."""
+        """Read the message window (newest messages win; cursor is explicit)."""
         session_id = self._require_session_id(session_id)
-        _session, failure, probe = self._probe_ownership("read_messages", session_id)
-        if failure is not None:
+        session, failure, merged, _response = self._fetch_session(
+            "read_messages", session_id
+        )
+        if session is None and failure is not None:
             return failure
+        if session is None:
+            raise OpenCodeSessionNotFoundError(
+                f"session {session_id} does not exist on {self.base_url}"
+            )
         result, response = self._request(
             "read_messages",
             "GET",
             self.paths.messages_path(session_id),
             session_id=session_id,
-            result=probe,
+            result=merged,
         )
         if not response.ok:
             if response.status == 404:
@@ -253,34 +289,49 @@ class OpenCodeBridge:
             raw = _first(raw, "messages", "data", "items")
         if not isinstance(raw, list):
             return self._malformed(result, response, "message list is not an array")
+        provider_count = len(raw)
         messages = [
             message
-            for message in (self._normalize_message(item) for item in raw[:MAX_MESSAGES])
+            for message in (
+                self._normalize_message(item) for item in raw[: MAX_MESSAGES * 10]
+            )
             if message is not None and message.message_id
         ]
+        # P1-2: the *newest* messages are the useful ones - never head-truncate.
+        window_truncated = (
+            len(messages) > self.max_messages or provider_count > MAX_MESSAGES
+        )
+        window = messages[-self.max_messages :]
         cursor_unknown = False
         replayed = False
         if cursor:
-            ids = [message.message_id for message in messages]
+            ids = [message.message_id for message in window]
             if cursor in ids:
                 start = ids.index(cursor) + 1
-                new_messages = messages[start:]
-                replayed = not new_messages
+                new_messages = window[start:]
+                # "Nothing new" is only honest when the cursor is the newest
+                # message actually present in the received payload.
+                replayed = not new_messages and ids[-1] == cursor
             else:
-                # The cursor is outside the current window: report it instead of
+                # The cursor is outside the kept window: report it instead of
                 # silently re-delivering (or dropping) messages.
                 cursor_unknown = True
-                new_messages = messages
+                new_messages = window
         else:
-            new_messages = messages[-self.max_messages :]
+            new_messages = window
         page = OpenCodeMessagePage(
             session_id=session_id,
             messages=new_messages,
-            next_cursor=(new_messages[-1].message_id if new_messages else (cursor or "")),
+            next_cursor=(
+                new_messages[-1].message_id if new_messages else (cursor or "")
+            ),
             cursor_unknown=cursor_unknown,
             replayed=replayed,
+            provider_message_count=provider_count,
+            window_truncated=window_truncated,
+            hard_max_messages=HARD_MAX_MESSAGES,
         )
-        return self._complete(result, response, page=page, messages=new_messages)
+        return self._complete(result, page=page, messages=new_messages)
 
     # ------------------------------------------------------------------
     # 5. send_prompt
@@ -293,16 +344,28 @@ class OpenCodeBridge:
         agent: str = "",
         model: str = "",
     ) -> OpenCodeOperationResult:
-        """Send exactly one prompt to one explicitly selected session."""
+        """Send exactly one prompt and correlate any reply honestly (P1-3)."""
         session_id = self._require_session_id(session_id)
         if not prompt or not prompt.strip():
             raise OpenCodeConfigError("send_prompt requires a non-empty prompt")
-        _session, failure, probe = self._probe_ownership("send_prompt", session_id)
+        _session, failure, merged = self._probe_ownership("send_prompt", session_id)
         if failure is not None:
             return failure
-        body: dict[str, Any] = {
-            "parts": [{"type": "text", "text": prompt}],
-        }
+        # Boundary BEFORE submission: everything already visible is "old".
+        boundary_result = self.read_messages(session_id)
+        if not boundary_result.ok:
+            return self._as_operation(boundary_result, "send_prompt", session_id)
+        known_ids = {message.message_id for message in boundary_result.messages}
+        boundary_cursor = (
+            boundary_result.page.next_cursor if boundary_result.page is not None else ""
+        )
+        merged = merged.model_copy(
+            update={
+                "call_ids": list(merged.call_ids) + list(boundary_result.call_ids),
+                "request_count": merged.request_count + boundary_result.request_count,
+            }
+        )
+        body: dict[str, Any] = {"parts": [{"type": "text", "text": prompt}]}
         if agent:
             body["agent"] = agent
         if model:
@@ -316,7 +379,7 @@ class OpenCodeBridge:
             prompt=prompt,
             agent=agent,
             model=model,
-            result=probe,
+            result=merged,
         )
         if not response.ok:
             if response.status == 404:
@@ -324,20 +387,87 @@ class OpenCodeBridge:
                     f"session {session_id} has no prompt endpoint on {self.base_url}"
                 )
             return self._failure(result, response)
-        message = self._assistant_from_payload(response.data)
-        if message is None:
-            # Some servers answer with an acknowledgement only: read the window
-            # instead of guessing (still exactly one extra issued request).
-            follow_up = self.read_messages(session_id)
-            if follow_up.state is OpenCodeOperationState.COMPLETED and follow_up.messages:
-                message = follow_up.messages[-1]
-                result.call_ids.extend(follow_up.call_ids)
-                result.request_count += follow_up.request_count
-        return self._complete(
-            result,
-            response,
-            session=None,
-            messages=[message] if message is not None else [],
+
+        # ---- inline candidate: only an explicit, *new* assistant message -----
+        candidate = self._assistant_from_payload(response.data)
+        if candidate is not None and candidate.message_id not in known_ids:
+            return self._complete(
+                result, messages=[candidate], reply_boundary=boundary_cursor
+            )
+
+        # ---- ack-only / asynchronous: one explicit follow-up read ------------
+        follow_up = self._read_after_prompt(session_id, boundary_cursor, result)
+        if follow_up.state is OpenCodeOperationState.MALFORMED_RESPONSE:
+            return follow_up
+        if not follow_up.ok:
+            # The prompt WAS accepted: never suggest it was not submitted, never
+            # encourage a transparent resubmission.
+            return follow_up.model_copy(
+                update={
+                    "operation": "send_prompt",
+                    "session_id": session_id,
+                    "reply_pending": True,
+                    "reply_boundary": boundary_cursor,
+                    "follow_up_state": follow_up.state.value,
+                }
+            )
+        fresh = [
+            message
+            for message in follow_up.messages
+            if message.role == "assistant" and message.message_id not in known_ids
+        ]
+        if fresh:
+            return follow_up.model_copy(
+                update={
+                    "operation": "send_prompt",
+                    "session_id": session_id,
+                    "reply_pending": False,
+                    "reply_boundary": boundary_cursor,
+                    "follow_up_state": follow_up.state.value,
+                    "messages": [fresh[-1]],
+                }
+            )
+        return follow_up.model_copy(
+            update={
+                "operation": "send_prompt",
+                "session_id": session_id,
+                "reply_pending": True,
+                "reply_boundary": boundary_cursor,
+                "follow_up_state": follow_up.state.value,
+                "error_type": "reply_pending",
+                "error": (
+                    "the prompt was accepted but no new assistant message was "
+                    "visible yet; DevRelay does not substitute a stale reply and "
+                    "does not resubmit automatically"
+                ),
+                "messages": [],
+            }
+        )
+
+    def _read_after_prompt(
+        self, session_id: str, boundary_cursor: str, prior: OpenCodeOperationResult
+    ) -> OpenCodeOperationResult:
+        """One explicit follow-up read whose accounting always merges (P1-3)."""
+        try:
+            follow_up = self.read_messages(session_id, boundary_cursor or None)
+        except OpenCodeSessionNotFoundError as exc:
+            # Post-acceptance: a vanished session is a follow-up condition, not a
+            # "your prompt was never submitted" failure.
+            return prior.model_copy(
+                update={
+                    "operation": "send_prompt",
+                    "state": OpenCodeOperationState.PROVIDER_UNAVAILABLE,
+                    "completed_at": utcnow_iso(),
+                    "error_type": "follow_up_session_not_found",
+                    "error": str(exc),
+                }
+            )
+        return follow_up.model_copy(
+            update={
+                "call_ids": list(prior.call_ids) + list(follow_up.call_ids),
+                "request_count": prior.request_count + follow_up.request_count,
+                "completed_at": follow_up.completed_at or utcnow_iso(),
+            }
         )
 
     # ------------------------------------------------------------------
@@ -346,28 +476,51 @@ class OpenCodeBridge:
     def wait_idle(
         self, session_id: str, timeout: float | None = None
     ) -> OpenCodeOperationResult:
-        """Poll until the session is idle/terminal or the bound expires."""
+        """Poll until idle/terminal or the whole-operation deadline expires.
+
+        The deadline is established *before* the ownership probe, and every
+        request that participates (probe and polls alike) is clamped to the
+        remaining budget, so the operation can never run past it (P1-1).
+        """
         session_id = self._require_session_id(session_id)
-        _session, failure, probe = self._probe_ownership("wait_idle", session_id)
-        if failure is not None:
-            return failure
         budget = float(self.idle_timeout_seconds if timeout is None else timeout)
-        deadline = self._monotonic() + max(0.0, budget)
-        result = probe.model_copy(
-            update={
-                "operation": "wait_idle",
-                "state": OpenCodeOperationState.IN_FLIGHT,
-                "session": None,
-            }
+        budget = max(0.0, budget)
+        started = self._monotonic()
+        deadline = started + budget
+        result = OpenCodeOperationResult(
+            operation="wait_idle",
+            state=OpenCodeOperationState.IN_FLIGHT,
+            session_id=session_id,
+            started_at=utcnow_iso(),
         )
-        last_session: OpenCodeSession | None = None
+
+        remaining = deadline - self._monotonic()
+        if remaining <= 0:
+            return self._idle_timeout(result, None, budget)
+        session, failure, result, _response = self._fetch_session(
+            "wait_idle", session_id, result=result, timeout_seconds=remaining
+        )
+        if session is None and failure is not None:
+            return failure
+        if session is None:
+            raise OpenCodeSessionNotFoundError(
+                f"session {session_id} does not exist on {self.base_url}"
+            )
+        last_session = session
+        if last_session.state.terminal:
+            return self._complete(result, session=last_session)
+
         while True:
+            remaining = deadline - self._monotonic()
+            if remaining <= 0:
+                return self._idle_timeout(result, last_session, budget)
             result, response = self._request(
                 "wait_idle",
                 "GET",
                 self.paths.session_path(session_id),
                 session_id=session_id,
                 result=result,
+                timeout_seconds=remaining,
             )
             if not response.ok:
                 if response.status == 404:
@@ -379,37 +532,45 @@ class OpenCodeBridge:
             if isinstance(payload, dict) and isinstance(payload.get("session"), dict):
                 payload = payload["session"]
             if not isinstance(payload, dict):
-                return self._malformed(result, response, "session payload is not an object")
+                return self._malformed(
+                    result, response, "session payload is not an object"
+                )
             session = self._normalize_session(payload)
             if not session.session_id:
                 session = session.model_copy(update={"session_id": session_id})
+            if session.state_overflow:
+                return self._malformed(
+                    result, response, "provider session state nested too deeply"
+                )
             last_session = session
             if session.state.terminal:
-                return self._complete(
-                    result, response, session=session, state=OpenCodeOperationState.COMPLETED
-                )
-            if self._monotonic() >= deadline:
-                finished = self._settle(
-                    result,
-                    response,
-                    state=OpenCodeCallState.COMPLETED,
-                    http_status=response.status,
-                )
-                finished = finished.model_copy(
-                    update={
-                        "state": OpenCodeOperationState.TIMED_OUT,
-                        "session": session,
-                        "completed_at": utcnow_iso(),
-                        "error_type": "idle_timeout",
-                        "error": (
-                            f"session {session_id} was still "
-                            f"{session.state.value} after {budget:g}s; no retry is "
-                            "attempted"
-                        ),
-                    }
-                )
-                return finished
-            self._sleep(self.poll_interval_seconds)
+                return self._complete(result, session=session)
+            remaining = deadline - self._monotonic()
+            if remaining <= 0:
+                return self._idle_timeout(result, last_session, budget)
+            # Never sleep past the deadline.
+            self._sleep(min(self.poll_interval_seconds, remaining))
+
+    def _idle_timeout(
+        self,
+        result: OpenCodeOperationResult,
+        session: OpenCodeSession | None,
+        budget: float,
+    ) -> OpenCodeOperationResult:
+        """Explicit TIMED_OUT with *actual* whole-operation duration evidence."""
+        return result.model_copy(
+            update={
+                "state": OpenCodeOperationState.TIMED_OUT,
+                "session": session,
+                "completed_at": utcnow_iso(),
+                "duration_ms": self._elapsed_ms(result),
+                "error_type": "idle_timeout",
+                "error": (
+                    f"session did not become idle/terminal within {budget:g}s; "
+                    "no retry is attempted and no polling continues after return"
+                ),
+            }
+        )
 
     # ------------------------------------------------------------------
     # 7. interrupt
@@ -417,7 +578,7 @@ class OpenCodeBridge:
     def interrupt(self, session_id: str) -> OpenCodeOperationResult:
         """Abort an in-flight operation (capability must be supported)."""
         session_id = self._require_session_id(session_id)
-        _session, failure, probe = self._probe_ownership("interrupt", session_id)
+        _session, failure, merged = self._probe_ownership("interrupt", session_id)
         if failure is not None:
             return failure
         result, response = self._request(
@@ -425,32 +586,42 @@ class OpenCodeBridge:
             "POST",
             self.paths.abort_path(session_id),
             session_id=session_id,
-            result=probe,
+            result=merged,
+            expect_json=False,
         )
-        if response.status in (404, 405, 501):
-            settle = self._settle(
-                result, response, state=OpenCodeCallState.PROVIDER_UNAVAILABLE,
-                http_status=response.status,
+        if response.state is OpenCodeCallState.MALFORMED_RESPONSE:
+            # Oversized/unusable interrupt responses are their own condition; they
+            # are never reported as "the capability is unsupported" (P2-C).
+            return self._malformed(
+                result, response, "interrupt response was unusable"
             )
-            return settle.model_copy(
-                update={
-                    "state": OpenCodeOperationState.PROVIDER_UNAVAILABLE,
-                    "error_type": "interrupt_unsupported",
-                    "error": (
-                        f"the configured server does not support interrupting "
-                        f"session {session_id} (HTTP {response.status}); DevRelay "
-                        "will not claim the operation was cancelled"
-                    ),
-                    "completed_at": utcnow_iso(),
-                }
+        if response.status == 404:
+            return self._as_state(
+                result,
+                OpenCodeOperationState.PROVIDER_UNAVAILABLE,
+                "interrupt_session_not_found",
+                f"session {session_id} no longer exists on {self.base_url}; the "
+                "abort was not applied",
+            )
+        if response.status in (405, 501):
+            return self._as_state(
+                result,
+                OpenCodeOperationState.PROVIDER_UNAVAILABLE,
+                "interrupt_unsupported",
+                "the configured server does not support interrupting session "
+                f"{session_id} (HTTP {response.status}); DevRelay will not claim "
+                "the operation was cancelled",
             )
         if not response.ok:
             return self._failure(result, response)
-        return self._complete(
+        # 2xx (including an empty 204) means the abort request was accepted.  It
+        # is *not* a verified terminal state, and DevRelay says so explicitly.
+        return self._as_state(
             result,
-            response,
-            state=OpenCodeOperationState.INTERRUPTED,
-            session=None,
+            OpenCodeOperationState.INTERRUPTED,
+            "",
+            "",
+            interrupt_verified=False,
         )
 
     # ------------------------------------------------------------------
@@ -463,42 +634,36 @@ class OpenCodeBridge:
                 "an explicit session id is required (v0.3-A never guesses the "
                 "'most recent' session)"
             )
-        if len(value) > MAX_ID_CHARS:
-            raise OpenCodeConfigError("session id is implausibly long")
+        if not valid_session_id(value):
+            # P2-B: identifiers are interpolated into URL paths, so anything that
+            # could change the path meaning (``/``, ``?``, ``#``, whitespace,
+            # control characters, traversal, overlong ids) is rejected before a
+            # request is constructed.
+            raise OpenCodeConfigError(
+                "session id is not a valid opaque OpenCode identifier "
+                "(allowed: unreserved characters [A-Za-z0-9._~-], length 1-200, "
+                "no path separators, query/fragment markers or traversal)"
+            )
         return value
 
     def _normalize_workspace(self, value: object) -> tuple[str, bool]:
+        """Normalize a provider-reported workspace identity.
+
+        Only **absolute** paths are trusted: a relative provider value has an
+        undefined base (provider namespace, container, remote host), and assuming
+        DevRelay's own working directory would silently weaken the ownership
+        check.  Relative/ambiguous values are reported as *unknown*, which fails
+        closed unless ``allow_unknown_workspace`` is explicitly set.
+        """
         text = _clean(value, MAX_WORKSPACE_CHARS)
         if not text:
             return "", False
+        if not os.path.isabs(text):
+            return text, False
         try:
-            return str(Path(text).resolve()), True
+            return os.path.normpath(os.path.abspath(text)), True
         except OSError:  # pragma: no cover - defensive
-            return text, True
-
-    def _probe_ownership(
-        self, operation: str, session_id: str
-    ) -> tuple[
-        OpenCodeSession | None, OpenCodeOperationResult | None, OpenCodeOperationResult
-    ]:
-        """Validate ownership; propagate a provider condition instead of guessing.
-
-        Returns ``(session, None)`` when the session is owned by this workspace,
-        ``(None, failure_result)`` when the probe itself hit a provider condition
-        (the failure keeps its own call accounting and state), and raises for
-        hard validation failures (unknown session / workspace mismatch).
-        """
-        probe = self.get_session(session_id)
-        if probe.ok and probe.session is not None:
-            return probe.session, None, probe
-        failure = probe.model_copy(
-            update={
-                "operation": operation,
-                "session_id": session_id,
-                "completed_at": probe.completed_at or utcnow_iso(),
-            }
-        )
-        return None, failure, probe
+            return text, False
 
     def _assert_ownership(self, session: OpenCodeSession | None) -> None:
         """Hard failure: a session must belong to the configured workspace."""
@@ -508,9 +673,10 @@ class OpenCodeBridge:
             if self.allow_unknown_workspace:
                 return
             raise OpenCodeSessionWorkspaceMismatchError(
-                f"session {session.session_id} does not report a workspace; "
-                "DevRelay cannot prove it belongs to this repository (set "
-                "opencode.allow_unknown_workspace explicitly to accept that risk)"
+                f"session {session.session_id} does not report an absolute "
+                "workspace path; DevRelay cannot prove it belongs to this "
+                "repository (set opencode.allow_unknown_workspace explicitly to "
+                "accept that risk)"
             )
         if not session.workspace_match:
             raise OpenCodeSessionWorkspaceMismatchError(
@@ -523,7 +689,9 @@ class OpenCodeBridge:
     # normalization
     # ------------------------------------------------------------------
     def _normalize_session(self, payload: Mapping[str, Any]) -> OpenCodeSession:
-        session_id = _clean(_first(payload, "id", "session_id", "sessionID"), MAX_ID_CHARS)
+        session_id = _clean(
+            _first(payload, "id", "session_id", "sessionID"), MAX_ID_CHARS
+        )
         workspace_raw = _first(
             payload, "workspace", "directory", "cwd", "worktree", "path", "project"
         )
@@ -531,27 +699,29 @@ class OpenCodeBridge:
             workspace_raw = _first(workspace_raw, "path", "directory", "cwd")
         workspace, workspace_known = self._normalize_workspace(workspace_raw)
         match = bool(workspace_known and workspace == self.workspace_root)
+        state, state_overflow = _normalize_state(_first(payload, "state", "status"))
         return OpenCodeSession(
             session_id=session_id,
             workspace=workspace,
             workspace_known=workspace_known,
             workspace_match=match,
             title=_clean(_first(payload, "title", "name", "summary"), MAX_TITLE_CHARS),
-            state=_normalize_state(_first(payload, "state", "status")),
+            state=state,
+            state_overflow=state_overflow,
             agent=_clean(_first(payload, "agent", "agent_name"), 64),
-            model=_clean(
-                _first(payload, "model", "model_id", "modelID"), 128
-            )
-            if not isinstance(_first(payload, "model", "model_id", "modelID"), dict)
-            else _clean(
-                _first(_first(payload, "model", "model_id", "modelID"), "id", "name"),
-                128,
-            ),
+            model=self._normalize_model(payload),
             updated_at=_clean(
                 _first(payload, "updated_at", "updatedAt", "time", "created_at"), 64
             ),
             parent_id=_clean(_first(payload, "parent_id", "parentID"), MAX_ID_CHARS),
         )
+
+    @staticmethod
+    def _normalize_model(payload: Mapping[str, Any]) -> str:
+        raw = _first(payload, "model", "model_id", "modelID")
+        if isinstance(raw, dict):
+            raw = _first(raw, "id", "name")
+        return _clean(raw, 128)
 
     def _normalize_message(self, payload: Any) -> OpenCodeMessage | None:
         if not isinstance(payload, dict):
@@ -565,16 +735,20 @@ class OpenCodeBridge:
         role_raw = _first(info, "role", "type")
         role = str(role_raw or "unknown").strip().lower()
         if role not in ("assistant", "user", "system"):
-            role = "assistant" if role in ("ai", "model") else "unknown"
+            role = "assistant" if role in _ASSISTANT_ROLES else "unknown"
         parts: list[OpenCodeMessagePart] = []
         raw_parts = _first(payload, "parts", "content", "blocks")
         if isinstance(raw_parts, str):
-            parts.append(OpenCodeMessagePart(kind="text", text=_clean(raw_parts, MAX_TEXT_CHARS)))
+            parts.append(
+                OpenCodeMessagePart(kind="text", text=_clean(raw_parts, MAX_TEXT_CHARS))
+            )
         elif isinstance(raw_parts, list):
             for item in raw_parts[:MAX_PARTS]:
                 if isinstance(item, str):
                     parts.append(
-                        OpenCodeMessagePart(kind="text", text=_clean(item, MAX_TEXT_CHARS))
+                        OpenCodeMessagePart(
+                            kind="text", text=_clean(item, MAX_TEXT_CHARS)
+                        )
                     )
                     continue
                 if not isinstance(item, dict):
@@ -583,43 +757,62 @@ class OpenCodeBridge:
                 if kind_raw in ("text", "reasoning"):
                     parts.append(
                         OpenCodeMessagePart(
-                            kind="text", text=_clean(_first(item, "text", "content"), MAX_TEXT_CHARS)
+                            kind="text",
+                            text=_clean(
+                                _first(item, "text", "content"), MAX_TEXT_CHARS
+                            ),
                         )
                     )
                 elif kind_raw in ("tool", "tool-call", "tool_use", "tool_result"):
                     parts.append(
                         OpenCodeMessagePart(
                             kind="tool",
-                            name=_clean(
-                                _first(item, "tool", "name", "tool_name"), 128
-                            ),
+                            name=_clean(_first(item, "tool", "name", "tool_name"), 128),
                         )
                     )
                 else:
                     parts.append(OpenCodeMessagePart(kind="other"))
         text = _first(info, "text", "summary")
         if not parts and isinstance(text, str):
-            parts.append(OpenCodeMessagePart(kind="text", text=_clean(text, MAX_TEXT_CHARS)))
+            parts.append(
+                OpenCodeMessagePart(kind="text", text=_clean(text, MAX_TEXT_CHARS))
+            )
         return OpenCodeMessage(
             message_id=message_id,
             role=role,
-            created_at=_clean(
-                _first(info, "created_at", "createdAt", "time"), 64
-            ),
+            created_at=_clean(_first(info, "created_at", "createdAt", "time"), 64),
             parts=parts,
         )
 
     def _assistant_from_payload(self, payload: Any) -> OpenCodeMessage | None:
+        """Accept an inline reply only when it is an explicit assistant message.
+
+        A session object, a result envelope or any arbitrary id-bearing dict is
+        **not** a reply (P1-3); those are rejected here and handled by the
+        follow-up path instead.
+        """
+        candidates: list[Any] = []
         if isinstance(payload, dict):
-            for key in ("message", "result", "data"):
+            for key in ("message", "reply", "result", "data"):
                 candidate = payload.get(key)
                 if isinstance(candidate, dict):
-                    message = self._normalize_message(candidate)
-                    if message is not None:
-                        return message
-            message = self._normalize_message(payload)
-            if message is not None:
-                return message
+                    candidates.append(candidate)
+            candidates.append(payload)
+        for candidate in candidates:
+            if not isinstance(candidate, dict):
+                continue
+            if any(key in candidate for key in _ENVELOPE_KEYS) and not isinstance(
+                candidate.get("info"), dict
+            ):
+                continue  # looks like a session/envelope, not a message
+            message = self._normalize_message(candidate)
+            if message is None or not message.message_id:
+                continue
+            if message.role != "assistant":
+                continue
+            if not message.parts:
+                continue
+            return message
         return None
 
     # ------------------------------------------------------------------
@@ -637,6 +830,8 @@ class OpenCodeBridge:
         agent: str = "",
         model: str = "",
         result: OpenCodeOperationResult | None = None,
+        timeout_seconds: float | None = None,
+        expect_json: bool = True,
     ) -> tuple[OpenCodeOperationResult, TransportResponse]:
         """Issue exactly one request, recording it before it leaves the machine."""
         call_id = self.ledger.allocate_call_id()
@@ -657,7 +852,14 @@ class OpenCodeBridge:
             model=_clean(model, 128),
         )
         self.ledger.begin(record)
-        response = self.transport.request(method, path, json_body=json_body)
+        response = self.transport.request(
+            method,
+            path,
+            json_body=json_body,
+            timeout_seconds=timeout_seconds,
+            redact_values=(prompt,) if prompt else (),
+            expect_json=expect_json,
+        )
         settled = record.model_copy(
             update={
                 "state": response.state,
@@ -688,10 +890,98 @@ class OpenCodeBridge:
         )
         return base, response
 
+    def _fetch_session(
+        self,
+        operation: str,
+        session_id: str,
+        *,
+        result: OpenCodeOperationResult | None = None,
+        timeout_seconds: float | None = None,
+    ) -> tuple[
+        OpenCodeSession | None,
+        OpenCodeOperationResult | None,
+        OpenCodeOperationResult,
+        TransportResponse,
+    ]:
+        """Fetch + validate one session, returning merged accounting.
+
+        Returns ``(session, failure, merged_result, response)``.  A ``404`` yields
+        ``(None, None, merged, response)`` so the caller can decide between a hard
+        not-found failure and an honest post-acceptance result.
+        """
+        merged, response = self._request(
+            operation,
+            "GET",
+            self.paths.session_path(session_id),
+            session_id=session_id,
+            result=result,
+            timeout_seconds=timeout_seconds,
+        )
+        if response.status == 404:
+            return None, None, merged, response
+        if not response.ok:
+            return None, self._failure(merged, response), merged, response
+        payload = response.data
+        if isinstance(payload, dict) and isinstance(payload.get("session"), dict):
+            payload = payload["session"]
+        if not isinstance(payload, dict):
+            return (
+                None,
+                self._malformed(merged, response, "session payload is not an object"),
+                merged,
+                response,
+            )
+        session = self._normalize_session(payload)
+        if session.session_id and session.session_id != session_id:
+            # The endpoint contract supplied an id that is not the requested one.
+            return (
+                None,
+                self._malformed(
+                    merged,
+                    response,
+                    f"server returned session {session.session_id!r} for request "
+                    f"{session_id!r}",
+                ),
+                merged,
+                response,
+            )
+        if not session.session_id:
+            session = session.model_copy(update={"session_id": session_id})
+        if session.state_overflow:
+            return (
+                None,
+                self._malformed(
+                    merged, response, "provider session state nested too deeply"
+                ),
+                merged,
+                response,
+            )
+        self._assert_ownership(session)
+        return session, None, merged, response
+
+    def _probe_ownership(
+        self, operation: str, session_id: str
+    ) -> tuple[
+        OpenCodeSession | None, OpenCodeOperationResult | None, OpenCodeOperationResult
+    ]:
+        """Ownership probe: hard failure for unknown/mismatched sessions."""
+        session, failure, merged, _response = self._fetch_session(
+            operation, session_id
+        )
+        if session is None:
+            if failure is not None:
+                return None, failure, merged
+            raise OpenCodeSessionNotFoundError(
+                f"session {session_id} does not exist on {self.base_url}"
+            )
+        return session, None, merged
+
+    # ------------------------------------------------------------------
+    # result shaping
+    # ------------------------------------------------------------------
     def _complete(
         self,
         result: OpenCodeOperationResult,
-        response: TransportResponse,
         *,
         state: OpenCodeOperationState = OpenCodeOperationState.COMPLETED,
         health: OpenCodeHealth | None = None,
@@ -699,27 +989,54 @@ class OpenCodeBridge:
         sessions: Sequence[OpenCodeSession] | None = None,
         page: OpenCodeMessagePage | None = None,
         messages: Sequence[OpenCodeMessage] | None = None,
+        reply_boundary: str = "",
     ) -> OpenCodeOperationResult:
         return result.model_copy(
             update={
                 "state": state,
                 "completed_at": utcnow_iso(),
-                "duration_ms": sum(
-                    record.duration_ms for record in self._records_for(result)
-                ),
+                "duration_ms": self._elapsed_ms(result),
                 "health": health if health is not None else result.health,
                 "session": session if session is not None else result.session,
-                "sessions": list(sessions) if sessions is not None else list(result.sessions),
+                "sessions": (
+                    list(sessions) if sessions is not None else list(result.sessions)
+                ),
                 "page": page if page is not None else result.page,
-                "messages": list(messages) if messages is not None else list(result.messages),
+                "messages": (
+                    list(messages) if messages is not None else list(result.messages)
+                ),
+                "reply_boundary": reply_boundary or result.reply_boundary,
                 "error_type": "",
                 "error": "",
             }
         )
 
-    def _records_for(self, result: OpenCodeOperationResult) -> list[OpenCodeCallRecord]:
-        wanted = set(result.call_ids)
-        return [record for record in self.ledger.records() if record.call_id in wanted]
+    def _as_state(
+        self,
+        result: OpenCodeOperationResult,
+        state: OpenCodeOperationState,
+        error_type: str,
+        error: str,
+        *,
+        interrupt_verified: bool | None = None,
+    ) -> OpenCodeOperationResult:
+        update: dict[str, Any] = {
+            "state": state,
+            "completed_at": utcnow_iso(),
+            "duration_ms": self._elapsed_ms(result),
+            "error_type": error_type,
+            "error": error,
+        }
+        if interrupt_verified is not None:
+            update["interrupt_verified"] = interrupt_verified
+        return result.model_copy(update=update)
+
+    def _as_operation(
+        self, result: OpenCodeOperationResult, operation: str, session_id: str
+    ) -> OpenCodeOperationResult:
+        return result.model_copy(
+            update={"operation": operation, "session_id": session_id}
+        )
 
     def _failure(
         self, result: OpenCodeOperationResult, response: TransportResponse
@@ -734,9 +1051,7 @@ class OpenCodeBridge:
             update={
                 "state": state,
                 "completed_at": utcnow_iso(),
-                "duration_ms": sum(
-                    record.duration_ms for record in self._records_for(result)
-                ),
+                "duration_ms": self._elapsed_ms(result),
                 "http_status": response.status,
                 "error_type": response.error_type or "provider_unavailable",
                 "error": response.error,
@@ -750,37 +1065,18 @@ class OpenCodeBridge:
             update={
                 "state": OpenCodeOperationState.MALFORMED_RESPONSE,
                 "completed_at": utcnow_iso(),
-                "duration_ms": sum(
-                    record.duration_ms for record in self._records_for(result)
-                ),
+                "duration_ms": self._elapsed_ms(result),
                 "http_status": response.status,
                 "error_type": response.error_type or "unexpected_shape",
                 "error": detail,
             }
         )
 
-    def _settle(
-        self,
-        result: OpenCodeOperationResult,
-        response: TransportResponse,
-        *,
-        state: OpenCodeCallState,
-        http_status: int | None,
-    ) -> OpenCodeOperationResult:
-        """Settle the *last* call of ``result`` explicitly (interrupt/timeout)."""
-        if result.call_ids:
-            call_id = result.call_ids[-1]
-            existing = next(
-                (r for r in self.ledger.records() if r.call_id == call_id), None
-            )
-            if existing is not None:
-                self.ledger.finish(
-                    existing.model_copy(
-                        update={
-                            "state": state,
-                            "http_status": http_status,
-                            "completed_at": utcnow_iso(),
-                        }
-                    )
-                )
-        return result
+    def _elapsed_ms(self, result: OpenCodeOperationResult) -> int:
+        """Actual total operation duration, from the recorded per-call evidence."""
+        total = 0
+        wanted = set(result.call_ids)
+        for record in self.ledger.records():
+            if record.call_id in wanted:
+                total += record.duration_ms
+        return max(total, 0)

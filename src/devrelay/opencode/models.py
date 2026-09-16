@@ -20,6 +20,7 @@ State vocabulary for one bridge operation (explicit by design):
 from __future__ import annotations
 
 import hashlib
+import re
 from enum import Enum
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -29,11 +30,29 @@ from devrelay.models import utcnow_iso
 # Caps for everything the server can influence.
 MAX_TEXT_CHARS = 8_000
 MAX_PARTS = 200
-MAX_MESSAGES = 200
+MAX_MESSAGES = 200          # hard local maximum (no server pagination in v0.3-A)
 MAX_SESSIONS = 500
 MAX_TITLE_CHARS = 300
 MAX_ID_CHARS = 200
 MAX_WORKSPACE_CHARS = 1_024
+MAX_STATE_DEPTH = 8         # bounded provider-state unwrapping (no recursion)
+
+# Opaque OpenCode identifiers: unreserved characters only.  Anything that could
+# change the meaning of a URL path (``/``, ``?``, ``#``, whitespace, control
+# chars, traversal forms) is rejected before a request is constructed.
+SESSION_ID_RE = re.compile(r"^[A-Za-z0-9._~-]{1,200}$")
+SESSION_ID_MAX = 200
+
+
+def valid_session_id(value: object) -> bool:
+    """True when *value* is safe to interpolate into a URL path."""
+    if not isinstance(value, str):
+        return False
+    if not SESSION_ID_RE.match(value):
+        return False
+    # Belt and braces: refuse traversal-shaped identifiers even if the grammar
+    # ever changes (``..`` is technically two unreserved characters).
+    return ".." not in value
 
 
 class OpenCodeSessionState(str, Enum):
@@ -107,6 +126,10 @@ class OpenCodeSession(BaseModel):
     workspace_match: bool = False
     title: str = ""
     state: OpenCodeSessionState = OpenCodeSessionState.UNKNOWN
+    # True when the provider state could not be unwrapped within the bounded
+    # depth budget: the caller fails closed (protocol/malformed) instead of
+    # recursing without limit.
+    state_overflow: bool = False
     agent: str = ""
     model: str = ""
     updated_at: str = ""
@@ -151,6 +174,11 @@ class OpenCodeMessagePage(BaseModel):
     next_cursor: str = ""
     cursor_unknown: bool = False   # the requested cursor is no longer available
     replayed: bool = False         # nothing new since the requested cursor
+    # Explicit window metadata: the provider payload is tail-windowed (newest
+    # messages are kept), never head-truncated.
+    provider_message_count: int = 0
+    window_truncated: bool = False
+    hard_max_messages: int = MAX_MESSAGES
 
 
 class OpenCodeOperationResult(BaseModel):
@@ -180,6 +208,14 @@ class OpenCodeOperationResult(BaseModel):
     sessions: list[OpenCodeSession] = Field(default_factory=list)
     page: OpenCodeMessagePage | None = None
     messages: list[OpenCodeMessage] = Field(default_factory=list)
+    # send_prompt correlation evidence (P1-3): the boundary taken before the
+    # submission, whether a reply is still pending, and the follow-up outcome.
+    reply_pending: bool = False
+    reply_boundary: str = ""
+    follow_up_state: str = ""
+    # interrupt (P2-C): an accepted abort request is not a verified terminal
+    # state, and v0.3-A says exactly that.
+    interrupt_verified: bool = False
 
     @property
     def ok(self) -> bool:

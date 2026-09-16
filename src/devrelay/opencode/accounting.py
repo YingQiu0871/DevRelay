@@ -16,6 +16,7 @@ import json
 from pathlib import Path
 from typing import Any, Protocol
 
+from devrelay.errors import OpenCodeLedgerError
 from devrelay.opencode.models import OpenCodeCallRecord
 from devrelay.redact import sanitize
 
@@ -67,24 +68,58 @@ class FilesystemOpenCodeLedger:
         self._records: list[OpenCodeCallRecord] = []
 
     # ------------------------------------------------------------------
-    def _read_sequence(self) -> int:
+    def _existing_ids(self) -> list[int]:
+        if not self.calls_dir.is_dir():
+            return []
+        numbers: list[int] = []
+        for path in self.calls_dir.glob("OC-*.json"):
+            try:
+                numbers.append(int(path.stem.split("-", 1)[1]))
+            except (IndexError, ValueError):
+                continue
+        return numbers
+
+    def _read_sequence(self) -> int | None:
+        """Persisted next-sequence value, or ``None`` when it is absent.
+
+        A *corrupt* sequence is a hard failure: silently restarting at ``OC-0001``
+        could reuse an existing call identity (P2-E).
+        """
         if not self.sequence_path.is_file():
-            return 0
+            return None
         try:
             payload: Any = json.loads(self.sequence_path.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError):
-            return 0
+        except (OSError, json.JSONDecodeError) as exc:
+            raise OpenCodeLedgerError(
+                f"OpenCode call sequence {self.sequence_path} is unreadable "
+                f"({type(exc).__name__}); refusing to allocate call identities "
+                "because numbering could be reused"
+            ) from exc
         value = payload.get("next_call_sequence") if isinstance(payload, dict) else None
-        return int(value) if isinstance(value, int) and value > 0 else 0
+        if not isinstance(value, int) or isinstance(value, bool) or value < 1:
+            raise OpenCodeLedgerError(
+                f"OpenCode call sequence {self.sequence_path} is malformed "
+                "(expected {'next_call_sequence': <int >= 1>}); refusing to "
+                "allocate call identities because numbering could be reused"
+            )
+        return value
 
     def allocate_call_id(self) -> str:
-        """Durable, monotonic, never-reused call identity."""
-        sequence = max(1, self._read_sequence())
+        """Durable, monotonic, never-reused call identity.
+
+        A missing sequence file is recovered from the existing ledger
+        (``max(existing) + 1``); a torn/corrupt one fails closed.  A crash gap is
+        acceptable, reuse is not.
+        """
+        existing = self._existing_ids()
+        floor = (max(existing) + 1) if existing else 1
+        persisted = self._read_sequence()
+        sequence = max(persisted or 1, floor)
         self.root.mkdir(parents=True, exist_ok=True)
-        self.sequence_path.write_text(
-            json.dumps({"next_call_sequence": sequence + 1}, indent=2),
-            encoding="utf-8",
-        )
+        payload = json.dumps({"next_call_sequence": sequence + 1}, indent=2)
+        tmp = self.sequence_path.with_name(f".{self.sequence_path.name}.tmp")
+        tmp.write_text(payload, encoding="utf-8")
+        tmp.replace(self.sequence_path)
         return f"OC-{sequence:04d}"
 
     # ------------------------------------------------------------------
@@ -102,11 +137,24 @@ class FilesystemOpenCodeLedger:
         tmp.replace(target)
 
     def begin(self, record: OpenCodeCallRecord) -> None:
+        """Record a *new* call immutably; an existing id must never be reused."""
         record = record.model_copy(
             update={"error": sanitize(record.error)[:500] if record.error else ""}
         )
         self._records.append(record)
-        self._write(record)
+        self.calls_dir.mkdir(parents=True, exist_ok=True)
+        target = self._path(record.call_id)
+        data = json.dumps(
+            record.model_dump(mode="json"), indent=2, ensure_ascii=False
+        ).encode("utf-8")
+        try:
+            with open(target, "xb") as handle:
+                handle.write(data)
+        except FileExistsError as exc:
+            raise OpenCodeLedgerError(
+                f"refusing to reuse existing OpenCode call identity "
+                f"{record.call_id} ({target} already exists)"
+            ) from exc
 
     def finish(self, record: OpenCodeCallRecord) -> None:
         record = record.model_copy(

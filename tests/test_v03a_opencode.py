@@ -168,9 +168,11 @@ def test_send_prompt_success_returns_normalized_reply():
     assert len(result.messages) == 1
     reply = result.messages[0]
     assert reply.role == "assistant" and "please fix the widget" in reply.text
-    # every issued request is accounted for: ownership probe + prompt submission
-    assert result.request_count == 2
-    assert len(result.call_ids) == 2
+    # every issued request is accounted for: ownership probe + pre-submission
+    # boundary read (session + messages) + the prompt submission itself
+    assert result.request_count == 4
+    assert len(result.call_ids) == 4
+    assert result.reply_boundary == "msg_02"
     assert stub.prompts[0]["parts"][0]["text"] == "please fix the widget"
 
 
@@ -270,11 +272,19 @@ def test_call_accounting_is_explicit_and_durable(tmp_path):
     assert all(record.external_request_count == 1 for record in records)
     assert all(record.state is OpenCodeCallState.COMPLETED for record in records)
     # the prompt text itself is never persisted - only its hash and length
-    prompts = [record for record in records if record.operation == "send_prompt"]
+    prompts = [
+        record
+        for record in records
+        if record.operation == "send_prompt" and record.method == "POST"
+    ]
     assert prompts and prompts[0].prompt_sha256 and prompts[0].prompt_chars == 5
-    persisted = (tmp_path / ".devrelay" / "opencode" / "calls" / f"{prompts[0].call_id}.json").read_text(
-        encoding="utf-8"
-    )
+    persisted = (
+        tmp_path
+        / ".devrelay"
+        / "opencode"
+        / "calls"
+        / f"{prompts[0].call_id}.json"
+    ).read_text(encoding="utf-8")
     assert "hello" not in persisted
     assert FAKE_SECRET not in persisted
     # sequence is durable and monotonic across a fresh ledger instance

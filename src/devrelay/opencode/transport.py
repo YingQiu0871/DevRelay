@@ -14,12 +14,12 @@ from __future__ import annotations
 import json
 import time
 from dataclasses import dataclass, field
-from typing import Any, Mapping
+from typing import Any, Mapping, Sequence
 
 import httpx
 
 from devrelay.opencode.models import OpenCodeCallState
-from devrelay.redact import sanitize
+from devrelay.redact import redact_text, sanitize
 
 # Response bodies are never echoed in full: bounded read + sanitized snippet.
 MAX_ERROR_SNIPPET_CHARS = 500
@@ -85,6 +85,8 @@ class OpenCodeTransport:
         self.paths = paths or OpenCodePaths()
         self.timeout_seconds = float(timeout_seconds)
         self.max_response_bytes = max(1_024, int(max_response_bytes))
+        # The bearer token must never appear in a persisted error snippet.
+        self._token_redactions = (token,) if token else ()
         headers = {}
         if token:
             headers["Authorization"] = f"Bearer {token}"
@@ -99,6 +101,12 @@ class OpenCodeTransport:
                 base_url=self.base_url,
                 headers=headers,
                 timeout=self.timeout_seconds,
+                # P2-A: the OpenCode control channel is bearer-authenticated and
+                # usually loopback.  Ambient HTTP_PROXY/HTTPS_PROXY/ALL_PROXY/
+                # SSL_CERT_FILE must never silently reroute or intercept it.
+                # DevRelay has no reviewed proxy configuration mechanism, so
+                # ambient environment routing is disabled outright.
+                trust_env=False,
             )
             self._owns_client = True
 
@@ -111,12 +119,32 @@ class OpenCodeTransport:
         json_body: Any | None = None,
         params: Mapping[str, Any] | None = None,
         expect_json: bool = True,
+        timeout_seconds: float | None = None,
+        redact_values: Sequence[str] = (),
     ) -> TransportResponse:
-        """Issue exactly one request; ``state`` always describes the outcome."""
+        """Issue exactly one request; ``state`` always describes the outcome.
+
+        ``timeout_seconds`` overrides the client timeout for this single request
+        (used to clamp a bounded operation to its remaining budget).
+        ``redact_values`` are extra literals (prompt text, bearer token) that must
+        never appear in a persisted error snippet.
+        """
         started = time.monotonic()
+        extra = tuple(
+            value
+            for value in (*self._token_redactions, *redact_values)
+            if value
+        )
+        request_timeout = (
+            self.timeout_seconds if timeout_seconds is None else max(0.001, timeout_seconds)
+        )
         try:
             with self._client.stream(
-                method, path, json=json_body, params=params
+                method,
+                path,
+                json=json_body,
+                params=params,
+                timeout=request_timeout,
             ) as response:
                 body = self._read_bounded(response)
                 status = response.status_code
@@ -125,21 +153,21 @@ class OpenCodeTransport:
             return TransportResponse(
                 state=OpenCodeCallState.TIMED_OUT,
                 error_type="timeout",
-                error=sanitize(f"{type(exc).__name__}: {exc}")[:MAX_ERROR_SNIPPET_CHARS],
+                error=self._clip(f"{type(exc).__name__}: {exc}", extra),
                 duration_ms=self._ms(started),
             )
         except httpx.HTTPError as exc:
             return TransportResponse(
                 state=OpenCodeCallState.PROVIDER_UNAVAILABLE,
                 error_type="transport",
-                error=sanitize(f"{type(exc).__name__}: {exc}")[:MAX_ERROR_SNIPPET_CHARS],
+                error=self._clip(f"{type(exc).__name__}: {exc}", extra),
                 duration_ms=self._ms(started),
             )
         except OSError as exc:  # pragma: no cover - defensive
             return TransportResponse(
                 state=OpenCodeCallState.PROVIDER_UNAVAILABLE,
                 error_type="transport",
-                error=sanitize(f"{type(exc).__name__}: {exc}")[:MAX_ERROR_SNIPPET_CHARS],
+                error=self._clip(f"{type(exc).__name__}: {exc}", extra),
                 duration_ms=self._ms(started),
             )
 
@@ -165,7 +193,7 @@ class OpenCodeTransport:
                 state=OpenCodeCallState.PROVIDER_UNAVAILABLE,
                 status=status,
                 error_type="http_status",
-                error=f"HTTP {status}: {self._snippet(payload_bytes)}",
+                error=f"HTTP {status}: {self._snippet(payload_bytes, extra)}",
                 duration_ms=duration,
                 response_bytes=len(body),
                 headers=headers,
@@ -227,9 +255,14 @@ class OpenCodeTransport:
         return b"".join(chunks)
 
     @staticmethod
-    def _snippet(data: bytes) -> str:
+    def _clip(text: str, extra: Sequence[str]) -> str:
+        """Bounded, sanitized snippet: never persists a raw provider body."""
+        return redact_text(text, extra_values=extra)[:MAX_ERROR_SNIPPET_CHARS]
+
+    @classmethod
+    def _snippet(cls, data: bytes, extra: Sequence[str] = ()) -> str:
         text = data.decode("utf-8", errors="replace").strip()
-        return sanitize(text)[:MAX_ERROR_SNIPPET_CHARS]
+        return cls._clip(text, extra)
 
     @staticmethod
     def _ms(started: float) -> int:

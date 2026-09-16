@@ -264,3 +264,14 @@ class OpenCodeUnsupportedError(OpenCodeError):
     """The configured server does not support a requested capability."""
 
     code = "opencode_unsupported"
+
+
+class OpenCodeLedgerError(OpenCodeError):
+    """OpenCode call-identity accounting could not proceed safely.
+
+    Raised when the durable call sequence is unreadable/torn or when a call
+    identity would have to be reused: v0.3-A fails closed instead of restarting
+    numbering or overwriting an existing record.
+    """
+
+    code = "opencode_ledger_error"

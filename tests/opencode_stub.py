@@ -8,6 +8,8 @@ deterministically.  Failure modes are configured explicitly (never inferred).
 from __future__ import annotations
 
 import json
+import tempfile
+from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
 
@@ -16,7 +18,9 @@ import httpx
 from devrelay.opencode.bridge import OpenCodeBridge
 from devrelay.opencode.transport import OpenCodeTransport
 
-DEFAULT_WORKSPACE = "/ws"
+# Absolute on every platform: provider-reported workspaces are only trusted when
+# absolute (P2/PART III - no implicit resolution against DevRelay's cwd).
+DEFAULT_WORKSPACE = str(Path(tempfile.gettempdir()) / "opencode-stub-ws")
 
 FAKE_SECRET = "sk-live-OPENCODESECRET1234567890ab"
 
