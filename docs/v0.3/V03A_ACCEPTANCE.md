@@ -86,11 +86,36 @@ byte-identically); the 13 that already passed are guards.
 | S10 | PART II-E malformed authorities/ports/control characters/percent-encoded authorities are configuration errors before httpx, and config errors never echo an embedded password | COVERED | `test_malformed_urls_are_configuration_errors`, `test_malformed_authority_never_reaches_httpx`, `test_config_errors_never_echo_an_embedded_password`, `test_accepted_urls_construct_a_transport` |
 | S11 | PART II-F a refused create-new leaves no phantom in-memory ledger record | COVERED | `test_refused_create_new_leaves_no_phantom_record` |
 
+## Third independent-review blocker remediation (T-rows)
+
+All T-rows live in `tests/test_v03a_third_remediation.py` (offline OpenCode stub
+with per-route transport failures; no network, no model).  **22 of its 23 tests
+fail against `6e0eb61`** for the actual mechanism (verified by temporarily
+reverting the four remediated source files and restoring them byte-identically);
+the one that already passed is the guard that a *correlated* reply is still
+returned.
+
+| # | Finding | Status | Evidence |
+| --- | --- | --- | --- |
+| T1 | P1 POST `ReadTimeout`/`WriteTimeout` are submission-uncertain: one POST, no retry, `submission_uncertain`, `reply_pending`, explicit "may already have been accepted / do not resubmit" evidence, one bounded follow-up, accounting == ledger, nothing left `ISSUED` | COVERED | `test_post_timeout_is_submission_uncertain` (read + write), `test_later_reply_after_a_post_timeout_stays_flagged_uncertain` |
+| T2 | P1 POST `ConnectTimeout`/`ConnectError` are a definite "not submitted" outcome (no follow-up implying acceptance, no retry) | COVERED | `test_post_connect_failure_is_definitely_not_submitted` (connect timeout + connect error) |
+| T3 | P1 the classification itself (which failures prove nothing was submitted, exact error types and call states) | COVERED | `test_transport_failure_classes_are_classified`, `test_non_post_read_timeout_is_not_a_submission_uncertainty` |
+| T4 | SMOKE BLOCKER a post-acceptance result never exposes the pre-submission message window/page (`messages == []`, `page is None`, old assistant text absent) for follow-up 500, follow-up timeout, provider unavailable, vanished session, malformed follow-up, still-pending and POST read timeout | COVERED | `test_no_pre_submission_reply_is_exposed` (7 modes), `test_a_correlated_reply_is_still_returned` (guard) |
+| T5 | Human CLI states the submission truth and the pending reply, never prints an old reply, and agrees with `--json` | COVERED | `test_human_output_states_the_submission_truth` (5 modes), `test_pending_human_output_says_do_not_resubmit` |
+| T6 | Adjacent: a genuine HTTP rejection keeps its status as submission evidence (`submission_status`, `submission_body == ""`) | COVERED | `test_rejected_submission_keeps_the_http_status` (401, 500) |
+
 ## Call accounting totals recorded by the suite
 
 Every test above asserts exact counts where a count is meaningful
 (`request_count`, `call_ids`, one record per issued request). The suite is
 deterministic; there is no retry, no background work and no network.
+
+Accounting totals asserted by the third-remediation suite: a POST read/write
+timeout is `6` requests (probe + boundary session + boundary messages + POST +
+the single bounded follow-up session/message read); a POST connect failure is `4`
+(no follow-up is issued, because nothing was submitted); a rejected POST (401/500)
+is `4`.  In every case `request_count == len(ledger.read_records())`, `call_ids`
+matches the ledger exactly and no record is left `ISSUED`.
 
 Accounting totals asserted by the remediation suites: an ack-only `send_prompt`
 with a follow-up read is `6` requests (probe + boundary session + boundary

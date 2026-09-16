@@ -14,6 +14,7 @@ authorizes code changes; each item names its own scope and owner stage.
 | Still unverified | end-to-end structured delivery: `--output-last-message` result, schema-version validation, reconciliation, `COMPLETION_READY` → `COMPLETION_APPLIED`, budget/completion evidence from a real provider |
 | Why it stopped | Codex hit the provider **usage limit** before producing the structured result |
 | Constraint | Do **not** modify v0.2-C to work around the block; do **not** spend another real Codex call; do **not** treat the partial run as a pass |
+| Smoke checklist addition (v0.3-A, third review) | when the real OpenCode smoke is eventually authorized it must additionally verify: actual provider message ordering (DevRelay assumes newest-last and never re-sorts), `read_timeout`/`write_timeout` behaviour against a real server, and that a pending/uncertain submission is never presented as a delivered prompt |
 | Evidence | left exactly as produced (historical smoke directory and artifacts untouched by v0.3-A) |
 | Next step | a replacement single-call smoke once Codex provider availability returns; the offline suite already covers everything except real-provider delivery |
 

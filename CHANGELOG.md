@@ -182,6 +182,36 @@ pre-remediation source):
   `docs/v0.3/V03_PLAN.md`, and `docs/BACKLOG.md` (which carries the pending
   v0.2-C real Codex smoke and a separate Windows Codex shell P2 investigation).
 
+### Fixed (third independent-review blocker remediation)
+
+Third remediation pass on `6e0eb61` (22 of the 23 new tests in
+`tests/test_v03a_third_remediation.py` fail against it), still entirely offline:
+
+- **Blocker P1** transport failures around the submission POST are now classified
+  instead of treated alike: `connect_timeout`/`pool_timeout`/`connect_error` and
+  local refusals prove nothing was submitted, while `read_timeout`,
+  `write_timeout`, read/write errors, remote protocol errors and anything
+  unclassified are *submission-uncertain*.  An uncertain POST reports
+  `submission_uncertain: true`, `reply_pending: true` (unless a new assistant
+  reply is correlated), explains that the prompt may already have been accepted
+  and that DevRelay will not resubmit automatically, performs exactly one bounded
+  follow-up read and never retries the POST.
+- **Blocker P2** a post-acceptance result can no longer expose the
+  pre-submission message window: `messages` is empty and `page` is `null`
+  whenever no new assistant reply was positively correlated (follow-up 500,
+  timeout, provider unavailable, vanished session, malformed follow-up, still
+  pending, or an uncertain submission), so `messages[-1]` can never be mistaken
+  for the answer to the prompt just sent.  The boundary cursor stays available as
+  `reply_boundary`.
+- **Adjacent** the human CLI now states the submission verdict and the reply
+  state explicitly ("submission accepted (HTTP nnn …)", "submission uncertain …
+  do not resubmit automatically", "submission rejected (HTTP nnn)", "submission
+  not accepted", "reply pending: no new assistant message was confirmed"), never
+  prints an old reply, and agrees with `--json`; a genuine HTTP rejection keeps
+  its status as submission evidence (`submission_status`) and is not described as
+  an unusable body; a malformed follow-up clears the page as well as the
+  messages; and `submission_uncertain` results are never a clean exit.
+
 ### Fixed (second independent-review remediation)
 
 Second remediation pass on `f5d487d` (36 of the 49 new tests in

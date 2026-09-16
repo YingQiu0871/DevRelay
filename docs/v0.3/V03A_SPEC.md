@@ -103,7 +103,8 @@ opencode:
 | `list_sessions(include_other_workspaces=False)` | normalized sessions, each carrying its ownership verdict; other-workspace sessions are hidden unless explicitly requested. |
 | `get_session(session_id)` | read one explicitly selected session; unknown id → `opencode_session_not_found`; wrong workspace → `opencode_session_workspace_mismatch` (hard failures); a session id the server answers with that is not the requested one → `MALFORMED_RESPONSE` (never "adopt" another session). |
 | `read_messages(session_id, cursor=None)` | normalized message window + explicit cursor semantics (`next_cursor`, `cursor_unknown`, `replayed`).  The **newest** messages win at every level: the anti-DoS pre-cap keeps the newest `2000` provider entries and the window is the newest `max_messages` of those, while `provider_message_count`/`window_truncated` report what the payload actually contained. |
-| `send_prompt(session_id, prompt, agent="", model="")` | exactly one prompt to exactly one session.  **Submission acceptance is the HTTP status**: any 2xx means the server may have accepted the prompt, so an unusable body (`204`, empty `200`, invalid JSON, oversized) is recorded as evidence (`submission_body`, `submission_status`) and the operation continues as a post-acceptance result - never as "not submitted", never resubmitted.  A reply is correlated **only** as a new assistant message (inline candidate, or exactly one explicit follow-up read); no visible new reply yields `reply_pending: true` with an empty message list - never a stale reply. |
+| `send_prompt(session_id, prompt, agent="", model="")` | exactly one prompt to exactly one session.  **Submission acceptance is the HTTP status**: any 2xx means the server may have accepted the prompt, so an unusable body (`204`, empty `200`, invalid JSON, oversized) is recorded as evidence (`submission_body`, `submission_status`) and the operation continues as a post-acceptance result - never as "not submitted", never resubmitted.  A reply is correlated **only** as a new assistant message (inline candidate, or exactly one explicit follow-up read); no visible new reply yields `reply_pending: true` with `messages: []` and `page: null`, so a pre-submission message can never be read as the answer. |
+| transport-timeout semantics | the POST outcome is classified, not guessed.  A failure that proves no connection was established (`connect_timeout`, `pool_timeout`, `connect_error`, local/proxy refusals) is **not submitted**: `submission_attempted: true`, `submission_status: null`, `submission_uncertain: false`, `reply_pending: false`.  A failure that may happen after the request bytes were sent (`read_timeout`, `write_timeout`, read/write errors, remote protocol errors, and anything unclassified) is **submission-uncertain**: `submission_uncertain: true`, `reply_pending: true` unless a new assistant reply is correlated, explicit "may already have been accepted; do not resubmit automatically" text, exactly one bounded follow-up read, and never a POST retry. |
 | `wait_idle(session_id, timeout=None, *, redact_values=())` | bounded polling until idle/terminal; the deadline is established **before** the ownership probe and every request (probe included) is clamped to the remaining budget; `TIMED_OUT` on expiry — no retry, no continued polling. |
 | `interrupt(session_id)` | abort request; 2xx (including an empty `204`) → `INTERRUPTED` with `interrupt_verified: false` (accepted is not verified), `404` → `interrupt_session_not_found`, `405`/`501` → `interrupt_unsupported`, any other failure → the provider error, and an oversized/unusable body → `MALFORMED_RESPONSE` (never "unsupported"). |
 
@@ -189,6 +190,13 @@ PROVIDER_UNAVAILABLE | MALFORMED_RESPONSE`.
 * Expiry yields `TIMED_OUT` with the last observed session state, the actual
   whole-operation `duration_ms` (the sum of the accounted calls) and **no**
   automatic retry or continued polling after the return.
+* Transport failures are classified by stage, never by exception text: a
+  connect/pool timeout, connect error or local refusal is *not submitted*; a
+  read/write timeout, a read/write error or a remote protocol error may have
+  happened after the request bytes reached the server, so a POST that fails that
+  way is reported as *submission-uncertain* (see the bridge surface).  Unclassified
+  transport failures default to uncertain: a caller is never told "safe to retry"
+  on a guess.
 * A request that times out is recorded as `TIMED_OUT` in the ledger and counts as
   one issued request.
 
@@ -271,5 +279,11 @@ PROVIDER_UNAVAILABLE | MALFORMED_RESPONSE`.
   there is nothing to configure yet.
 * CLI exit codes: `0` means the command achieved what was asked (`COMPLETED`, or
   `INTERRUPTED` for `interrupt`), `2` means any other outcome - including
-  `reply_pending`, where the prompt was accepted but no reply was visible - in
-  both human and `--json` output.
+  `reply_pending` (the prompt was accepted but no reply was visible) and
+  `submission_uncertain` (even when a reply was later correlated, because the
+  submission itself is unconfirmed) - in both human and `--json` output.
+* Human `send_prompt` output states the submission verdict explicitly
+  ("submission accepted", "submission uncertain ... do not resubmit
+  automatically", "submission rejected (HTTP nnn)" or "submission not accepted")
+  and the reply state ("reply pending: no new assistant message was confirmed"),
+  and never prints a pre-submission message as the answer.
