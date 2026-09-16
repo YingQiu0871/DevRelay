@@ -182,6 +182,41 @@ pre-remediation source):
   `docs/v0.3/V03_PLAN.md`, and `docs/BACKLOG.md` (which carries the pending
   v0.2-C real Codex smoke and a separate Windows Codex shell P2 investigation).
 
+### Fixed (A33 real-protocol remediation)
+
+Real-protocol compatibility with the installed OpenCode 1.18.11 server, after the
+authorized A33 smoke returned `FAIL` on a genuine product/protocol mismatch
+(28 of the 30 new tests in `tests/test_v03a_real_protocol.py` fail against
+`780c2fd`; no real model call was made during this remediation):
+
+- **Submission route**: the default prompt path is now the documented
+  `POST /session/{id}/message` (the old `/session/{id}/prompt` route does not
+  exist on 1.18.11 - the server answers unmatched paths with a `200 text/html`
+  SPA shell).  There is deliberately **no** compatibility fallback and no switch
+  to `prompt_async`: exactly one POST, on the real route.
+- **Request contract**: the minimum body is
+  `{"parts":[{"type":"text","text":...}]}` with every optional member omitted;
+  `agent` is forwarded as the documented string and `model` is encoded as the real
+  structured identity `{providerID, modelID}` via the explicit
+  `<providerID>/<modelID>` grammar - an unmappable override fails locally before
+  any request is issued.
+- **Response normalization**: the real synchronous `{info, parts}` body
+  normalizes to exactly one assistant message (role must be `assistant`, text
+  parts normalize, unknown parts stay limited, raw wire objects never escape); an
+  incomplete/non-assistant body remains an honest pending/fail-closed result.
+- **Runtime status**: `wait_idle` polls the real `GET /session/status` map
+  (`idle` completes, `busy`/`retry` keep polling with retry evidence preserved in
+  `status_detail`, a **missing entry means idle** - verified: 1.18.11 omits
+  non-running sessions, and the session object has no state field), instead of
+  polling a session state field that does not exist. All deadline/ownership/
+  clamping/accounting guarantees are unchanged.
+- **2xx evidence**: a 2xx is credible acceptance only when its media/body contract
+  matches the endpoint. A JSON body with an unusable body stays "accepted,
+  unusable body"; a 2xx whose media type cannot carry the documented contract
+  (the SPA `text/html` fallback) is **submission-uncertain** with the media type
+  preserved on the result (`submission_contract`) and on the durable record
+  (`response_media_type`), never presented as accepted and never retried.
+
 ### Fixed (third independent-review blocker remediation)
 
 Third remediation pass on `6e0eb61` (22 of the 23 new tests in

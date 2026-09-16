@@ -35,6 +35,9 @@ Do not begin v0.3-B before v0.3-A is independently reviewed.
 10. `tests/test_v03a_third_remediation.py` — focused regression tests for the
     third independent review's smoke blockers (T1–T6 in `V03A_ACCEPTANCE.md`);
     22 of its 23 tests fail against `6e0eb61`.
+11. `tests/test_v03a_real_protocol.py` — real-protocol regression tests for the
+    A33 findings (V1–V8 in `V03A_ACCEPTANCE.md`), with fixtures derived from the
+    installed OpenCode 1.18.11 `/doc`; 28 of its 30 tests fail against `780c2fd`.
 
 ## Explicit non-goals (v0.3-A)
 
@@ -47,7 +50,8 @@ against the v0.2 provider budget. See `docs/v0.3/V03A_SPEC.md`.
 
 1. Focused offline tests (`tests/test_v03a_opencode.py`,
    `tests/test_v03a_remediation.py`, `tests/test_v03a_second_remediation.py`,
-   `tests/test_v03a_third_remediation.py`) throughout.
+   `tests/test_v03a_third_remediation.py`, `tests/test_v03a_real_protocol.py`)
+   throughout.
 2. Full suite (`python -m pytest`) at the end, run with an isolated temporary
    directory — see the implementation report.  (Note: the suite's shared-`%TEMP%`
    hygiene item in `docs/BACKLOG.md` is pre-existing and out of scope here.)

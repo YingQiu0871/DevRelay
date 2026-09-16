@@ -104,11 +104,39 @@ returned.
 | T5 | Human CLI states the submission truth and the pending reply, never prints an old reply, and agrees with `--json` | COVERED | `test_human_output_states_the_submission_truth` (5 modes), `test_pending_human_output_says_do_not_resubmit` |
 | T6 | Adjacent: a genuine HTTP rejection keeps its status as submission evidence (`submission_status`, `submission_body == ""`) | COVERED | `test_rejected_submission_keeps_the_http_status` (401, 500) |
 
+## A33 real-protocol remediation (V-rows)
+
+All V-rows live in `tests/test_v03a_real_protocol.py` (offline stub modelling the
+**verified** OpenCode 1.18.11 wire contract; fixtures derived from the installed
+server's `/doc`).  **28 of its 30 tests fail against `780c2fd`** for the actual
+mechanism (verified by temporarily reverting the four remediated source files and
+restoring them byte-identically); the two that already passed are the
+stale-reply guard for the HTML case and a stub-self-check.
+
+| # | Requirement | Status | Evidence |
+| --- | --- | --- | --- |
+| V1 | submission uses the real route `POST /session/{id}/message`, exactly one POST, and the nonexistent `/prompt` route is never attempted (no fallback) | COVERED | `test_submission_uses_the_real_message_route_exactly_once`, `test_unknown_route_in_the_stub_matches_the_real_spa_behaviour` |
+| V2 | minimum request body is `parts` only; optional members omitted unless requested | COVERED | `test_minimum_request_body_is_parts_only` |
+| V3 | `agent` forwarded as a string; `model` encoded as the real `{providerID, modelID}` identity; unmappable override fails locally before any request | COVERED | `test_agent_is_forwarded_and_model_is_a_structured_identity`, `test_unmappable_model_override_fails_locally_before_any_request` |
+| V4 | real `{info, parts}` response normalizes to exactly one new assistant reply; raw wire objects do not escape; unknown parts stay limited | COVERED | `test_real_sync_response_normalizes_to_one_new_assistant_reply`, `test_real_sync_response_with_unknown_parts_stays_limited` |
+| V5 | assistant-role requirement: a non-assistant/incomplete body is never the reply (fail closed, no stale reply, accounting intact) | COVERED | `test_non_assistant_or_incomplete_response_is_not_a_reply`, `test_ack_only_json_body_stays_accepted_but_pending` |
+| V6 | 2xx evidence: a JSON body with an unusable body is accepted (not "definitely failed"); a 2xx whose media type is not credible (SPA `text/html`) is submission-uncertain, one POST, no resubmit, ledger settled with the media type | COVERED | `test_json_endpoint_with_a_broken_body_is_accepted_not_uncertain`, `test_html_200_fallback_is_submission_uncertain`, `test_html_200_fallback_never_substitutes_a_stale_reply` |
+| V7 | `wait_idle` uses the real `/session/status` contract (idle, busy→idle, retry→idle with evidence, bounded busy timeout, missing entry = idle, target absent while another session is busy, malformed payloads fail closed) and no longer polls the session detail for a nonexistent state field | COVERED | `test_wait_idle_status_idle_completes`, `test_wait_idle_busy_then_idle`, `test_wait_idle_retry_keeps_evidence_and_continues`, `test_wait_idle_bounded_busy_timeout`, `test_wait_idle_missing_entry_means_idle`, `test_wait_idle_target_absent_while_another_session_is_busy`, `test_wait_idle_malformed_status_fails_closed`, `test_wait_idle_does_not_poll_the_session_detail_for_state` |
+| V8 | human and `--json` output tell the same truth for the unexpected-contract case | COVERED | `test_human_output_reports_the_unexpected_contract` |
+
 ## Call accounting totals recorded by the suite
 
 Every test above asserts exact counts where a count is meaningful
 (`request_count`, `call_ids`, one record per issued request). The suite is
 deterministic; there is no retry, no background work and no network.
+
+Accounting totals asserted by the real-protocol suite: a synchronous `/message`
+submission with an inline reply is `4` requests (probe + boundary session +
+boundary message list + POST); `wait_idle` is the ownership probe plus one status
+poll per observation (`2` for the first answer, `4` for busy→busy→idle), and a
+bounded busy timeout accounts every poll; every case asserts
+`request_count == len(ledger.read_records())`, `call_ids` matching the ledger and
+no record left `ISSUED`.
 
 Accounting totals asserted by the third-remediation suite: a POST read/write
 timeout is `6` requests (probe + boundary session + boundary messages + POST +

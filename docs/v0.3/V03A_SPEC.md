@@ -95,6 +95,42 @@ opencode:
   `codex:` is (a legacy full-config snapshot may still contain it; the policy
   reader drops it as a known wiring key).
 
+## Verified wire contract (OpenCode 1.18.11)
+
+Verified against the installed server's own `/doc` (OpenAPI 3.1, 162 paths) and a
+dedicated loopback server started from a disposable workspace:
+
+| Operation | Real route | Notes |
+| --- | --- | --- |
+| health | `GET /global/health` | returns `{healthy, version}` |
+| list sessions | `GET /session` | returns an array of session objects |
+| session detail | `GET /session/{id}` | **no** `state`/`status` field exists |
+| list messages | `GET /session/{id}/message` | array of `{info, parts}` |
+| **submit (synchronous)** | **`POST /session/{id}/message`** | "Send message ... streaming the AI response"; returns `{info: AssistantMessage, parts: Part[]}` |
+| runtime status | `GET /session/status` | map session id → `SessionStatus` (`idle` \| `busy` \| `retry`) |
+| abort | `POST /session/{id}/abort` | abort request accepted, not verified terminal |
+| create session | `POST /session` | provisioning only, never used by the bridge |
+| create session (async) | `POST /session/{id}/prompt_async` | exists; **not used** by v0.3-A normal send |
+
+* `POST /session/{id}/prompt` **does not exist** on 1.18.11 (the A33 smoke proved
+  the server answers unmatched routes with `200 text/html` + the SPA shell).  The
+  bridge's default prompt path is the documented `/message` route, and there is
+  **no compatibility fallback**: a fallback would issue a second submission POST.
+* Request body (minimum, exactly what DevRelay sends when nothing is overridden):
+  `{"parts": [{"type": "text", "text": "<prompt>"}]}`.  Optional members are
+  omitted entirely so the session/default configuration chooses the agent/model.
+* `agent` is forwarded as the documented string.  `model` must be
+  `{providerID, modelID}` in the real schema, so DevRelay's public override uses
+  the explicit grammar `<providerID>/<modelID>` (split at the first `/`); a value
+  that cannot be mapped losslessly fails locally **before** any request is issued
+  - DevRelay never guesses a wire encoding.
+* Synchronous response: `{info, parts}` normalizes to exactly one assistant
+  message (`info.id` → message id, `info.role` must be `assistant`, text parts
+  normalize, unknown parts stay limited to their kind/name, and no raw wire
+  object escapes `devrelay.opencode`).  A body that is not a valid assistant
+  message is never treated as the reply: the operation stays honest
+  (pending/fail-closed), exactly as before.
+
 ## Bridge surface
 
 | Method | Semantics |
@@ -105,7 +141,7 @@ opencode:
 | `read_messages(session_id, cursor=None)` | normalized message window + explicit cursor semantics (`next_cursor`, `cursor_unknown`, `replayed`).  The **newest** messages win at every level: the anti-DoS pre-cap keeps the newest `2000` provider entries and the window is the newest `max_messages` of those, while `provider_message_count`/`window_truncated` report what the payload actually contained. |
 | `send_prompt(session_id, prompt, agent="", model="")` | exactly one prompt to exactly one session.  **Submission acceptance is the HTTP status**: any 2xx means the server may have accepted the prompt, so an unusable body (`204`, empty `200`, invalid JSON, oversized) is recorded as evidence (`submission_body`, `submission_status`) and the operation continues as a post-acceptance result - never as "not submitted", never resubmitted.  A reply is correlated **only** as a new assistant message (inline candidate, or exactly one explicit follow-up read); no visible new reply yields `reply_pending: true` with `messages: []` and `page: null`, so a pre-submission message can never be read as the answer. |
 | transport-timeout semantics | the POST outcome is classified, not guessed.  A failure that proves no connection was established (`connect_timeout`, `pool_timeout`, `connect_error`, local/proxy refusals) is **not submitted**: `submission_attempted: true`, `submission_status: null`, `submission_uncertain: false`, `reply_pending: false`.  A failure that may happen after the request bytes were sent (`read_timeout`, `write_timeout`, read/write errors, remote protocol errors, and anything unclassified) is **submission-uncertain**: `submission_uncertain: true`, `reply_pending: true` unless a new assistant reply is correlated, explicit "may already have been accepted; do not resubmit automatically" text, exactly one bounded follow-up read, and never a POST retry. |
-| `wait_idle(session_id, timeout=None, *, redact_values=())` | bounded polling until idle/terminal; the deadline is established **before** the ownership probe and every request (probe included) is clamped to the remaining budget; `TIMED_OUT` on expiry — no retry, no continued polling. |
+| `wait_idle(session_id, timeout=None, *, redact_values=())` | bounded polling of the **real** runtime status (`GET /session/status`): `idle` → completed, `busy`/`retry` → keep polling inside the deadline (retry evidence is kept in `status_detail`), a **missing entry means idle** (verified: 1.18.11 omits non-running sessions from the map - the session object has no state field), any other shape → `MALFORMED_RESPONSE`.  The deadline is established **before** the ownership probe and every request (probe included) is clamped to the remaining budget; `TIMED_OUT` on expiry, no retry, no continued polling, no background work. |
 | `interrupt(session_id)` | abort request; 2xx (including an empty `204`) → `INTERRUPTED` with `interrupt_verified: false` (accepted is not verified), `404` → `interrupt_session_not_found`, `405`/`501` → `interrupt_unsupported`, any other failure → the provider error, and an oversized/unusable body → `MALFORMED_RESPONSE` (never "unsupported"). |
 
 `devrelay opencode health|sessions|show|read|send|wait|interrupt|calls` are thin
@@ -146,6 +182,16 @@ Split of responsibilities, deliberately:
 * **Hard validation failures raise**: missing configuration
   (`opencode_config_invalid`), unknown session (`opencode_session_not_found`),
   workspace mismatch (`opencode_session_workspace_mismatch`).
+* **A 2xx is credible acceptance only when its media/body contract matches the
+  endpoint.**  A usable JSON body is acceptance (with or without an inline reply);
+  a JSON-capable response whose body is unusable (empty, invalid JSON, oversized)
+  stays "accepted, unusable body" (`submission_body`, `submission_contract:
+  "json"`); a 2xx whose media type clearly cannot carry the documented JSON
+  contract (e.g. the SPA `text/html` fallback the real server returns for an
+  unmatched route - the A33 observation) is **submission-uncertain**
+  (`submission_contract: "unexpected_media_type:text/html"`), because a POST
+  happened but endpoint acceptance could not be proven.  It is never reported as
+  accepted, never as safely retryable, and never followed by a fallback request.
 * **Untrusted response content never escapes** as a Python exception: invalid
   JSON (`invalid_json`), extreme nesting (`json_too_deep`, `RecursionError`) and
   unparsable values such as an over-long integer literal (`json_unparsable`,
@@ -235,6 +281,28 @@ PROVIDER_UNAVAILABLE | MALFORMED_RESPONSE`.
   reviewer provider budget (`ProviderCallRecord` remains the only budget
   authority for those roles).
 
+## Real-protocol verification status (A33)
+
+| Capability | Status |
+| --- | --- |
+| `GET /global/health` | **verified** against a real 1.18.11 server |
+| `POST /session` (provisioning, prompt-free) | **verified** (one disposable session created, no model call) |
+| session discovery / explicit selection | **verified** |
+| workspace ownership (absolute path match) | **verified** |
+| baseline message read (`GET /session/{id}/message`) | **verified** (empty list) |
+| old `POST /session/{id}/prompt` | **does not exist** - the A33 smoke failed here (`FAIL - V0.3-A A33 MINIMAL REAL OPENCODE SMOKE`, kept as historical evidence, never rewritten as PASS); the default path is now the documented `/message` route |
+| synchronous `/message` request + `{info, parts}` response | implemented from the installed server's `/doc`; **not yet exercised against a real model turn** |
+| `GET /session/status` semantics | verified (idle session is absent from the map) |
+| real model turn (prompt → correlated reply → `DEVRELAY_A33_OK`) | **NOT yet verified**; still requires an authorized real smoke (budget unspent: 0 model prompts) |
+
+### Future auth compatibility item (recorded, not designed here)
+
+OpenCode's native server authentication is **HTTP Basic** when
+`OPENCODE_SERVER_PASSWORD` is configured, while DevRelay's v0.3-A wiring sends a
+**bearer** token from `DEVRELAY_OPENCODE_TOKEN`.  The two are not yet verified as
+equivalent, and A33 deliberately ran a loopback server with no server auth.  Any
+auth-mode work is a separate, explicitly authorized change.
+
 ## Known limitations
 
 * Polling `wait_idle` (no SSE/stream subscription yet).
@@ -248,6 +316,15 @@ PROVIDER_UNAVAILABLE | MALFORMED_RESPONSE`.
 * `read_messages` has no server-side pagination: the local window is the newest
   `max_messages` (hard cap 200, anti-DoS pre-cap 2000 provider entries) and
   truncation is reported, not worked around.
+* Reply correlation evidence, strongest first: (1) the syntactically valid
+  assistant message returned by the synchronous `POST /session/{id}/message`
+  response for *this* submission; (2) a new assistant message id (relative to the
+  pre-submission boundary) seen in exactly one bounded follow-up read.  The
+  follow-up path keeps its fail-closed safeguards (`cursor_unknown`, `replayed`,
+  window stability), and an arbitrary unseen assistant id is **not** accepted as
+  proof of correlation when the provider window is unstable (F1, recorded as a
+  non-blocking risk; the next real smoke must compare baseline vs final ordering
+  and verify window stability).
 * Message ordering is assumed to be the provider's own order (newest last) -
   DevRelay does not re-sort messages by timestamp, so a provider that returns
   them in another order would be reported as-is; cursor semantics stay honest
