@@ -102,12 +102,43 @@ fake providers (no real Codex invocation, no real reviewer endpoint).
   generation. Orphan evidence is never deleted, never overwritten and never
   treated as applied.
 
-## Unreleased - v0.3-A candidate (OpenCode session bridge)
+## Unreleased - v0.3-A accepted (OpenCode session bridge)
 
 A narrow, provider-contained bridge to one explicitly configured, already running
-OpenCode server. **Not released**: version stays `0.1.0`, nothing is pushed,
-merged, tagged or published, and every test is offline (deterministic stub
-server, no real OpenCode call, no network).
+OpenCode server. **Accepted internally and still unreleased**: the package
+version stays `0.1.0`, nothing is pushed, merged, tagged or published, and the
+supported public release remains v0.1.0.
+
+### Accepted
+
+- **Final decision:** `ACCEPT — V0.3-A OPENCODE SESSION BRIDGE`, functional
+  candidate `bcf9627e92ef839abb756810e3c615e6d01b6576`; v0.3-A functional
+  development is closed and the runtime implementation is frozen at that commit.
+- **Real compatibility verified** against a dedicated **OpenCode 1.18.11** server:
+  health, prompt-free session creation, explicit disposable session, workspace
+  ownership, empty baseline read, exactly **one** real
+  `POST /session/{id}/message` with the explicit model
+  `opencode-go/deepseek-v4.1-flash` (wire `{providerID, modelID}`), provider
+  inference confirmed, synchronous `{info, parts}` response (HTTP `200`,
+  `application/json`) normalized to one correlated assistant reply whose text is
+  exactly `DEVRELAY_A33_OK`, runtime status via `GET /session/status` (idle
+  represented by the session's absence from the map), real provider message
+  ordering **oldest → newest**, stable window (`cursor_unknown=false`,
+  `replayed=false`, no truncation), workspace unchanged, 15 settled ledger
+  records with no `ISSUED`, no raw prompt and no credentials persisted, and the
+  disposable session/server cleaned up afterwards.
+- **Historical A33 attempts are preserved as evidence, not rewritten:** the first
+  attempt was `BLOCKED` (no provisioned endpoint/session), the first real
+  protocol attempt was `FAIL` (the obsolete `/session/{id}/prompt` route does not
+  exist on 1.18.11), a second real attempt was `FAIL` (the *user's* global default
+  model referenced a provider disabled by the same configuration), and a
+  zero-model diagnostic proved that failure was an OpenCode/environment
+  configuration issue with **no DevRelay defect** before the final explicit-model
+  smoke passed.
+- Non-blocking follow-ups (F1 follow-up-only hardening, Basic-vs-Bearer auth
+  compatibility, multi-process ledger locking, cross-host/container path mapping,
+  server-side pagination, corrupt-ledger UX, Windows Codex `pwsh.exe`, remaining
+  v0.2-C real E2E evidence) stay recorded in `docs/BACKLOG.md`.
 
 ### Added
 

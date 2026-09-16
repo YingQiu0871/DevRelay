@@ -8,6 +8,18 @@ reports the same version via `devrelay version`).
 Source: <https://github.com/YingQiu0871/DevRelay> -
 [Issues](https://github.com/YingQiu0871/DevRelay/issues)
 
+**Development status: v0.3-A OpenCode Session Bridge — accepted internally /
+unreleased.** The bridge is implemented and was verified against a real OpenCode
+`1.18.11` server (one real prompt → correlated reply `DEVRELAY_A33_OK`); it is
+not part of the v0.1.0 release, the version number is unchanged, and v0.3-A
+functional development is closed at candidate
+`bcf9627e92ef839abb756810e3c615e6d01b6576`. Specification, acceptance decision
+and real-smoke evidence:
+[docs/v0.3/V03A_SPEC.md](docs/v0.3/V03A_SPEC.md),
+[docs/v0.3/V03A_ACCEPTANCE.md](docs/v0.3/V03A_ACCEPTANCE.md).
+
+**Next development stage: v0.3-B ChatGPT/MCP tool surface — not started.**
+
 > **v0.2-A candidate (unreleased)**: the automatic review loop described under
 > [Automatic review loop (v0.2-A)](#automatic-review-loop-v02-a) is implemented
 > in this working branch as a candidate for independent review. It is not part
@@ -937,11 +949,11 @@ not downgrade the binary inside a workspace that v0.2-B has already written.
   improved provider adapters / state-driven UI
 - **v0.3-A** - OpenCode session bridge: one explicitly configured, already
   running OpenCode server (select/read one session, one prompt, bounded wait,
-  interrupt, durable call accounting) - candidate under independent review
-- **v0.3-B** - not designed yet (the next v0.3 stage starts only after v0.3-A is
-  approved)
-- **later** - MCP server, ChatGPT integration / plugin, optional release
-  automation with explicit approvals
+  interrupt, durable call accounting) - **accepted internally** after a real
+  OpenCode `1.18.11` smoke passed; unreleased
+- **v0.3-B** - ChatGPT/MCP tool surface - **NEXT, not started** (MCP is not
+  implemented yet; the roadmap entry describes the planned stage only)
+- **later** - optional release automation with explicit approvals
 
 ## Development
 

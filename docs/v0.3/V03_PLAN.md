@@ -4,11 +4,14 @@
 
 | Stage | Description | Status |
 | --- | --- | --- |
-| **A** | OpenCode session bridge (explicit endpoint, session select/read, one prompt, bounded wait, interrupt, accounting) | **CURRENT — candidate for independent review** |
-| B | (not designed yet) | **NOT STARTED** |
+| **A** | OpenCode session bridge (explicit endpoint, session select/read, one prompt, bounded wait, interrupt, accounting) | **COMPLETE / ACCEPTED** — candidate `bcf9627e92ef839abb756810e3c615e6d01b6576`, real A33 smoke `PASS` against OpenCode `1.18.11` |
+| B | ChatGPT/MCP tool surface | **NEXT — NOT STARTED** |
 | C | (not designed yet) | **NOT STARTED** |
 
-Do not begin v0.3-B before v0.3-A is independently reviewed.
+v0.3-A is accepted and its runtime implementation is frozen at the accepted
+candidate.  v0.3-B has **not** started and must not begin without a separate
+authorization.  See `docs/v0.3/V03A_ACCEPTANCE.md` for the final decision and the
+A33 evidence summary, and `docs/BACKLOG.md` for deferred, non-blocking follow-ups.
 
 ## v0.3-A scope (implemented)
 
@@ -48,6 +51,10 @@ against the v0.2 provider budget. See `docs/v0.3/V03A_SPEC.md`.
 
 ## Verification order used in this stage
 
+0. Real smoke (A33) against a dedicated OpenCode 1.18.11 server — `PASS`
+   (explicit model `opencode-go/deepseek-v4.1-flash`, exactly one
+   `POST /session/{id}/message`, reply `DEVRELAY_A33_OK`); outcome and the full
+   historical sequence are recorded in `V03A_ACCEPTANCE.md`.
 1. Focused offline tests (`tests/test_v03a_opencode.py`,
    `tests/test_v03a_remediation.py`, `tests/test_v03a_second_remediation.py`,
    `tests/test_v03a_third_remediation.py`, `tests/test_v03a_real_protocol.py`)

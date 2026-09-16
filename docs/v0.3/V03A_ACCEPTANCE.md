@@ -1,8 +1,29 @@
 # DevRelay v0.3-A acceptance matrix
 
-All evidence is **offline**: the deterministic in-memory OpenCode stub
-(`tests/opencode_stub.py`) via `httpx.MockTransport`. No real OpenCode instance,
-no network, no model call is required (or used) by any test below.
+## Final decision
+
+**`ACCEPT — V0.3-A OPENCODE SESSION BRIDGE`**
+
+| Field | Value |
+| --- | --- |
+| Accepted functional candidate | `bcf9627e92ef839abb756810e3c615e6d01b6576` (branch `v0.3-a-opencode-bridge`) |
+| Real smoke | `PASS — V0.3-A A33 EXPLICIT-MODEL REAL SMOKE` against real OpenCode `1.18.11` |
+| Status | v0.3-A functional development is **CLOSED**; the runtime implementation is frozen at the accepted candidate |
+| Release | **unreleased** — package version stays `0.1.0`; the supported public release remains v0.1.0 |
+| Next stage | v0.3-B (ChatGPT/MCP tool surface) — **NEXT, NOT STARTED** |
+
+The independent reviews and every remediation pass, the five real-protocol
+regressions found by the A33 attempts, the zero-model root-cause diagnostic and
+the final successful real smoke are recorded below in the order they happened;
+earlier `BLOCKED`/`FAIL` outcomes are **historical evidence and are never
+rewritten as successes**.
+
+All **automated** evidence below is offline: the deterministic in-memory
+OpenCode stub (`tests/opencode_stub.py`) via `httpx.MockTransport`. No real
+OpenCode instance, no network and no model call is required (or used) by any test
+in this file. The real A33 smoke recorded further down was a separately
+authorized manual operation against a disposable loopback server - exactly one
+real model prompt in total - not part of the automated suite.
 
 Legend: **COVERED** = automated test asserts it · **PARTIAL** = covered
 indirectly · **DEFERRED** = documented, not automated in this stage.
@@ -41,7 +62,7 @@ indirectly · **DEFERRED** = documented, not automated in this stage.
 | A30 | CLI surface is thin: `health`, `sessions`, `calls` work through the bridge | COVERED | `test_cli_opencode_health_and_sessions` |
 | A31 | OpenCode section is wiring only (never task policy); legacy snapshots tolerate it | COVERED | `test_opencode_section_is_projected_out_of_the_policy` (real `resolve_policy_config` + `workspace_policy_overrides`), `test_legacy_full_config_snapshot_tolerates_opencode_only_when_lenient` (`opencode`/`codex`/`profiles`/`review.provider` dropped only in lenient mode; strict mode still fails) |
 | A32 | No v0.3-B functionality (role routing / orchestration / approval / MCP) | COVERED (negative) | self-audit + absence of any pipeline import in `devrelay/opencode/**`; documented non-goals |
-| A33 | Real OpenCode smoke | DEFERRED | proposed separately after independent review of this offline implementation |
+| A33 | Real OpenCode smoke | **COVERED (PASS)** | `PASS — V0.3-A A33 EXPLICIT-MODEL REAL SMOKE` on real OpenCode `1.18.11`: dedicated `opencode serve`, prompt-free `POST /session`, explicit disposable session, ownership validated, empty baseline, **exactly one** `POST /session/{id}/message` with the explicit model `opencode-go/deepseek-v4.1-flash`, provider inference confirmed in the server log, synchronous `{info, parts}` response normalized, correlated assistant reply exactly `DEVRELAY_A33_OK`, `HTTP 200` + `application/json`, `/session/status` idle-by-absence, real ordering oldest→newest, stable window, workspace unchanged, 15 settled ledger records and no prompt/credential leakage |
 
 ## Independent-review remediation (R-rows)
 
@@ -123,6 +144,50 @@ stale-reply guard for the HTML case and a stub-self-check.
 | V6 | 2xx evidence: a JSON body with an unusable body is accepted (not "definitely failed"); a 2xx whose media type is not credible (SPA `text/html`) is submission-uncertain, one POST, no resubmit, ledger settled with the media type | COVERED | `test_json_endpoint_with_a_broken_body_is_accepted_not_uncertain`, `test_html_200_fallback_is_submission_uncertain`, `test_html_200_fallback_never_substitutes_a_stale_reply` |
 | V7 | `wait_idle` uses the real `/session/status` contract (idle, busy→idle, retry→idle with evidence, bounded busy timeout, missing entry = idle, target absent while another session is busy, malformed payloads fail closed) and no longer polls the session detail for a nonexistent state field | COVERED | `test_wait_idle_status_idle_completes`, `test_wait_idle_busy_then_idle`, `test_wait_idle_retry_keeps_evidence_and_continues`, `test_wait_idle_bounded_busy_timeout`, `test_wait_idle_missing_entry_means_idle`, `test_wait_idle_target_absent_while_another_session_is_busy`, `test_wait_idle_malformed_status_fails_closed`, `test_wait_idle_does_not_poll_the_session_detail_for_state` |
 | V8 | human and `--json` output tell the same truth for the unexpected-contract case | COVERED | `test_human_output_reports_the_unexpected_contract` |
+
+## Final real smoke (A33) — historical sequence and evidence
+
+| # | Attempt | Outcome | Cause / evidence |
+| --- | --- | --- | --- |
+| 1 | first A33 attempt | `BLOCKED — A33 DISPOSABLE SESSION NOT AVAILABLE` | no provisioned endpoint/session environment at that time; **0 model prompts**, budget not consumed |
+| 2 | A33 retry (first real protocol attempt) | `FAIL — V0.3-A A33 MINIMAL REAL OPENCODE SMOKE` | DevRelay's default prompt path `POST /session/{id}/prompt` does not exist on OpenCode 1.18.11; the server answers unmatched routes with `200 text/html` (SPA shell), so no model ran (0 prompts, 0 tokens) |
+| 3 | protocol remediation | implemented the verified real contract | default submit route `POST /session/{id}/message`, synchronous `{info, parts}` normalization, runtime state from `GET /session/status` (target absent ⇒ idle), `<providerID>/<modelID>` model grammar, media-type-aware 2xx evidence; no fallback to `/prompt`, `/prompt_async` unused |
+| 4 | next real attempt | `FAIL — V0.3-A A33 REAL MODEL SMOKE RETRY` | HTTP 500 `UnknownError` (`ref=err_99568e48`); the user's global default model `coding-plan/deepseek-v4-pro` names a provider that the same configuration disables (`disabled_providers`), so it never registered |
+| 5 | zero-model diagnostic | `ROOT CAUSE — OPENCODE MODEL CONFIGURATION` | server log proved `ProviderModelNotFoundError: Model not found: coding-plan/deepseek-v4-pro` at `SessionPrompt.getModel` — **before any provider inference**; no DevRelay defect; ledger of that run showed one POST, truthful 500 classification, no retry |
+| 6 | final explicit-model A33 | **`PASS — V0.3-A A33 EXPLICIT-MODEL REAL SMOKE`** | same candidate, same OpenCode 1.18.11, explicit model `opencode-go/deepseek-v4.1-flash` (registered, connected, authenticated) |
+
+### Final A33 evidence summary (compact)
+
+| Item | Value |
+| --- | --- |
+| Candidate | `bcf9627e92ef839abb756810e3c615e6d01b6576` |
+| OpenCode version | `1.18.11` (dedicated loopback `opencode serve`, no server auth, disposable workspace) |
+| Explicit model | `opencode-go/deepseek-v4.1-flash` → wire `{"providerID":"opencode-go","modelID":"deepseek-v4.1-flash"}` |
+| Model prompts | **exactly 1** |
+| `/message` POSTs | **exactly 1** (`/session/{id}/message`); 0 `/prompt`, 0 `/prompt_async`, 0 retries |
+| Response | HTTP **200**, Content-Type **`application/json`**, top-level `{info, parts}` |
+| Assistant reply | `msg_0aa2ee81c001Nvg49Tla5qtb0p`, role `assistant`, text exactly **`DEVRELAY_A33_OK`** |
+| Provider inference | confirmed (`message=stream providerID=opencode-go modelID=deepseek-v4.1-flash`, `llm runtime selected`; the broken `coding-plan/…` default was never selected) |
+| Real ordering | **oldest → newest** (user prompt, then assistant reply), never re-sorted |
+| Window evidence | `provider_message_count 2`, `cursor_unknown false`, `replayed false`, no truncation, stable across the synchronous response and the final read |
+| Wait/status | live `/session/status` `{}` (target absent ⇒ idle); `wait_idle` → `COMPLETED` (GET polls only, no model POST) |
+| Ledger | **15 settled records**, 0 `ISSUED`, ids unique/contiguous, one POST, model override recorded only as non-secret metadata |
+| Workspace | unchanged (`README.txt` sha256 identical, `git status` clean, no model-created files) |
+| Containment | disposable server/session deleted (`DELETE` → 200, then 404); port released; user's sessions/processes untouched |
+| Leakage | none (no raw prompt, no credentials in results or ledger) |
+| Findings | P0 = 0, P1 = 0, smoke-blocking P2 = 0 |
+
+## Deferred follow-ups (recorded, non-blocking)
+
+The items kept in `docs/BACKLOG.md` — follow-up-only F1 window-correlation
+hardening, OpenCode Basic-vs-Bearer auth-mode compatibility, multi-process
+ledger locking, cross-host/container path mapping, server-side pagination,
+corrupt-ledger UX, narrow exception/settlement documentation accuracy, the
+Windows Codex `pwsh.exe` alias investigation and the remaining v0.2-C real E2E
+evidence — **do not block v0.3-A acceptance** and were not part of it. The
+broken global OpenCode default (`coding-plan/deepseek-v4-pro` pointing at a
+provider disabled by the same configuration) is an **environment/user
+configuration issue**, recorded as such, not a DevRelay backlog defect.
 
 ## Call accounting totals recorded by the suite
 

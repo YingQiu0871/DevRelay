@@ -45,7 +45,30 @@ authorizes code changes; each item names its own scope and owner stage.
 * The bridge is **not** wired into the pipeline: it neither implements nor routes
   any implementer/reviewer role.
 
-## 4. Deferred beyond the second v0.3-A remediation (recorded, not started)
+## 4. Deferred follow-ups after v0.3-A acceptance (recorded; **do not block acceptance**)
+
+v0.3-A was accepted on the strength of the final real A33 smoke (see
+`docs/v0.3/V03A_ACCEPTANCE.md`).  Every item below is explicitly **non-blocking**
+and outside the accepted scope:
+
+| Item | Note |
+| --- | --- |
+| Follow-up-only F1 window-correlation hardening | the final smoke showed a stable window (`cursor_unknown=false`, `replayed=false`, no truncation) and used the direct synchronous reply as the strongest evidence; a *follow-up-only* correlation path could still be hardened later |
+| OpenCode Basic-vs-Bearer auth-mode compatibility | real OpenCode server auth is HTTP Basic when `OPENCODE_SERVER_PASSWORD` is set; DevRelay sends a bearer token from `DEVRELAY_OPENCODE_TOKEN` and the equivalence was never exercised (A33 ran without server auth) |
+| Multi-process ledger locking | call ids are unique under the supported single-process model only |
+| Cross-host/container workspace path mapping | ownership compares paths in DevRelay's own namespace; such sessions fail closed |
+| Server-side pagination | the message window is local and reports truncation |
+| Corrupt-ledger UX (`devrelay opencode calls`) | allocation fails closed; reporting/repair UX is not designed |
+| Narrow exception/settlement documentation accuracy | keep the documented mapping between transport failures, settlement and result states precise as the code evolves |
+| Windows Codex `pwsh.exe` alias (`exec_command` rejected) | carried forward from the v0.2-C smoke (item 2) |
+| v0.2-C remaining real E2E evidence | still pending (item 1) |
+
+The user's broken global OpenCode default (`coding-plan/deepseek-v4-pro`
+referencing a provider disabled by the same configuration) is an
+**environment/user configuration issue** — recorded here for context only, not a
+DevRelay defect and not a backlog item.
+
+## 5. Deferred beyond the second v0.3-A remediation (recorded, not started)
 
 | Item | Why it is deferred |
 | --- | --- |
@@ -57,7 +80,7 @@ authorizes code changes; each item names its own scope and owner stage.
 | Post-abort verification polling (`interrupt_verified`) | accepted-but-unverified is the documented v0.3-A semantic |
 | Attachment/tool-argument modeling | deliberately dropped in v0.3-A |
 
-## 5. Pre-existing test-environment hygiene: shared `%TEMP%` residue
+## 6. Pre-existing test-environment hygiene: shared `%TEMP%` residue
 
 | Field | Value |
 | --- | --- |

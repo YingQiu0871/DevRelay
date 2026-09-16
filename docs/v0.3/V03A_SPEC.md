@@ -290,10 +290,19 @@ PROVIDER_UNAVAILABLE | MALFORMED_RESPONSE`.
 | session discovery / explicit selection | **verified** |
 | workspace ownership (absolute path match) | **verified** |
 | baseline message read (`GET /session/{id}/message`) | **verified** (empty list) |
-| old `POST /session/{id}/prompt` | **does not exist** - the A33 smoke failed here (`FAIL - V0.3-A A33 MINIMAL REAL OPENCODE SMOKE`, kept as historical evidence, never rewritten as PASS); the default path is now the documented `/message` route |
-| synchronous `/message` request + `{info, parts}` response | implemented from the installed server's `/doc`; **not yet exercised against a real model turn** |
-| `GET /session/status` semantics | verified (idle session is absent from the map) |
-| real model turn (prompt → correlated reply → `DEVRELAY_A33_OK`) | **NOT yet verified**; still requires an authorized real smoke (budget unspent: 0 model prompts) |
+| old `POST /session/{id}/prompt` | **does not exist** on 1.18.11 - the first A33 attempt failed here (`FAIL - V0.3-A A33 MINIMAL REAL OPENCODE SMOKE`, kept as historical evidence, never rewritten as PASS); the default path is the documented `/message` route |
+| synchronous `/message` request + `{info, parts}` response | **verified** against a real model turn: HTTP `200`, Content-Type `application/json`, top-level `{info, parts}` normalized to one assistant message |
+| explicit model mapping (`<providerID>/<modelID>` → `{providerID, modelID}`) | **verified** end-to-end with `opencode-go/deepseek-v4.1-flash`; the server log resolved exactly that provider/model |
+| `GET /session/status` semantics | **verified** (idle session absent from the map; `wait_idle` completed from the real status map with GET polls only) |
+| real model turn (prompt → correlated reply → `DEVRELAY_A33_OK`) | **VERIFIED - A33 PASS** (`PASS - V0.3-A A33 EXPLICIT-MODEL REAL SMOKE`, OpenCode 1.18.11, one prompt, one `/message` POST, reply exactly `DEVRELAY_A33_OK`) |
+| real provider message ordering | **observed on 1.18.11: oldest → newest** (user prompt first, assistant reply last), never re-sorted locally; the window was stable (`cursor_unknown=false`, `replayed=false`, no truncation) |
+| strongest reply-correlation evidence | the contract-valid assistant message returned by the synchronous `POST /session/{id}/message` response for *this* submission (used, and independently confirmed by the following read) |
+
+> Note: the second A33 attempt failed with HTTP 500 because the *user's* global
+> default model (`coding-plan/deepseek-v4-pro`) named a provider disabled by the
+> same configuration; the zero-model diagnostic proved it was a local
+> configuration issue, **not** a DevRelay defect.  The final A33 passed by passing
+> the model explicitly, which is the supported, verified path.
 
 ### Future auth compatibility item (recorded, not designed here)
 
@@ -325,10 +334,10 @@ auth-mode work is a separate, explicitly authorized change.
   proof of correlation when the provider window is unstable (F1, recorded as a
   non-blocking risk; the next real smoke must compare baseline vs final ordering
   and verify window stability).
-* Message ordering is assumed to be the provider's own order (newest last) -
-  DevRelay does not re-sort messages by timestamp, so a provider that returns
-  them in another order would be reported as-is; cursor semantics stay honest
-  (`cursor_unknown`) instead of guessing.
+* Message ordering is taken as the provider's own order and never re-sorted:
+  observed **oldest → newest** on OpenCode 1.18.11 (so "newest last" held for the
+  verified version), and cursor semantics stay honest (`cursor_unknown`) instead
+  of guessing for other versions/providers.
 * `interrupt_verified: false` always means "the abort request was accepted", not
   "a terminal state was observed"; v0.3-A performs no post-abort verification
   polling.
