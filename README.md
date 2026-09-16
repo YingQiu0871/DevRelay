@@ -652,8 +652,9 @@ opencode:
   workspace: ""                       # defaults to this repository root
   default_session: ""                 # convenience only
   timeout_seconds: 30                 # per HTTP request
-  idle_timeout_seconds: 300           # bound for the idle wait
+  idle_timeout_seconds: 300           # whole-operation deadline for the idle wait
   max_response_bytes: 1048576         # larger responses fail closed
+  max_messages: 50                    # read window (newest messages win; max 200)
 ```
 
 ```bash
@@ -676,8 +677,20 @@ as explicit states (`PROVIDER_UNAVAILABLE`, `TIMED_OUT`, `MALFORMED_RESPONSE`,
 `INTERRUPTED`, …) rather than raised, so a failed call can never look like
 success; each issued HTTP request is recorded once in
 `.devrelay/opencode/calls/` with a monotonic id, and there are **no hidden
-retries**. The token, when needed, comes from `DEVRELAY_OPENCODE_TOKEN` and is
-never persisted.
+retries**. The whole idle wait shares one deadline (the ownership probe spends
+from the same budget, and polling stops when it is gone); `send` reports
+`reply_pending` instead of substituting an older assistant message; and an
+accepted abort is `INTERRUPTED` with `interrupt_verified: false`, never a
+verified terminal state.
+
+`--json` prints the normalized result and never hides a failure: the exit code is
+`0` only when the command achieved what was asked (`COMPLETED`, or an accepted
+`INTERRUPTED` for `interrupt`) and `2` otherwise — including `reply_pending` —
+in both output modes.
+
+The token, when needed, comes from `DEVRELAY_OPENCODE_TOKEN`, is never persisted,
+and is scrubbed from every Codex child environment (it is in the v0.2-C child
+denylist), so a subprocess cannot bypass the bridge with it.
 
 v0.3-A deliberately does **not** perform role routing (DeepSeek → GLM), review
 loops, approval decisions or ChatGPT/MCP exposure; see
