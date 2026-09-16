@@ -987,7 +987,15 @@ def test_legacy_full_config_snapshot_tolerates_opencode_only_when_lenient(
     raw = yaml.safe_dump(document, sort_keys=False).encode("utf-8")
 
     parsed, dropped = load_policy_snapshot(raw, strict=False, source="legacy dump")
-    assert sorted(dropped) == ["codex", "opencode", "profiles", "review.provider"]
+    # v0.3-C adds one more wiring section (``roles``); like ``opencode`` before
+    # it, it is dropped from a legacy full-config dump rather than frozen.
+    assert sorted(dropped) == [
+        "codex",
+        "opencode",
+        "profiles",
+        "review.provider",
+        "roles",
+    ]
     assert "opencode" not in parsed.model_dump(mode="json")
     with pytest.raises(ConfigError):
         load_policy_snapshot(raw, strict=True, source="legacy dump")

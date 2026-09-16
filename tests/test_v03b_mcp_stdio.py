@@ -50,6 +50,11 @@ EXACT_TOOLS = [
     "opencode_send_prompt",
     "opencode_wait_idle",
     "opencode_interrupt",
+    # v0.3-C appends exactly three role-aware tools; the accepted nine above are
+    # unchanged, in order.
+    "devrelay_list_roles",
+    "devrelay_get_role",
+    "devrelay_send_role_prompt",
 ]
 TOKEN_SENTINEL = "oc-token-STDIO-SENTINEL-4711"
 PROMPT = "Reply with exactly DEVRELAY_A33_OK."
@@ -451,10 +456,10 @@ def _copy_mutated_candidate(target_src: Path, marker: str) -> Path:
     )
     server_py = target_src / "devrelay" / "mcp" / "server.py"
     server_text = server_py.read_text(encoding="utf-8")
-    assert 'MCP_SERVER_VERSION = "0.3.0-b"' in server_text
+    assert 'MCP_SERVER_VERSION = "0.3.0-c"' in server_text
     server_py.write_text(
         server_text.replace(
-            'MCP_SERVER_VERSION = "0.3.0-b"', f'MCP_SERVER_VERSION = "{marker}"'
+            'MCP_SERVER_VERSION = "0.3.0-c"', f'MCP_SERVER_VERSION = "{marker}"'
         ),
         encoding="utf-8",
     )
@@ -489,7 +494,7 @@ def test_stdio_child_executes_the_candidate_checkout(tmp_path):
 
     assert mutant_version == marker
     assert mutant_marker == marker, "the tool code path must come from the copied tree"
-    assert pristine_version == "0.3.0-b"
+    assert pristine_version == "0.3.0-c"
     assert pristine_marker is None
     assert (mutant_version, mutant_marker) != (pristine_version, pristine_marker)
 

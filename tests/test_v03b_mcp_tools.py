@@ -129,6 +129,8 @@ def test_tool_inventory_annotations_and_descriptions(tmp_path):
     server, _stub, _ws = build(tmp_path)
     tools = asyncio.run(server.list_tools())
     names = [tool.name for tool in tools]
+    # The accepted v0.3-B nine, unchanged and in order; v0.3-C appends exactly
+    # three role-aware tools (see tests/test_v03c_role_tools.py for v0.3-C).
     assert names == [
         "devrelay_status",
         "opencode_health",
@@ -139,6 +141,9 @@ def test_tool_inventory_annotations_and_descriptions(tmp_path):
         "opencode_send_prompt",
         "opencode_wait_idle",
         "opencode_interrupt",
+        "devrelay_list_roles",
+        "devrelay_get_role",
+        "devrelay_send_role_prompt",
     ]
     by_name = {tool.name: tool for tool in tools}
     for name in (
