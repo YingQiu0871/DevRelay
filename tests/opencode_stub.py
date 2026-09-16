@@ -24,6 +24,17 @@ DEFAULT_WORKSPACE = str(Path(tempfile.gettempdir()) / "opencode-stub-ws")
 
 FAKE_SECRET = "sk-live-OPENCODESECRET1234567890ab"
 
+#: Transport failures the stub can raise per route (third-review P1 tests).
+STUB_EXCEPTIONS = {
+    "read_timeout": httpx.ReadTimeout,
+    "write_timeout": httpx.WriteTimeout,
+    "connect_timeout": httpx.ConnectTimeout,
+    "pool_timeout": httpx.PoolTimeout,
+    "connect_error": httpx.ConnectError,
+    "read_error": httpx.ReadError,
+    "remote_protocol_error": httpx.RemoteProtocolError,
+}
+
 
 def _session(
     session_id: str,
@@ -80,6 +91,8 @@ class StubOpenCodeServer:
         prompt_raw_reply: Any = None,
         prompt_http_status: int | None = None,
         prompt_append: dict[str, Any] | None = None,
+        prompt_exception: str | None = None,
+        session_exception_after_prompt: str | None = None,
         prompt_error_body: str | None = None,
         vanish_after_prompt: bool = False,
         session_http_status_after_prompt: int | None = None,
@@ -126,6 +139,8 @@ class StubOpenCodeServer:
         # A message appended when the prompt is received even though the response
         # body itself is unusable (P1-B: accepted + reply correlated later).
         self.prompt_append = prompt_append
+        self.prompt_exception = prompt_exception
+        self.session_exception_after_prompt = session_exception_after_prompt
         self.prompt_error_body = prompt_error_body
         self.vanish_after_prompt = vanish_after_prompt
         self.session_http_status_after_prompt = session_http_status_after_prompt
@@ -194,6 +209,10 @@ class StubOpenCodeServer:
             session = self._find(parts[1])
             if session is None:
                 return httpx.Response(404, text="not found")
+            if self.prompts and self.session_exception_after_prompt:
+                raise STUB_EXCEPTIONS[self.session_exception_after_prompt](
+                    "stub follow-up failure"
+                )
             if self.prompts and self.malformed_after_prompt:
                 if self.malformed_after_prompt == "not_object":
                     return self._json(["not", "an", "object"])
@@ -223,6 +242,15 @@ class StubOpenCodeServer:
             if session is None:
                 return httpx.Response(404, text="not found")
             body = json.loads(request.content.decode("utf-8") or "{}")
+            if self.prompt_exception:
+                # The server received the prompt: record it (and any reply it
+                # produced) and then fail the way the transport would.
+                self.prompts.append(body)
+                if self.prompt_append is not None:
+                    self._message_counter += 1
+                    self.messages.append(self.prompt_append)
+                session["state"] = "busy"
+                raise STUB_EXCEPTIONS[self.prompt_exception]("stub prompt failure")
             if self.prompt_http_status is not None:
                 self.prompts.append(body)
                 if self.prompt_append is not None:

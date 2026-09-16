@@ -70,9 +70,14 @@ def _exit_code_for(result: OpenCodeOperationResult) -> int:
 
     ``reply_pending`` is not success either: the prompt was accepted, but the
     caller asked for a reply and did not get one, so it must not look like a
-    clean run.
+    clean run.  A ``submission_uncertain`` result is never a clean run either,
+    even when a reply was later correlated: the submission itself is unconfirmed.
     """
-    if result.state in _SUCCESS_STATES and not result.reply_pending:
+    if (
+        result.state in _SUCCESS_STATES
+        and not result.reply_pending
+        and not result.submission_uncertain
+    ):
         return 0
     return 2
 
@@ -87,6 +92,54 @@ def _emit(result: OpenCodeOperationResult, *, json_output: bool) -> None:
         raise typer.Exit(code)
 
 
+def _submission_lines(result: OpenCodeOperationResult) -> list[str]:
+    """Human rendering of the submission verdict - never a claim we cannot make.
+
+    The three states a caller must be able to tell apart are: accepted, uncertain
+    (may already be running - do not resubmit) and not accepted.
+    """
+    if not result.submission_attempted:
+        return []
+    if result.submission_uncertain:
+        return [
+            "  submission uncertain: the prompt may already have been accepted "
+            f"({result.error_type or 'transport failure'}); "
+            "do not resubmit automatically"
+        ]
+    if result.submission_status is None:
+        return [
+            "  submission not accepted: the request never reached the server, so "
+            "nothing was submitted"
+        ]
+    if 200 <= result.submission_status < 300:
+        detail = (
+            f"; response body unusable: {result.submission_body}"
+            if result.submission_body
+            else ""
+        )
+        return [f"  submission accepted (HTTP {result.submission_status}{detail})"]
+    return [
+        f"  submission rejected (HTTP {result.submission_status}): the server did "
+        "not accept the prompt"
+    ]
+
+
+def _reply_lines(result: OpenCodeOperationResult) -> list[str]:
+    """Human rendering of the reply correlation state."""
+    if result.reply_pending:
+        boundary = (
+            f" (boundary {result.reply_boundary})" if result.reply_boundary else ""
+        )
+        return [
+            "  reply      pending: no new assistant message was confirmed"
+            f"{boundary}; do not resubmit automatically"
+        ]
+    if result.messages:
+        latest = result.messages[-1]
+        return [f"  reply      {latest.message_id} ({latest.role})"]
+    return []
+
+
 def _emit_human(result: OpenCodeOperationResult) -> None:
     typer.echo(f"{result.operation}: {result.state.value}")
     if result.session_id:
@@ -94,6 +147,12 @@ def _emit_human(result: OpenCodeOperationResult) -> None:
     if result.call_ids:
         typer.echo(f"  calls      {', '.join(result.call_ids)}")
         typer.echo(f"  requests   {result.request_count}")
+    # Post-acceptance truth first: an accepted/uncertain submission with a pending
+    # reply must never look like a clean answer (third review).
+    for line in _submission_lines(result):
+        typer.echo(line)
+    for line in _reply_lines(result):
+        typer.echo(line)
     if result.error_type:
         typer.echo(f"  error      {result.error_type}: {result.error}")
     if result.health is not None:

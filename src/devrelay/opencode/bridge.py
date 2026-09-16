@@ -394,6 +394,12 @@ class OpenCodeBridge:
             boundary_result.page.next_cursor if boundary_result.page is not None else ""
         )
         merged = self._merge_accounting(boundary_result, merged)
+        # The boundary window is *pre-submission* state.  Its accounting and the
+        # correlation cursor are kept, but the messages/page are dropped from the
+        # result chain: otherwise a post-acceptance result with no confirmed reply
+        # would expose the previous assistant message as if it were the answer
+        # (third-review smoke blocker P2).
+        merged = merged.model_copy(update={"messages": [], "page": None})
         body: dict[str, Any] = {"parts": [{"type": "text", "text": prompt}]}
         if agent:
             body["agent"] = agent
@@ -411,27 +417,56 @@ class OpenCodeBridge:
             result=merged,
         )
         accepted = 200 <= (response.status or 0) < 300
-        if not accepted:
+        # Evidence about the POST itself, carried on *every* return path: the
+        # follow-up read legitimately overwrites ``http_status``, and a transport
+        # failure has no HTTP status at all.
+        # ``submission_body`` only describes an *accepted* submission whose body
+        # could not be used as an inline reply; a non-2xx response is a rejection
+        # (``submission_status``) and has no "unusable body" condition.
+        submission_body = (
+            (response.error_type or "unusable_body")
+            if (accepted and not response.ok)
+            else ""
+        )
+        post_evidence: dict[str, Any] = {
+            "submission_attempted": True,
+            "submission_status": response.status,
+            "submission_body": submission_body,
+            "submission_uncertain": bool(response.submission_uncertain),
+        }
+        result = result.model_copy(update=post_evidence)
+
+        if not accepted and not response.submission_uncertain:
+            # A *definite* outcome: either the server answered with a non-2xx
+            # status, or the transport failure proves nothing was submitted
+            # (connect/pool timeout, connect error, local refusal).
             if response.status == 404:
                 raise OpenCodeSessionNotFoundError(
                     f"session {session_id} has no prompt endpoint on {self.base_url}"
                 )
-            return self._failure(result, response)
+            failed = self._failure(result, response)
+            if response.status is None:
+                failed = failed.model_copy(
+                    update={
+                        "error": (
+                            f"{failed.error} (no connection was established, so the "
+                            "prompt was not submitted)"
+                        ).strip(),
+                        "reply_pending": False,
+                        "messages": [],
+                        "page": None,
+                    }
+                )
+            return failed
 
-        # P1-B: a 2xx status is submission acceptance, independently of whether
-        # the body can be used as an inline reply.  An unusable body (204/empty,
-        # invalid JSON, oversized) is recorded as evidence, and the operation
-        # continues as a *post-acceptance* result: the prompt may already be
-        # running on the server, so it is never reported as "not submitted" and
-        # never resubmitted.
-        submission_body = "" if response.ok else (response.error_type or "unusable_body")
-        # Evidence about the POST itself: it is carried on every return path,
-        # because the follow-up read legitimately overwrites ``http_status``.
-        post_evidence: dict[str, Any] = {
-            "submission_body": submission_body,
-            "submission_status": response.status,
-        }
-        result = result.model_copy(update=post_evidence)
+        if response.submission_uncertain:
+            # P1 (third review): a read/write timeout may happen *after* the
+            # request bytes reached the server, so the prompt may already have
+            # been accepted.  Exactly one bounded follow-up read is allowed (it
+            # never resubmits), and the result is always explicitly uncertain.
+            return self._uncertain_submission(
+                session_id, boundary_cursor, result, response, prompt, known_ids
+            )
 
         # ---- inline candidate: only an explicit, *new* assistant message -----
         candidate = (
@@ -458,6 +493,7 @@ class OpenCodeBridge:
                     "follow_up_state": follow_up.state.value,
                     **post_evidence,
                     "messages": [],
+                    "page": None,
                 }
             )
         if not follow_up.ok:
@@ -471,6 +507,11 @@ class OpenCodeBridge:
                     "reply_boundary": boundary_cursor,
                     "follow_up_state": follow_up.state.value,
                     **post_evidence,
+                    # No reply was correlated: expose no message window at all, so
+                    # a pre-submission assistant message can never be read as the
+                    # answer (the boundary stays in ``reply_boundary``).
+                    "messages": [],
+                    "page": None,
                 }
             )
         fresh = [
@@ -511,6 +552,93 @@ class OpenCodeBridge:
                 "error_type": "reply_pending",
                 "error": detail,
                 "messages": [],
+                "page": None,
+            }
+        )
+
+    def _uncertain_submission(
+        self,
+        session_id: str,
+        boundary_cursor: str,
+        prior: OpenCodeOperationResult,
+        response: TransportResponse,
+        prompt: str,
+        known_ids: set[str],
+    ) -> OpenCodeOperationResult:
+        """Result for a POST whose outcome cannot be proven (third review P1).
+
+        The submission may already have been accepted, so the result is never
+        "safe to retry": ``submission_uncertain`` is True, ``reply_pending`` stays
+        True unless a *new* assistant message appeared, and the POST is never
+        repeated.  Exactly one bounded follow-up read is attempted (it can only
+        observe), and all of its requests are accounted for.
+        """
+        follow_up = self._read_after_prompt(session_id, boundary_cursor, prior, prompt)
+        fresh = (
+            [
+                message
+                for message in follow_up.messages
+                if message.role == "assistant" and message.message_id not in known_ids
+            ]
+            if follow_up.ok
+            else []
+        )
+        if fresh:
+            # Positive evidence: a new assistant message appeared after the
+            # boundary, so the reply is correlated - the submission itself stays
+            # flagged as uncertain because the POST never returned.
+            return follow_up.model_copy(
+                update={
+                    "operation": "send_prompt",
+                    "session_id": session_id,
+                    "reply_pending": False,
+                    "reply_boundary": boundary_cursor,
+                    "follow_up_state": follow_up.state.value,
+                    "submission_attempted": True,
+                    "submission_status": None,
+                    "submission_body": "",
+                    "submission_uncertain": True,
+                    "error_type": response.error_type,
+                    "error": (
+                        f"the submission POST failed after it may have been sent "
+                        f"({response.error_type}); a new assistant reply was later "
+                        "correlated, but the submission itself remains unconfirmed"
+                    ),
+                    "messages": [fresh[-1]],
+                    "page": None,
+                }
+            )
+        detail = (
+            f"the submission POST failed after the request may already have "
+            f"reached the server ({response.error_type}); the prompt may have been "
+            "accepted, so DevRelay does not resubmit automatically and does not "
+            "report the submission as sent"
+        )
+        if follow_up.error_type:
+            detail += f"; the follow-up read also failed ({follow_up.error_type})"
+        return follow_up.model_copy(
+            update={
+                "operation": "send_prompt",
+                "session_id": session_id,
+                # The dominant condition is the POST failure that made the outcome
+                # unknown; the follow-up outcome stays explicit beside it.
+                "state": (
+                    OpenCodeOperationState.TIMED_OUT
+                    if response.state is OpenCodeCallState.TIMED_OUT
+                    else OpenCodeOperationState.PROVIDER_UNAVAILABLE
+                ),
+                "reply_pending": True,
+                "reply_boundary": boundary_cursor,
+                "follow_up_state": follow_up.state.value,
+                "submission_attempted": True,
+                "submission_status": None,
+                "submission_body": "",
+                "submission_uncertain": True,
+                "error_type": response.error_type,
+                "error": detail,
+                "messages": [],
+                "page": None,
+                "duration_ms": self._elapsed_ms(follow_up),
             }
         )
 
@@ -991,6 +1119,7 @@ class OpenCodeBridge:
                 "duration_ms": response.duration_ms,
                 "response_bytes": response.response_bytes,
                 "response_truncated": response.response_truncated,
+                "submission_uncertain": bool(response.submission_uncertain),
             }
         )
         self.ledger.finish(settled)

@@ -229,8 +229,15 @@ class OpenCodeOperationResult(BaseModel):
     # accepted by the server, so this is evidence, never a "not submitted" claim.
     submission_body: str = ""
     #: HTTP status of the submission POST itself (``http_status`` describes the
-    #: most recent request, which may be the follow-up read).
+    #: most recent request, which may be the follow-up read).  ``None`` together
+    #: with ``submission_attempted`` means the POST got no HTTP response at all.
     submission_status: int | None = None
+    #: True once the POST was actually issued (whether or not it succeeded).
+    submission_attempted: bool = False
+    #: True when the POST failure cannot prove the prompt was not accepted (a
+    #: read/write timeout or an equivalent mid-transfer failure): the caller must
+    #: not resubmit automatically.
+    submission_uncertain: bool = False
     # interrupt (P2-C): an accepted abort request is not a verified terminal
     # state, and v0.3-A says exactly that.
     interrupt_verified: bool = False
@@ -276,6 +283,9 @@ class OpenCodeCallRecord(BaseModel):
     duration_ms: int = 0
     response_bytes: int = 0
     response_truncated: bool = False
+    #: True when the failure cannot prove the request was never submitted (third
+    #: review P1): a later reader must know the prompt may already be running.
+    submission_uncertain: bool = False
     prompt_sha256: str = ""
     prompt_chars: int = 0
     agent: str = ""

@@ -47,13 +47,17 @@ def test_health_reports_capabilities():
 def test_health_fails_closed_when_unreachable():
     result = StubOpenCodeServer(unreachable=True).bridge().health()
     assert result.state is OpenCodeOperationState.PROVIDER_UNAVAILABLE
-    assert result.error_type == "transport"
+    # A connect failure proves nothing was submitted (see the third-review
+    # transport classification: it is not `submission_uncertain`).
+    assert result.error_type == "connect_error"
 
 
 def test_health_fails_closed_on_timeout():
     result = StubOpenCodeServer(timeout=True).bridge().health()
     assert result.state is OpenCodeOperationState.TIMED_OUT
-    assert result.error_type == "timeout"
+    # The stub raises httpx.ReadTimeout: the request may already have been sent,
+    # so it is classified precisely (and marked submission-uncertain in send_prompt).
+    assert result.error_type == "read_timeout"
 
 
 def test_health_fails_closed_on_malformed_response():

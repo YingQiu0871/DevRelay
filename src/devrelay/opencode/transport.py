@@ -12,6 +12,7 @@ smoke (see ``docs/v0.3/V03A_SPEC.md``).
 from __future__ import annotations
 
 import json
+import re
 import time
 from dataclasses import dataclass, field
 from typing import Any, Iterable, Mapping, Sequence
@@ -64,6 +65,11 @@ class TransportResponse:
     response_bytes: int = 0
     response_truncated: bool = False
     headers: Mapping[str, str] = field(default_factory=dict)
+    #: True when this failure cannot prove the request was never submitted (a
+    #: read/write timeout, a read/write error or a remote protocol error): the
+    #: bytes may already have reached the server, so a caller must not treat the
+    #: attempt as safely retryable (third-review blocker P1).
+    submission_uncertain: bool = False
 
     @property
     def ok(self) -> bool:
@@ -113,6 +119,57 @@ def _redaction_variants(values: Iterable[str], *, depth: int = 2) -> tuple[str, 
                 add(item)
             current = expanded
     return tuple(out)
+
+
+def _error_name(exc: BaseException) -> str:
+    """Snake-case exception name, used as a precise transport error type."""
+    return re.sub(r"(?<!^)(?=[A-Z])", "_", type(exc).__name__).lower()
+
+
+def transport_failure(
+    exc: httpx.TransportError, *, error: str, duration_ms: int
+) -> TransportResponse:
+    """Classify a transport failure: submitted-uncertain or not-submitted.
+
+    The distinction is safety-critical for a submission: ``ConnectTimeout``,
+    ``PoolTimeout``, ``ConnectError``, ``ProxyError``, ``UnsupportedProtocol`` and
+    ``LocalProtocolError`` prove that no connection was established or that the
+    request was refused locally, so the prompt was *not* submitted and the
+    failure is not ``submission_uncertain``.  A read/write timeout or a
+    read/write/remote-protocol error may happen after the request bytes were sent
+    - the server may already have accepted the prompt - so those (and anything
+    unclassified) are marked ``submission_uncertain=True``.  The default is
+    uncertainty: a caller must never be told "safe to retry" on a guess.
+    """
+    if isinstance(exc, httpx.ConnectTimeout):
+        error_type, uncertain = "connect_timeout", False
+    elif isinstance(exc, httpx.PoolTimeout):
+        error_type, uncertain = "pool_timeout", False
+    elif isinstance(exc, httpx.ConnectError):
+        error_type, uncertain = "connect_error", False
+    elif isinstance(exc, httpx.ReadTimeout):
+        error_type, uncertain = "read_timeout", True
+    elif isinstance(exc, httpx.WriteTimeout):
+        error_type, uncertain = "write_timeout", True
+    elif isinstance(
+        exc, (httpx.ProxyError, httpx.UnsupportedProtocol, httpx.LocalProtocolError)
+    ):
+        error_type, uncertain = _error_name(exc), False
+    else:
+        # ReadError/WriteError/RemoteProtocolError/CloseError and any future
+        # transport failure whose stage is unknown.
+        error_type, uncertain = _error_name(exc), True
+    return TransportResponse(
+        state=(
+            OpenCodeCallState.TIMED_OUT
+            if isinstance(exc, httpx.TimeoutException)
+            else OpenCodeCallState.PROVIDER_UNAVAILABLE
+        ),
+        error_type=error_type,
+        error=error,
+        duration_ms=duration_ms,
+        submission_uncertain=uncertain,
+    )
 
 
 class OpenCodeTransport:
@@ -202,26 +259,30 @@ class OpenCodeTransport:
                 body = self._read_bounded(response)
                 status = response.status_code
                 headers = {k.lower(): v for k, v in response.headers.items()}
-        except httpx.TimeoutException as exc:
-            return TransportResponse(
-                state=OpenCodeCallState.TIMED_OUT,
-                error_type="timeout",
+        except httpx.TransportError as exc:
+            return transport_failure(
+                exc,
                 error=self._clip(f"{type(exc).__name__}: {exc}", extra),
                 duration_ms=self._ms(started),
             )
         except httpx.HTTPError as exc:
+            # Non-transport httpx failures (e.g. a decoding error) happen after a
+            # response arrived, so they are never "not submitted".
             return TransportResponse(
                 state=OpenCodeCallState.PROVIDER_UNAVAILABLE,
-                error_type="transport",
+                error_type=_error_name(exc),
                 error=self._clip(f"{type(exc).__name__}: {exc}", extra),
                 duration_ms=self._ms(started),
+                submission_uncertain=True,
             )
         except OSError as exc:  # pragma: no cover - defensive
+            # A socket-level OSError can happen mid-transfer: fail closed.
             return TransportResponse(
                 state=OpenCodeCallState.PROVIDER_UNAVAILABLE,
-                error_type="transport",
+                error_type=_error_name(exc),
                 error=self._clip(f"{type(exc).__name__}: {exc}", extra),
                 duration_ms=self._ms(started),
+                submission_uncertain=True,
             )
 
         truncated = len(body) > self.max_response_bytes
