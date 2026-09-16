@@ -4,6 +4,73 @@ All notable changes to DevRelay are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## Unreleased - v0.3-C candidate (agent role routing)
+
+Explicit, deterministic **role -> route resolution** on top of the accepted
+v0.3-B MCP surface: an MCP caller selects a semantic role and DevRelay supplies
+the exact workspace-configured model (and optional OpenCode agent).  **Candidate
+implementation complete, awaiting independent review and unreleased**: the
+package version stays `0.1.0`, the supported public release remains `v0.1.0`,
+nothing is pushed, merged, tagged or published, and this stage makes **0 real
+model calls**.
+
+### Added
+
+- **`src/devrelay/roles/`** (`models.py`, `resolver.py`, `service.py`): the role
+  vocabulary (`implementer`, `reviewer` - no generic taxonomy yet, no vendor or
+  model identifier in code), a frozen `RoleRoute` value object (role, model,
+  agent, source) with sanitized read-only/audit views, deterministic exact
+  resolution, and `RoleRouter.send_role_prompt(bridge, role, session_id, prompt)`
+  which resolves first and then delegates to the accepted
+  `OpenCodeBridge.send_prompt`.
+- **Local error taxonomy**: `role_unknown`, `role_unconfigured` and
+  `role_invalid_route` (`CodedError` subclasses) - local routing failures raised
+  before any request that could submit a model turn, never mislabeled as provider
+  failures.
+- **`roles:` workspace wiring section**: `roles.implementer` / `roles.reviewer`
+  with `model` (`<providerID>/<modelID>`, the accepted grammar) and an optional
+  `agent`.  Identifiers only: prompt templates, shell commands, environment
+  variables, endpoint/workspace overrides, retry policies, fallback models,
+  candidate lists and credentials are rejected by the schema.  Runtime wiring,
+  never task policy (excluded from policy overrides; tolerated-and-dropped in
+  legacy full-config dumps).  The section is optional - an existing v0.3-B
+  workspace stays valid and `devrelay mcp serve` never refuses to start because
+  role routing is absent.
+- **Three MCP tools** (the accepted nine are unchanged, total 12):
+  `devrelay_list_roles` (read-only), `devrelay_get_role` (read-only) and
+  `devrelay_send_role_prompt` (`role`, `session_id`, `prompt` only).  Their
+  descriptions state the routing contract: the caller selects the role, DevRelay
+  resolves the exact configured model/agent, the route cannot be overridden,
+  exactly one model turn is sent, nothing is retried, and a reviewer reply is
+  provider text rather than an acceptance decision.
+- **Role-routing evidence in the send envelope**: `role`, `resolved_model`,
+  `resolved_model_identity`, `resolved_agent`, `route_source` alongside every
+  accepted v0.3-A send field, so a planner can audit which role and route were
+  used; an accepted bridge failure keeps its exact code and additionally reports
+  the attempted route.
+- **140 offline tests** (`tests/test_v03c_role_config.py`,
+  `tests/test_v03c_roles.py`, `tests/test_v03c_role_tools.py`,
+  `tests/test_v03c_role_concurrency.py`, `tests/test_v03c_stdio_roles.py`,
+  `tests/v03c_helpers.py`) plus the v0.3-C spec/acceptance documents.
+
+### Notes
+
+- **No orchestration**: no automatic implementer -> reviewer sequencing, no
+  repair loops, no retry loops, no automatic acceptance or rejection, no merge
+  decisions, no Planner role inside DevRelay, no session creation or lifecycle
+  management, no model ranking/fallback, no WebUI/HTTP control API.  The external
+  planner still decides which role to call, when and what to do next.
+- **Backward compatibility**: the raw `opencode_send_prompt` tool is byte-for-byte
+  unchanged (caller-supplied model/agent still reach the wire, no role key in its
+  envelope) and both paths can be used in the same session.  Role routing is
+  never inferred from prompt text, session title or model availability.
+- **The v0.3-B execution boundary still applies**: all twelve tool bodies run
+  under the same one per-surface execution lock (no role lock, no scheduler), so
+  the accepted single-writer filesystem ledger never sees concurrent access.
+- `MCP_SERVER_VERSION` is `0.3.0-c` (the advertised surface changed from nine to
+  twelve tools).  A real role-routed model smoke remains deferred until after
+  independent review and a separate authorization.
+
 ## Unreleased - v0.2-B project profiles (candidate under independent review)
 
 Reusable project policy profiles on top of a frozen, integrity-verified task

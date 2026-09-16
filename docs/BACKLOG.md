@@ -100,7 +100,18 @@ authorizes code changes; each item names its own scope and owner stage.
 * a fresh idle session may appear as `state: UNKNOWN` in list/get while
   `wait_idle` resolves idle through the `/session/status` absence semantics.
 
-## 5. Deferred follow-ups after v0.3-A acceptance (recorded; **do not block acceptance**)
+## 5. Deferred follow-ups from v0.3-C agent role routing (recorded; **non-blocking for v0.3-C review**)
+
+| Item | Note |
+| --- | --- |
+| Real role-routed model smoke against a real OpenCode server | requires independent review first (`P0 = 0`, `P1 = 0`, no smoke-blocking P2) and a separate authorization; the v0.3-C implementation round makes **0 real model calls** (all evidence is offline or over the real stdio boundary against a deterministic loopback fake) |
+| Generic / arbitrary role taxonomy and a role registry | v0.3-C ships exactly `implementer` and `reviewer` on purpose: a configurable role registry, role inheritance or per-role capability sets would freeze a taxonomy before the orchestration stage needs one; the internal model type is reusable so migration stays cheap |
+| Session policy per role (session-per-role provisioning, binding or inference) | explicitly out of scope for v0.3-C: every role-aware send requires an explicit `session_id`, no session is created, bound, inferred or remembered, and a reviewer session is never derived from an implementer session |
+| Role-level prompt templates / personas / system instructions | deliberately unsupported: role configuration carries identifiers only, so a role can never smuggle policy, prompts or credentials into a submission |
+| Orchestration (automatic implementer -> reviewer sequencing, repair loops, bounded loops) | v0.3-D territory; v0.3-C routes and stops there |
+| Role-aware cancellation leaves the same evidence as the raw path (no envelope, settled ledger record) | accepted v0.3-A behavior preserved on purpose; a future stage could add an explicit "role send in flight" reporting surface |
+
+## 6. Deferred follow-ups after v0.3-A acceptance (recorded; **do not block acceptance**)
 
 v0.3-A was accepted on the strength of the final real A33 smoke (see
 `docs/v0.3/V03A_ACCEPTANCE.md`).  Every item below is explicitly **non-blocking**
@@ -123,7 +134,7 @@ referencing a provider disabled by the same configuration) is an
 **environment/user configuration issue** — recorded here for context only, not a
 DevRelay defect and not a backlog item.
 
-## 6. Deferred beyond the second v0.3-A remediation (recorded, not started)
+## 7. Deferred beyond the second v0.3-A remediation (recorded, not started)
 
 | Item | Why it is deferred |
 | --- | --- |
@@ -135,7 +146,7 @@ DevRelay defect and not a backlog item.
 | Post-abort verification polling (`interrupt_verified`) | accepted-but-unverified is the documented v0.3-A semantic |
 | Attachment/tool-argument modeling | deliberately dropped in v0.3-A |
 
-## 7. Pre-existing test-environment hygiene: shared `%TEMP%` residue
+## 8. Pre-existing test-environment hygiene: shared `%TEMP%` residue
 
 | Field | Value |
 | --- | --- |

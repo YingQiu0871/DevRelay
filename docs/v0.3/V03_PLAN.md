@@ -6,7 +6,8 @@
 | --- | --- | --- |
 | **A** | OpenCode session bridge (explicit endpoint, session select/read, one prompt, bounded wait, interrupt, accounting) | **COMPLETE / ACCEPTED** — candidate `bcf9627e92ef839abb756810e3c615e6d01b6576`, real A33 smoke `PASS` against OpenCode `1.18.11` |
 | B | ChatGPT/MCP tool surface (local stdio MCP adapter over the accepted v0.3-A bridge) | **COMPLETE / ACCEPTED** — accepted candidate `d058d62341a173414bdba88fe357b08c236c8bb4`, real MCP smoke `PASS — V0.3-B LOCAL REAL MCP SMOKE` (accepted internally, **unreleased**) |
-| C | Agent role routing / orchestration (not designed yet) | **NEXT — NOT STARTED** |
+| C | Agent role routing (semantic role -> workspace-configured model/agent; routing only, no orchestration) | **CANDIDATE IMPLEMENTATION COMPLETE — ready for independent review** (unreleased) |
+| D | Orchestration (automatic implementer -> reviewer sequencing, repair loops) | **NOT STARTED** (not designed yet) |
 
 v0.3-A is accepted and its runtime implementation is frozen at the accepted
 candidate (`bcf9627…`); v0.3-A sources were not modified by v0.3-B.
@@ -21,9 +22,42 @@ evidence includes one separately authorized real MCP smoke
 one explicit `opencode-go/deepseek-v4.1-flash` turn, exactly one
 `POST /session/{id}/message`, reply `DEVRELAY_V03B_MCP_OK`).
 
-v0.3-C (role routing / orchestration) is **NEXT** and has **not** started; it must
-not begin without a separate authorization.  See `docs/BACKLOG.md` for deferred,
-non-blocking follow-ups.
+v0.3-C (agent role routing) is implemented as an **unreleased candidate** on
+branch `v0.3-c-agent-role-routing`, based on the v0.3-B acceptance closeout
+`c883bab…`: see `docs/v0.3/V03C_SPEC.md` and `docs/v0.3/V03C_ACCEPTANCE.md`.  It
+routes a semantic role (`implementer` | `reviewer`) to the exact model/agent the
+workspace configures and adds exactly three MCP tools (12 in total); it does
+**not** orchestrate anything.  It makes **0 real model calls** and awaits
+independent review before any real role-routing smoke is even considered.
+
+v0.3-D (orchestration: automatic sequencing, repair loops, acceptance decisions)
+has **not** started; it must not begin without a separate authorization.  See
+`docs/BACKLOG.md` for deferred, non-blocking follow-ups.
+
+## v0.3-C scope (implemented, candidate)
+
+1. `src/devrelay/roles/models.py` — the role vocabulary (`implementer`,
+   `reviewer`), the frozen `RoleRoute` value object and the `RolesConfig` wiring
+   schema (identifiers only; no prompts, credentials, endpoints or fallbacks).
+2. `src/devrelay/roles/resolver.py` — deterministic exact resolution with the
+   local error taxonomy (`role_unknown` / `role_unconfigured` /
+   `role_invalid_route`) and the sanitized read-only views.
+3. `src/devrelay/roles/service.py` — `RoleRouter.send_role_prompt(bridge, role,
+   session_id, prompt)`: resolve first, then delegate to the accepted
+   `OpenCodeBridge.send_prompt` with the configured model/agent.  No model/agent
+   parameter exists (P1), no second HTTP path exists.
+4. `src/devrelay/config.py` — the optional `roles:` wiring section (never task
+   policy; absent is valid so v0.3-B workspaces keep working).
+5. `src/devrelay/mcp/tools.py` + `server.py` — exactly three new tools
+   (`devrelay_list_roles`, `devrelay_get_role`, `devrelay_send_role_prompt`), all
+   routed through the one v0.3-B `_execute` execution boundary; the accepted nine
+   tools, the enveloping rule and the raw path are unchanged.
+6. `tests/test_v03c_role_config.py`, `tests/test_v03c_roles.py`,
+   `tests/test_v03c_role_tools.py`, `tests/test_v03c_role_concurrency.py`,
+   `tests/test_v03c_stdio_roles.py` (+ `tests/v03c_helpers.py`) — 140 offline
+   tests: configuration, resolution, route separation, override rejection,
+   failure taxonomy, the accepted send-semantics matrix through the role path,
+   serialization/cancellation and the real stdio MCP boundary.
 
 ## v0.3-B scope (implemented, accepted)
 
