@@ -201,10 +201,29 @@ and `reply_pending` and to **not resubmit automatically**.
   server version and adds a marker to `devrelay_status`, and asserts the child
   advertises both - proving the executed tool code comes from the tree the
   harness points at.
-* **Concurrency**: v0.3-B serializes side-effecting operations
-  (`opencode_send_prompt`, `opencode_interrupt`) per MCP server process with one
-  narrow lock; read tools are not serialized and there is no scheduler.  Two
-  concurrent submissions therefore cannot overlap (asserted by a test).
+* **Concurrency (remediated after the gate)**: v0.3-B serializes **all nine
+  tool bodies** per MCP server process with exactly ONE process-scoped,
+  re-entrant execution lock (`McpToolSurface._execution_lock`, a
+  `threading.RLock`); there is no scheduler, no reader/writer lock and no second
+  lock, so there is no lock order to get wrong.  The invariant is *at most one
+  DevRelay MCP tool body may access the accepted v0.3-A bridge/ledger at a time
+  within one MCP server process*.  This includes concurrent **reads**: every
+  bridge request (including the ownership probe and the message read) allocates a
+  durable `OC-*` identity through the accepted `FilesystemOpenCodeLedger`, whose
+  allocation is a non-atomic read-modify-write over one fixed-name temp file and
+  which refuses identity reuse - i.e. it is a single-writer store.  Before the
+  remediation, 8 parallel `opencode_read_messages` calls on one server produced 7
+  `internal_error`/`opencode_ledger_error` failures out of 8, colliding
+  `OC-0001` identities and a truncated ledger; after it, the same batch returns
+  8/8 success with 16 unique, settled, contiguously numbered call identities
+  (asserted by `tests/test_v03b_mcp_concurrency.py`).  Consequences a client must
+  expect: a long `opencode_wait_idle` body delays other tool calls in the same
+  process, and cancelling an MCP request does not let another body overtake a
+  still-running one.  `devrelay_status` reports `execution_serialized: true`.
+  The `readOnlyHint` annotations are unchanged: they describe side-effect
+  semantics, not concurrency.  Read concurrency can only be revisited together
+  with a thread-/process-safe ledger (see BACKLOG), not by weakening this
+  boundary.
 * **Cancellation**: cancelling the local MCP request does **not** cancel a model
   POST that was already issued, and it never implies "not submitted".  v0.3-B
   deliberately does not send an automatic `interrupt` on cancellation; the
@@ -247,10 +266,19 @@ and `reply_pending` and to **not resubmit automatically**.
 * Cancellation semantics are asserted at the boundary (no POST before the gate ⇒
   nothing recorded; cancellation around an issued POST ⇒ durable evidence stays
   inspectable, `retry_safe` is never claimed, no automatic resubmit, no automatic
-  `interrupt`, and the side-effect lock is released so a later legitimate call
-  completes).
+  `interrupt`).  Cancellation cannot stop an already-running synchronous tool
+  body, so the execution lock is released only when that body actually exits
+  (asserted: a concurrent tool call stays blocked until then, and exactly one
+  submission is ever issued).  Tool calls that arrive while another body holds
+  the boundary wait on it inside MCP worker threads; no tool body ever calls
+  another tool, so the boundary cannot deadlock, and the SDK's thread pool (not
+  the lock) is the only fan-out limit.
 * Multi-process concurrency, Streamable HTTP/SSE transport, multi-workspace
-  serving and any orchestration remain out of scope.
+  serving and any orchestration remain out of scope.  The serialization
+  boundary is **per MCP server process**: two `devrelay mcp serve` processes
+  bound to the same workspace share one filesystem ledger and are NOT serialized
+  against each other.  A single-writer ledger (lock file or atomic compare-and-
+  swap identity allocation) is required before that is claimed.
 
 ## 10. Minimal local setup
 

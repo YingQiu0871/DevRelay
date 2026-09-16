@@ -51,8 +51,17 @@ authorizes code changes; each item names its own scope and owner stage.
 | --- | --- |
 | Real MCP-client smoke (ChatGPT or another host) → disposable OpenCode session | deliberately **after** independent review; the v0.3-B implementation round makes 0 real model calls, so native-client interoperability is not yet verified |
 | Streamable HTTP/SSE MCP transport | out of scope for v0.3-B (local stdio only); needs its own design (auth, exposure, session lifetime) |
-| Multi-process concurrency / multi-workspace serving | v0.3-B is one process bound to one workspace with serialized side effects; a scheduler/locking design is a later stage |
+| Multi-process concurrency / multi-workspace serving | v0.3-B is one process bound to one workspace with **all** tool execution serialized by one re-entrant lock; two `devrelay mcp serve` processes over one workspace share one ledger and are NOT serialized against each other |
 | Tool-level progress notifications, MCP resources/prompts | not needed for the adapter surface in v0.3-B |
+| Single-writer ledger (`sequence.json` allocation is a non-atomic read-modify-write over one fixed-name temp file) | the v0.3-B execution lock makes concurrent access impossible *inside one MCP server process*; a lock file / atomic compare-and-swap identity allocation is required before multi-process serving or concurrent reads can be claimed |
+| Read concurrency inside one process | deliberately serialized in v0.3-B because reads also allocate durable call identities; revisit only together with ledger hardening, not by weakening the boundary |
+| Serialization latency | a long `opencode_wait_idle` (bounded by `idle_timeout_seconds`, MCP cap 600 s) delays every other tool call in the same process; a scheduler is explicitly out of scope for v0.3-B |
+| Post-POST unexpected exception can collapse `data` to `{}` | recorded at the v0.3-B gate; the envelope still reports `ok: false`, but the operation evidence is thinner than on a `DevRelayError` path |
+| `retry_safe` is absent (rather than `false`) for some pre-bridge failure envelopes | the truth table covers the bridge-backed path only; absence is not a safety claim and is documented as such |
+| `devrelay_status` bound-root vs `config.workspace` nuance | status reports the bound root while the bridge may target the configured `workspace`; both are surfaced, the reporting nuance is recorded |
+| `opencode_interrupt` queues behind an in-flight `send_prompt` | expected under the global serialization boundary (it is not an out-of-band abort) and documented; a second control channel would be a new design |
+| Provider error routes may echo the prompt on non-prompt operations | the prompt is never stored durably and the submission routes are covered; non-prompt error bodies are sanitized but not prompt-scrubbed |
+| Dead `_ENVELOPE_KEY` constant (and a `ServerMiddleware` import kept only as a protocol check) in `src/devrelay/mcp/server.py` | recorded at the v0.3-B gate; harmless leftovers from the abandoned middleware approach, deliberately not touched by the concurrency remediation (server.py envelope shaping is frozen) |
 
 ## 5. Deferred follow-ups after v0.3-A acceptance (recorded; **do not block acceptance**)
 

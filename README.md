@@ -757,8 +757,13 @@ model and never resubmits: read `submission_uncertain`, `reply_pending` and
 `retry_safe` before deciding anything - `submission_uncertain` means the prompt
 may already have been accepted, so **do not resubmit automatically**.  DevRelay
 holds no acceptance authority: no tool approves code or declares a review
-passed.  Side-effecting calls are serialized per process; cancelling a local MCP
-request never implies "not submitted" and never triggers an automatic abort.
+passed.  **All** tool execution - reads included - is serialized per MCP server
+process by one re-entrant lock, because the accepted v0.3-A filesystem ledger
+allocates call identities with a non-atomic read-modify-write (one writer at a
+time); `devrelay_status` reports `execution_serialized: true`.  A long
+`opencode_wait_idle` therefore delays other calls in the same process.
+Cancelling a local MCP request never implies "not submitted" and never triggers
+an automatic abort.
 Spec: `docs/v0.3/V03B_SPEC.md`; acceptance matrix:
 `docs/v0.3/V03B_ACCEPTANCE.md`.  Requires the optional extra
 `pip install -e ".[mcp]"`.

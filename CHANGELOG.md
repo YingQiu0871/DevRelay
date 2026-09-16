@@ -160,7 +160,25 @@ published, and no real model/OpenCode call is made by this stage.
 - **Cancellation evidence**: strengthened tests prove no submission is recorded
   before the gate, an already-issued POST leaves an inspectable settled record
   with no `retry_safe` claim, no automatic resubmit/interrupt happens, and the
-  side-effect lock is released for later calls.
+  execution lock is released for later calls.
+- **Global execution serialization (P2, post-re-gate)**: parallel MCP tool
+  executions raced the accepted v0.3-A filesystem ledger, which allocates durable
+  `OC-*` identities with a non-atomic read-modify-write and refuses identity
+  reuse.  With 8 concurrent `opencode_read_messages` on one server, 7 of 8 calls
+  failed (`internal_error` from a `PermissionError` on the shared
+  `.sequence.json.tmp` rename, and `opencode_ledger_error` from a colliding
+  `OC-0001`) and the durable ledger was truncated to 2 of 8 records.  All nine
+  tool bodies - reads included - now run under exactly **one** process-scoped,
+  re-entrant execution lock (`McpToolSurface._execution_lock`); the redundant
+  `_side_effect_lock` and the separate bridge-construction lock are gone, so
+  there is no lock order to get wrong and no scheduler to reason about.  The same
+  8-call batch now returns 8/8 success with 16 unique, settled, contiguously
+  numbered call identities and a measured maximum of one concurrent ledger entry.
+  `devrelay_status` reports `execution_serialized: true`.  Consequences: a long
+  `opencode_wait_idle` body delays other calls in the same process, cancelling a
+  request does not let another body overtake an already-running one, and two
+  `devrelay mcp serve` processes over one workspace are still not serialized
+  against each other (single-writer ledger hardening remains deferred).
 
 ### Notes
 
@@ -168,8 +186,10 @@ published, and no real model/OpenCode call is made by this stage.
   (exactly one submission POST, no retry/fallback, submission-uncertainty
   distinction, stale-reply suppression, durable accounting, credential/prompt
   containment) holds through the MCP layer.
-- Side-effecting tools are serialized per server process; cancelling a local MCP
-  request never implies "not submitted" and never triggers an automatic abort.
+- **All** tool execution (reads included) is serialized per MCP server process by
+  one re-entrant execution lock, because the accepted v0.3-A filesystem ledger is
+  a single-writer store; cancelling a local MCP request never implies "not
+  submitted" and never triggers an automatic abort.
 - Deferred: a real MCP-client smoke (after review), Streamable HTTP/SSE
   transport, multi-process/multi-workspace serving.
 

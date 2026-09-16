@@ -5,7 +5,11 @@ Status: **candidate implementation + gate remediation — ready for re-gate**
 This matrix includes the remediation of the independent review's
 `REQUEST_CHANGES — V0.3-B MCP TOOL SURFACE` findings (envelope truthfulness,
 stdio candidate pinning, malformed-input truth, ledger ordering, cancelled-call
-evidence) and the hardening tests added with it.
+evidence), the hardening tests added with it, and the follow-up remediation of
+the single smoke-blocking P2 that survived the re-gate: **parallel MCP tool
+executions raced the accepted v0.3-A filesystem ledger**.  v0.3-B now serializes
+**all** tool execution (reads included) in one MCP server process with one
+re-entrant execution lock; sections I.2 and B56-B65 record that evidence.
 
 Baseline: accepted v0.3-A at `bcf9627…` (documentation closeout `f4c92f3…`),
 branch `v0.3-b-mcp-tool-surface`.  All evidence below is **offline**: the
@@ -86,7 +90,7 @@ indirectly · **DEFERRED** = documented, not automated in this stage.
 
 | # | Criterion | Status | Evidence |
 | --- | --- | --- | --- |
-| B36 | Side-effecting tool calls serialize per process; no overlapping submissions | COVERED | `test_side_effecting_tools_serialize_per_process` |
+| B36 | **All** tool calls serialize per MCP server process (one re-entrant execution lock over every tool body, reads included); no overlapping submissions and no overlapping ledger access | COVERED | `test_side_effecting_tools_serialize_per_process` (unchanged), `tests/test_v03b_mcp_concurrency.py::test_cross_tool_matrix_never_overlaps` (5 pairs), `…::test_parallel_read_tools_never_race_the_ledger` |
 | B37 | Cancellation preserves already-issued evidence and never implies "safe to retry", with no automatic remote abort | COVERED | `test_cancellation_preserves_evidence_and_never_claims_safe_retry` |
 | B38 | No credential/prompt leakage through results, ledger or diagnostics | COVERED | `test_no_credential_leakage_in_any_tool_envelope`, `test_send_prompt_prompt_never_reaches_durable_artifacts` |
 | B39 | stdout carries protocol frames only; diagnostics on stderr | COVERED | `tests/test_v03b_mcp_stdio.py::test_stdio_stdout_is_protocol_only`, `…::test_stdio_raw_protocol_lines_and_clean_eof_exit` |
@@ -113,11 +117,32 @@ indirectly · **DEFERRED** = documented, not automated in this stage.
 | B54 | The stdio harness pins the candidate checkout for every child, and a copied-tree mutation (server version + `devrelay_status` marker) demonstrably changes what the child executes | COVERED | `tests/test_v03b_mcp_stdio.py::test_stdio_child_executes_the_candidate_checkout`, `…::test_stdio_every_child_launch_pins_the_candidate_src` |
 | B55 | Stdio error branches assert concrete invariants (`schema_version == 1`, expected tool, `ok == false`, `isError == true`, expected error type, no traceback marker, no secret sentinel, text fallback ≡ structured envelope) | COVERED | `tests/test_v03b_mcp_stdio.py::test_stdio_reports_errors_as_envelopes_without_tracebacks` |
 
+## I.2 Concurrency remediation (smoke-blocking P2: parallel tool executions vs. the accepted ledger)
+
+The accepted v0.3-A `FilesystemOpenCodeLedger` allocates durable `OC-*`
+identities with a non-atomic read-modify-write (one fixed-name
+`.sequence.json.tmp` plus `replace`) and refuses identity reuse, so it is a
+single-writer store - and **every** bridge request, reads included, allocates
+through it.
+
+| # | Criterion | Status | Evidence |
+| --- | --- | --- | --- |
+| B56 | N=8 concurrent `opencode_read_messages` on one server: 8/8 succeed, zero `opencode_ledger_error`/`internal_error`, 16 unique call ids, 16 settled records, contiguous `OC-0001..OC-0016`, `sequence.next_call_sequence == 17`, zero POSTs, and a measured maximum of **1** concurrent ledger entry | COVERED | `tests/test_v03b_mcp_concurrency.py::test_parallel_read_tools_never_race_the_ledger`, `…::test_parallel_reads_keep_the_reported_message_window_intact` |
+| B57 | Mixed batch (4 concurrent reads + 1 `opencode_send_prompt`): exactly one submission POST, no duplicate, no retry, every call settles, and exactly one durable `send_prompt` POST record | COVERED | `…::test_parallel_reads_with_one_send_prompt_post_exactly_once` |
+| B58 | Cross-tool matrix (read+read, read+send, read+interrupt, send+interrupt, send+send): `max_concurrent_execution == 1`, the second body never reaches the bridge while the first is inside, and every body releases the boundary | COVERED | `…::test_cross_tool_matrix_never_overlaps[read+read\|read+send\|read+interrupt\|send+interrupt\|send+send]` |
+| B59 | Exactly one process-scoped **re-entrant** execution lock (`_execution_lock`); the redundant `_side_effect_lock` and the separate bridge-construction lock are gone, and a tool body can lazily build the bridge while holding the boundary without deadlocking | COVERED | `…::test_one_reentrant_execution_lock_and_no_second_lock` |
+| B60 | The boundary covers all nine advertised tools: every tool body routes through the single `_execute` choke point (AST-checked) and `devrelay_status` reports `execution_serialized: true` | COVERED | `…::test_every_advertised_tool_runs_through_the_execution_choke_point`, `…::test_status_reports_the_global_serialization_boundary` |
+| B61 | The lock is released after every failure kind: invalid session/limit argument, provider unavailable, malformed bridge result, unexpected exception, `interrupt_not_accepted`, submission-uncertain, and a real-bridge HTTP 500 | COVERED | `…::test_execution_lock_is_released_after_every_failure[7 kinds]`, `…::test_lock_released_after_real_bridge_provider_failure` |
+| B62 | Cancellation honesty under the global boundary: the lock stays held until the already-running body exits (a concurrent call is measurably blocked), exactly one submission is issued, no retry, no automatic `interrupt`, no `retry_safe` claim, and the durable record stays settled and inspectable | COVERED | `…::test_cancellation_keeps_the_boundary_until_the_body_exits` |
+| B63 | Parallel foreign-workspace reads stay closed (`opencode_session_workspace_mismatch`), issue no POST, and leave a consistent ledger | COVERED | `…::test_parallel_foreign_workspace_reads_fail_closed_without_ledger_writes` |
+| B64 | `retry_safe` truth table unchanged (14 cases) and still conservative in the concurrent path | COVERED | `test_retry_safe_truth_table` (untouched) + `…::test_parallel_reads_with_one_send_prompt_post_exactly_once` asserts `retry_safe is False` for the accepted submission |
+| B65 | Back-check: the new suite run against the pre-remediation candidate `59f81c0` fails 19 of 21 tests (only the two all-side-effecting pairs pass), including 7 of 8 parallel reads failing with colliding `OC-0001` identities | COVERED | recorded run in the remediation report (disposable `git archive` copy of `59f81c0` + the new test file) |
+
 ## J. Deferred (non-blocking, recorded)
 
 | # | Item | Why deferred |
 | --- | --- | --- |
 | B44 | Real MCP client smoke (ChatGPT/other host) against a disposable OpenCode session | explicitly **after** independent review; this round makes 0 real model calls |
 | B45 | Streamable HTTP/SSE MCP transport | out of scope for v0.3-B |
-| B46 | Multi-process concurrency / multi-workspace serving | v0.3-B is one process, one workspace, serialized side effects |
+| B46 | Multi-process concurrency / multi-workspace serving | v0.3-B is one process, one workspace, with **all** tool execution serialized; two `devrelay mcp serve` processes over one workspace are not serialized against each other (single-writer ledger hardening is required first, see BACKLOG) |
 | B47 | Tool-level progress notifications, resources, prompts | not needed for the adapter surface |

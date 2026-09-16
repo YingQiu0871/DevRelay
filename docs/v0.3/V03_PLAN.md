@@ -5,7 +5,7 @@
 | Stage | Description | Status |
 | --- | --- | --- |
 | **A** | OpenCode session bridge (explicit endpoint, session select/read, one prompt, bounded wait, interrupt, accounting) | **COMPLETE / ACCEPTED** — candidate `bcf9627e92ef839abb756810e3c615e6d01b6576`, real A33 smoke `PASS` against OpenCode `1.18.11` |
-| B | ChatGPT/MCP tool surface (local stdio MCP adapter over the accepted v0.3-A bridge) | **CANDIDATE + GATE REMEDIATION COMPLETE — ready for re-gate** (unreleased) |
+| B | ChatGPT/MCP tool surface (local stdio MCP adapter over the accepted v0.3-A bridge) | **CANDIDATE + GATE REMEDIATION + CONCURRENCY REMEDIATION COMPLETE — ready for final re-gate** (unreleased) |
 | C | (not designed yet) | **NOT STARTED** |
 
 v0.3-A is accepted and its runtime implementation is frozen at the accepted
@@ -29,7 +29,9 @@ non-blocking follow-ups.
 3. `src/devrelay/mcp/tools.py` — one adapter per capability over the accepted
    `OpenCodeBridge` (health, list/get session, read messages, send_prompt,
    wait_idle, interrupt, calls) with v0.3-A validation, `retry_safe` derived from
-   documented evidence, and one narrow lock for side-effecting tools.
+   documented evidence, and **one process-scoped re-entrant execution lock over
+   all nine tool bodies** (the accepted v0.3-A filesystem ledger is a
+   single-writer store, so reads are serialized too).
 4. `src/devrelay/mcp/server.py` — bound-workspace startup (fail closed), the
    exact nine-tool inventory with honest annotations and planner-oriented
    descriptions, envelope-for-every-failure, stderr-only diagnostics, stdio run.
@@ -37,6 +39,12 @@ non-blocking follow-ups.
    --workspace <path>`.
 6. `tests/test_v03b_mcp_tools.py`, `tests/test_v03b_mcp_stdio.py` — the offline
    in-process matrix and the real stdio subprocess harness.
+7. `tests/test_v03b_mcp_concurrency.py` — the concurrency-remediation suite: the
+   parallel-read ledger regression, the mixed read+send batch, the cross-tool
+   serialization matrix, lock release after every failure kind, and cancellation
+   under the global boundary; 19 of its 21 tests fail against the
+   pre-remediation candidate `59f81c0` (only the two all-side-effecting pairs
+   pass there).
 
 ## v0.3-A scope (implemented)
 
