@@ -14,7 +14,10 @@ Safety properties carried over unchanged from v0.3-A (and asserted by tests):
   *definitely not submitted* (the envelope carries ``retry_safe`` derived from
   documented bridge evidence only);
 * a pending/uncertain result never substitutes a stale reply;
-* side-effecting tools are serialized per MCP server process (one narrow lock);
+* **all** tool execution is serialized per MCP server process by one re-entrant
+  execution lock: the accepted v0.3-A filesystem ledger allocates durable call
+  identities with a non-atomic read-modify-write and is therefore single-writer,
+  so concurrent tool bodies (including concurrent reads) must not overlap;
 * secrets are never logged or returned; error text is redacted and bounded.
 """
 
@@ -92,9 +95,17 @@ class McpToolSurface:
         self.mcp_server_version = mcp_server_version
         self._bridge_factory = bridge_factory
         self._bridge: OpenCodeBridge | None = None
-        self._bridge_lock = threading.Lock()
-        # §16: v0.3-B serializes side-effecting operations per server process.
-        self._side_effect_lock = threading.Lock()
+        # v0.3-B concurrency boundary (P2 remediation): the accepted v0.3-A
+        # filesystem ledger allocates durable ``OC-*`` identities with a
+        # non-atomic read-modify-write (fixed-name temp file + replace) and
+        # refuses identity reuse, so it is safe only for one caller at a time.
+        # Exactly ONE process-scoped, re-entrant execution lock therefore covers
+        # every MCP tool body: within one MCP server process at most one tool
+        # body may touch the accepted bridge/ledger at any moment.  Re-entrant
+        # because a tool body may lazily construct the bridge while already
+        # holding it.  There is deliberately no second lock and therefore no
+        # lock order to get wrong.
+        self._execution_lock = threading.RLock()
         self._diagnostics = diagnostics
 
     # ------------------------------------------------------------------
@@ -105,8 +116,14 @@ class McpToolSurface:
         return self.wiring.opencode
 
     def bridge(self) -> OpenCodeBridge:
-        """The one bridge instance for this bound workspace (built lazily)."""
-        with self._bridge_lock:
+        """The one bridge instance for this bound workspace (built lazily).
+
+        Construction happens under the same execution lock as every tool body
+        (``RLock``, so re-entering from a tool body is legal): the bridge binds
+        the workspace's ledger, and two bridges over one ledger would defeat the
+        single-writer boundary.
+        """
+        with self._execution_lock:
             if self._bridge is None:
                 if self._bridge_factory is not None:
                     self._bridge = self._bridge_factory()
@@ -177,25 +194,39 @@ class McpToolSurface:
         )
 
     def _execute(self, tool: str, call: Callable[[], McpEnvelope]) -> McpEnvelope:
-        """Run one tool body, normalizing every failure to a structured envelope.
+        """Run one tool body under the process-wide execution lock.
+
+        Every one of the nine tools funnels its whole body through here, so this
+        is the single place that establishes the v0.3-B serialization boundary:
+        at most one DevRelay MCP tool body may access the accepted v0.3-A
+        bridge/ledger at a time within one MCP server process.  The lock is held
+        for the whole body (validation, bridge operation, envelope shaping) and
+        is released on every exit path, including ``DevRelayError`` and
+        unexpected exceptions.
+
+        Cancellation is honest rather than magic: cancelling a client's MCP
+        request does not interrupt an already-running synchronous tool body, so
+        the lock is released only when that body actually returns.  No retry, no
+        automatic interrupt and no automatic resubmission happens on the way out.
 
         ``DevRelayError`` (including validation and bridge/provider errors) keeps
         its stable code; anything else is an internal DevRelay error: it is
         diagnosed (bounded, sanitized) on stderr and reported generically - it is
         never translated into a provider failure.
         """
-        try:
-            return call()
-        except DevRelayError as exc:
-            return error_envelope(tool, _error_type(exc), exc)
-        except Exception as exc:  # pragma: no cover - defensive boundary
-            self._diag(f"{tool}: internal error {type(exc).__name__}")
-            return error_envelope(
-                tool,
-                "internal_error",
-                "internal DevRelay error while handling this tool call; "
-                "see the MCP server diagnostics on stderr",
-            )
+        with self._execution_lock:
+            try:
+                return call()
+            except DevRelayError as exc:
+                return error_envelope(tool, _error_type(exc), exc)
+            except Exception as exc:  # pragma: no cover - defensive boundary
+                self._diag(f"{tool}: internal error {type(exc).__name__}")
+                return error_envelope(
+                    tool,
+                    "internal_error",
+                    "internal DevRelay error while handling this tool call; "
+                    "see the MCP server diagnostics on stderr",
+                )
 
     # ------------------------------------------------------------------
     # validation (reuses the accepted v0.3-A rules; no second grammar)
@@ -311,35 +342,43 @@ class McpToolSurface:
     # read-only tools
     # ------------------------------------------------------------------
     def devrelay_status(self) -> McpEnvelope:
-        config = self.opencode_config
-        data: dict[str, Any] = {
-            "schema_version": 1,
-            "package_version": self.package_version,
-            "workspace": str(self.workspace_root),
-            "opencode": {
-                "configured": bool(config.configured),
-                "endpoint_authority": _endpoint_authority(config.base_url),
-                "token_source": "DEVRELAY_OPENCODE_TOKEN (environment only)",
-                "allow_unknown_workspace": bool(config.allow_unknown_workspace),
-                "timeout_seconds": float(config.timeout_seconds),
-                "idle_timeout_seconds": float(config.idle_timeout_seconds),
-                "max_messages": int(config.max_messages),
-            },
-            "bridge_operations": list(BRIDGE_OPERATIONS),
-            "ledger": {
-                "directory": "opencode/calls",
-                "present": (self.devrelay_dir / "opencode").is_dir(),
-            },
-            "mcp": {
-                "server": "devrelay",
-                "server_version": self.mcp_server_version,
-                "transport": "stdio",
-                "tools": list(TOOL_NAMES),
-                "side_effects_serialized": True,
-            },
-            "acceptance_authority": False,
-        }
-        return self._execute("devrelay_status", lambda: ok_envelope("devrelay_status", data))
+        def call() -> McpEnvelope:
+            config = self.opencode_config
+            data: dict[str, Any] = {
+                "schema_version": 1,
+                "package_version": self.package_version,
+                "workspace": str(self.workspace_root),
+                "opencode": {
+                    "configured": bool(config.configured),
+                    "endpoint_authority": _endpoint_authority(config.base_url),
+                    "token_source": "DEVRELAY_OPENCODE_TOKEN (environment only)",
+                    "allow_unknown_workspace": bool(config.allow_unknown_workspace),
+                    "timeout_seconds": float(config.timeout_seconds),
+                    "idle_timeout_seconds": float(config.idle_timeout_seconds),
+                    "max_messages": int(config.max_messages),
+                },
+                "bridge_operations": list(BRIDGE_OPERATIONS),
+                "ledger": {
+                    "directory": "opencode/calls",
+                    "present": (self.devrelay_dir / "opencode").is_dir(),
+                },
+                "mcp": {
+                    "server": "devrelay",
+                    "server_version": self.mcp_server_version,
+                    "transport": "stdio",
+                    "tools": list(TOOL_NAMES),
+                    # v0.3-B: ALL tool execution is serialized in this process,
+                    # not only the side-effecting tools (the accepted v0.3-A
+                    # filesystem ledger is a single-writer store).
+                    "execution_serialized": True,
+                    "serialization": "one process-wide execution lock over all tools",
+                    "side_effects_serialized": True,
+                },
+                "acceptance_authority": False,
+            }
+            return ok_envelope("devrelay_status", data)
+
+        return self._execute("devrelay_status", call)
 
     def opencode_health(self) -> McpEnvelope:
         def call() -> McpEnvelope:
@@ -417,7 +456,7 @@ class McpToolSurface:
         return self._execute("opencode_calls", call)
 
     # ------------------------------------------------------------------
-    # side-effecting tools (serialized per process)
+    # side-effecting tools (serialized with every other tool by _execute)
     # ------------------------------------------------------------------
     def opencode_send_prompt(
         self,
@@ -431,10 +470,9 @@ class McpToolSurface:
             text = self._require_prompt(prompt)
             agent_value = self._require_agent(agent)
             model_value = self._require_model(model)
-            with self._side_effect_lock:
-                result = self.bridge().send_prompt(
-                    sid, text, agent=agent_value, model=model_value
-                )
+            result = self.bridge().send_prompt(
+                sid, text, agent=agent_value, model=model_value
+            )
             return self._send_prompt_envelope(result)
 
         return self._execute("opencode_send_prompt", call)
@@ -458,8 +496,7 @@ class McpToolSurface:
     def opencode_interrupt(self, session_id: str | None = None) -> McpEnvelope:
         def call() -> McpEnvelope:
             sid = self._require_session_id(session_id)
-            with self._side_effect_lock:
-                result = self.bridge().interrupt(sid)
+            result = self.bridge().interrupt(sid)
             return self._bridge_envelope(
                 "opencode_interrupt",
                 result,
