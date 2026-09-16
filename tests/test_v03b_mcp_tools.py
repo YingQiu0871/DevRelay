@@ -909,3 +909,380 @@ def test_no_credential_leakage_in_any_tool_envelope(tmp_path, monkeypatch):
     assert TOKEN_SENTINEL not in joined
     assert "sk-should-never-appear" not in joined
     assert "Authorization" not in joined
+
+
+# ---------------------------------------------------------------------------
+# cross-tool envelope truthfulness (gate P1: ok == bridge success)
+# ---------------------------------------------------------------------------
+READ_TOOL_CALLS: tuple[tuple[str, dict[str, Any]], ...] = (
+    ("opencode_health", {}),
+    ("opencode_list_sessions", {}),
+    ("opencode_get_session", {"session_id": "ses_match"}),
+    ("opencode_read_messages", {"session_id": "ses_match"}),
+)
+
+FAILURE_SCENARIOS: tuple[tuple[str, dict[str, Any]], ...] = (
+    ("http500", {"http_status": 500}),
+    ("malformed", {"malformed": "invalid_json"}),
+    ("unreachable", {"unreachable": True}),
+)
+
+
+def _success_marker(tool: str, envelope: dict[str, Any]) -> bool:
+    data = envelope["data"]
+    if tool == "opencode_health":
+        return data["health"]["healthy"] is True
+    if tool == "opencode_list_sessions":
+        return [s["session_id"] for s in data["sessions"]] == ["ses_match"]
+    if tool == "opencode_get_session":
+        return data["session"]["session_id"] == "ses_match"
+    if tool == "opencode_read_messages":
+        return data["page"]["provider_message_count"] == 2 and bool(data["messages"])
+    raise AssertionError(tool)
+
+
+@pytest.mark.parametrize("tool,arguments", READ_TOOL_CALLS, ids=[t for t, _ in READ_TOOL_CALLS])
+def test_read_tools_report_success_truthfully(tmp_path, tool, arguments):
+    server, stub, _ws = build(tmp_path)
+    result = call_result(server, tool, arguments)
+    envelope = envelope_of(result)
+    assert envelope["ok"] is True
+    assert result.is_error is False
+    assert envelope["schema_version"] == 1
+    assert envelope["tool"] == tool
+    assert envelope["error"] is None
+    assert _success_marker(tool, envelope), json.dumps(envelope)[:300]
+    assert stub.requests, "the tool must actually call the bridge"
+
+
+@pytest.mark.parametrize("scenario,stub_kwargs", FAILURE_SCENARIOS, ids=[s for s, _ in FAILURE_SCENARIOS])
+@pytest.mark.parametrize("tool,arguments", READ_TOOL_CALLS, ids=[t for t, _ in READ_TOOL_CALLS])
+def test_read_tools_report_failure_truthfully(tmp_path, tool, arguments, scenario, stub_kwargs):
+    """A failed accepted operation is never `ok=true` / `isError=false`."""
+    server, stub, _ws = build(tmp_path, StubOpenCodeServer(**stub_kwargs))
+    result = call_result(server, tool, arguments)
+    envelope = envelope_of(result)
+
+    assert envelope["ok"] is False, (tool, scenario)
+    assert result.is_error is True, (tool, scenario)
+    assert result.is_error is (not envelope["ok"])
+    assert envelope["schema_version"] == 1
+    assert envelope["tool"] == tool
+    assert envelope["error"] is not None and envelope["error"]["type"], (tool, scenario)
+    assert envelope["data"], "sanitized operation evidence must be preserved"
+    assert envelope["data"]["state"] in ("PROVIDER_UNAVAILABLE", "MALFORMED_RESPONSE")
+    dumped = json.dumps(envelope)
+    assert "Traceback" not in dumped
+    assert "retry_safe" not in envelope["data"], "read tools never carry retry_safe"
+    assert stub.requests, "the failure came from the bridge, not from local validation"
+
+
+def test_get_session_failure_keeps_the_full_evidence(tmp_path):
+    """The P1 regression: get_session must expose the bridge evidence on failure."""
+    server, _stub, _ws = build(tmp_path, StubOpenCodeServer(http_status=500))
+    result = call_result(server, "opencode_get_session", {"session_id": "ses_match"})
+    envelope = envelope_of(result)
+    assert envelope["ok"] is False and result.is_error is True
+    assert envelope["error"]["type"] == "http_status"
+    data = envelope["data"]
+    assert data["operation"] == "get_session"
+    assert data["state"] == "PROVIDER_UNAVAILABLE"
+    assert data["http_status"] == 500
+    assert data["call_ids"], "the issued call is accounted"
+    assert data["session"] is None
+
+
+# ---------------------------------------------------------------------------
+# retry_safe: exhaustive truth table (must stay mechanically conservative)
+# ---------------------------------------------------------------------------
+RETRY_SAFE_CASES: tuple[tuple[str, dict[str, Any], bool], ...] = (
+    ("inline_success", {"prompt_reply": real_reply()}, False),
+    ("accepted_pending", {"prompt_raw_reply": {"ok": True}}, False),
+    (
+        "accepted_unusable_body",
+        {
+            "prompt_http_status": 200,
+            "prompt_error_body": "{not json",
+            "prompt_content_type": "application/json",
+        },
+        False,
+    ),
+    ("rejected_500", {"prompt_http_status": 500}, False),
+    ("html_2xx", {"prompt_html_fallback": True}, False),
+    ("read_timeout", {"prompt_exception": "read_timeout"}, False),
+    ("write_timeout", {"prompt_exception": "write_timeout"}, False),
+    ("read_error", {"prompt_exception": "read_error"}, False),
+    ("write_error", {"prompt_exception": "write_error"}, False),
+    ("remote_protocol_error", {"prompt_exception": "remote_protocol_error"}, False),
+    ("connect_error", {"prompt_exception": "connect_error"}, True),
+    ("connect_timeout", {"prompt_exception": "connect_timeout"}, True),
+    ("pool_timeout", {"prompt_exception": "pool_timeout"}, True),
+    ("probe_failed_before_submission", {"http_status": 500}, True),
+)
+
+
+@pytest.mark.parametrize(
+    "label,stub_kwargs,expected", RETRY_SAFE_CASES, ids=[c[0] for c in RETRY_SAFE_CASES]
+)
+def test_retry_safe_truth_table(tmp_path, label, stub_kwargs, expected):
+    """`retry_safe` is true ONLY when nothing was submitted for certain."""
+    server, stub, _ws = build(tmp_path, StubOpenCodeServer(**stub_kwargs))
+    envelope = call(
+        server, "opencode_send_prompt", {"session_id": "ses_match", "prompt": "hello"}
+    )
+    assert envelope["ok"] is (label == "inline_success"), label
+    assert envelope["data"]["retry_safe"] is expected, label
+    if expected:
+        assert envelope["data"]["submission_uncertain"] is False, label
+        assert envelope["data"]["reply_pending"] is False, label
+    else:
+        assert envelope["data"]["submission_attempted"] is True, label
+    posts = [p for m, p in stub.requests if m == "POST"]
+    assert len(posts) <= 1, label
+    if envelope["data"]["submission_attempted"]:
+        assert posts == ["/session/ses_match/message"], label
+    assert "Traceback" not in json.dumps(envelope)
+
+
+# ---------------------------------------------------------------------------
+# workspace isolation: a foreign session is non-actionable through every tool
+# ---------------------------------------------------------------------------
+def test_foreign_session_is_non_actionable_through_every_tool(tmp_path):
+    foreign = StubOpenCodeServer(
+        workspace="C:/elsewhere",
+        sessions=[_session("ses_foreign", workspace="C:/elsewhere")],
+    )
+    server, stub, _ws = build(tmp_path, foreign, bind_stub=False)
+    actions = (
+        ("opencode_get_session", {"session_id": "ses_foreign"}),
+        ("opencode_read_messages", {"session_id": "ses_foreign"}),
+        ("opencode_send_prompt", {"session_id": "ses_foreign", "prompt": "hi"}),
+        ("opencode_wait_idle", {"session_id": "ses_foreign", "timeout_seconds": 0.2}),
+        ("opencode_interrupt", {"session_id": "ses_foreign"}),
+    )
+    for tool, arguments in actions:
+        envelope = call(server, tool, arguments)
+        assert envelope["ok"] is False, tool
+        assert envelope["error"]["type"] in (
+            "opencode_session_workspace_mismatch",
+            "opencode_session_not_found",
+        ), (tool, envelope["error"])
+        assert not [p for m, p in stub.requests if m == "POST"], (
+            f"{tool} must not issue an acting request for a foreign session"
+        )
+
+
+# ---------------------------------------------------------------------------
+# ledger ordering: numeric, not lexical
+# ---------------------------------------------------------------------------
+def _write_call_record(ws: Path, number: int) -> None:
+    calls = ws / ".devrelay" / "opencode" / "calls"
+    calls.mkdir(parents=True, exist_ok=True)
+    (calls / f"OC-{number}.json").write_text(
+        json.dumps(
+            {
+                "call_id": f"OC-{number}",
+                "operation": "health",
+                "state": "COMPLETED",
+                "method": "GET",
+                "path": "/global/health",
+                "started_at": "2026-01-01T00:00:00+00:00",
+                "completed_at": "2026-01-01T00:00:01+00:00",
+            }
+        ),
+        encoding="utf-8",
+    )
+
+
+def test_calls_orders_numerically_across_the_width_boundary(tmp_path):
+    server, _stub, ws = build(tmp_path)
+    for number in (9998, 9999, 10000, 10001):
+        _write_call_record(ws, number)
+
+    all_records = call(server, "opencode_calls", {"limit": 4})
+    assert all_records["ok"] is True
+    assert [r["call_id"] for r in all_records["data"]["records"]] == [
+        "OC-9998",
+        "OC-9999",
+        "OC-10000",
+        "OC-10001",
+    ], "newest last, ordered by call number - never lexically"
+
+    newest = call(server, "opencode_calls", {"limit": 2})
+    assert [r["call_id"] for r in newest["data"]["records"]] == ["OC-10000", "OC-10001"]
+    assert newest["data"]["count"] == 2
+
+
+def test_calls_rejects_a_non_numeric_call_id_instead_of_ranking_it(tmp_path):
+    server, _stub, ws = build(tmp_path)
+    _write_call_record(ws, 10)
+    calls = ws / ".devrelay" / "opencode" / "calls"
+    (calls / "OC-latest.json").write_text("{}", encoding="utf-8")
+    result = call(server, "opencode_calls", {"limit": 5})
+    assert result["ok"] is False
+    assert result["error"]["type"] == "opencode_ledger_error"
+    assert "OC-latest.json" in result["error"]["message"]
+
+
+# ---------------------------------------------------------------------------
+# cancellation: evidence preserved, never "safe to retry", never deadlocked
+# ---------------------------------------------------------------------------
+class _CancellableBridge:
+    """Fake bridge that can be cancelled before/after recording a submission.
+
+    The submission is persisted through the real filesystem ledger, so the
+    durable evidence a cancelled MCP call leaves behind is inspectable exactly
+    as it would be in production.
+    """
+
+    def __init__(self, ledger: FilesystemOpenCodeLedger, *, gate_before_submit: bool) -> None:
+        from devrelay.opencode.models import (
+            OpenCodeCallRecord,
+            OpenCodeCallState,
+            OpenCodeOperationResult,
+            OpenCodeOperationState,
+            prompt_digest,
+        )
+
+        self.ledger = ledger
+        self.gate_before_submit = gate_before_submit
+        self.submissions = 0
+        self.interrupt_calls = 0
+        self.entered = threading.Event()
+        self.release = threading.Event()
+        self._record_cls = OpenCodeCallRecord
+        self._call_state = OpenCodeCallState
+        self._result_cls = OpenCodeOperationResult
+        self._op_state = OpenCodeOperationState
+        self._digest = prompt_digest
+
+    def _persist(self, prompt: str) -> None:
+        from devrelay.models import utcnow_iso
+
+        record = self._record_cls(
+            call_id=self.ledger.allocate_call_id(),
+            operation="send_prompt",
+            state=self._call_state.ISSUED,
+            method="POST",
+            path="/session/ses_match/message",
+            session_id="ses_match",
+            prompt_sha256=self._digest(prompt),
+            prompt_chars=len(prompt),
+        )
+        self.ledger.begin(record)
+        self.ledger.finish(
+            record.model_copy(
+                update={
+                    "state": self._call_state.TIMED_OUT,
+                    "completed_at": utcnow_iso(),
+                    "error_type": "read_timeout",
+                    "submission_uncertain": True,
+                }
+            )
+        )
+
+    def send_prompt(self, session_id: str, prompt: str, *, agent: str = "", model: str = "") -> Any:
+        self.entered.set()
+        if self.gate_before_submit:
+            self.release.wait(timeout=10)  # cancelled here: nothing was submitted
+        else:
+            self.submissions += 1
+            self._persist(prompt)
+            self.release.wait(timeout=10)  # cancelled here: POST already issued
+        self.submissions += 0 if self.gate_before_submit else 0
+        return self._result_cls(
+            operation="send_prompt",
+            state=self._op_state.TIMED_OUT,
+            session_id=session_id,
+            submission_attempted=True,
+            submission_status=None,
+            submission_uncertain=True,
+            reply_pending=True,
+            error_type="read_timeout",
+            error="the submission POST failed after the request may already have reached the server",
+        )
+
+    def interrupt(self, session_id: str) -> Any:
+        self.interrupt_calls += 1
+        return self._result_cls(
+            operation="interrupt",
+            state=self._op_state.INTERRUPTED,
+            session_id=session_id,
+        )
+
+    def health(self, *args: Any, **kwargs: Any) -> Any:
+        return self._result_cls(operation="health", state=self._op_state.COMPLETED)
+
+
+def _cancel_during(bridge: _CancellableBridge, server: Any, prompt: str) -> str:
+    async def run() -> str:
+        task = asyncio.create_task(
+            server.call_tool(
+                "opencode_send_prompt", {"session_id": "ses_match", "prompt": prompt}
+            )
+        )
+        while not bridge.entered.is_set():
+            await asyncio.sleep(0.01)
+        task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            return "cancelled"
+        return "completed"
+
+    return asyncio.run(run())
+
+
+def test_cancellation_before_submission_records_nothing(tmp_path):
+    ws = make_workspace(tmp_path)
+    ledger = FilesystemOpenCodeLedger(ws / ".devrelay")
+    bridge = _CancellableBridge(ledger, gate_before_submit=True)
+    server = create_server(build_surface(ws, bridge_factory=lambda: bridge))
+
+    assert _cancel_during(bridge, server, "one") == "cancelled"
+    assert bridge.submissions == 0, "no submission may be recorded before the gate"
+    assert ledger.read_records() == []
+    assert bridge.interrupt_calls == 0, "cancellation must never send an automatic abort"
+    calls = call(server, "opencode_calls")
+    assert calls["ok"] is True and calls["data"]["count"] == 0
+
+    # the side-effect lock must be released: a legitimate call still works
+    bridge.release.set()
+    bridge.gate_before_submit = False
+    bridge.entered.clear()
+    envelope = call(
+        server, "opencode_send_prompt", {"session_id": "ses_match", "prompt": "two"}
+    )
+    assert envelope["ok"] is False  # TIMED_OUT + uncertain is never success
+    assert envelope["data"]["retry_safe"] is False
+    assert bridge.submissions == 1
+
+
+def test_cancellation_after_submission_preserves_evidence_without_safe_retry(tmp_path):
+    ws = make_workspace(tmp_path)
+    ledger = FilesystemOpenCodeLedger(ws / ".devrelay")
+    bridge = _CancellableBridge(ledger, gate_before_submit=False)
+    server = create_server(build_surface(ws, bridge_factory=lambda: bridge))
+
+    assert _cancel_during(bridge, server, "one") == "cancelled"
+    assert bridge.submissions == 1, "the submission had already been issued"
+    assert bridge.interrupt_calls == 0
+    # durable evidence stays inspectable and honest about the ambiguity
+    records = call(server, "opencode_calls")["data"]["records"]
+    assert [r["call_id"] for r in records] == ["OC-0001"]
+    assert records[0]["method"] == "POST"
+    assert records[0]["state"] == "TIMED_OUT"
+    assert records[0]["submission_uncertain"] is True
+    assert records[0]["completed_at"], "the durable record is settled, not stranded"
+
+    # no automatic resubmission happened while the cancelled call was in flight
+    assert bridge.submissions == 1
+    # and the lock is released: a later legitimate operation completes promptly
+    bridge.release.set()
+    bridge.entered.clear()
+    envelope = call(
+        server, "opencode_send_prompt", {"session_id": "ses_match", "prompt": "two"}
+    )
+    assert bridge.submissions == 2
+    assert envelope["data"]["retry_safe"] is False
+    assert "Traceback" not in json.dumps(envelope)

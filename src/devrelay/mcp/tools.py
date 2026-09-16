@@ -135,6 +135,47 @@ class McpToolSurface:
         if self._diagnostics is not None:
             self._diagnostics(bounded(message))
 
+    @staticmethod
+    def _bridge_envelope(
+        tool: str,
+        result: Any,
+        *,
+        failure_message: str,
+        expect: Callable[[Any], bool] | None = None,
+        error_type_fallback: str = "operation_not_completed",
+        extra: dict[str, Any] | None = None,
+    ) -> McpEnvelope:
+        """The single bridge-result-to-envelope rule (envelope truthfulness).
+
+        ``ok`` is true **only** when the accepted v0.3-A operation reached the
+        success state that tool is defined to achieve.  By default that is the
+        bridge's own ``result.ok`` (``state is COMPLETED``); a tool whose
+        accepted success state differs states it explicitly through ``expect``
+        (``opencode_interrupt``: an accepted abort is ``INTERRUPTED``, which the
+        accepted v0.3-A CLI also treats as success, and is still reported with
+        ``interrupt_verified: false``).  A tool that composes the base rule with
+        extra conditions (``opencode_send_prompt``) states them in ``expect``.
+
+        Every bridge-backed tool derives its envelope here, so a failed
+        operation can never be reported as success - and the protocol
+        ``isError`` flag stays mechanically ``not envelope.ok`` because the
+        server shapes it from this envelope alone.
+
+        The full sanitized operation evidence is always preserved in ``data``.
+        """
+        data = result.model_dump(mode="json")
+        if extra:
+            data.update(extra)
+        achieved = bool(expect(result)) if expect is not None else bool(result.ok)
+        if achieved:
+            return ok_envelope(tool, data)
+        return error_envelope(
+            tool,
+            result.error_type or error_type_fallback,
+            result.error or failure_message,
+            data,
+        )
+
     def _execute(self, tool: str, call: Callable[[], McpEnvelope]) -> McpEnvelope:
         """Run one tool body, normalizing every failure to a structured envelope.
 
@@ -303,15 +344,12 @@ class McpToolSurface:
     def opencode_health(self) -> McpEnvelope:
         def call() -> McpEnvelope:
             result = self.bridge().health()
-            data = result.model_dump(mode="json")
-            if not result.ok:
-                return error_envelope(
-                    "opencode_health",
-                    result.error_type or "provider_unavailable",
-                    result.error or "OpenCode health probe failed",
-                    data,
-                )
-            return ok_envelope("opencode_health", data)
+            return self._bridge_envelope(
+                "opencode_health",
+                result,
+                failure_message="OpenCode health probe failed",
+                error_type_fallback="provider_unavailable",
+            )
 
         return self._execute("opencode_health", call)
 
@@ -323,15 +361,12 @@ class McpToolSurface:
                 include_other_workspaces, "include_other_workspaces"
             )
             result = self.bridge().list_sessions(include_other_workspaces=include)
-            data = result.model_dump(mode="json")
-            if not result.ok:
-                return error_envelope(
-                    "opencode_list_sessions",
-                    result.error_type or "provider_unavailable",
-                    result.error or "session listing failed",
-                    data,
-                )
-            return ok_envelope("opencode_list_sessions", data)
+            return self._bridge_envelope(
+                "opencode_list_sessions",
+                result,
+                failure_message="session listing failed",
+                error_type_fallback="provider_unavailable",
+            )
 
         return self._execute("opencode_list_sessions", call)
 
@@ -339,8 +374,14 @@ class McpToolSurface:
         def call() -> McpEnvelope:
             sid = self._require_session_id(session_id)
             result = self.bridge().get_session(sid)
-            data = result.model_dump(mode="json")
-            return ok_envelope("opencode_get_session", data)
+            # Envelope truthfulness: a provider failure (HTTP error, malformed
+            # body, unreachable endpoint) must never be reported as success.
+            return self._bridge_envelope(
+                "opencode_get_session",
+                result,
+                failure_message="session read failed",
+                error_type_fallback="provider_unavailable",
+            )
 
         return self._execute("opencode_get_session", call)
 
@@ -351,15 +392,12 @@ class McpToolSurface:
             sid = self._require_session_id(session_id)
             position = self._require_cursor(cursor)
             result = self.bridge().read_messages(sid, position)
-            data = result.model_dump(mode="json")
-            if not result.ok:
-                return error_envelope(
-                    "opencode_read_messages",
-                    result.error_type or "provider_unavailable",
-                    result.error or "message read failed",
-                    data,
-                )
-            return ok_envelope("opencode_read_messages", data)
+            return self._bridge_envelope(
+                "opencode_read_messages",
+                result,
+                failure_message="message read failed",
+                error_type_fallback="provider_unavailable",
+            )
 
         return self._execute("opencode_read_messages", call)
 
@@ -408,16 +446,12 @@ class McpToolSurface:
             sid = self._require_session_id(session_id)
             timeout = self._require_timeout(timeout_seconds)
             result = self.bridge().wait_idle(sid, timeout)
-            data = result.model_dump(mode="json")
-            if result.state is not OpenCodeOperationState.COMPLETED:
-                return error_envelope(
-                    "opencode_wait_idle",
-                    result.error_type or "not_idle",
-                    result.error
-                    or "session did not become idle/terminal inside the bound",
-                    data,
-                )
-            return ok_envelope("opencode_wait_idle", data)
+            return self._bridge_envelope(
+                "opencode_wait_idle",
+                result,
+                failure_message="session did not become idle/terminal inside the bound",
+                error_type_fallback="not_idle",
+            )
 
         return self._execute("opencode_wait_idle", call)
 
@@ -426,49 +460,53 @@ class McpToolSurface:
             sid = self._require_session_id(session_id)
             with self._side_effect_lock:
                 result = self.bridge().interrupt(sid)
-            data = result.model_dump(mode="json")
-            data["interrupt_semantics"] = (
-                "an accepted abort request is not a verified terminal state"
+            return self._bridge_envelope(
+                "opencode_interrupt",
+                result,
+                expect=lambda r: r.state is OpenCodeOperationState.INTERRUPTED,
+                failure_message="the abort request was not accepted",
+                error_type_fallback="interrupt_not_accepted",
+                extra={
+                    "interrupt_semantics": (
+                        "an accepted abort request is not a verified terminal state"
+                    )
+                },
             )
-            if result.state is not OpenCodeOperationState.INTERRUPTED:
-                return error_envelope(
-                    "opencode_interrupt",
-                    result.error_type or "interrupt_not_accepted",
-                    result.error or "the abort request was not accepted",
-                    data,
-                )
-            return ok_envelope("opencode_interrupt", data)
 
         return self._execute("opencode_interrupt", call)
 
     # ------------------------------------------------------------------
     # send_prompt envelope: preserve every nuance of the bridge result
     # ------------------------------------------------------------------
-    @staticmethod
-    def _send_prompt_envelope(result: Any) -> McpEnvelope:
-        data = result.model_dump(mode="json")
-        data["retry_safe"] = _retry_safe(result)
-        data["resubmit_policy"] = (
-            "never resubmit automatically when submission_uncertain or "
-            "reply_pending is set"
-        )
-        ok = (
-            result.state is OpenCodeOperationState.COMPLETED
-            and not result.reply_pending
-            and not result.submission_uncertain
-        )
-        if ok:
-            return ok_envelope("opencode_send_prompt", data)
-        message = result.error or (
-            "the prompt was accepted but no reply was confirmed"
-            if result.reply_pending
-            else "the prompt submission did not complete"
-        )
-        return error_envelope(
+    @classmethod
+    def _send_prompt_envelope(cls, result: Any) -> McpEnvelope:
+        """send_prompt envelope: success only for a confirmed completion.
+
+        The same single rule as every other bridge-backed tool, plus the
+        correlation nuance: a pending reply or an uncertain submission is **not**
+        success, and ``retry_safe`` (derived from documented evidence only)
+        travels with the evidence so a caller can distinguish "definitely not
+        submitted" from "may already be running".
+        """
+        return cls._bridge_envelope(
             "opencode_send_prompt",
-            result.error_type or "submission_not_confirmed",
-            message,
-            data,
+            result,
+            expect=lambda r: (
+                r.ok and not r.reply_pending and not r.submission_uncertain
+            ),
+            error_type_fallback="submission_not_confirmed",
+            failure_message=(
+                "the prompt was accepted but no reply was confirmed"
+                if result.reply_pending
+                else "the prompt submission did not complete"
+            ),
+            extra={
+                "retry_safe": _retry_safe(result),
+                "resubmit_policy": (
+                    "never resubmit automatically when submission_uncertain or "
+                    "reply_pending is set"
+                ),
+            },
         )
 
 

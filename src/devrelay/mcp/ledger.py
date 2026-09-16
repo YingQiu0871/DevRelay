@@ -22,6 +22,7 @@ by :mod:`devrelay.opencode`.
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 from typing import Any
 
@@ -55,6 +56,29 @@ _RECORD_FIELDS = (
     "agent",
     "model",
 )
+
+
+#: The accepted call-identity grammar.  Ordering must be numeric: ``OC-9999``
+#: and ``OC-10000`` do not sort correctly as strings, and a name that does not
+#: follow the grammar must never be ranked as a valid numeric identity.
+_CALL_FILE_RE = re.compile(r"^OC-(?P<number>[0-9]+)$")
+
+
+def call_number(path: Path) -> int:
+    """Numeric call sequence of one ledger file (raises when malformed)."""
+    match = _CALL_FILE_RE.match(Path(path).stem)
+    if match is None:
+        raise OpenCodeLedgerError(
+            f"OpenCode ledger entry {Path(path).name} does not follow the accepted "
+            "OC-<number> naming; refusing to treat it as a valid call identity"
+        )
+    try:
+        return int(match.group("number"))
+    except ValueError as exc:  # e.g. an absurdly long digit string
+        raise OpenCodeLedgerError(
+            f"OpenCode ledger entry {Path(path).name} has an unusable call number "
+            f"({type(exc).__name__}); refusing to treat it as a valid call identity"
+        ) from exc
 
 
 def ledger_root(devrelay_dir: Path) -> Path:
@@ -98,12 +122,14 @@ def read_records_strict(devrelay_dir: Path, *, limit: int) -> list[dict[str, Any
     calls_dir = root / "calls"
     if not calls_dir.is_dir():
         return []
-    paths = sorted(calls_dir.glob("OC-*.json"))
-    if not paths:
+    numbered = [(call_number(path), path) for path in calls_dir.glob("OC-*.json")]
+    if not numbered:
         return []
-    selected = paths[-max(1, limit) :]
+    # Numeric ordering (newest last): lexical ordering breaks at OC-9999 -> OC-10000.
+    numbered.sort(key=lambda item: item[0])
+    selected = numbered[-max(1, limit) :]
     out: list[dict[str, Any]] = []
-    for path in selected:
+    for _number, path in selected:
         payload = _read_json(path)
         if not isinstance(payload, dict):
             raise OpenCodeLedgerError(
@@ -122,4 +148,4 @@ def read_records_strict(devrelay_dir: Path, *, limit: int) -> list[dict[str, Any
     return out
 
 
-__all__ = ["ledger_root", "read_records_strict", "sequence_state"]
+__all__ = ["call_number", "ledger_root", "read_records_strict", "sequence_state"]

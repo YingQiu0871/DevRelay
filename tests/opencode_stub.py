@@ -46,6 +46,7 @@ STUB_EXCEPTIONS = {
     "pool_timeout": httpx.PoolTimeout,
     "connect_error": httpx.ConnectError,
     "read_error": httpx.ReadError,
+    "write_error": httpx.WriteError,
     "remote_protocol_error": httpx.RemoteProtocolError,
 }
 
