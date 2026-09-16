@@ -21,9 +21,12 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import queue
+import shutil
 import subprocess
 import sys
 import threading
+import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any, Iterator
@@ -152,12 +155,58 @@ def make_workspace(tmp_path: Path, base_url: str) -> Path:
     return ws
 
 
+#: The child must import the checkout under test, never an ambient editable
+#: installation.  The repository's normal test strategy is ``pythonpath = ["src"]``
+#: (see pyproject.toml), so the harness pins exactly that for every child.
+CANDIDATE_SRC = Path(__file__).resolve().parents[1] / "src"
+_PINNED_DROP = ("PYTHONPATH", "PYTHONHOME", "PYTHONSTARTUP")
+
+
+def child_env(**extra: str) -> dict[str, str]:
+    """Environment for a child MCP server process: pinned candidate + extras."""
+    env = {
+        key: value
+        for key, value in os.environ.items()
+        if not key.startswith("DEVRELAY_") and key not in _PINNED_DROP
+    }
+    env["PYTHONPATH"] = str(CANDIDATE_SRC)
+    env.update({key: value for key, value in extra.items() if value is not None})
+    return env
+
+
 def server_params(ws: Path, *, env: dict[str, str] | None = None) -> StdioServerParameters:
     return StdioServerParameters(
         command=sys.executable,
         args=["-m", "devrelay", "mcp", "serve", "--workspace", str(ws)],
         cwd=str(ws),
-        env=env,
+        env=child_env(**(env or {})),
+    )
+
+
+def run_child(args: list[str], *, cwd: Path, env: dict[str, str] | None = None,
+              input_bytes: bytes = b"", timeout: int = 60) -> subprocess.CompletedProcess:
+    """Run one child MCP process with the candidate checkout pinned."""
+    return subprocess.run(
+        [sys.executable, "-m", "devrelay", "mcp", *args],
+        cwd=str(cwd),
+        env=child_env(**(env or {})),
+        input=input_bytes,
+        capture_output=True,
+        timeout=timeout,
+    )
+
+
+def spawn_child(args: list[str], *, cwd: Path, env: dict[str, str] | None = None) -> subprocess.Popen:
+    return subprocess.Popen(
+        [sys.executable, "-m", "devrelay", "mcp", *args],
+        cwd=str(cwd),
+        env=child_env(**(env or {})),
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        encoding="utf-8",
+        bufsize=1,
     )
 
 
@@ -200,13 +249,7 @@ def test_stdio_initialize_discovery_and_sequential_calls(tmp_path, fake_opencode
 def test_stdio_stdout_is_protocol_only(tmp_path):
     """No banner/log may reach stdout: with stdin closed the child emits none."""
     ws = make_workspace(tmp_path, "http://127.0.0.1:9")
-    proc = subprocess.run(
-        [sys.executable, "-m", "devrelay", "mcp", "serve", "--workspace", str(ws)],
-        cwd=str(ws),
-        input=b"",
-        capture_output=True,
-        timeout=60,
-    )
+    proc = run_child(["serve", "--workspace", str(ws)], cwd=ws)
     assert proc.returncode == 0, proc.stderr.decode("utf-8", "replace")
     assert proc.stdout == b"", "stdout must stay clean for the MCP transport"
     assert b"serving MCP over stdio" in proc.stderr
@@ -219,7 +262,9 @@ def test_stdio_reports_errors_as_envelopes_without_tracebacks(tmp_path, fake_ope
         session["directory"] = str(ws)
 
     async def run() -> tuple[Any, Any, Any]:
-        async with stdio_client(server_params(ws)) as (read, write):
+        async with stdio_client(
+            server_params(ws, env={"DEVRELAY_OPENCODE_TOKEN": TOKEN_SENTINEL})
+        ) as (read, write):
             async with ClientSession(read, write) as session:
                 await session.initialize()
                 semantic = await session.call_tool(
@@ -240,15 +285,35 @@ def test_stdio_reports_errors_as_envelopes_without_tracebacks(tmp_path, fake_ope
                 return semantic, schema, unknown
 
     semantic, schema, unknown = asyncio.run(run())
+
+    # concrete invariants, not "some error occurred"
     envelope = envelope_of(semantic)
     assert semantic.is_error is True
+    assert envelope["schema_version"] == 1
+    assert envelope["tool"] == "opencode_get_session"
     assert envelope["ok"] is False
-    assert envelope["error"]["type"] == "mcp_invalid_argument"
-    assert "Traceback" not in json.dumps(envelope)
+    assert envelope["error"] is not None and envelope["error"]["type"] == "mcp_invalid_argument"
+    assert envelope["error"]["message"]
+    assert semantic.is_error is (not envelope["ok"])
+    assert json.loads(semantic.content[0].text) == envelope, (
+        "the text fallback must represent the same semantic outcome"
+    )
+    rendered = json.dumps(envelope)
+    assert "Traceback" not in rendered and 'File "' not in rendered
+    assert TOKEN_SENTINEL not in rendered
+    assert "SK-" not in rendered.upper()
+
+    # the SDK-level schema rejection (a JSON number where a string is required)
+    # stays a bounded SDK error: no traceback, no secret, documented boundary
     for other in (schema, unknown):
-        text = json.dumps(other.structured_content) if getattr(other, "structured_content", None) else str(other)
-        assert "Traceback" not in text
-        assert "File \"" not in text
+        rendered = (
+            json.dumps(getattr(other, "structured_content", None))
+            if getattr(other, "structured_content", None)
+            else str(other)
+        )
+        assert "Traceback" not in rendered
+        assert 'File "' not in rendered
+        assert TOKEN_SENTINEL not in rendered
 
 
 def test_stdio_send_prompt_end_to_end_against_the_loopback_fake(tmp_path, fake_opencode):
@@ -257,11 +322,7 @@ def test_stdio_send_prompt_end_to_end_against_the_loopback_fake(tmp_path, fake_o
     stub.workspace = str(ws)
     for session in stub.sessions:
         session["directory"] = str(ws)
-    env = {
-        **{k: v for k, v in os.environ.items() if not k.startswith("DEVRELAY_")},
-        "DEVRELAY_OPENCODE_TOKEN": TOKEN_SENTINEL,
-    }
-    env.pop("PYTHONPATH", None)
+    env = {"DEVRELAY_OPENCODE_TOKEN": TOKEN_SENTINEL}
 
     async def run() -> dict[str, Any]:
         async with stdio_client(server_params(ws, env=env)) as (read, write):
@@ -305,16 +366,7 @@ def test_stdio_raw_protocol_lines_and_clean_eof_exit(tmp_path, fake_opencode):
     for session in fake_opencode.stub.sessions:
         session["directory"] = str(ws)
 
-    proc = subprocess.Popen(
-        [sys.executable, "-m", "devrelay", "mcp", "serve", "--workspace", str(ws)],
-        cwd=str(ws),
-        stdin=subprocess.PIPE,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        text=True,
-        encoding="utf-8",
-        bufsize=1,
-    )
+    proc = spawn_child(["serve", "--workspace", str(ws)], cwd=ws)
     assert proc.stdin and proc.stdout
 
     def send(payload: dict[str, Any]) -> None:
@@ -372,22 +424,185 @@ def test_stdio_raw_protocol_lines_and_clean_eof_exit(tmp_path, fake_opencode):
 def test_stdio_invalid_workspace_refuses_before_serving(tmp_path):
     plain = tmp_path / "plain"
     plain.mkdir()
-    completed = subprocess.run(
-        [sys.executable, "-m", "devrelay", "mcp", "serve", "--workspace", str(plain)],
-        cwd=str(plain),
-        input=b"",
-        capture_output=True,
-        timeout=60,
-    )
+    completed = run_child(["serve", "--workspace", str(plain)], cwd=plain)
     assert completed.returncode == 2
     assert completed.stdout == b""
     assert b"not an initialized DevRelay workspace" in completed.stderr
 
-    missing = subprocess.run(
-        [sys.executable, "-m", "devrelay", "mcp", "serve"],
-        capture_output=True,
-        timeout=60,
-    )
+    missing = run_child(["serve"], cwd=plain)
     assert missing.returncode == 2
     assert missing.stdout == b""
     assert b"--workspace" in missing.stderr
+
+# ---------------------------------------------------------------------------
+# candidate identity: the child must execute the tree under test
+# ---------------------------------------------------------------------------
+def _copy_mutated_candidate(target_src: Path, marker: str) -> Path:
+    """Copy the candidate package and mutate two independent surfaces.
+
+    The marker is visible both in the advertised server version and in the
+    `devrelay_status` tool payload, so it proves the *tool code path* executed by
+    the child comes from the copied tree - not merely its metadata.
+    """
+    shutil.copytree(
+        CANDIDATE_SRC / "devrelay",
+        target_src / "devrelay",
+        ignore=shutil.ignore_patterns("__pycache__"),
+    )
+    server_py = target_src / "devrelay" / "mcp" / "server.py"
+    server_text = server_py.read_text(encoding="utf-8")
+    assert 'MCP_SERVER_VERSION = "0.3.0-b"' in server_text
+    server_py.write_text(
+        server_text.replace(
+            'MCP_SERVER_VERSION = "0.3.0-b"', f'MCP_SERVER_VERSION = "{marker}"'
+        ),
+        encoding="utf-8",
+    )
+    tools_py = target_src / "devrelay" / "mcp" / "tools.py"
+    tools_text = tools_py.read_text(encoding="utf-8")
+    anchor = '"bridge_operations": list(BRIDGE_OPERATIONS),'
+    assert anchor in tools_text
+    tools_py.write_text(
+        tools_text.replace(
+            anchor, anchor + f'\n                "candidate_marker": "{marker}",', 1
+        ),
+        encoding="utf-8",
+    )
+    return target_src
+
+
+def test_stdio_child_executes_the_candidate_checkout(tmp_path):
+    """Mutation propagation: a copied tree changes what the child actually runs."""
+    marker = "0.3.0-b-MUTANT-CHECK"
+    mutated_src = _copy_mutated_candidate(tmp_path / "tree" / "src", marker)
+    ws = make_workspace(tmp_path, "http://127.0.0.1:9")
+
+    async def probe(env: dict[str, str] | None) -> tuple[str, Any]:
+        async with stdio_client(server_params(ws, env=env)) as (read, write):
+            async with ClientSession(read, write) as session:
+                init = await session.initialize()
+                status = envelope_of(await session.call_tool("devrelay_status", {}))
+                return init.server_info.version, status["data"].get("candidate_marker")
+
+    mutant_version, mutant_marker = asyncio.run(probe({"PYTHONPATH": str(mutated_src)}))
+    pristine_version, pristine_marker = asyncio.run(probe(None))
+
+    assert mutant_version == marker
+    assert mutant_marker == marker, "the tool code path must come from the copied tree"
+    assert pristine_version == "0.3.0-b"
+    assert pristine_marker is None
+    assert (mutant_version, mutant_marker) != (pristine_version, pristine_marker)
+
+
+def test_stdio_every_child_launch_pins_the_candidate_src():
+    """The harness must never rely on the ambient editable installation."""
+    assert CANDIDATE_SRC.is_dir()
+    env = child_env()
+    assert env["PYTHONPATH"] == str(CANDIDATE_SRC)
+    assert not any(key.startswith("DEVRELAY_") for key in env)
+    params = server_params(CANDIDATE_SRC)
+    assert params.env is not None and params.env["PYTHONPATH"] == str(CANDIDATE_SRC)
+
+
+# ---------------------------------------------------------------------------
+# malformed MCP input: record the ACTUAL SDK behaviour
+# ---------------------------------------------------------------------------
+def _raw_line_reader(proc: subprocess.Popen) -> "queue.Queue[str]":
+    lines: "queue.Queue[str]" = queue.Queue()
+
+    def reader() -> None:
+        assert proc.stdout is not None
+        for line in proc.stdout:
+            lines.put(line)
+
+    threading.Thread(target=reader, daemon=True).start()
+    return lines
+
+
+def _drain(lines: "queue.Queue[str]", timeout: float) -> list[str]:
+    out: list[str] = []
+    end = time.monotonic() + timeout
+    while True:
+        remaining = end - time.monotonic()
+        if remaining <= 0:
+            break
+        try:
+            out.append(lines.get(timeout=remaining))
+        except queue.Empty:
+            break
+    return out
+
+
+@pytest.mark.parametrize("invalid", [False, True])
+def test_stdio_malformed_frames_actual_behaviour(tmp_path, invalid):
+    """Unparseable/invalid-shape frames are dropped; protocol errors are typed.
+
+    Verified SDK behaviour (mcp 2.2.0, observed through the real stdio server):
+    frames that are not parseable JSON, not JSON-RPC shaped, or missing a method
+    receive **no reply at all** (they are dropped, the process stays alive and
+    keeps serving); an unknown method answers a JSON-RPC error -32601 and a
+    request with invalid params answers -32602.  DevRelay must therefore not
+    claim a generic protocol-error response for unparseable input.
+    """
+    ws = make_workspace(tmp_path, "http://127.0.0.1:9")
+    proc = spawn_child(["serve", "--workspace", str(ws)], cwd=ws)
+    lines = _raw_line_reader(proc)
+
+    def send(raw: str) -> None:
+        assert proc.stdin is not None
+        proc.stdin.write(raw + chr(10))
+        proc.stdin.flush()
+
+    try:
+        send(
+            json.dumps(
+                {
+                    "jsonrpc": "2.0",
+                    "id": 1,
+                    "method": "initialize",
+                    "params": {
+                        "protocolVersion": "2025-11-25",
+                        "capabilities": {},
+                        "clientInfo": {"name": "malformed-probe", "version": "0"},
+                    },
+                }
+            )
+        )
+        assert _drain(lines, 5), "initialize must be answered"
+        send(json.dumps({"jsonrpc": "2.0", "method": "notifications/initialized"}))
+
+        if invalid:
+            dropped = [
+                "this is not json at all",
+                json.dumps({"hello": "world"}),
+                json.dumps({"jsonrpc": "2.0", "id": 7}),
+            ]
+            for raw in dropped:
+                send(raw)
+            assert _drain(lines, 1.0) == [], "unparseable frames are silently dropped"
+        else:
+            send(json.dumps({"jsonrpc": "2.0", "id": 8, "method": "nope/method"}))
+            unknown = _drain(lines, 2.0)
+            assert len(unknown) == 1
+            payload = json.loads(unknown[0])
+            assert payload["error"]["code"] == -32601
+            assert payload["id"] == 8
+
+            send(json.dumps({"jsonrpc": "2.0", "id": 9, "method": "tools/call"}))
+            bad_params = _drain(lines, 2.0)
+            assert len(bad_params) == 1
+            payload = json.loads(bad_params[0])
+            assert payload["error"]["code"] == -32602
+
+        # the session survives malformed input and still serves real calls
+        send(json.dumps({"jsonrpc": "2.0", "id": 10, "method": "tools/list"}))
+        recovered = _drain(lines, 5)
+        assert len(recovered) == 1
+        assert [t["name"] for t in json.loads(recovered[0])["result"]["tools"]] == EXACT_TOOLS
+
+        assert proc.stdin is not None
+        proc.stdin.close()
+        assert proc.wait(timeout=30) == 0
+    finally:
+        if proc.poll() is None:  # pragma: no cover - defensive
+            proc.kill()
