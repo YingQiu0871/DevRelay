@@ -20,7 +20,7 @@ Source: <https://github.com/YingQiu0871/DevRelay> -
 | v0.3-A OpenCode Session Bridge | **accepted / unreleased** — closed at candidate `bcf9627e92ef839abb756810e3c615e6d01b6576`; real OpenCode `1.18.11` smoke passed (one prompt → `DEVRELAY_A33_OK`) |
 | v0.3-B ChatGPT/MCP tool surface | **accepted / unreleased** — closed at accepted candidate `d058d62341a173414bdba88fe357b08c236c8bb4`; final real MCP smoke `PASS — V0.3-B LOCAL REAL MCP SMOKE` |
 | v0.3-C Agent Role Routing | **accepted / unreleased** — closed at accepted candidate `eabb667d1bd9e379d3b7105d72b6a2751bc2a32b`; real routing verified for both roles (implementer `opencode-go/deepseek-v4.1-flash`, reviewer `opencode-go/glm-5.3-flash`), routing only, no orchestration |
-| v0.3-D Bounded Orchestration | **candidate implementation complete / unreleased** — ready for independent review; durable run state, legal transitions and a hard cycle bound (max six model turns per run) over the accepted role path, **0 real model calls**, no automatic sequencing |
+| v0.3-D Bounded Orchestration | **candidate + remediation complete / NOT ACCEPTED / unreleased** — ready for independent re-review; durable run state, legal transitions and a hard cycle bound (max six model turns per run) over the accepted role path, untrusted persisted state validated on load and save, **0 real model calls**, no automatic sequencing |
 
 Neither stage is part of the `v0.1.0` release, the package version stays `0.1.0`,
 and nothing is pushed, tagged or published.  Spec/acceptance for v0.3-B:
@@ -94,8 +94,11 @@ tools.  Spec and matrix: `docs/v0.3/V03D_SPEC.md`,
 
 ### Next stage
 
-`v0.3-D Bounded Orchestration` — **candidate implementation complete, awaiting
-independent review** (unreleased; no real orchestration smoke yet).
+`v0.3-D Bounded Orchestration` — **candidate + remediation complete, awaiting
+independent RE-REVIEW (NOT ACCEPTED)** (unreleased; no real orchestration smoke
+yet).  The independent gate's blocking P1 (persisted state trusted as input) is
+fixed at the model/store load boundary and its four reproductions are refused;
+see `docs/v0.3/V03D_ACCEPTANCE.md` §J.
 
 `v0.3-E Orchestration Recovery` — **not started** (crash-during-submission
 reconciliation, uncertain-call recovery, automatic resume).  DevRelay still never
@@ -1080,7 +1083,8 @@ not downgrade the binary inside a workspace that v0.2-B has already written.
   at candidate `d058d62…` after the final real MCP smoke passed: a local stdio
   MCP adapter over the accepted v0.3-A bridge, with nine high-level tools, a
   stable result envelope, honest read-only / side-effecting annotations and one
-  process-wide execution lock over the accepted single-writer filesystem ledger.
+  execution lock per tool surface (the shipped stdio server builds exactly one
+  surface) over the accepted single-writer filesystem ledger.
   Still no HTTP/SSE MCP transport, no multi-workspace serving
 - **v0.3-C** - Agent Role Routing - **accepted internally (unreleased)** at
   candidate `eabb667…` after two bounded real runs verified both routes
@@ -1089,12 +1093,16 @@ not downgrade the binary inside a workspace that v0.2-B has already written.
   surface (three new tools, 12 in total), where the workspace pins which
   model/agent plays `implementer`/`reviewer`.  Routing only - the planner still
   sequences the work
-- **v0.3-D** - Bounded Orchestration - **candidate implementation complete
-  (unreleased, ready for independent review)**: durable run state, legal
-  transitions, a hard cycle bound (at most six model turns per run), durable audit
-  and fail-closed behaviour over the accepted role path, with five new MCP tools
-  (17 in total).  The Planner still decides every phase and every decision, and no
-  real model call was made in this round
+- **v0.3-D** - Bounded Orchestration - **candidate + remediation complete
+  (unreleased, NOT ACCEPTED, ready for independent re-review)**: durable run
+  state, legal transitions, a hard cycle bound (at most six model turns per run),
+  durable audit and fail-closed behaviour over the accepted role path, with five
+  new MCP tools (17 in total).  Persisted run state is validated as untrusted
+  input on load and save (the independent gate's four reproductions are refused),
+  an unresolvable route fails closed, an interrupted turn is materialized with its
+  audit trail, and the durable in-flight intent is proven to precede submission.
+  The Planner still decides every phase and every decision, and no real model call
+  was made in this round
 - **v0.3-E** - Orchestration recovery (crash/uncertain-call reconciliation,
   automatic resume) - **not started**
 - **later** - optional release automation with explicit approvals

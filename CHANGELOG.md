@@ -9,10 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 Durable, **bounded** orchestration state over the accepted v0.3-C role path: a
 Planner creates a run, explicitly runs each phase, and records its own decision -
 DevRelay remembers where the run is, enforces a hard cycle bound and fails closed
-on uncertainty.  **Candidate implementation complete, awaiting independent review
-and unreleased**: the package version stays `0.1.0`, the supported public release
-remains `v0.1.0`, nothing is pushed, merged, tagged or published, and this stage
-makes **0 real model calls**.
+on uncertainty.  **Candidate implementation + remediation complete, awaiting
+independent RE-REVIEW and NOT ACCEPTED / unreleased**: the package version stays
+`0.1.0`, the supported public release remains `v0.1.0`, nothing is pushed, merged,
+tagged or published, and this stage makes **0 real model calls**.
 
 ### Added
 
@@ -37,11 +37,12 @@ makes **0 real model calls**.
   assistant message ids - never a raw prompt, provider reply, model reasoning or
   credential.
 - **Fail-closed bounds**: an uncertain, pending or failed phase blocks the run
-  (no retry, no fallback, no role switch, no automatic interrupt); a changed role
-  route or an ownership loss fails the run closed with zero model POST; a
-  persisted in-flight turn is never replayed; a corrupt run document is reported
-  as `orchestration_state_corrupt` and never reset.
-- **154 offline tests** plus the v0.3-D spec and acceptance matrix.
+  (no retry, no fallback, no role switch, no automatic interrupt); a changed **or
+  unresolvable** role route or an ownership loss fails the run closed with zero
+  model POST; a persisted in-flight turn is never replayed; a corrupt run document
+  is reported as `orchestration_state_corrupt` and never reset.
+- **255 offline tests** (154 at the candidate, 101 added by the remediation)
+  plus the v0.3-D spec and acceptance matrix.
 
 ### Notes
 
@@ -56,6 +57,63 @@ makes **0 real model calls**.
   raw `opencode_send_prompt` and role `devrelay_send_role_prompt` paths are
   untouched, and the only test-expectation updates are the intended tool
   inventory (12 -> 17) and the advertised server version (`0.3.0-c` -> `0.3.0-d`).
+### Remediation (independent gate: `REQUEST_CHANGES`, P0 = 0, one blocking P1)
+
+The first v0.3-D candidate trusted persisted run state as input.  Fixed at the
+model/store load boundary rather than by adding checks to `start_run`:
+
+- **Persisted state is untrusted input** (`src/devrelay/orchestration/invariants.py`):
+  every load *and* every save re-derives the invariants the state machine
+  guarantees - fixed schema version, `1 <= max_cycles <= 3`, budget `2 x
+  max_cycles`, counters consistent with the recorded turns, `turn_attempts ==
+  model_turns_used`, every reserved slot accounted for by a finished turn or the
+  live in-flight intent, two distinct non-blank sessions, a complete and mappable
+  two-role snapshot, one turn per role per cycle with the implementer first,
+  `completed_cycles` equal to the completed reviewer turns, the state/cycle
+  relation, `LIMIT_REACHED` only at the cap with `blocked_reason=cycle_limit`,
+  `BLOCKED` only with a reason, the in-flight shape (matching `READY_*` state,
+  current cycle, `outcome=in_flight`, snapshot model, well-formed prompt
+  evidence), an external-only decision history consistent with the current state,
+  and start provenance that claims no previous state.  Anything else is
+  `orchestration_state_corrupt`: refused, never repaired, never migrated, never
+  rewritten, never able to reach a model call.  The store additionally requires
+  transition provenance for a persisted document and binds it to its workspace.
+- **The gate's four reproductions are refused**: `max_cycles=99`/budget 198 cannot
+  run a single extra turn, identical role sessions are rejected, `max_cycles=1000`
+  cannot open five cycles, and `AWAITING_DECISION` with `completed_cycles=0` and
+  no reviewer turn cannot open one.  A 20-case tamper matrix plus 22 additional
+  corruption cases assert this, including that the file is byte-identical after
+  every refused attempt.
+- **An unresolvable role route** (role removed, or its configured route invalid)
+  now fails an existing run closed with `orchestration_route_changed`, durable
+  `BLOCKED`/`blocked_reason=route_changed`, an immutable snapshot and zero model
+  POST; at `start_run` there is nothing durable to block, so the same failure is
+  reported as `orchestration_route_changed` with no run created.
+- **An interrupted turn keeps its audit trail**: the sanitized attempt is
+  finalized as `blocked`/`turn_interrupted` and appended to the role history (so
+  the reserved slot keeps a matching record and the transition keeps the phase
+  action and role) before the run fails closed; `legal_next_actions` is empty while
+  an intent is live.
+- **The durable in-flight intent provably precedes submission**: a transport-level
+  callback observes the on-disk document at the exact moment the prompt POST is
+  sent (no sleeps, no polling), and a real process death (`SystemExit`) at
+  submission leaves a loadable in-flight document that a fresh surface
+  materializes into an auditable `BLOCKED` run.  The previously undetected
+  Mutation F (bypassing the pre-call save) now fails four tests.
+- **Accounting, vocabulary and identity wording**: `model_turns_used` is
+  documented and tested as *consumed slots* that are never refunded (a ten-kind
+  failure matrix asserts one slot, one turn record, no retry); turn `outcome` is
+  constrained to `in_flight`/`completed`/`blocked`; run ids are matched with a
+  strict full match; and the docs/status no longer overclaim (atomic against a
+  crash of this process, **no** power-loss `fsync` claim; the execution lock is
+  per tool surface, the shipped stdio server builds exactly one surface, and
+  multiple surfaces or processes are unsupported).
+- **Recorded, not fixed (P3)**: the MCP SDK's lax argument model normalizes JSON
+  `true`/`"2"`/`2.0` to integers before the tool body (and refuses `1.5`), so a
+  boolean `max_cycles` reaches the body as `1`.  DevRelay still rejects a real
+  `bool` at its own boundary and the 1..3 ceiling can never be raised (`false`
+  normalizes to 0 and is refused).
+
 - `MCP_SERVER_VERSION` is `0.3.0-d`.  A bounded real orchestration smoke (at most
   two cycles / four model turns) remains deferred until after independent review
   and a separate authorization; v0.3-E recovery is explicitly out of scope.

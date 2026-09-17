@@ -36,22 +36,34 @@ three-way route agreement (`devrelay_get_role`, response metadata, OpenCode
 provider log).  The package version stays `0.1.0` and the public release remains
 `v0.1.0`.
 
-v0.3-D (bounded orchestration) is implemented as an **unreleased candidate** on
-branch `v0.3-d-bounded-orchestration`, based on the v0.3-C acceptance closeout
-`e0a06fa…`: see `docs/v0.3/V03D_SPEC.md` and `docs/v0.3/V03D_ACCEPTANCE.md`.  It
-adds durable run state, legal transitions, a hard cycle bound (`max_cycles` 1..3,
-at most six model turns per run), durable audit and fail-closed behaviour over the
-accepted role path - and exactly five MCP tools (17 in total).  It still does
-**not** sequence roles automatically, never interprets reviewer text, never
-retries and makes **0 real model calls**; a bounded real orchestration smoke
-requires independent review and a separate authorization.
+v0.3-D (bounded orchestration) is implemented as an **unreleased, NOT ACCEPTED
+candidate** on branch `v0.3-d-bounded-orchestration`, based on the v0.3-C
+acceptance closeout `e0a06fa…`: see `docs/v0.3/V03D_SPEC.md` and
+`docs/v0.3/V03D_ACCEPTANCE.md`.  It adds durable run state, legal transitions, a
+hard cycle bound (`max_cycles` 1..3, at most six model turns per run), durable
+audit and fail-closed behaviour over the accepted role path - and exactly five MCP
+tools (17 in total).  It still does **not** sequence roles automatically, never
+interprets reviewer text, never retries and makes **0 real model calls**; a
+bounded real orchestration smoke requires independent review and a separate
+authorization.
+
+An independent review of the first v0.3-D candidate returned
+`REQUEST_CHANGES` (P0 = 0, one blocking P1: persisted run state was trusted as
+input, plus P2/P3 findings).  The **remediation is complete and ready for
+independent re-review**: persisted state is now validated by a semantic invariant
+pass on load *and* save (the four gate reproductions A-D are refused), an
+unresolvable role route fails closed like a changed one, an interrupted turn is
+materialized into the role history with its sanitized audit fields, the durable
+in-flight intent is proven to precede submission (Mutation F is now detected), and
+the accounting/outcome/run-id/wording findings are fixed or recorded.  The stage
+remains **NOT ACCEPTED** until that re-review passes.
 
 v0.3-E (recovery: crash-during-submission reconciliation, uncertain-call
 recovery, automatic resume) has **not** started and must not begin without a
 separate authorization.  See `docs/BACKLOG.md` for deferred, non-blocking
 follow-ups.
 
-## v0.3-D scope (implemented, candidate)
+## v0.3-D scope (implemented + remediated, candidate, NOT ACCEPTED)
 
 1. `src/devrelay/orchestration/models.py` — the explicit state enum, hard bounds
    (`HARD_MAX_CYCLES = 3`, default 2, model-turn budget = 2 x max_cycles), the

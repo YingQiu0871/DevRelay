@@ -1,11 +1,13 @@
 # DevRelay v0.3-D — bounded orchestration
 
-Status: **candidate implementation complete — ready for independent review**
+Status: **candidate implementation + remediation after the independent gate
+complete — ready for independent re-review (NOT ACCEPTED)**
 (unreleased candidate work; package version stays `0.1.0`; public release remains
 `v0.1.0`; v0.3-E not started).  Accepted baselines this stage builds on: v0.3-A
 OpenCode session bridge (`bcf9627…`), v0.3-B MCP tool surface (`d058d62…`) and
 v0.3-C agent role routing (`eabb667…`, closeout `e0a06fa…`).  Branch:
-`v0.3-d-bounded-orchestration`.
+`v0.3-d-bounded-orchestration`; implementation commit `78d4e5d…` (unchanged by the
+remediation, which is additive).
 
 ## 1. Objective and boundary
 
@@ -78,6 +80,25 @@ Cycle accounting: a cycle is complete when the reviewer turn reaches
 `request_changes` opens the next cycle only while `completed_cycles < max_cycles`
 and otherwise produces `LIMIT_REACHED` with **zero** model POSTs.
 
+Model-turn accounting (`model_turns_used`, authoritative): the counter records
+**consumed orchestration model-turn budget slots**, not confirmed provider/HTTP
+submissions.  A slot is consumed when the durable in-flight intent is committed,
+*before* the role/model call is entered, so `model_turns_used = 1` with zero
+actual POSTs (a connect failure after the slot was reserved) is valid and
+intentional.  No failure path decrements or refunds a slot, and the truth about an
+actual submission lives in the accepted ledger plus the per-turn
+`submission_attempted`/`submission_status`/`submission_uncertain`/`call_ids`
+evidence.  `turn_attempts` equals `model_turns_used` in every honest state, and
+each reserved slot is accounted for either by a finished turn record in the role
+history or by the live in-flight intent.
+
+Turn outcome vocabulary (constrained): a recorded turn's `outcome` is exactly
+`in_flight`, `completed` or `blocked`; an in-flight intent is `in_flight` until
+the accepted result is recorded.  While a turn is in flight,
+`legal_next_actions = []` (recovery is out of scope for v0.3-D), and a persisted
+in-flight intent is finalized as `blocked`/`turn_interrupted` before the run fails
+closed.
+
 A cycle budget is **not** a retry budget: an individual turn that times out, is
 uncertain, stays pending, fails the provider, produces a malformed state or fails
 ownership blocks the run instead of spending another turn.  Recovery of failed or
@@ -97,7 +118,14 @@ uncertain runs is explicitly out of scope (v0.3-E).
   route_source) at creation.  Before every role turn the route is resolved again
   and compared; a difference fails the run closed with
   `orchestration_route_changed` and **zero** model POST - a run never continues
-  silently under a changed route.
+  silently under a changed route.  A route that can no longer be **resolved at
+  all** (the role was removed from the configuration, or its configured route
+  became invalid) is treated exactly the same way: the existing run keeps its
+  immutable snapshot and becomes durable `BLOCKED` with
+  `blocked_reason = route_changed`, still with zero model POST and no fallback to
+  another role or a default model.  At `start_run` nothing durable exists yet, so
+  an unresolvable route is reported as `orchestration_route_changed` with **no run
+  created** (there is no snapshot to store and no run to block).
 
 ## 6. Durable state and audit
 
@@ -105,14 +133,40 @@ uncertain runs is explicitly out of scope (v0.3-E).
 <workspace>/.devrelay/orchestration/runs/<run_id>.json
 ```
 
-* run ids are generated (`DR-<32 hex characters>`) and validated against a strict
-  pattern before any filesystem access, so a caller-supplied id can never be a
-  traversal primitive; unknown/malformed ids are local
-  `orchestration_run_not_found`/argument errors;
+* run ids are generated (`DR-<32 hex characters>`) and validated with a strict
+  full match (no prefix, suffix, trailing newline or CR) before any filesystem
+  access, so a caller-supplied id can never be a traversal primitive;
+  unknown/malformed ids are local `orchestration_run_not_found`/argument errors;
 * writes are atomic (unique temp file + `os.replace`): a partially written
   document never appears as a valid run; a missing run is
   `orchestration_run_not_found` and an unreadable/malformed one is
-  `orchestration_state_corrupt` - it is **never** silently reset or recreated;
+  `orchestration_state_corrupt` - it is **never** silently reset or recreated.
+  Honest scope: this is atomicity against a crash of *this* process (no partially
+  written document is ever visible, and no temp file is left behind).  Durability
+  against power loss is **not** claimed - no `fsync` is issued;
+* **persisted state is untrusted input.**  A run document found on disk is
+  re-validated before it is believed: the strict schema, then a semantic
+  invariant pass that re-derives everything the state machine guarantees (fixed
+  schema version; `1 <= max_cycles <= 3`; `model_turn_budget = 2 x max_cycles`;
+  cycle counters inside their bounds and consistent with the recorded turns;
+  `turn_attempts = model_turns_used`; every reserved turn accounted for by a
+  finished record or the live in-flight intent; two distinct non-blank sessions;
+  a two-role snapshot whose models are mappable and whose declared roles match
+  their keys; at most one turn per role per cycle and never a reviewer turn
+  before its implementer turn; `completed_cycles` equal to the number of
+  completed reviewer turns; the state/cycle relation; `LIMIT_REACHED` only at the
+  cap and with `blocked_reason = cycle_limit`; `BLOCKED` only with a reason;
+  in-flight shape: matching `READY_*` state, current cycle, `outcome =
+  in_flight`, snapshot model, well-formed prompt evidence; a decision history made
+  only of external decisions with the decision and next state the current state
+  requires; start provenance that claims no previous state; and a persisted
+  document that records the transition that produced it and is bound to the
+  workspace it was created in).  The same pass runs on save, so an internally
+  inconsistent document cannot reach the disk either.  Anything else is
+  `orchestration_state_corrupt`: it is refused at the boundary, never repaired,
+  never migrated, never normalized, never rewritten - and it can never reach a
+  model call.  A run copied in from another workspace is corrupt *here* and is
+  never adopted;
 * every state-changing operation records previous/next state, timestamp, action,
   whether the transition was external or model-bearing, cycle, role, prompt
   digest and length, resolved model/agent, call ids, submission status/flags,
@@ -120,15 +174,22 @@ uncertain runs is explicitly out of scope (v0.3-E).
 * **no raw prompt, no provider reply body, no model reasoning and no credential
   material is persisted**; the provider/OpenCode session history remains the
   canonical conversational content and the Planner receives the live response;
-* one MCP server process writes here (the accepted v0.3-B execution boundary
-  serializes every tool body).  Multi-process orchestration and crash
-  reconciliation are out of scope.
+* one tool surface writes here (the shipped stdio MCP server builds exactly one
+  surface, and that surface serializes every tool body with one execution lock).
+  Running several surfaces - or several processes - against one workspace is
+  **unsupported** for v0.3-D: there is no cross-process lock, no writer lease and
+  no recovery, and multi-process orchestration and crash reconciliation are out of
+  scope.
 
-A model-bearing phase writes a durable **in-flight** record *before* the call.  A
-persisted in-flight turn is never replayed: the next mutating action fails the run
-closed (`BLOCKED`, `blocked_reason=turn_interrupted`).  An intact run record can
-be read by a new process and legal explicit transitions operate from persisted
-state - nothing more is claimed.
+A model-bearing phase writes a durable **in-flight** record *before* the call is
+submitted (the intent is on disk before the role call reaches submission; this is
+asserted through a transport-level callback, not by timing).  A persisted
+in-flight turn is never replayed: its sanitized evidence (role, cycle, prompt
+digest and length, resolved model/agent, route source) is appended to that role's
+turn history as `blocked`/`turn_interrupted` and only then does the run become
+durable `BLOCKED` with `blocked_reason = turn_interrupted` and
+`legal_next_actions = []`.  An intact run record can be read by a new process and
+legal explicit transitions operate from persisted state - nothing more is claimed.
 
 ## 7. MCP surface (17 tools)
 
@@ -147,9 +208,13 @@ background runner.  `start_run` accepts no task prompt (and no model/agent/
 endpoint/workspace argument): the Planner supplies prompt text for every phase,
 so DevRelay neither invents task instructions nor persists task content.
 
-All five bodies run through the same `_execute` choke point, so the accepted
-v0.3-B execution lock still serializes **all seventeen** tools; there is no
-orchestration lock, no role lock and no scheduler.  Run-scoped failures report the
+All five bodies run through the same `_execute` choke point, so **every** tool
+body of one surface runs under that surface's execution lock; there is no
+orchestration lock, no role lock and no scheduler.  Lock scope is honest: the lock
+is per tool surface, the shipped stdio server builds exactly one surface (so in it
+every tool body is serialized), and multiple surfaces or multiple writer processes
+against one workspace are unsupported and not covered by that lock.  Run-scoped
+failures report the
 current run state (`state`, `previous_state`, cycle accounting, model-turn
 budget, `terminal`, `blocked_reason`, `legal_next_actions`) next to the stable
 error code, and `devrelay_status` gains a sanitized capability block
@@ -197,6 +262,14 @@ is made for the model-bearing tools themselves).
   uncertain-call recovery, orphan-process recovery, automatic resume), any
   semantic judgement of review content, WebUI/HTTP control API, background
   scheduling, multi-process orchestration.
+* **Known boundary, recorded (P3):** the MCP SDK builds a lax pydantic argument
+  model from the declared tool schema, so a JSON ``true``/``"2"``/``2.0`` reaches
+  the tool body as the integer 1/2/2 (and ``1.5`` is refused by the SDK before the
+  body runs).  The DevRelay bound is applied to the normalized value - the v0.3-D
+  ceiling can never be raised, ``false`` normalizes to 0 and is refused - and the
+  tool body itself rejects a real ``bool`` whenever it sees one.  No fix is
+  attempted at the adapter layer because the normalization happens above it; the
+  DevRelay-side check is kept and asserted.
 
 ## 11. Minimal local setup
 

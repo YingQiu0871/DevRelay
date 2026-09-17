@@ -106,10 +106,19 @@ authorizes code changes; each item names its own scope and owner stage.
 | --- | --- |
 | Bounded real orchestration smoke (two cycles maximum / four model turns) | requires independent review first (`P0 = 0`, `P1 = 0`, no smoke-blocking P2) and a separate authorization; the v0.3-D implementation round makes **0 real model calls** |
 | v0.3-E recovery: reconciliation after a crash during a model submission, uncertain-call recovery, orphan-process recovery, automatic resume | explicitly out of scope for v0.3-D: a persisted in-flight turn fails the run closed (`blocked_reason=turn_interrupted`) and is never replayed, so an interrupted run must be resolved by a human or a later stage |
-| Multi-process orchestration locking | v0.3-D assumes one MCP server process (accepted global serialization) and a single-writer store; multi-process orchestration needs its own design |
+| Multi-process / multi-surface orchestration locking | the execution lock is **per tool surface** and the shipped stdio server builds exactly one surface, so several surfaces or several writer processes against one workspace are unsupported; the honest scope is now stated in `tools.py`, `store.py`, the spec §6/§7 and the `devrelay_status` block, and needs its own design if ever required |
 | Run listing / run-history API and run-document retention | not needed for the bounded workflow; run documents accumulate under `.devrelay/orchestration/runs/` |
 | `devrelay_get_run` does not materialize an interrupted turn (it reports `in_flight: true`) | deliberate: reads never mutate; the next mutating action fails the run closed |
 | Repeated transition/read duplication (the service re-resolves routes before every phase) | cheap and deterministic; a future stage could cache per-run resolutions |
+
+### Carried findings at the v0.3-D remediation (recorded; **non-blocking for re-review**)
+
+| Item | Note |
+| --- | --- |
+| MCP SDK argument normalization (P3, measured) | the SDK builds a lax pydantic argument model from the declared tool schema, so JSON `true` -> `1`, `"2"` -> `2`, `2.0` -> `2` reach the tool body (and `1.5` is refused by the SDK).  The DevRelay bound is applied to the normalized value and the tool body rejects a real `bool`, so the 1..3 ceiling can never be raised; no fix is attempted at the adapter layer because the normalization happens above it.  Evidence: `test_mcp_sdk_normalizes_max_cycles_before_the_tool_body`, `test_boolean_max_cycles_is_rejected_by_the_tool_body` |
+| `devrelay_get_run` still reports `in_flight: true` instead of materializing an interrupted turn | deliberate: reads never mutate; `legal_next_actions` is empty while an intent is live and the next mutating action materializes the interruption (`blocked`/`turn_interrupted`) and fails the run closed |
+| No power-loss durability (P3, wording) | writes are atomic against a crash of this process (no partial document, no temp residue) but no `fsync` is issued, so power-loss durability is not claimed anywhere in code or docs |
+| Corruption detection is structural + semantic, not cryptographic | nothing signs a run document, so an attacker who can rewrite the file can also rewrite a consistent lie within the invariants (for example a different route snapshot); the store's defences are the strict schema, the invariant pass, the workspace binding and single-writer access, not tamper-evidence |
 
 ## 6. Deferred follow-ups from v0.3-C agent role routing (recorded; **non-blocking for v0.3-C acceptance**)
 
