@@ -1,24 +1,41 @@
-"""Semantic invariants for a persisted v0.3-D run document.
+"""Semantic invariants and reachability proof for a persisted v0.3-D run.
 
 The store parses the JSON, but parsing is not trust: a run document can be
-tampered with on disk, copied between workspaces, truncated or hand-edited.  This
-module re-derives every invariant the production state machine *guarantees* and
-refuses anything else as ``orchestration_state_corrupt``.
+tampered with on disk, copied between workspaces, truncated, hand-edited or rolled
+back to an earlier (cheaper) state.  This module re-derives every invariant the
+production state machine *guarantees* and refuses anything else as
+``orchestration_state_corrupt``.
+
+The contract is stronger than "every field looks plausible": the **current state
+must be provably reachable** from the persisted turn history, decision history,
+counters, transition provenance, cycle structure and in-flight intent.  A
+document whose history cannot have produced its state, counters or provenance is
+not a run DevRelay will act on.
 
 Design rules used here:
 
-* every rule below is satisfied by **every** honestly generated run, including
-  the legitimate crash boundary (a ``READY_*`` state carrying an ``in_flight``
-  intent) - verified against the honest-state corpus in
-  ``tests/test_v03d_invariants.py``;
-* a rule is only added when the state machine or the tests prove it, never
-  invented;
+* every rule below is satisfied by **every** honestly generated run - verified
+  against a corpus produced by the real service (including the legitimate crash
+  boundary: a ``READY_*`` state carrying an ``in_flight`` intent);
+* a rule is only added when the state machine, the corpus or the service proves
+  it, never invented;
 * corruption is never repaired: no normalisation, no re-resolution, no silent
   migration, no reset.
+
+Honest bound of this guarantee (v0.3-D): a run document is self-contained mutable
+JSON with no external integrity anchor, so DevRelay can guarantee that **every
+structural and semantic reachability invariant holds** and that malformed,
+inconsistent or partially rolled-back documents fail closed before any model
+call.  It does **not** claim cryptographic or append-only tamper evidence: an
+attacker who rewrites the whole document into a different but internally
+consistent history is out of scope for v0.3-D (that would need a signed journal or
+an append-only store, which v0.3-D deliberately does not add).
 """
 
 from __future__ import annotations
 
+import re
+from datetime import datetime
 from typing import Any, NoReturn
 
 from devrelay.errors import OrchestrationStateCorruptError, RoleRoutingError
@@ -54,6 +71,38 @@ _EXPECTED_IN_FLIGHT_STATE = {
     "implementer": RunState.READY_IMPLEMENTER,
     "reviewer": RunState.READY_REVIEWER,
 }
+
+#: A persisted prompt digest is always a lowercase sha256 hex digest.
+_PROMPT_DIGEST_RE = re.compile(r"^[0-9a-f]{64}$")
+
+#: The state machine edges a *last* transition may describe, per current state:
+#: ``(action, previous_state, role)``.  ``None`` for the role means "any role the
+#: action legitimately carries".  Cycle relations are checked next to the table.
+_LAST_EDGE_RULES: dict[RunState, frozenset[tuple[str, str, str | None]]] = {
+    RunState.READY_IMPLEMENTER: frozenset({("decide", "AWAITING_DECISION", "")}),
+    RunState.READY_REVIEWER: frozenset(
+        {("run_implementer", "READY_IMPLEMENTER", "implementer")}
+    ),
+    RunState.AWAITING_DECISION: frozenset({("run_reviewer", "READY_REVIEWER", "reviewer")}),
+    RunState.COMPLETED: frozenset({("decide", "AWAITING_DECISION", "")}),
+    RunState.STOPPED: frozenset({("decide", "AWAITING_DECISION", "")}),
+    RunState.LIMIT_REACHED: frozenset({("decide", "AWAITING_DECISION", "")}),
+    RunState.BLOCKED: frozenset(
+        {
+            # fail-closed via the phase itself (failed role turn / interruption)
+            ("run_implementer", "READY_IMPLEMENTER", "implementer"),
+            ("run_reviewer", "READY_REVIEWER", "reviewer"),
+            # fail-closed administratively (route invalidation, ownership loss)
+            ("block", "READY_IMPLEMENTER", None),
+            ("block", "READY_REVIEWER", None),
+        }
+    ),
+}
+
+#: Decisions that end a run: they may only ever be the last recorded decision.
+_TERMINAL_DECISION_STATES = frozenset(
+    {RunState.COMPLETED.value, RunState.STOPPED.value, RunState.LIMIT_REACHED.value}
+)
 
 
 def validate_run_semantics(run: Any) -> None:
@@ -117,6 +166,13 @@ def validate_run_semantics(run: Any) -> None:
             f"{run.model_turns_used} reserved turn(s)"
             + (" with an in-flight intent" if run.in_flight_turn is not None else "")
         )
+    # The budget is spend-only: the turns a run claims to have spent can never
+    # exceed what its cycle structure could ever have allowed.
+    if run.model_turns_used > 2 * run.current_cycle:
+        bad(
+            f"model_turns_used {run.model_turns_used} cannot have been spent by "
+            f"cycle {run.current_cycle} (at most {2 * run.current_cycle} slots exist)"
+        )
 
     # -- §7 session separation ----------------------------------------
     impl_session = run.implementer_session_id
@@ -155,14 +211,23 @@ def validate_run_semantics(run: Any) -> None:
             )
         _require_mappable_model(entry.model, role, bad)
 
-    # -- §10 role histories: one phase per cycle, implementer first -----
-    for role, turns in (("implementer", run.implementer_turns), ("reviewer", run.reviewer_turns)):
+    # -- §10 role histories: per-cycle evidence, real audit fields -----
+    blocked_turns: list[str] = []
+    for role, turns in (
+        ("implementer", run.implementer_turns),
+        ("reviewer", run.reviewer_turns),
+    ):
         seen: dict[int, int] = {}
         for turn in turns:
             if turn.role != role:
                 bad(f"{role} history contains a {turn.role!r} turn record")
             if not (1 <= turn.cycle <= run.max_cycles):
                 bad(f"{role} turn cycle {turn.cycle} is outside 1..{run.max_cycles}")
+            if turn.cycle > run.current_cycle:
+                bad(
+                    f"{role} turn cycle {turn.cycle} is from the future (the run is "
+                    f"in cycle {run.current_cycle})"
+                )
             seen[turn.cycle] = seen.get(turn.cycle, 0) + 1
             if seen[turn.cycle] > 1:
                 bad(f"{role} has more than one turn in cycle {turn.cycle}")
@@ -170,18 +235,42 @@ def validate_run_semantics(run: Any) -> None:
                 bad(f"{role} turn outcome {turn.outcome!r} is not a known outcome")
             if turn.outcome == TurnOutcomeState.IN_FLIGHT.value:
                 bad(f"{role} history contains an unfinished in-flight turn")
-            if turn.prompt_chars < 0 or len(turn.prompt_sha256) not in (0, 64):
-                bad(f"{role} turn has malformed prompt evidence")
-            if turn.resolved_model != snapshot[role].model:
-                bad(
-                    f"{role} turn was recorded against model {turn.resolved_model!r} "
-                    f"but the snapshot says {snapshot[role].model!r}"
-                )
+            _require_prompt_evidence(turn, f"{role} turn (cycle {turn.cycle})", bad)
+            _require_route_agreement(
+                turn, role, snapshot, bad, label=f"{role} turn (cycle {turn.cycle})"
+            )
+            _require_finished_audit(turn, f"{role} turn (cycle {turn.cycle})", bad)
+            if turn.outcome == TurnOutcomeState.BLOCKED.value:
+                blocked_turns.append(f"{role} cycle {turn.cycle}")
+    state = run.state
+    if blocked_turns and state is not RunState.BLOCKED:
+        # A failed phase always fails the run closed and nothing reopens it, so a
+        # blocked turn can never live inside an active or completed run.
+        bad(
+            f"blocked turn(s) ({', '.join(blocked_turns)}) exist but the run state "
+            f"is {state.value} (a failed phase fails the run closed and never resumes)"
+        )
+
+    def completed_turns(role: str, cycle: int) -> list[Any]:
+        turns = run.implementer_turns if role == "implementer" else run.reviewer_turns
+        return [
+            turn
+            for turn in turns
+            if turn.cycle == cycle and turn.outcome == TurnOutcomeState.COMPLETED.value
+        ]
+
     for cycle in range(1, run.current_cycle + 1):
         impl_count = sum(1 for turn in run.implementer_turns if turn.cycle == cycle)
         rev_count = sum(1 for turn in run.reviewer_turns if turn.cycle == cycle)
         if rev_count > impl_count:
             bad(f"cycle {cycle} has a reviewer turn before any implementer turn")
+        if len(completed_turns("reviewer", cycle)) and len(completed_turns("implementer", cycle)) != 1:
+            # Reviewer completion is only reachable after that cycle's implementer
+            # phase completed: the service cannot advance otherwise.
+            bad(
+                f"cycle {cycle} contains a completed reviewer turn without exactly "
+                "one completed implementer turn in the same cycle"
+            )
 
     completed_reviewer_turns = [
         turn
@@ -201,7 +290,6 @@ def validate_run_semantics(run: Any) -> None:
             bad(f"cycle {cycle} counts as completed but has no completed reviewer turn")
 
     # -- §10/§11 state <-> cycle <-> evidence --------------------------
-    state = run.state
     if state in _CYCLE_CLOSED_STATES:
         if run.current_cycle != run.completed_cycles:
             bad(
@@ -231,6 +319,17 @@ def validate_run_semantics(run: Any) -> None:
         bad(
             f"state LIMIT_REACHED requires completed_cycles == max_cycles "
             f"({run.completed_cycles} != {run.max_cycles})"
+        )
+
+    # A reviewer phase is only reachable after this cycle's implementer phase
+    # completed - with or without a live in-flight reviewer intent.
+    reviewer_phase_is_current = state is RunState.READY_REVIEWER or (
+        run.in_flight_turn is not None and run.in_flight_turn.role == "reviewer"
+    )
+    if reviewer_phase_is_current and len(completed_turns("implementer", run.current_cycle)) != 1:
+        bad(
+            f"cycle {run.current_cycle} claims the reviewer phase without exactly one "
+            "completed implementer turn in that cycle"
         )
 
     # -- blocked reason truthfulness -----------------------------------
@@ -264,14 +363,23 @@ def validate_run_semantics(run: Any) -> None:
             )
         if in_flight.outcome != TurnOutcomeState.IN_FLIGHT.value:
             bad(f"in-flight intent outcome must be 'in_flight', not {in_flight.outcome!r}")
-        if in_flight.resolved_model != snapshot[in_flight.role].model:
-            bad("in-flight intent model does not match the route snapshot")
-        if in_flight.prompt_chars < 0 or len(in_flight.prompt_sha256) not in (0, 64):
-            bad("in-flight intent has malformed prompt evidence")
+        _require_prompt_evidence(in_flight, "in-flight intent", bad)
+        _require_route_agreement(
+            in_flight, in_flight.role, snapshot, bad, label="in-flight intent"
+        )
+        if in_flight.completed_at:
+            bad("a live in-flight intent must not claim a completion timestamp")
+        if in_flight.blocked_reason:
+            bad("a live in-flight intent must not carry a blocked_reason")
 
-    # -- decision history ---------------------------------------------
+    # -- decision history: a legal graph, not a free-form list ---------
+    # Every recorded decision starts from AWAITING_DECISION and lands on an edge
+    # the state machine actually has; each completed cycle (except the one still
+    # awaiting its decision) has exactly one external decision; every cycle after
+    # the first was opened by exactly one request_changes decision.
     allowed_decisions = {item.value for item in Decision}
-    for record in run.decision_history:
+    opened_cycles = 0
+    for index, record in enumerate(run.decision_history):
         if record.decision not in allowed_decisions:
             bad(f"decision history contains unknown decision {record.decision!r}")
         if record.source != "external_planner":
@@ -279,6 +387,52 @@ def validate_run_semantics(run: Any) -> None:
                 f"decision history decision {record.decision!r} has source "
                 f"{record.source!r} (only external decisions may advance a run)"
             )
+        if not record.decided_at or not _is_iso(record.decided_at):
+            bad(f"decision {record.decision!r} has no valid decided_at timestamp")
+        if record.previous_state != RunState.AWAITING_DECISION.value:
+            bad(
+                f"decision {record.decision!r} was recorded from "
+                f"{record.previous_state!r}; only AWAITING_DECISION may be left by a "
+                "decision"
+            )
+        allowed_next = {
+            Decision.COMPLETE.value: {RunState.COMPLETED.value},
+            Decision.STOP.value: {RunState.STOPPED.value},
+            Decision.REQUEST_CHANGES.value: {
+                RunState.READY_IMPLEMENTER.value,
+                RunState.LIMIT_REACHED.value,
+            },
+        }[record.decision]
+        if record.next_state not in allowed_next:
+            bad(
+                f"decision {record.decision!r} cannot lead to {record.next_state!r} "
+                f"(allowed: {sorted(allowed_next)})"
+            )
+        if record.next_state == RunState.READY_IMPLEMENTER.value:
+            opened_cycles += 1
+        if record.next_state in _TERMINAL_DECISION_STATES and index != len(
+            run.decision_history
+        ) - 1:
+            bad(
+                f"decision {record.decision!r} ended the run at {record.next_state!r} "
+                "but later decisions are recorded"
+            )
+
+    expected_decisions = run.completed_cycles - (
+        1 if state is RunState.AWAITING_DECISION else 0
+    )
+    if len(run.decision_history) != expected_decisions:
+        bad(
+            f"{len(run.decision_history)} decision(s) are recorded but "
+            f"completed_cycles {run.completed_cycles} in state {state.value} requires "
+            f"exactly {expected_decisions} external decision(s)"
+        )
+    if opened_cycles != run.current_cycle - 1:
+        bad(
+            f"cycle {run.current_cycle} requires exactly {run.current_cycle - 1} "
+            f"request_changes decision(s) that opened a new cycle, found {opened_cycles}"
+        )
+
     if run.decision_history:
         last = run.decision_history[-1]
         expected_decision = {
@@ -300,27 +454,116 @@ def validate_run_semantics(run: Any) -> None:
                 f"the last decision recorded next_state {last.next_state!r}, which "
                 f"is not {expected_next_state!r} for state {state.value}"
             )
-    elif state in (RunState.COMPLETED, RunState.STOPPED, RunState.LIMIT_REACHED) or (
-        run.current_cycle > 1
-    ):
-        # A closed terminal state and any cycle beyond the first can only have
-        # been reached by an explicit external decision; an empty history there
-        # means the document was not produced by the state machine.
-        bad(
-            f"state {state.value} / cycle {run.current_cycle} was reached without "
-            "any decision history"
-        )
 
-    # -- start provenance ---------------------------------------------
+    # -- transition provenance: the last edge must end at this state --
     # ``last_transition is None`` is legal for an in-memory run under
     # construction; requiring provenance for *persisted* documents is enforced by
     # the store on load and on save (OrchestrationStore._require_provenance).
-    if run.last_transition is not None:
-        if run.last_transition.action == "start":
-            if run.last_transition.previous_state:
-                bad("the start transition must not claim a previous state")
-        elif not run.last_transition.previous_state:
-            bad("a non-start transition must record its previous state")
+    _require_last_transition(run, state, bad)
+
+
+def _is_iso(value: str) -> bool:
+    try:
+        datetime.fromisoformat(value)
+    except (TypeError, ValueError):
+        return False
+    return True
+
+
+def _require_prompt_evidence(turn: Any, label: str, bad: Any) -> None:
+    """Only a digest and a length of the prompt are persisted, always both."""
+    if not isinstance(turn.prompt_sha256, str) or not _PROMPT_DIGEST_RE.match(
+        turn.prompt_sha256
+    ):
+        bad(f"{label} has no valid prompt digest (expected a lowercase sha256)")
+    if not isinstance(turn.prompt_chars, int) or turn.prompt_chars < 1:
+        bad(f"{label} has an invalid prompt length {turn.prompt_chars!r}")
+    if not turn.started_at or not _is_iso(turn.started_at):
+        bad(f"{label} has no valid started_at timestamp")
+
+
+def _require_route_agreement(
+    turn: Any, role: str, snapshot: Any, bad: Any, *, label: str = ""
+) -> None:
+    """A turn (or live intent) must have been taken on the captured route."""
+    entry = snapshot[role]
+    where = label or f"{role} turn"
+    if turn.resolved_model != entry.model:
+        bad(
+            f"{where} was recorded against model {turn.resolved_model!r} but the "
+            f"snapshot says {entry.model!r}"
+        )
+    if turn.resolved_agent != entry.agent:
+        bad(
+            f"{where} was recorded against agent {turn.resolved_agent!r} but the "
+            f"snapshot says {entry.agent!r}"
+        )
+    if turn.route_source != entry.route_source:
+        bad(
+            f"{where} was recorded with route_source {turn.route_source!r} but "
+            f"the snapshot says {entry.route_source!r}"
+        )
+
+
+def _require_finished_audit(turn: Any, label: str, bad: Any) -> None:
+    """A finished turn always records how it ended."""
+    if not turn.completed_at or not _is_iso(turn.completed_at):
+        bad(f"{label} has no valid completed_at timestamp")
+    if turn.outcome == TurnOutcomeState.COMPLETED.value and turn.blocked_reason:
+        bad(f"{label} completed but carries blocked_reason {turn.blocked_reason!r}")
+    if turn.outcome == TurnOutcomeState.BLOCKED.value and not turn.blocked_reason:
+        bad(f"{label} is blocked but carries no blocked_reason")
+
+
+def _require_last_transition(run: Any, state: RunState, bad: Any) -> None:
+    """The recorded transition must be a real edge that ends at *state*."""
+    record = run.last_transition
+    if record is None:
+        return
+    if record.next_state != state.value:
+        bad(
+            f"the last transition ends at {record.next_state!r} but the run state is "
+            f"{state.value!r}"
+        )
+    if record.action == "start":
+        if (
+            record.previous_state
+            or record.next_state != RunState.READY_IMPLEMENTER.value
+            or record.cycle != 1
+            or run.current_cycle != 1
+        ):
+            bad(
+                "the start transition must describe a fresh cycle-1 "
+                "READY_IMPLEMENTER run (no previous state)"
+            )
+        return
+    if not record.previous_state:
+        bad("a non-start transition must record its previous state")
+    allowed = _LAST_EDGE_RULES.get(state, frozenset())
+    matching = [
+        edge
+        for edge in allowed
+        if edge[0] == record.action
+        and edge[1] == record.previous_state
+        and (edge[2] is None or edge[2] == record.role)
+    ]
+    if not matching:
+        bad(
+            f"the last transition ({record.action} from {record.previous_state!r} to "
+            f"{record.next_state!r}, role {record.role!r}) is not a legal edge into "
+            f"{state.value}"
+        )
+    if state is RunState.READY_IMPLEMENTER:
+        expected_cycle = run.current_cycle - 1
+    else:
+        expected_cycle = run.current_cycle
+    if record.cycle != expected_cycle:
+        bad(
+            f"the last transition was recorded in cycle {record.cycle} but state "
+            f"{state.value} in cycle {run.current_cycle} requires cycle {expected_cycle}"
+        )
+    if not record.at or not _is_iso(record.at):
+        bad("the last transition has no valid timestamp")
 
 
 def _require_mappable_model(model: str, role: str, bad: Any) -> None:

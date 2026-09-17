@@ -33,6 +33,7 @@ from devrelay.orchestration.models import (
     DEFAULT_MAX_CYCLES,
     HARD_MAX_CYCLES,
     MIN_MAX_CYCLES,
+    ORCHESTRATION_SCHEMA_VERSION,
     Decision,
     DecisionRecord,
     OrchestrationAction,
@@ -48,6 +49,34 @@ from devrelay.orchestration.store import OrchestrationStore
 SOURCE_EXTERNAL = DECISION_SOURCE
 SOURCE_MODEL = "model_bearing"
 SOURCE_INTERNAL = "internal"
+
+
+def _unconfirmed_turn_message(role: str, attempt: TurnRecord) -> str:
+    """Describe a non-confirmed turn from the accepted bridge evidence only.
+
+    Never claims uncertainty or a pending reply unless the structured flags say
+    so: ``connect_error``/``connect_timeout``/HTTP 500 are *definite* failures, and
+    saying "uncertain submission" about them would be false.
+    """
+    if attempt.submission_uncertain and attempt.reply_pending:
+        state = "the submission may have reached OpenCode and its reply is still pending"
+    elif attempt.submission_uncertain:
+        state = "the submission may have reached OpenCode (uncertain submission)"
+    elif attempt.reply_pending:
+        state = "the submission was accepted and its reply is still pending"
+    elif attempt.submission_attempted:
+        status = (
+            f"HTTP {attempt.submission_status}"
+            if attempt.submission_status is not None
+            else "no status"
+        )
+        state = f"the submission was attempted and did not complete ({status})"
+    else:
+        state = "no submission was attempted (the request failed before the model call)"
+    return (
+        f"the {role} turn did not reach a confirmed completion: {state}; the run is "
+        "blocked and is never retried automatically"
+    )
 
 
 @dataclass(frozen=True)
@@ -274,6 +303,7 @@ class OrchestrationService:
         run_id = self.store.new_run_id()
         transition = policy.start_transition()
         run = OrchestrationRun(
+            schema_version=ORCHESTRATION_SCHEMA_VERSION,
             run_id=run_id,
             workspace=str(self.workspace_root),
             implementer_session_id=implementer_session_id,
@@ -377,13 +407,13 @@ class OrchestrationService:
             and not attempt.reply_pending
         )
         if not achieved and not error_type:
-            # keep the accepted bridge/role taxonomy when it is available
+            # Keep the accepted bridge/role taxonomy when it is available, and
+            # describe the failure with the *structured evidence* the accepted
+            # bridge reported - never with a generic claim about uncertainty.
             error_type = str(getattr(result, "error_type", "") or "") or "submission_not_confirmed"
-            error_message = (
-                "the role turn did not reach a confirmed completion "
-                "(uncertain submission or pending reply); the run is blocked and is "
-                "never retried automatically"
-            )
+            error_message = _unconfirmed_turn_message(role, attempt)
+        elif not achieved and not error_message:
+            error_message = _unconfirmed_turn_message(role, attempt)
 
         attempt.outcome = (
             TurnOutcomeState.COMPLETED.value if achieved else TurnOutcomeState.BLOCKED.value
@@ -468,4 +498,10 @@ class OrchestrationService:
         return OrchestrationOutcome(run=run, ok=True)
 
 
-__all__ = ["OrchestrationOutcome", "OrchestrationService", "SOURCE_EXTERNAL", "SOURCE_INTERNAL", "SOURCE_MODEL"]
+__all__ = [
+    "OrchestrationOutcome",
+    "OrchestrationService",
+    "SOURCE_EXTERNAL",
+    "SOURCE_INTERNAL",
+    "SOURCE_MODEL",
+]

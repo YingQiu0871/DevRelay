@@ -11,7 +11,7 @@ from __future__ import annotations
 from enum import Enum
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, StrictInt, model_validator
 
 from devrelay.models import utcnow_iso
 
@@ -110,12 +110,12 @@ class TurnRecord(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     role: str
-    cycle: int
+    cycle: StrictInt
     started_at: str = Field(default_factory=utcnow_iso)
     completed_at: str = ""
     #: Only the digest and the length of the Planner-supplied prompt are kept.
     prompt_sha256: str = ""
-    prompt_chars: int = 0
+    prompt_chars: StrictInt = 0
     resolved_model: str = ""
     resolved_agent: str = ""
     route_source: str = ""
@@ -169,7 +169,7 @@ class TransitionRecord(BaseModel):
     at: str = Field(default_factory=utcnow_iso)
     previous_state: str
     next_state: str
-    cycle: int = 0
+    cycle: StrictInt = 0
     role: str = ""
     note: str = ""
 
@@ -179,7 +179,11 @@ class OrchestrationRun(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    schema_version: int = ORCHESTRATION_SCHEMA_VERSION
+    #: Strict, required integers: a persisted document must state them explicitly
+    #: and pydantic may never coerce ``"2"``/``2.0``/``true``/``null`` into a
+    #: number.  A missing ``schema_version`` is a malformed document, not a
+    #: document to migrate, so it has no default.
+    schema_version: StrictInt
     run_id: str
     workspace: str
     state: RunState = RunState.READY_IMPLEMENTER
@@ -187,13 +191,15 @@ class OrchestrationRun(BaseModel):
     implementer_session_id: str
     reviewer_session_id: str
 
-    max_cycles: int = DEFAULT_MAX_CYCLES
-    current_cycle: int = 1
-    completed_cycles: int = 0
+    max_cycles: StrictInt = DEFAULT_MAX_CYCLES
+    current_cycle: StrictInt = 1
+    completed_cycles: StrictInt = 0
 
     #: One per reserved model-bearing turn slot (equal to ``model_turns_used``).
-    turn_attempts: int = 0
-    model_turn_budget: int = 0
+    turn_attempts: StrictInt = 0
+    #: Required: ``model_turn_budget`` is always ``2 x max_cycles`` and a default
+    #: of 0 could only ever describe an impossible run.
+    model_turn_budget: StrictInt
     #: **Consumed orchestration model-turn budget slots** - NOT a count of
     #: confirmed provider/HTTP submissions.  A slot is consumed when the durable
     #: in-flight intent is committed, before the role/model call is entered, so
@@ -202,7 +208,7 @@ class OrchestrationRun(BaseModel):
     #: about an actual submission lives in the ledger and in the per-turn
     #: ``submission_attempted``/``submission_status``/``submission_uncertain``/
     #: ``call_ids`` evidence.
-    model_turns_used: int = 0
+    model_turns_used: StrictInt = 0
 
     created_at: str = Field(default_factory=utcnow_iso)
     updated_at: str = Field(default_factory=utcnow_iso)

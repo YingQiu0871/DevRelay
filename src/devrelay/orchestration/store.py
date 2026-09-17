@@ -7,8 +7,12 @@ Layout::
 * run ids are **generated** (``DR-<32 hex>``) and validated against a strict
   pattern before they ever touch the filesystem, so a caller-supplied id can
   never become a traversal primitive;
-* writes are atomic (unique temp file + ``os.replace``) against a crash of this
-  process; durability against power loss is **not** claimed (no ``fsync``);
+* the final document is replaced atomically (unique temp file + ``os.replace``)
+  under the documented process/filesystem assumptions, so a reader ever sees
+  either the complete previous document or the complete new one.  Scope is honest:
+  a hard kill *can* leave an inert ``.*.tmp`` file behind (it is never listed as a
+  run and never honoured, because only ``DR-*.json`` is read), and durability
+  against power loss is **not** claimed - no ``fsync`` is issued;
 * a missing run is ``orchestration_run_not_found``; an unreadable/corrupt run is
   ``orchestration_state_corrupt`` - the store never silently recreates or resets
   a run.
