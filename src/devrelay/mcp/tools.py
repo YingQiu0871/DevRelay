@@ -14,10 +14,13 @@ Safety properties carried over unchanged from v0.3-A (and asserted by tests):
   *definitely not submitted* (the envelope carries ``retry_safe`` derived from
   documented bridge evidence only);
 * a pending/uncertain result never substitutes a stale reply;
-* **all** tool execution is serialized per MCP server process by one re-entrant
-  execution lock: the accepted v0.3-A filesystem ledger allocates durable call
+* **all** tool execution is serialized by one re-entrant execution lock **per
+  tool surface**: the accepted v0.3-A filesystem ledger allocates durable call
   identities with a non-atomic read-modify-write and is therefore single-writer,
-  so concurrent tool bodies (including concurrent reads) must not overlap;
+  so concurrent tool bodies (including concurrent reads) must not overlap.  The
+  shipped stdio server builds exactly one surface, so in that server every tool
+  body is serialized; several surfaces - or several writer processes against one
+  workspace - are **unsupported** and are not covered by this lock;
 * v0.3-D adds a **bounded orchestration path** on top of the role path:
   durable run state, legal transitions, a hard cycle bound, one role turn per
   explicit phase call, fail-closed blocking on uncertainty - and **no** parsing
@@ -227,15 +230,16 @@ class McpToolSurface:
         )
 
     def _execute(self, tool: str, call: Callable[[], McpEnvelope]) -> McpEnvelope:
-        """Run one tool body under the process-wide execution lock.
+        """Run one tool body under this surface's execution lock.
 
-        Every one of the nine tools funnels its whole body through here, so this
-        is the single place that establishes the v0.3-B serialization boundary:
-        at most one DevRelay MCP tool body may access the accepted v0.3-A
-        bridge/ledger at a time within one MCP server process.  The lock is held
-        for the whole body (validation, bridge operation, envelope shaping) and
-        is released on every exit path, including ``DevRelayError`` and
-        unexpected exceptions.
+        Every tool funnels its whole body through here, so this is the single
+        place that establishes the v0.3-B serialization boundary: within one
+        :class:`McpToolSurface`, at most one DevRelay MCP tool body may access
+        the accepted v0.3-A bridge/ledger at a time.  The shipped stdio server
+        builds exactly one surface; several surfaces or several writer processes
+        against one workspace are unsupported.  The lock is held for the whole
+        body (validation, bridge operation, envelope shaping) and is released on
+        every exit path, including ``DevRelayError`` and unexpected exceptions.
 
         Cancellation is honest rather than magic: cancelling a client's MCP
         request does not interrupt an already-running synchronous tool body, so
@@ -570,11 +574,18 @@ class McpToolSurface:
                     "server_version": self.mcp_server_version,
                     "transport": "stdio",
                     "tools": list(TOOL_NAMES),
-                    # v0.3-B: ALL tool execution is serialized in this process,
+                    # v0.3-B: ALL tool execution is serialized in this surface,
                     # not only the side-effecting tools (the accepted v0.3-A
                     # filesystem ledger is a single-writer store).
                     "execution_serialized": True,
-                    "serialization": "one process-wide execution lock over all tools",
+                    "serialization": (
+                        "one execution lock per tool surface, held for every tool body"
+                    ),
+                    "lock_scope": "per tool surface (one lock instance)",
+                    "surfaces": "the shipped stdio server builds exactly one surface",
+                    "multiple_surfaces_or_processes": (
+                        "unsupported (the accepted v0.3-A ledger is single-writer)"
+                    ),
                     "side_effects_serialized": True,
                 },
                 "acceptance_authority": False,
