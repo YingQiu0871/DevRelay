@@ -4,6 +4,26 @@ All notable changes to DevRelay are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## Unreleased - v0.3-E design (recovery & reconciliation)
+
+**Design only.  Not implemented, not accepted, unreleased.**  The
+recovery/reconciliation contract for bounded orchestration is frozen for
+independent review: `docs/v0.3/V03E_SPEC.md` (case taxonomy A-H, preserved v0.3-D
+invariants, one new non-terminal execution-frozen `RECOVERY_REQUIRED` state,
+exact call-identity model, reconciliation evidence sources, crash-window matrix
+W0-W6, restart matrix, reconciled completion / non-delivery / pending-reply
+policies, budget and privacy rules, minimum two-tool MCP surface, design-decisions
+table) and `docs/v0.3/V03E_ACCEPTANCE.md` (design-phase matrix).  The design
+forbids implicit retry, model fallback, automatic sequencing and automatic resume,
+keeps `model_turns_used` as consumed slots that are never refunded, keeps terminal
+runs closed, and keeps `devrelay_get_run` read-only.  Two tools are proposed and
+**not** implemented: `devrelay_reconcile_run` (read-only) and
+`devrelay_resolve_recovery` (mutating, evidence-gated).  Implementation is gated on
+an independent design review and the open platform proofs in SPEC section 15
+(P1-P7).  No runtime source, test, schema, dependency, version or tag changed; no
+real provider/model call was made.  Design branch:
+`v0.3-e-recovery-reconciliation` (parent `56e7842`).
+
 ## Unreleased - v0.3-D accepted (bounded orchestration)
 
 Durable, **bounded** orchestration state over the accepted v0.3-C role path: a

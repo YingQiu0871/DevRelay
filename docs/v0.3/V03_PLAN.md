@@ -8,7 +8,7 @@
 | B | ChatGPT/MCP tool surface (local stdio MCP adapter over the accepted v0.3-A bridge) | **COMPLETE / ACCEPTED** — accepted candidate `d058d62341a173414bdba88fe357b08c236c8bb4`, real MCP smoke `PASS — V0.3-B LOCAL REAL MCP SMOKE` (accepted internally, **unreleased**) |
 | C | Agent role routing (semantic role -> workspace-configured model/agent; routing only, no orchestration) | **COMPLETE / ACCEPTED / UNRELEASED** — accepted candidate `eabb667d1bd9e379d3b7105d72b6a2751bc2a32b`; real routing verified by two bounded runs (implementer `opencode-go/deepseek-v4.1-flash`, reviewer `opencode-go/glm-5.3-flash`) |
 | D | Bounded orchestration (durable run state, legal transitions, hard cycle bound, fail-closed; still no automatic sequencing) | **COMPLETE / ACCEPTED / CLOSED / UNRELEASED** — accepted candidate `8b70610a5cdda600ef57cf8378c4f69cd33d5be4` after two remediations and the real bounded smoke `PASS — V0.3-D REAL BOUNDED ORCHESTRATION SMOKE` (4 real model turns / 4 POSTs, 0 retries, 0 fallbacks) |
-| E | Orchestration recovery (crash-during-submission reconciliation, uncertain-call recovery, resume) | **NOT STARTED** (not designed yet) |
+| E | Orchestration recovery (crash-during-submission reconciliation, uncertain-call recovery, resume) | **DESIGN ONLY / NOT IMPLEMENTED / NOT ACCEPTED / UNRELEASED** — design frozen for review in `docs/v0.3/V03E_SPEC.md` + `docs/v0.3/V03E_ACCEPTANCE.md` (branch `v0.3-e-recovery-reconciliation`, parent `56e7842`); implementation must not start until the design is reviewed and the open platform proofs (SPEC §15 P1–P7) are resolved |
 
 v0.3-A is accepted and its runtime implementation is frozen at the accepted
 candidate (`bcf9627…`); v0.3-A sources were not modified by v0.3-B.
@@ -73,9 +73,19 @@ approved one bounded real smoke, the smoke passed, and v0.3-D was accepted - see
 `be4dce7` (documentation only).
 
 v0.3-E (recovery: crash-during-submission reconciliation, uncertain-call
-recovery, automatic resume) has **not** started and must not begin without a
-separate authorization.  See `docs/BACKLOG.md` for deferred, non-blocking
-follow-ups.
+recovery, resume) is **design-only**: the contract is drafted and frozen for review
+in `docs/v0.3/V03E_SPEC.md` (with the acceptance matrix
+`docs/v0.3/V03E_ACCEPTANCE.md`) on the design branch
+`v0.3-e-recovery-reconciliation`, parent `56e7842a414777d20a3882cad641da383964bab3`.
+**No recovery code exists**, the accepted v0.3-D runtime candidate
+`8b70610a5cdda600ef57cf8378c4f69cd33d5be4` is untouched, and implementation must not
+start until an independent review of the design passes and the open platform
+proofs (SPEC §15 P1–P7: history durability, verbatim user text, match uniqueness,
+pending-operation visibility, failure-class semantics, session identity strength,
+ledger settle integrity) are resolved.  v0.3-E keeps every accepted v0.3-D
+invariant: no implicit retry, no fallback, no automatic sequencing, no automatic
+resume, no budget refund, terminal runs never reopen.  See `docs/BACKLOG.md` for
+deferred, non-blocking follow-ups.
 
 ## v0.3-D scope (implemented, remediated, accepted and closed — unreleased)
 
@@ -187,6 +197,23 @@ follow-ups.
 11. `tests/test_v03a_real_protocol.py` — real-protocol regression tests for the
     A33 findings (V1–V8 in `V03A_ACCEPTANCE.md`), with fixtures derived from the
     installed OpenCode 1.18.11 `/doc`; 28 of its 30 tests fail against `780c2fd`.
+
+## v0.3-E scope (designed, not implemented)
+
+1. `docs/v0.3/V03E_SPEC.md` — the recovery/reconciliation contract: case taxonomy
+   A–H, reconcile/materialize/resume/retry definitions, recovery authority,
+   preserved v0.3-D invariants, one new non-terminal execution-frozen run state
+   (`RECOVERY_REQUIRED`), exact call-identity model, reconciliation evidence
+   sources, crash-window matrix W0–W6, restart matrix, reconciled
+   completion/non-delivery/pending policies, budget table, route/workspace/session
+   identity rules, terminal immunity, proposed schema version 2 with a no-migration
+   policy, privacy, concurrency, the minimum two-tool MCP surface
+   (`devrelay_reconcile_run` read-only, `devrelay_resolve_recovery` mutating), the
+   design-decisions table and the open platform proofs P1–P7.
+2. `docs/v0.3/V03E_ACCEPTANCE.md` — the design-phase acceptance matrix (E1–E20
+   frozen design, E21–E26 proof-gated, E27–E40 future implementation evidence).
+3. Not implemented in this stage: no runtime source, no tests, no new tool, no
+   schema change, no real provider/model call, no v0.3-E smoke.
 
 ## Explicit non-goals (v0.3-A)
 

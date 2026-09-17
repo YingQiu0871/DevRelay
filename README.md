@@ -20,6 +20,7 @@ Source: <https://github.com/YingQiu0871/DevRelay> -
 | v0.3-A OpenCode Session Bridge | **accepted / unreleased** — closed at candidate `bcf9627e92ef839abb756810e3c615e6d01b6576`; real OpenCode `1.18.11` smoke passed (one prompt → `DEVRELAY_A33_OK`) |
 | v0.3-B ChatGPT/MCP tool surface | **accepted / unreleased** — closed at accepted candidate `d058d62341a173414bdba88fe357b08c236c8bb4`; final real MCP smoke `PASS — V0.3-B LOCAL REAL MCP SMOKE` |
 | v0.3-C Agent Role Routing | **accepted / unreleased** — closed at accepted candidate `eabb667d1bd9e379d3b7105d72b6a2751bc2a32b`; real routing verified for both roles (implementer `opencode-go/deepseek-v4.1-flash`, reviewer `opencode-go/glm-5.3-flash`), routing only, no orchestration |
+| v0.3-E Recovery & Reconciliation | **design only / not implemented / not accepted / unreleased** — contract frozen for review in `docs/v0.3/V03E_SPEC.md` (+ `V03E_ACCEPTANCE.md`); no recovery code, no schema change, no real model call; implementation gated on independent design review and the open platform proofs (SPEC §15 P1–P7) |
 | v0.3-D Bounded Orchestration | **accepted / closed / unreleased** — closed at candidate `8b70610a5cdda600ef57cf8378c4f69cd33d5be4` after two remediations and one authorized bounded real orchestration smoke `PASS — V0.3-D REAL BOUNDED ORCHESTRATION SMOKE` (4 real model turns / 4 POSTs, 0 retries, 0 fallbacks); durable run state, legal transitions and a hard cycle bound (at most six reserved/consumed model-turn budget slots per run) over the accepted role path, untrusted persisted state validated for **reachability**, no automatic sequencing |
 
 No `v0.3` stage is part of the `v0.1.0` release, the package version stays
@@ -107,9 +108,15 @@ real authority probes (provider `REQUEST_CHANGES` and provider `APPROVE` both le
 the run at `AWAITING_DECISION`), and the terminal guard proved without spending a
 fifth turn.  Evidence: `docs/v0.3/V03D_ACCEPTANCE.md` §J, §K and §L.
 
-`v0.3-E Orchestration Recovery` — **not started** (crash-during-submission
-reconciliation, uncertain-call recovery, automatic resume).  DevRelay still never
-decides when to invoke a role, and no automatic DeepSeek/GLM routing exists.
+`v0.3-E Orchestration Recovery` — **design only, not implemented, not accepted,
+unreleased**: the recovery/reconciliation contract is frozen for independent review
+in `docs/v0.3/V03E_SPEC.md` (design branch `v0.3-e-recovery-reconciliation`, parent
+`56e7842`), with `docs/v0.3/V03E_ACCEPTANCE.md` as the design-phase matrix.
+Implementation must not start until that review passes and the open platform proofs
+(SPEC §15 P1-P7) are resolved; a design that cannot prove an already-completed turn
+must ship as "reconcile and report, never adopt, always fail closed".  DevRelay
+still never decides when to invoke a role, keeps no implicit retry, fallback or
+automatic resume, and no automatic DeepSeek/GLM routing exists.
 
 > **v0.2-A candidate (unreleased)**: the automatic review loop described under
 > [Automatic review loop (v0.2-A)](#automatic-review-loop-v02-a) is implemented
@@ -1113,7 +1120,13 @@ not downgrade the binary inside a workspace that v0.2-B has already written.
   durable in-flight intent is proven to precede submission.  The Planner still
   decides every phase and every decision
 - **v0.3-E** - Orchestration recovery (crash/uncertain-call reconciliation,
-  automatic resume) - **not started**
+  resume) - **design only / not implemented / not accepted / unreleased**: the
+  contract is frozen for review in `docs/v0.3/V03E_SPEC.md` (case taxonomy,
+  `RECOVERY_REQUIRED` state, crash-window and restart matrices, minimum two-tool
+  surface, no-implicit-retry policy) with the acceptance matrix in
+  `docs/v0.3/V03E_ACCEPTANCE.md`; implementation waits for an independent design
+  review and the open platform proofs (SPEC §15 P1-P7).  No recovery code exists
+  and no automatic resume is designed in
 - **later** - optional release automation with explicit approvals
 
 ## Development
