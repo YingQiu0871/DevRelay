@@ -12,8 +12,14 @@ then this acceptance closeout.
 Development trail (preserved, not rewritten): initial candidate `78d4e5d` ->
 independent `REQUEST_CHANGES` (P1: persisted state trusted) -> first remediation
 `98dd422` -> independent `REQUEST_CHANGES` (three reachability P1s) -> second
-remediation `8b70610` -> independent approval for one bounded real smoke -> real
-smoke **PASS** -> this acceptance closeout.
+remediation `8b70610` -> independent final reachability re-review (**P0 = 0,
+P1 = 0, P2 = 0**) and its decision *APPROVE V0.3-D FOR ONE BOUNDED REAL
+ORCHESTRATION SMOKE WITH RECORDED P3* -> real smoke **PASS** -> acceptance
+bookkeeping commit `be4dce7` -> closeout review `REQUEST_CHANGES` (P0 = 0,
+P1 = 0, **P2 = 1**: a documentation/status contradiction, no runtime finding) ->
+this docs-only follow-up.  The accepted **runtime** candidate remains
+`8b70610a5cdda600ef57cf8378c4f69cd33d5be4`; `be4dce7` and this follow-up are
+documentation-only commits.
 
 Sections A-I (D-rows), J and K are **offline** evidence: the real MCP SDK
 dispatch over the real orchestration service, the real v0.3-C role router and the
@@ -22,7 +28,9 @@ accepted v0.3-A bridge wired to the deterministic OpenCode stub
 loopback fake OpenCode server - **no real model call**.  The **real-provider**
 evidence is the single authorized bounded smoke recorded in **§L**; no second
 smoke was performed.
-**Real orchestration model calls in this round: 0.**
+**Real orchestration model calls in this offline validation/re-review round: 0**
+(that statement is scoped to the offline sections of this matrix; the single real
+provider smoke is recorded in §L).
 
 Legend: **COVERED** = automated test asserts it · **PARTIAL** = covered
 indirectly · **DEFERRED** = documented, not automated in this stage.
@@ -34,7 +42,7 @@ indirectly · **DEFERRED** = documented, not automated in this stage.
 | D2 | Explicit state enum and exactly four terminal states | COVERED | `test_state_enum_is_explicit_and_complete`, `test_terminal_states_are_exactly_the_four_documented_ones` |
 | D3 | The run document is strict, content-free and exposes a Planner-complete summary | COVERED | `test_run_model_is_strict_and_carries_no_content_fields`, `test_summary_exposes_everything_a_planner_needs`, `test_route_snapshot_is_sanitized_identifiers_only` |
 | D4 | Run ids are generated and collision-resistant; a caller-supplied id can never be a path | COVERED | `test_generated_ids_are_collision_resistant_and_pattern_valid`, `test_caller_supplied_ids_can_never_be_paths[12 cases]`, `test_contained_path_stays_under_the_runs_directory` |
-| D5 | Writes are atomic (unique temp + replace) with no temp residue; **no** power-loss durability is claimed (no `fsync`) | COVERED | `test_writes_are_atomic_and_leave_no_temp_files`, `test_round_trip_preserves_the_run_document`; wording: `V03D_SPEC.md` §6, `store.py` module docstring |
+| D5 | Writes are atomic (unique temp + replace) with no temp residue; **no** power-loss durability is claimed (no `fsync`) | COVERED | `test_writes_are_atomic_and_leave_no_temp_files`, `test_round_trip_preserves_the_run_document`; wording: `V03D_SPEC.md` section 6, `store.py` module docstring |
 | D6 | Missing runs are not-found; corrupt/malformed/unknown-field/wrong-id runs are reported and never reset; **persisted state is treated as untrusted input** (semantic invariants on load *and* save, provenance, workspace binding) | COVERED | `test_missing_run_is_reported_as_not_found`, `test_corrupt_json_is_reported_and_never_reset`, `test_malformed_document_is_reported_as_corrupt`, `test_unknown_fields_are_rejected_as_corrupt`, `test_document_with_a_different_run_id_is_corrupt`, plus the whole R-section below |
 
 ## B. Transition policy
@@ -100,7 +108,7 @@ indirectly · **DEFERRED** = documented, not automated in this stage.
 | D40 | Accepted v0.3-C suite unchanged and green | COVERED | `tests/test_v03c_*.py` (140 tests); disclosed expectation updates: tool positions 9..11 of 17 and inventory size |
 | D41 | Accepted v0.3-B suite unchanged and green | COVERED | `tests/test_v03b_*.py` (111 tests); disclosed expectation updates: tool inventory 12 → 17 and server version `0.3.0-c` → `0.3.0-d` |
 | D42 | Accepted v0.3-A suite unchanged and green | COVERED | `tests/test_v03a_*.py` (200 tests), no changes |
-| D43 | Full offline suite green with isolated `TEMP`/`TMP`/`TMPDIR` | COVERED | full-suite runs recorded in the remediation reports (first remediation **1064** = 963 + 101, second remediation **1166** = 1064 + 102); v0.3-D 154 → **255** → **357**, v0.3-C 140, v0.3-B 111, v0.3-A 200, 0 failed/errors/skipped/xfail |
+| D43 | Full offline suite green with isolated `TEMP`/`TMP`/`TMPDIR` | COVERED | full-suite runs recorded in the remediation reports (first remediation **1064** = 963 + 101, second remediation **1166** = 1064 + 102); v0.3-D 154 → **255** → **357**, v0.3-C 140, v0.3-B 111, v0.3-A 200, complete result tuple **0 failed / 0 errors / 0 skipped / 0 xfail / 0 xpass** |
 | D44 | Mutation back-check: reviewer auto-completes; cycle cap removed; duplicate phase allowed; reviewer text auto-sequences; route drift ignored; **in-flight intent not saved before the call** | COVERED | disposable `git archive HEAD` copies, each running the whole v0.3-D suite (control: **255 pass**); **68 / 4 / 6 / 67 / 2 / 4** tests fail respectively.  Mutation F is detected by exactly the four new intent-order tests (`test_the_durable_in_flight_intent_precedes_the_submission`, `test_both_roles_commit_their_intent_before_their_submission`, `test_a_crash_at_submission_leaves_a_loadable_in_flight_intent`, `test_a_crash_during_the_reviewer_turn_blocks_without_closing_a_cycle`); it was undetected before this remediation |
 | D45 | Real model/OpenCode/network calls during implementation **and remediation** | COVERED | **0** (offline stub or loopback fake only) |
 
@@ -140,7 +148,7 @@ re-review (historical: v0.3-D was accepted later - see §L).
 | R16 | `legal_next_actions` is empty while a turn is in flight | DONE | `test_legal_next_actions_is_empty_while_a_turn_is_in_flight`, corpus row `10_ready_implementer_with_in_flight_intent`, `test_a_persisted_in_flight_turn_is_never_replayed` |
 | R17 | Run ids are matched strictly (no trailing newline/CR/space, no prefix/suffix) | DONE | `store.valid_run_id` uses `fullmatch`; `test_run_ids_are_matched_strictly_end_to_end[8 vectors]` next to the existing 12-case local-error matrix |
 | R18 | Constrained turn-outcome vocabulary | DONE | `TurnOutcomeState` (`in_flight`/`completed`/`blocked`), `TurnRecord` validator, `test_turn_outcome_vocabulary_is_constrained`, tamper case `X01_unknown_turn_outcome` |
-| R19 | No power-loss durability overclaim; lock scope stated as per-surface | DONE | spec §6/§7 and `store.py`/`tools.py` docstrings; `devrelay_status` now reports `lock_scope`, `surfaces`, `multiple_surfaces_or_processes`; `tests/test_v03b_mcp_concurrency.py::test_status_reports_the_global_serialization_boundary` still passes |
+| R19 | No power-loss durability overclaim; lock scope stated as per-surface | DONE | spec sections 6 and 7 and `store.py`/`tools.py` docstrings; `devrelay_status` now reports `lock_scope`, `surfaces`, `multiple_surfaces_or_processes`; `tests/test_v03b_mcp_concurrency.py::test_status_reports_the_global_serialization_boundary` still passes |
 | R20 | Boolean `max_cycles` probe | DONE (recorded, not fixed at the adapter) | `test_boolean_max_cycles_is_rejected_by_the_tool_body` (the tool body refuses a real `bool`), `test_the_service_also_refuses_a_boolean_max_cycles`, and `test_mcp_sdk_normalizes_max_cycles_before_the_tool_body` which measures the SDK's lax normalization (`true`→1, `"2"`→2, `2.0`→2, `1.5` refused by the SDK, `false`→0 refused by DevRelay).  The normalization happens above the DevRelay boundary and can never raise the 1..3 ceiling, so it is recorded as a P3 boundary finding in the spec §10 and `docs/BACKLOG.md` §5 |
 
 ## K. Second remediation — persisted-state reachability (independent gate, P1 = 3)
@@ -284,8 +292,9 @@ the repository.  The repository working tree was clean before and after.
 
 ### L.8 Acceptance decision
 
-Independent final reachability re-review: **P0 = 0, P1 = 0, P2 = 0** with the
-recorded P3s carried forward (§7 of the closeout; `docs/BACKLOG.md` §5).  One
+Independent final reachability re-review: **P0 = 0, P1 = 0, P2 = 0**, decision
+*APPROVE V0.3-D FOR ONE BOUNDED REAL ORCHESTRATION SMOKE WITH RECORDED P3*, with the
+carried P3 list kept in `docs/BACKLOG.md` §5.  One
 authorized bounded real orchestration smoke: **PASS** as recorded above; no second
 smoke was performed.  v0.3-D is therefore **ACCEPTED / CLOSED / UNRELEASED**,
 subject to one final independent closeout review of this bookkeeping change.

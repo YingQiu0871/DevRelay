@@ -74,7 +74,7 @@ as `APPROVE`/`REQUEST_CHANGES` is provider text, never an automatic acceptance,
 rejection or repair.  Spec and matrix: `docs/v0.3/V03C_SPEC.md`,
 `docs/v0.3/V03C_ACCEPTANCE.md`.
 
-### Bounded orchestration (v0.3-D candidate, unreleased)
+### Bounded orchestration (v0.3-D accepted / closed / unreleased)
 
 v0.3-D adds durable **bounded** run state over the accepted role path: an MCP
 Planner creates a run with two existing, different role sessions

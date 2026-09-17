@@ -322,15 +322,28 @@ Because each model-bearing phase has exactly one legal state, a repeated
 model POST - that is the primary duplicate-submission guard (no idempotency claim
 is made for the model-bearing tools themselves).
 
-## 10. What is not verified yet
+## 10. Verification status and known boundaries
 
-* **No real orchestration/model smoke has been run**: real model turns = 0 in this
-  round; all evidence is offline (deterministic stub over `httpx.MockTransport`)
-  or the real stdio boundary against a deterministic loopback fake.
-* A bounded real orchestration smoke requires independent review first
-  (`P0 = 0`, `P1 = 0`, no smoke-blocking P2) and a separate authorization; its
-  expected shape is two cycles at most (4 model turns) with an explicit
-  `request_changes` and a final explicit `complete`.
+**Historical (pre-acceptance review state, kept for the record):** during
+implementation and the first two reviews no real orchestration/model smoke had been
+run - real model turns were 0 in those rounds, and all evidence was offline
+(deterministic stub over `httpx.MockTransport`) or the real stdio boundary against
+a deterministic loopback fake.  A bounded real smoke required independent review
+first and a separate authorization at that time.
+
+**Current status (v0.3-D is accepted and closed, unreleased):** exactly one
+separately authorized bounded real orchestration smoke was run at candidate
+`8b70610a5cdda600ef57cf8378c4f69cd33d5be4` and the result is
+**`PASS — V0.3-D REAL BOUNDED ORCHESTRATION SMOKE`**: `max_cycles = 2`, **4 real
+model-bearing turns**, **exactly 4 `/message` POSTs**, **0 retries**, **0
+fallbacks**, **0 automatic role calls** and **0 fifth turn**, ending in
+`COMPLETED` after an explicit external decision.  The full real-run evidence
+(identity, cycle-by-cycle transitions, both authority probes, accounting, route
+agreement, durability/privacy audit and the terminal guard) is recorded in
+`docs/v0.3/V03D_ACCEPTANCE.md` §L.  **No second smoke is authorized or required for
+v0.3-D acceptance**, and **v0.3-E remains NOT STARTED** (recovery is still out of
+scope for v0.3-D).
+
 * Out of scope: v0.3-E recovery (reconciliation after a crash during submission,
   uncertain-call recovery, orphan-process recovery, automatic resume), any
   semantic judgement of review content, WebUI/HTTP control API, background

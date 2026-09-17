@@ -68,7 +68,9 @@ in-flight intent is proven to precede submission (Mutation F is now detected), a
 the accounting/outcome/run-id/wording findings are fixed or recorded.  The stage
 remained **NOT ACCEPTED** until that re-review passed (historical: the re-review
 approved one bounded real smoke, the smoke passed, and v0.3-D was accepted - see
-`docs/v0.3/V03D_ACCEPTANCE.md` §L).
+`docs/v0.3/V03D_ACCEPTANCE.md` §L).  The accepted runtime candidate stays
+`8b70610a5cdda600ef57cf8378c4f69cd33d5be4`; the acceptance bookkeeping commit is
+`be4dce7` (documentation only).
 
 v0.3-E (recovery: crash-during-submission reconciliation, uncertain-call
 recovery, automatic resume) has **not** started and must not begin without a
