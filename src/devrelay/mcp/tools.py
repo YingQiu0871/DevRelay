@@ -121,12 +121,14 @@ class McpToolSurface:
         # filesystem ledger allocates durable ``OC-*`` identities with a
         # non-atomic read-modify-write (fixed-name temp file + replace) and
         # refuses identity reuse, so it is safe only for one caller at a time.
-        # Exactly ONE process-scoped, re-entrant execution lock therefore covers
-        # every MCP tool body: within one MCP server process at most one tool
-        # body may touch the accepted bridge/ledger at any moment.  Re-entrant
-        # because a tool body may lazily construct the bridge while already
-        # holding it.  There is deliberately no second lock and therefore no
-        # lock order to get wrong.
+        # Exactly ONE re-entrant execution lock therefore covers every tool body
+        # **of this surface**: within one ``McpToolSurface`` at most one tool body
+        # may touch the accepted bridge/ledger at any moment.  The shipped stdio
+        # server builds exactly one surface, so in that server all seventeen tools
+        # serialize; several surfaces - or several writer processes against one
+        # workspace - are unsupported.  Re-entrant because a tool body may lazily
+        # construct the bridge while already holding it.  There is deliberately no
+        # second lock and therefore no lock order to get wrong.
         self._execution_lock = threading.RLock()
         # v0.3-C: one role router per surface, fed by the same workspace wiring
         # the bridge uses.  It resolves roles for the three role-aware tools; it

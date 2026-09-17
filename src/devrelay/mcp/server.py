@@ -157,19 +157,26 @@ _START_RUN_DESCRIPTION = (
 _GET_RUN_DESCRIPTION = (
     "Read-only view of one orchestration run from durable local state (no "
     "OpenCode request, no mutation): state, cycle, completed_cycles, max_cycles, "
-    "model turns used/budget, terminal flag, blocked reason, the role-route "
+    "model-turn slots used/budget, terminal flag, blocked reason, the role-route "
     "snapshot captured at creation, per-turn sanitized evidence and the decision "
-    "history. Never returns raw prompts, provider replies or credentials."
+    "history. A persisted document that cannot have produced its own state, "
+    "counters or history is refused as orchestration_state_corrupt instead of "
+    "being reported as a run. Never returns raw prompts, provider replies or "
+    "credentials."
 )
 
 _RUN_IMPLEMENTER_DESCRIPTION = (
     "Run exactly ONE implementer role turn for an orchestration run, legal only "
-    "in READY_IMPLEMENTER (a second call fails locally with state unchanged and "
-    "zero model POST). The prompt is supplied by you; the model and agent come "
-    "from the workspace role configuration and cannot be overridden. On a "
-    "confirmed completion the run moves to READY_REVIEWER. On uncertainty, a "
-    "pending reply or any failure the run is BLOCKED: it is never retried, the "
-    "reviewer is never invoked automatically, and no further model turn is spent."
+    "in READY_IMPLEMENTER. A duplicate attempt that is simply illegal for the "
+    "current state fails locally without submitting another model turn; if a "
+    "previously interrupted phase is still persisted as in-flight, a mutating "
+    "operation first fails the run closed (that attempt is materialized into the "
+    "durable history as blocked/turn_interrupted) and then refuses. The prompt is "
+    "supplied by you; the model and agent come from the workspace role "
+    "configuration and cannot be overridden. On a confirmed completion the run "
+    "moves to READY_REVIEWER. On uncertainty, a pending reply or any failure the "
+    "run is BLOCKED: it is never retried, the reviewer is never invoked "
+    "automatically, and no further model-turn slot is consumed."
 )
 
 _RUN_REVIEWER_DESCRIPTION = (
