@@ -682,21 +682,14 @@ def test_a_new_service_reads_the_same_run_after_a_restart(tmp_path):
 
 
 def test_a_persisted_in_flight_turn_is_never_replayed(tmp_path):
-    harness = build(tmp_path, run_id_factory=fixed_run_ids(RUN_ID))
+    """The crash boundary is produced by a real SystemExit, never hand-written."""
+    from v03d_helpers import dying_stub
+
+    stub = dying_stub(tmp_path / "ws", on_post=1)
+    harness = build(tmp_path, stub=stub, run_id_factory=fixed_run_ids(RUN_ID))
     run_id = run_id_of(harness.server, max_cycles=1)
-    path = harness.ws / ".devrelay" / "orchestration" / "runs" / f"{run_id}.json"
-    payload = json.loads(path.read_text(encoding="utf-8"))
-    payload["in_flight_turn"] = {
-        "role": "implementer",
-        "cycle": 1,
-        "prompt_sha256": "d" * 64,
-        "prompt_chars": 4,
-        "resolved_model": "provider-a/model-a",
-        "outcome": "in_flight",
-    }
-    payload["turn_attempts"] = 1
-    payload["model_turns_used"] = 1
-    path.write_text(json.dumps(payload), encoding="utf-8")
+    with pytest.raises(SystemExit):
+        phase(harness.server, "devrelay_run_implementer", run_id, "i")
 
     # reading stays truthful (the attempt is visible, nothing is replayed)
     read = get_run(harness.server, run_id)

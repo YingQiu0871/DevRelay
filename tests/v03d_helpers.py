@@ -8,6 +8,7 @@ bridge wired to the accepted OpenCode stub (``httpx.MockTransport``).
 from __future__ import annotations
 
 import asyncio
+import json
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -54,13 +55,16 @@ def honest_run(
     run_id: str = RUN_ID,
     workspace: str = "C:/ws",
 ) -> Any:
-    """A run document the production state machine could honestly have produced.
+    """An in-memory replay of what ``OrchestrationService`` writes for a state.
 
-    Mirrors exactly what ``OrchestrationService`` writes for the requested state
-    (turn records, transitions, decision records, counters, in-flight intents),
-    so :func:`validate_run_semantics` accepts it.  Used as the *valid* baseline
-    that tamper tests then corrupt.
+    This is a *replay helper for pure policy/summary unit tests*, not evidence:
+    the authoritative proof that the validator accepts honest documents is the
+    production-generated corpus in ``tests/v03d_corpus.py`` (the real service, the
+    real router and the accepted bridge against the stub).  Every field shape here
+    mirrors the service's writes, including the strict ``schema_version``/
+    ``model_turn_budget`` and the audit timestamps.
     """
+    from devrelay.models import utcnow_iso
     from devrelay.orchestration import (
         DecisionRecord,
         OrchestrationRun,
@@ -69,6 +73,7 @@ def honest_run(
         TransitionRecord,
         TurnRecord,
     )
+    from devrelay.orchestration.models import ORCHESTRATION_SCHEMA_VERSION
 
     impl_model = "provider-a/model-a"
     rev_model = "provider-b/model-b"
@@ -77,6 +82,7 @@ def honest_run(
         "reviewer": RoleRouteSnapshot(role="reviewer", model=rev_model),
     }
     run = OrchestrationRun(
+        schema_version=ORCHESTRATION_SCHEMA_VERSION,
         run_id=run_id,
         workspace=workspace,
         implementer_session_id=IMPLEMENTER_SESSION,
@@ -98,10 +104,13 @@ def honest_run(
         return TurnRecord(
             role=role,
             cycle=cycle,
+            started_at=utcnow_iso(),
+            completed_at=utcnow_iso(),
             prompt_sha256="0" * 64,
             prompt_chars=4,
             resolved_model=impl_model if role == "implementer" else rev_model,
-            route_source="workspace_config",
+            resolved_agent=snapshot[role].agent,
+            route_source=snapshot[role].route_source,
             operation_state="COMPLETED" if outcome == "completed" else "",
             submission_attempted=True,
             submission_status=200 if outcome == "completed" else None,
@@ -354,6 +363,85 @@ def build(
         ws=ws,
         ledger=ledger,
     )
+
+
+def prompt_posts(stub: Any) -> list[str]:
+    """The prompt submission paths the stub actually served."""
+    return [
+        path
+        for method, path in stub.requests
+        if method == "POST" and path.endswith("/message")
+    ]
+
+
+def dying_stub(ws: Path, *, on_post: int = 1) -> StubOpenCodeServer:
+    """A stub that dies (``SystemExit``) at the *on_post*-th prompt submission.
+
+    ``SystemExit`` is a ``BaseException``, so the service's defensive
+    ``except Exception`` boundary deliberately does not catch it: this produces a
+    **real** crash boundary (durable in-flight intent, no recorded outcome)
+    instead of a hand-written document.  Patch the stub before building the
+    harness - the accepted bridge binds its transport handler once, at creation.
+    """
+    stub = two_session_stub(ws)
+    original = stub.handler
+    state = {"posts": 0}
+
+    def handler(request: Any) -> Any:
+        if request.method.upper() == "POST" and request.url.path.endswith("/message"):
+            state["posts"] += 1
+            if state["posts"] == on_post:
+                raise SystemExit("simulated process death at submission")
+        return original(request)
+
+    stub.handler = handler
+    return stub
+
+
+def observing_stub(ws: Path, sink: list[dict[str, Any]]) -> StubOpenCodeServer:
+    """A stub that snapshots the durable document at each prompt submission.
+
+    The callback runs before the accepted bridge sees a response and before the
+    stub records the request, so ``posts_recorded_so_far == 0`` proves the intent
+    was already durable when the submission left the process.  Patch before build.
+    """
+    stub = two_session_stub(ws)
+    original = stub.handler
+    state = {"posts": 0}
+
+    def handler(request: Any) -> Any:
+        if request.method.upper() == "POST" and request.url.path.endswith("/message"):
+            state["posts"] += 1
+            sink.append(
+                {
+                    "index": state["posts"],
+                    "posts_recorded_so_far": len(prompt_posts(stub)),
+                    "document": json.loads(
+                        state_path(ws, RUN_ID).read_text(encoding="utf-8")
+                    ),
+                }
+            )
+        return original(request)
+
+    stub.handler = handler
+    return stub
+
+
+def failing_post_stub(ws: Path, *, on_post: int, failure: str = "read_timeout") -> Any:
+    """A stub whose *on_post*-th prompt submission fails like the real transport."""
+    stub = two_session_stub(ws)
+    original = stub.handler
+    state = {"posts": 0}
+
+    def handler(request: Any) -> Any:
+        if request.method.upper() == "POST" and request.url.path.endswith("/message"):
+            state["posts"] += 1
+            if state["posts"] == on_post:
+                stub.prompt_exception = failure
+        return original(request)
+
+    stub.handler = handler
+    return stub
 
 
 def restart_surface(harness: "Harness", *, stub: StubOpenCodeServer | None = None) -> "Harness":

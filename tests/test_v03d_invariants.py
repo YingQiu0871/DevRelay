@@ -143,8 +143,16 @@ def _blocked(tmp_path: Path) -> tuple[Harness, str]:
     return harness, run_id
 
 
+def _blocked_implementer(tmp_path: Path) -> tuple[Harness, str]:
+    """BLOCKED after a failed implementer turn, produced by the real service."""
+    from v03d_corpus import build_state
+
+    return build_state("blocked_implementer_failure", tmp_path)
+
+
 BASES: dict[str, Callable[[Path], tuple[Harness, str]]] = {
     "fresh": _fresh,
+    "blocked_impl": _blocked_implementer,
     "reviewed": _reviewed,
     "cap_reviewed": _cap_reviewed,
     "cycle2": _cycle2,
@@ -257,9 +265,9 @@ TAMPER_MATRIX: list[tuple[str, str, Callable[[dict[str, Any]], None], str]] = [
     ),
     (
         "T13_two_turns_for_one_role_cycle",
-        "reviewed",
+        "cycle2",
         lambda p: (
-            p["reviewer_turns"].append(dict(p["reviewer_turns"][0])),
+            p["implementer_turns"].append(dict(p["implementer_turns"][0])),
             p.update(model_turns_used=3, turn_attempts=3),
         ),
         "more than one turn in cycle 1",
@@ -272,9 +280,15 @@ TAMPER_MATRIX: list[tuple[str, str, Callable[[dict[str, Any]], None], str]] = [
                 {
                     "role": "reviewer",
                     "cycle": 1,
+                    "started_at": p["implementer_turns"][0]["started_at"]
+                    if p["implementer_turns"]
+                    else "2026-01-01T00:00:00+00:00",
+                    "completed_at": "2026-01-01T00:00:01+00:00",
                     "prompt_sha256": "b" * 64,
                     "prompt_chars": 4,
                     "resolved_model": "provider-b/model-b",
+                    "resolved_agent": "",
+                    "route_source": "workspace_config",
                     "outcome": "completed",
                 }
             ),
@@ -285,7 +299,10 @@ TAMPER_MATRIX: list[tuple[str, str, Callable[[dict[str, Any]], None], str]] = [
     (
         "T15_completed_cycles_without_completed_reviewer",
         "reviewed",
-        lambda p: p["reviewer_turns"][0].update(outcome="blocked"),
+        lambda p: (
+            p.update(reviewer_turns=[], model_turns_used=1, turn_attempts=1),
+            p["implementer_turns"][0].update(cycle=1),
+        ),
         "completed reviewer turn(s)",
     ),
     (
@@ -319,7 +336,7 @@ TAMPER_MATRIX: list[tuple[str, str, Callable[[dict[str, Any]], None], str]] = [
         "T19_start_transition_claims_a_previous_state",
         "fresh",
         lambda p: p["last_transition"].update(previous_state="READY_IMPLEMENTER"),
-        "must not claim a previous state",
+        "the start transition must describe a fresh cycle-1",
     ),
     (
         "T20_in_flight_model_outside_the_snapshot",
@@ -328,15 +345,18 @@ TAMPER_MATRIX: list[tuple[str, str, Callable[[dict[str, Any]], None], str]] = [
             in_flight_turn={
                 "role": "implementer",
                 "cycle": 1,
+                "started_at": "2026-01-01T00:00:00+00:00",
                 "prompt_sha256": "a" * 64,
                 "prompt_chars": 4,
                 "resolved_model": "provider-z/model-z",
+                "resolved_agent": "",
+                "route_source": "workspace_config",
                 "outcome": "in_flight",
             },
             model_turns_used=1,
             turn_attempts=1,
         ),
-        "in-flight intent model does not match the route snapshot",
+        "in-flight intent was recorded against model",
     ),
 ]
 
@@ -350,35 +370,57 @@ EXTRA_TAMPER_CASES: list[tuple[str, str, Callable[[dict[str, Any]], None], str]]
     ),
     (
         "X02_terminal_state_with_a_live_in_flight_intent",
-        "completed",
+        "blocked_impl",
         lambda p: p.update(
             in_flight_turn={
                 "role": "implementer",
                 "cycle": 1,
+                "started_at": "2026-01-01T00:00:00+00:00",
                 "prompt_sha256": "a" * 64,
                 "prompt_chars": 4,
                 "resolved_model": "provider-a/model-a",
+                "resolved_agent": "",
+                "route_source": "workspace_config",
                 "outcome": "in_flight",
             },
-            model_turns_used=3,
-            turn_attempts=3,
+            model_turns_used=2,
+            turn_attempts=2,
         ),
         "carries a live in-flight intent",
     ),
     (
         "X03_in_flight_role_state_mismatch",
-        "fresh",
-        lambda p: p.update(
-            in_flight_turn={
-                "role": "reviewer",
-                "cycle": 1,
-                "prompt_sha256": "a" * 64,
-                "prompt_chars": 4,
-                "resolved_model": "provider-b/model-b",
-                "outcome": "in_flight",
-            },
-            model_turns_used=1,
-            turn_attempts=1,
+        "cycle2",
+        lambda p: (
+            p["implementer_turns"].append(
+                {
+                    "role": "implementer",
+                    "cycle": 2,
+                    "started_at": "2026-01-01T00:00:00+00:00",
+                    "completed_at": "2026-01-01T00:00:01+00:00",
+                    "prompt_sha256": "b" * 64,
+                    "prompt_chars": 4,
+                    "resolved_model": "provider-a/model-a",
+                    "resolved_agent": "",
+                    "route_source": "workspace_config",
+                    "outcome": "completed",
+                }
+            ),
+            p.update(
+                in_flight_turn={
+                    "role": "reviewer",
+                    "cycle": 2,
+                    "started_at": "2026-01-01T00:00:02+00:00",
+                    "prompt_sha256": "a" * 64,
+                    "prompt_chars": 4,
+                    "resolved_model": "provider-b/model-b",
+                    "resolved_agent": "",
+                    "route_source": "workspace_config",
+                    "outcome": "in_flight",
+                },
+                model_turns_used=4,
+                turn_attempts=4,
+            ),
         ),
         "requires state READY_REVIEWER",
     ),
@@ -406,15 +448,18 @@ EXTRA_TAMPER_CASES: list[tuple[str, str, Callable[[dict[str, Any]], None], str]]
             in_flight_turn={
                 "role": "implementer",
                 "cycle": 1,
+                "started_at": "2026-01-01T00:00:00+00:00",
                 "prompt_sha256": "deadbeef",
                 "prompt_chars": 4,
                 "resolved_model": "provider-a/model-a",
+                "resolved_agent": "",
+                "route_source": "workspace_config",
                 "outcome": "in_flight",
             },
             model_turns_used=1,
             turn_attempts=1,
         ),
-        "malformed prompt evidence",
+        "has no valid prompt digest",
     ),
     (
         "X06_in_flight_cycle_is_not_current",
@@ -511,29 +556,21 @@ EXTRA_TAMPER_CASES: list[tuple[str, str, Callable[[dict[str, Any]], None], str]]
     ),
     (
         "X18_decision_next_state_does_not_match",
-        "reviewed",
-        lambda p: p.update(
-            decision_history=[
-                {
-                    "decision": "complete",
-                    "previous_state": "AWAITING_DECISION",
-                    "next_state": "COMPLETED",
-                }
-            ]
-        ),
-        "requires the last decision to be",
+        "completed",
+        lambda p: p["decision_history"][0].update(next_state="READY_IMPLEMENTER"),
+        "cannot lead to",
     ),
     (
         "X19_second_cycle_without_any_decision",
         "cycle2",
         lambda p: p.update(decision_history=[]),
-        "reached without any decision history",
+        "requires exactly 1 external decision(s)",
     ),
     (
         "X20_completed_without_any_decision",
         "completed",
         lambda p: p.update(decision_history=[]),
-        "reached without any decision history",
+        "requires exactly 1 external decision(s)",
     ),
     (
         "X21_limit_reached_without_the_cycle_limit_reason",
@@ -716,34 +753,21 @@ def _corpus_limit_reached(tmp_path: Path) -> tuple[Harness, str]:
 
 
 def _corpus_in_flight(tmp_path: Path) -> tuple[Harness, str]:
-    """READY_IMPLEMENTER with a durable in-flight intent (crash before result)."""
-    harness = build(tmp_path, run_id_factory=fixed_run_ids(RUN_ID))
-    run_id = run_id_of(harness.server, max_cycles=1)
-    path = state_path(harness.ws, run_id)
-    payload = json.loads(path.read_text(encoding="utf-8"))
-    payload["in_flight_turn"] = {
-        "role": "implementer",
-        "cycle": 1,
-        "prompt_sha256": "c" * 64,
-        "prompt_chars": 7,
-        "resolved_model": "provider-a/model-a",
-        "route_source": "workspace_config",
-        "outcome": "in_flight",
-    }
-    payload["model_turns_used"] = 1
-    payload["turn_attempts"] = 1
-    path.write_text(json.dumps(payload), encoding="utf-8")
-    return harness, run_id
+    """READY_IMPLEMENTER with a durable in-flight intent.
+
+    Produced by a real ``SystemExit`` at submission (never hand-written JSON), so
+    the crash boundary in this suite is evidence rather than a fixture.
+    """
+    from v03d_corpus import build_state
+
+    return build_state("implementer_in_flight", tmp_path)
 
 
 def _corpus_interrupted_blocked(tmp_path: Path) -> tuple[Harness, str]:
-    """BLOCKED/turn_interrupted materialized from the crash boundary."""
-    harness, run_id = _corpus_in_flight(tmp_path)
-    restarted = restart_surface(harness)
-    envelope = phase(restarted.server, "devrelay_run_implementer", run_id, "i")
-    assert envelope["ok"] is False
-    assert envelope["data"]["state"] == "BLOCKED"
-    return restarted, run_id
+    """BLOCKED/turn_interrupted materialized from the real crash boundary."""
+    from v03d_corpus import build_state
+
+    return build_state("blocked_interrupted_implementer", tmp_path)
 
 
 HONEST_CORPUS: list[tuple[str, Callable[[Path], tuple[Harness, str]], dict[str, Any]]] = [
