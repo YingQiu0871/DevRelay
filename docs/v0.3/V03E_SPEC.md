@@ -1,16 +1,25 @@
-# DevRelay v0.3-E — recovery and reconciliation (design, remediated)
+# DevRelay v0.3-E — recovery and reconciliation (design, FROZEN)
 
-Status: **DESIGN REMEDIATED / NOT IMPLEMENTED / NOT ACCEPTED / UNRELEASED** —
-this is the design contract after the independent design review's
-`REQUEST_CHANGES` (P0 = 1, P1 = 6, P2 = 5).  **No implementation is authorized**:
-no recovery code exists, no runtime source or test was modified, no platform proof
-was run, no OpenCode instance was started, and no provider/model call was made.
-The design is **not** "frozen": an independent re-review of this remediation comes
-first.
+Status: **DESIGN FROZEN / NOT IMPLEMENTED / NOT ACCEPTED / UNRELEASED**
 
-* Branch: `v0.3-e-recovery-reconciliation` (design only).
-* Design lineage: `673632d` (first design) → **this remediation**; the branch's
-  parent is `56e7842a414777d20a3882cad641da383964bab3` (v0.3-D closeout follow-up).
+Independent design-freeze review of candidate
+`9f4a01804b9affe8938a272553df345b5a60aeed`: **P0 = 0, P1 = 0, P2 = 0**, F1–F12
+**CLOSED**, decision **APPROVE V0.3-E FAIL-CLOSED CORE DESIGN; PLATFORM PROOF GATE
+REQUIRED BEFORE IMPLEMENTATION**.  The design is therefore **frozen**; the
+implementation is **NOT authorized**, the pre-implementation platform proof gate has
+**NOT run**, `adopt_completed_turn` remains **DISABLED**, and no provider/model call
+occurred during the review (the review was static/documentary).
+
+* Frozen contract: this document; acceptance target:
+  `docs/v0.3/V03E_ACCEPTANCE.md`.
+* Branch: `v0.3-e-recovery-reconciliation` (design only, no upstream).
+* Design lineage (preserved): `673632d` initial design candidate → independent
+  `REQUEST_CHANGES` (P0 = 1, P1 = 6, P2 = 5) → remediation `f67bf9e` → narrow
+  re-review `REQUEST_CHANGES` (P2: stale status/gating pointer) → status fix
+  `5b7c65a` → narrow re-review `REQUEST_CHANGES` (P2: G0.1/P7 hard-gate
+  contradiction) → hard-gate policy fix `9f4a018` → **final independent
+  design-freeze approval (P0 = 0, P1 = 0, P2 = 0)**.  The branch parent is
+  `56e7842a414777d20a3882cad641da383964bab3` (v0.3-D closeout follow-up).
 * Accepted v0.3-D runtime candidate:
   `8b70610a5cdda600ef57cf8378c4f69cd33d5be4` (ACCEPTED / CLOSED / UNRELEASED).
 * Package version stays `0.1.0`; the only public tag is `v0.1.0`; nothing is
@@ -18,9 +27,9 @@ first.
 
 ## 1. Scope decision — the mandatory core vs the gated capability
 
-v0.3-E is split so that the fail-closed core can be implemented and accepted
-**without** any remote platform proof, and so that no optional capability can
-block it.
+v0.3-E is split so that the fail-closed core needs **no remote platform proof**
+(only the local **G0.1 / P7** gate first, §25) and can therefore be implemented and
+accepted once that gate passes, and so that no optional capability can block it.
 
 **MANDATORY v0.3-E CORE (implementable; no remote platform proof required):**
 
@@ -735,6 +744,18 @@ proofs, **no real adoption smoke is required**: the reduced core (report +
 | P7 | is the ledger settle record complete-or-absent under a hard kill? | all ledger-trusting logic | PROOF REQUIRED (G0.1) — local, no provider |
 | P8 | can session exclusivity (no other writer in the window) be established? | adoption (C) | PROOF REQUIRED (G2 + local cross-checks) |
 | P9 | is `created_at`/ordering fidelity sufficient if timestamps are used? | adoption (C) *only if* timestamps are used | PROOF REQUIRED (G2) |
+
+### Recorded P3 observations (non-blocking; do not block design freeze)
+
+* **P3-1** — `evidence_sha256` includes timestamp-derived metadata, but digest
+  equality has **no identity authority** and must not be treated as timestamp
+  fidelity proof (that would require P9).
+* **P3-2** — "directly associated assistant message" remains a **proof-gated
+  platform assumption** (it is part of the optional adoption gate, not of the
+  mandatory core).
+* **P3-4 / P3-5** — minor clarity observations recorded by the reviewer around
+  summary wording; they are informational and require no design change for freeze.
+* These observations stay recorded; `P3` is **not** claimed to be zero.
 
 Until **G0.1 / P7 passes**, mandatory-core implementation is **not authorized**:
 no recovery runtime is implemented, the design remains frozen but

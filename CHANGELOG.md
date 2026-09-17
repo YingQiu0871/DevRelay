@@ -4,11 +4,22 @@ All notable changes to DevRelay are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## Unreleased - v0.3-E design, remediated (recovery & reconciliation)
+## Unreleased - v0.3-E design FROZEN (recovery & reconciliation)
 
-**Design remediated.  Not implemented, not accepted, unreleased.**  After the
-independent design review returned `REQUEST_CHANGES` (P0 = 1, P1 = 6, P2 = 5) the
-recovery/reconciliation contract was repaired for re-review.  The remediated design
+**Design frozen.  Not implemented, not accepted, unreleased.**  The independent
+design-freeze review approved candidate
+`9f4a01804b9affe8938a272553df345b5a60aeed` with **P0 = 0, P1 = 0, P2 = 0** and
+F1-F12 **CLOSED**, decision *APPROVE V0.3-E FAIL-CLOSED CORE DESIGN; PLATFORM PROOF
+GATE REQUIRED BEFORE IMPLEMENTATION*.  Implementation is **not authorized**, the
+platform proof gate has **not run**, `adopt_completed_turn` remains **disabled**, and
+the recorded P3 observations (P3-1, P3-2, P3-4/P3-5) stay non-blocking.
+
+That approval followed three earlier review rounds: the first independent design
+review returned `REQUEST_CHANGES` (P0 = 1, P1 = 6, P2 = 5) and the
+recovery/reconciliation contract was repaired in `f67bf9e`; two narrow re-reviews
+then returned `REQUEST_CHANGES` for a stale status/gating pointer (fixed in
+`5b7c65a`) and for a G0.1/P7 hard-gate contradiction (fixed in `9f4a018`).  The
+remediated design  The remediated design
 splits a **mandatory fail-closed core** (reconcile/report + an explicit
 `mark_unrecoverable` exit; no provider submission, no retry, no auto-resume, no
 adoption) from an **optional gated** `adopt_completed_turn` capability and a

@@ -20,7 +20,7 @@ Source: <https://github.com/YingQiu0871/DevRelay> -
 | v0.3-A OpenCode Session Bridge | **accepted / unreleased** — closed at candidate `bcf9627e92ef839abb756810e3c615e6d01b6576`; real OpenCode `1.18.11` smoke passed (one prompt → `DEVRELAY_A33_OK`) |
 | v0.3-B ChatGPT/MCP tool surface | **accepted / unreleased** — closed at accepted candidate `d058d62341a173414bdba88fe357b08c236c8bb4`; final real MCP smoke `PASS — V0.3-B LOCAL REAL MCP SMOKE` |
 | v0.3-C Agent Role Routing | **accepted / unreleased** — closed at accepted candidate `eabb667d1bd9e379d3b7105d72b6a2751bc2a32b`; real routing verified for both roles (implementer `opencode-go/deepseek-v4.1-flash`, reviewer `opencode-go/glm-5.3-flash`), routing only, no orchestration |
-| v0.3-E Recovery & Reconciliation | **design remediated / not implemented / not accepted / unreleased** — contract repaired after the design review (P0 = 1, P1 = 6, P2 = 5) in `docs/v0.3/V03E_SPEC.md` (+ `V03E_ACCEPTANCE.md`): mandatory fail-closed core (reconcile/report + `mark_unrecoverable`), optional gated `adopt_completed_turn`, report-only pending; no recovery code, no schema change, no real model call; implementation gated on the design re-review plus the local strict-reader proof (core) and P1/P2/P3/P8 (+P9) for adoption |
+| v0.3-E Recovery & Reconciliation | **design frozen / not implemented / not accepted / unreleased** — independent design-freeze review of candidate `9f4a01804b9affe8938a272553df345b5a60aeed` returned **P0 = 0, P1 = 0, P2 = 0** with F1–F12 **CLOSED** and decision *APPROVE V0.3-E FAIL-CLOSED CORE DESIGN; PLATFORM PROOF GATE REQUIRED BEFORE IMPLEMENTATION* (`docs/v0.3/V03E_SPEC.md` + `V03E_ACCEPTANCE.md`); implementation NOT authorized, proof gate NOT run, `adopt_completed_turn` DISABLED; mandatory core needs **G0.1/P7 PASS first**, adoption needs P1/P2/P3/P8 (+P9 if timestamps) |
 | v0.3-D Bounded Orchestration | **accepted / closed / unreleased** — closed at candidate `8b70610a5cdda600ef57cf8378c4f69cd33d5be4` after two remediations and one authorized bounded real orchestration smoke `PASS — V0.3-D REAL BOUNDED ORCHESTRATION SMOKE` (4 real model turns / 4 POSTs, 0 retries, 0 fallbacks); durable run state, legal transitions and a hard cycle bound (at most six reserved/consumed model-turn budget slots per run) over the accepted role path, untrusted persisted state validated for **reachability**, no automatic sequencing |
 
 No `v0.3` stage is part of the `v0.1.0` release, the package version stays
@@ -108,18 +108,22 @@ real authority probes (provider `REQUEST_CHANGES` and provider `APPROVE` both le
 the run at `AWAITING_DECISION`), and the terminal guard proved without spending a
 fifth turn.  Evidence: `docs/v0.3/V03D_ACCEPTANCE.md` §J, §K and §L.
 
-`v0.3-E Orchestration Recovery` — **design remediated, not implemented, not
-accepted, unreleased**: after the design review's `REQUEST_CHANGES` (P0 = 1,
-P1 = 6, P2 = 5) the contract in `docs/v0.3/V03E_SPEC.md` splits a mandatory
-fail-closed core (reconcile/report + `mark_unrecoverable`; no submission, no retry,
-no auto-resume, no adoption) from an optional, gated `adopt_completed_turn` and a
-report-only pending capability, with `docs/v0.3/V03E_ACCEPTANCE.md` as the
-design-phase matrix (design branch `v0.3-e-recovery-reconciliation`, parent
-`56e7842`).  Implementation must not start until the design re-review passes and
-the required proofs are obtained; a design that cannot prove an already-completed
-turn ships as "reconcile and report, never adopt, always fail closed".  DevRelay
-still never decides when to invoke a role, keeps no implicit retry, fallback or
-automatic resume, and no automatic DeepSeek/GLM routing exists.
+`v0.3-E Orchestration Recovery` — **DESIGN FROZEN, not implemented, not accepted,
+unreleased**: the independent design-freeze review approved candidate
+`9f4a01804b9affe8938a272553df345b5a60aeed` (**P0 = 0, P1 = 0, P2 = 0**, F1–F12
+**CLOSED**) with the decision *APPROVE V0.3-E FAIL-CLOSED CORE DESIGN; PLATFORM
+PROOF GATE REQUIRED BEFORE IMPLEMENTATION*.  The frozen contract in
+`docs/v0.3/V03E_SPEC.md` splits a mandatory fail-closed core (reconcile/report +
+`mark_unrecoverable`; no submission, no retry, no auto-resume, no adoption) from an
+optional, gated `adopt_completed_turn` and a report-only pending capability, with
+`docs/v0.3/V03E_ACCEPTANCE.md` as the design-phase matrix (design branch
+`v0.3-e-recovery-reconciliation`, parent `56e7842`).  Implementation is **not
+authorized** and the platform proof gate has **not run**: the core requires
+**G0.1/P7 PASS first** (no degraded-implementation path) and adoption requires
+P1/P2/P3/P8 (plus P9 if timestamp/order correlation is used); a design that cannot
+prove an already-completed turn ships as "reconcile and report, never adopt, always
+fail closed".  DevRelay still never decides when to invoke a role, keeps no implicit
+retry, fallback or automatic resume, and no automatic DeepSeek/GLM routing exists.
 
 > **v0.2-A candidate (unreleased)**: the automatic review loop described under
 > [Automatic review loop (v0.2-A)](#automatic-review-loop-v02-a) is implemented
@@ -1123,15 +1127,18 @@ not downgrade the binary inside a workspace that v0.2-B has already written.
   durable in-flight intent is proven to precede submission.  The Planner still
   decides every phase and every decision
 - **v0.3-E** - Orchestration recovery (crash/uncertain-call reconciliation,
-  resume) - **design remediated / not implemented / not accepted / unreleased**:
-  the contract was repaired after the design review (P0 = 1, P1 = 6, P2 = 5) in
-  `docs/v0.3/V03E_SPEC.md` with the matrix in `docs/v0.3/V03E_ACCEPTANCE.md`.  The
-  mandatory fail-closed core is reconcile/report plus an explicit
-  `mark_unrecoverable` exit; `adopt_completed_turn` is an optional capability that
-  stays disabled until the platform proof gate passes; pending results are
-  report-only.  No recovery code exists, no automatic resume is designed in, and
-  implementation waits for the design re-review plus the required proofs (the local
-  strict-reader proof for the core; P1/P2/P3/P8 and P9 for adoption)
+  resume) - **design frozen / not implemented / not accepted / unreleased**: the
+  independent design-freeze review approved candidate
+  `9f4a01804b9affe8938a272553df345b5a60aeed` (**P0 = 0, P1 = 0, P2 = 0**, F1–F12
+  **CLOSED**, *APPROVE V0.3-E FAIL-CLOSED CORE DESIGN; PLATFORM PROOF GATE REQUIRED
+  BEFORE IMPLEMENTATION*) and the contract in `docs/v0.3/V03E_SPEC.md` is frozen,
+  with the matrix in `docs/v0.3/V03E_ACCEPTANCE.md`.  The mandatory fail-closed core
+  is reconcile/report plus an explicit `mark_unrecoverable` exit and needs
+  **G0.1/P7 PASS first** (no degraded-implementation path); `adopt_completed_turn`
+  stays disabled until P1/P2/P3/P8 (plus P9 if timestamp/order correlation is used)
+  pass the platform proof gate; pending results are report-only.  No recovery code
+  exists, the proof gate has not run, implementation is not authorized, and no
+  automatic resume is designed in
 - **later** - optional release automation with explicit approvals
 
 ## Development

@@ -1,14 +1,22 @@
 # DevRelay v0.3-E acceptance matrix — recovery & reconciliation (design phase)
 
-Status: **DESIGN REMEDIATED / NOT IMPLEMENTED / NOT ACCEPTED / UNRELEASED**
+Status: **DESIGN FROZEN / NOT IMPLEMENTED / NOT ACCEPTED / UNRELEASED**
 
-This matrix is the acceptance target for v0.3-E after the design remediation
-(`docs/v0.3/V03E_SPEC.md`).  Only a design exists: **no recovery code, no new tool,
-no schema change and no test was written**, no platform proof was run, no OpenCode
-instance was started and no provider/model call was made.  The accepted v0.3-D
-runtime candidate `8b70610a5cdda600ef57cf8378c4f69cd33d5be4` is untouched.  The
-design is **not** marked frozen: an independent re-review of the remediation comes
-first.
+Independent design-freeze review of candidate
+`9f4a01804b9affe8938a272553df345b5a60aeed`: **P0 = 0, P1 = 0, P2 = 0**, F1–F12
+**CLOSED**, decision **APPROVE V0.3-E FAIL-CLOSED CORE DESIGN; PLATFORM PROOF GATE
+REQUIRED BEFORE IMPLEMENTATION**.  The design (`docs/v0.3/V03E_SPEC.md`) is frozen;
+implementation is **NOT authorized**, the platform proof gate has **NOT run**
+(steps G0.1-G0.5, G1, G2 all unrun), `adopt_completed_turn` remains **DISABLED**,
+and the mandatory-core gate stays **G0.1/P7 PASS first** with no
+degraded-implementation path.
+
+Only a design exists: **no recovery code, no new tool, no schema change and no test
+was written**, no platform proof was run, no OpenCode instance was started and no
+provider/model call was made.  The accepted v0.3-D runtime candidate
+`8b70610a5cdda600ef57cf8378c4f69cd33d5be4` is untouched.  All implementation rows
+below remain FUTURE / NOT RUN, and the recorded P3 observations (P3-1, P3-2,
+P3-4/P3-5) stay non-blocking.
 
 Legend:
 
