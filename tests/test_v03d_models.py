@@ -76,7 +76,7 @@ def test_run_model_is_strict_and_carries_no_content_fields():
 
 
 def test_summary_exposes_everything_a_planner_needs():
-    run = make_run(state=RunState.AWAITING_DECISION, completed_cycles=1)
+    run = make_run(state=RunState.AWAITING_DECISION)
     summary = run.summary()
     for field in (
         "run_id",

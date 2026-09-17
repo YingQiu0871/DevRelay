@@ -104,6 +104,80 @@ def test_start_run_rejects_out_of_bound_cycles(tmp_path, max_cycles):
     )
 
 
+def test_boolean_max_cycles_is_rejected_by_the_tool_body(tmp_path):
+    """`true` is a bool, not the integer 1: the tool body says so (the §23 probe)."""
+    harness = build(tmp_path, run_id_factory=fixed_run_ids(RUN_ID))
+    for value in (True, False):
+        envelope = harness.surface.devrelay_start_run(
+            implementer_session_id=IMPLEMENTER_SESSION,
+            reviewer_session_id=REVIEWER_SESSION,
+            max_cycles=value,
+        )
+        assert envelope.ok is False
+        assert envelope.error.type == "mcp_invalid_argument"
+        assert "max_cycles must be an integer" in envelope.error.message
+    assert both_posts(harness) == []
+    assert not (harness.ws / ".devrelay" / "orchestration" / "runs").exists() or not list(
+        (harness.ws / ".devrelay" / "orchestration" / "runs").glob("*.json")
+    )
+
+
+def test_mcp_sdk_normalizes_max_cycles_before_the_tool_body(tmp_path):
+    """Documented boundary behaviour: the SDK's lax int coercion, never a bypass.
+
+    The MCP SDK builds a pydantic argument model from the declared tool schema,
+    so JSON ``true``/``"2"``/``2.0`` reach the tool body as integers 1/2/2.  The
+    DevRelay bound still holds on the normalized value: nothing can raise the
+    v0.3-D ceiling, a fractional number is refused at the SDK boundary, and
+    ``false`` normalizes to 0, which the tool body rejects.
+    """
+    harness = build(tmp_path, run_id_factory=fixed_run_ids(RUN_ID))
+    accepted = {
+        True: 1,
+        "2": 2,
+        2.0: 2,
+        "3": 3,
+    }
+    for raw, expected in accepted.items():
+        envelope = start(harness.server, max_cycles=raw)
+        assert envelope["ok"] is True, (raw, envelope)
+        assert envelope["data"]["max_cycles"] == expected
+        assert envelope["data"]["model_turn_budget"] == 2 * expected
+
+    rejected = {
+        False: "mcp_invalid_argument",  # normalizes to 0: outside 1..3
+        "4": "mcp_invalid_argument",  # above the hard ceiling
+        4.5: None,  # refused by the SDK itself
+    }
+    for raw, expected_type in rejected.items():
+        if expected_type is None:
+            with pytest.raises(Exception):
+                start(harness.server, max_cycles=raw)
+        else:
+            envelope = start(harness.server, max_cycles=raw)
+            assert envelope["ok"] is False, (raw, envelope)
+            assert envelope["error"]["type"] == expected_type
+    assert both_posts(harness) == [], "starting a run never calls a model"
+
+
+def test_the_service_also_refuses_a_boolean_max_cycles(tmp_path):
+    """The same bound is enforced below the MCP boundary."""
+    from devrelay.errors import OrchestrationCycleLimitError
+    from devrelay.orchestration import OrchestrationService
+
+    harness = build(tmp_path, run_id_factory=fixed_run_ids(RUN_ID))
+    service = harness.surface.orchestration
+    assert isinstance(service, OrchestrationService)
+    for value in (True, False):
+        with pytest.raises(OrchestrationCycleLimitError):
+            service.start_run(
+                implementer_session_id=IMPLEMENTER_SESSION,
+                reviewer_session_id=REVIEWER_SESSION,
+                max_cycles=value,
+            )
+    assert both_posts(harness) == []
+
+
 def test_start_run_accepts_the_hard_bound_but_not_beyond(tmp_path):
     harness = build(tmp_path, run_id_factory=fixed_run_ids(RUN_ID))
     assert start(harness.server, max_cycles=3)["data"]["model_turn_budget"] == 6
@@ -615,7 +689,7 @@ def test_a_persisted_in_flight_turn_is_never_replayed(tmp_path):
     payload["in_flight_turn"] = {
         "role": "implementer",
         "cycle": 1,
-        "prompt_sha256": "deadbeef",
+        "prompt_sha256": "d" * 64,
         "prompt_chars": 4,
         "resolved_model": "provider-a/model-a",
         "outcome": "in_flight",
@@ -628,6 +702,7 @@ def test_a_persisted_in_flight_turn_is_never_replayed(tmp_path):
     read = get_run(harness.server, run_id)
     assert read["data"]["in_flight"] is True
     assert read["data"]["state"] == "READY_IMPLEMENTER"
+    assert read["data"]["legal_next_actions"] == [], "nothing is legal while a turn is in flight"
 
     # the next mutating action fails the run closed without any model call
     envelope = phase(harness.server, "devrelay_run_implementer", run_id, "i")

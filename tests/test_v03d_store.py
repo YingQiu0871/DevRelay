@@ -9,24 +9,19 @@ import pytest
 from devrelay.errors import OrchestrationRunNotFoundError, OrchestrationStateCorruptError
 from devrelay.orchestration import OrchestrationRun, OrchestrationStore, generate_run_id
 from devrelay.orchestration.store import RUN_ID_PATTERN, valid_run_id
-from devrelay.orchestration.models import RoleRouteSnapshot
 
 GOOD_ID = "DR-" + "0123456789abcdef" * 2
 
+#: Newline vectors for the run-id strictness test (composed, never embedded).
+NL = chr(10)
+CRLF = chr(13) + chr(10)
 
-def make_run(run_id: str = GOOD_ID) -> OrchestrationRun:
-    return OrchestrationRun(
-        run_id=run_id,
-        workspace="C:/ws",
-        implementer_session_id="ses_impl",
-        reviewer_session_id="ses_rev",
-        max_cycles=2,
-        model_turn_budget=4,
-        route_snapshot={
-            "implementer": RoleRouteSnapshot(role="implementer", model="provider-a/model-a"),
-            "reviewer": RoleRouteSnapshot(role="reviewer", model="provider-b/model-b"),
-        },
-    )
+
+def make_run(tmp_path, run_id: str = GOOD_ID) -> OrchestrationRun:
+    """An honest run document bound to *tmp_path* (the store's workspace)."""
+    from v03d_helpers import honest_run
+
+    return honest_run(run_id=run_id, workspace=str(tmp_path.resolve()))
 
 
 def store_for(tmp_path, factory=None) -> OrchestrationStore:
@@ -84,6 +79,35 @@ def test_contained_path_stays_under_the_runs_directory(tmp_path):
     assert path.name == f"{GOOD_ID}.json"
 
 
+@pytest.mark.parametrize(
+    "candidate",
+    [
+        GOOD_ID + NL,
+        GOOD_ID + CRLF,
+        GOOD_ID + " ",
+        " " + GOOD_ID,
+        GOOD_ID + "x",
+        "x" + GOOD_ID,
+        GOOD_ID[:-1] + "G",  # 'G' is not a hex digit
+        "DR-0123456789abcdef0123456789abcde" + NL,
+    ],
+)
+def test_run_ids_are_matched_strictly_end_to_end(tmp_path, candidate):
+    """A trailing newline, CR, space or any prefix/suffix is not this run id."""
+    assert valid_run_id(candidate) is False
+    store = store_for(tmp_path)
+    store.create(make_run(tmp_path))
+    with pytest.raises(OrchestrationRunNotFoundError):
+        store.load(candidate)
+    with pytest.raises(OrchestrationRunNotFoundError):
+        store.path_for(candidate)
+    assert store.exists(candidate) is False
+    # each vector differs from the stored id by whitespace or one character:
+    # that is exactly what strict full-match rejection must catch
+    assert store.load(GOOD_ID).run_id == GOOD_ID
+    assert sorted(path.name for path in store.root.iterdir()) == [f"{GOOD_ID}.json"]
+
+
 def test_bad_run_id_factory_is_rejected(tmp_path):
     store = store_for(tmp_path, factory=lambda: "../../escape")
     with pytest.raises(OrchestrationStateCorruptError):
@@ -95,7 +119,7 @@ def test_bad_run_id_factory_is_rejected(tmp_path):
 # ---------------------------------------------------------------------------
 def test_round_trip_preserves_the_run_document(tmp_path):
     store = store_for(tmp_path)
-    run = make_run()
+    run = make_run(tmp_path)
     store.create(run)
     loaded = store.load(GOOD_ID)
     assert loaded.model_dump(mode="json") == run.model_dump(mode="json")
@@ -105,14 +129,15 @@ def test_round_trip_preserves_the_run_document(tmp_path):
 
 def test_writes_are_atomic_and_leave_no_temp_files(tmp_path):
     store = store_for(tmp_path)
-    store.create(make_run())
+    store.create(make_run(tmp_path))
     for index in range(5):
         run = store.load(GOOD_ID)
-        run.turn_attempts = index + 1
+        run.updated_at = f"2026-01-01T00:00:0{index}+00:00"
         store.save(run)
     files = sorted(path.name for path in store.root.iterdir())
-    assert files == [f"{GOOD_ID}.json"]
-    assert json.loads((store.root / f"{GOOD_ID}.json").read_text(encoding="utf-8"))["turn_attempts"] == 5
+    assert files == [f"{GOOD_ID}.json"], "no temp file survives a save"
+    payload = json.loads((store.root / f"{GOOD_ID}.json").read_text(encoding="utf-8"))
+    assert payload["updated_at"] == "2026-01-01T00:00:04+00:00"
 
 
 def test_missing_run_is_reported_as_not_found(tmp_path):
@@ -123,7 +148,7 @@ def test_missing_run_is_reported_as_not_found(tmp_path):
 
 def test_corrupt_json_is_reported_and_never_reset(tmp_path):
     store = store_for(tmp_path)
-    store.create(make_run())
+    store.create(make_run(tmp_path))
     path = store.path_for(GOOD_ID)
     path.write_text("{not json", encoding="utf-8")
     with pytest.raises(OrchestrationStateCorruptError):
@@ -133,7 +158,7 @@ def test_corrupt_json_is_reported_and_never_reset(tmp_path):
 
 def test_malformed_document_is_reported_as_corrupt(tmp_path):
     store = store_for(tmp_path)
-    store.create(make_run())
+    store.create(make_run(tmp_path))
     path = store.path_for(GOOD_ID)
     payload = json.loads(path.read_text(encoding="utf-8"))
     payload["state"] = "SOMETHING_FUZZY"
@@ -144,7 +169,7 @@ def test_malformed_document_is_reported_as_corrupt(tmp_path):
 
 def test_unknown_fields_are_rejected_as_corrupt(tmp_path):
     store = store_for(tmp_path)
-    store.create(make_run())
+    store.create(make_run(tmp_path))
     path = store.path_for(GOOD_ID)
     payload = json.loads(path.read_text(encoding="utf-8"))
     payload["reviewer_approved"] = True
@@ -155,7 +180,7 @@ def test_unknown_fields_are_rejected_as_corrupt(tmp_path):
 
 def test_document_with_a_different_run_id_is_corrupt(tmp_path):
     store = store_for(tmp_path)
-    store.create(make_run())
+    store.create(make_run(tmp_path))
     path = store.path_for(GOOD_ID)
     payload = json.loads(path.read_text(encoding="utf-8"))
     payload["run_id"] = "DR-" + "f" * 32
@@ -166,7 +191,7 @@ def test_document_with_a_different_run_id_is_corrupt(tmp_path):
 
 def test_touch_updates_the_timestamp(tmp_path):
     store = store_for(tmp_path)
-    run = store.create(make_run())
+    run = store.create(make_run(tmp_path))
     before = run.updated_at
     store.touch(run)
     assert store.load(GOOD_ID).updated_at >= before

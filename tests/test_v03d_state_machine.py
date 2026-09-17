@@ -81,7 +81,8 @@ def test_complete_and_stop_are_terminal():
 
 
 def test_request_changes_opens_the_next_cycle_while_budget_remains():
-    run = make_run(state=RunState.AWAITING_DECISION, completed_cycles=1, max_cycles=2)
+    run = make_run(state=RunState.AWAITING_DECISION, max_cycles=2)
+    assert run.completed_cycles == 1, "one honest completed cycle"
     transition = policy.after_decision(run, Decision.REQUEST_CHANGES)
     assert transition.state is RunState.READY_IMPLEMENTER
     assert transition.current_cycle == 2
@@ -89,7 +90,9 @@ def test_request_changes_opens_the_next_cycle_while_budget_remains():
 
 
 def test_request_changes_at_the_cycle_cap_reaches_the_limit():
-    run = make_run(state=RunState.AWAITING_DECISION, completed_cycles=2, max_cycles=2)
+    # max_cycles=1: the single completed cycle *is* the cap
+    run = make_run(state=RunState.AWAITING_DECISION, max_cycles=1)
+    assert run.completed_cycles == run.max_cycles == 1
     transition = policy.after_decision(run, Decision.REQUEST_CHANGES)
     assert transition.state is RunState.LIMIT_REACHED
     assert transition.blocked_reason == "cycle_limit"
@@ -103,7 +106,7 @@ def test_unknown_decisions_are_rejected_by_policy(decision):
 
 
 def test_applying_a_transition_records_previous_and_next_state():
-    run = make_run(state=RunState.AWAITING_DECISION, completed_cycles=1, max_cycles=2)
+    run = make_run(state=RunState.AWAITING_DECISION, max_cycles=2)
     transition = policy.after_decision(run, Decision.REQUEST_CHANGES)
     applied = apply_transition(run, transition)
     assert applied.state is RunState.READY_IMPLEMENTER
@@ -140,7 +143,9 @@ def test_in_flight_guard_refuses_to_continue():
 
 
 def test_cycle_budget_guard_uses_the_model_turn_budget():
-    run = make_run(model_turn_budget=2, model_turns_used=2)
+    # max_cycles=1 spends exactly 2 model-turn slots: the whole budget
+    run = make_run(state=RunState.AWAITING_DECISION, max_cycles=1)
+    assert run.model_turns_used == run.model_turn_budget == 2
     with pytest.raises(OrchestrationCycleLimitError):
         policy.require_cycle_budget(run)
     run.model_turns_used = 1
