@@ -19,7 +19,7 @@ review returned `REQUEST_CHANGES` (P0 = 1, P1 = 6, P2 = 5) and the
 recovery/reconciliation contract was repaired in `f67bf9e`; two narrow re-reviews
 then returned `REQUEST_CHANGES` for a stale status/gating pointer (fixed in
 `5b7c65a`) and for a G0.1/P7 hard-gate contradiction (fixed in `9f4a018`).  The
-remediated design  The remediated design
+remediated design
 splits a **mandatory fail-closed core** (reconcile/report + an explicit
 `mark_unrecoverable` exit; no provider submission, no retry, no auto-resume, no
 adoption) from an **optional gated** `adopt_completed_turn` capability and a

@@ -20,43 +20,55 @@ P3-4/P3-5) stay non-blocking.
 
 Legend:
 
-* **FROZEN-PENDING-REVIEW (design)** — decided by the remediated design; may be
-  implemented as written once the design re-review passes.
+* **FROZEN (design)** — decided and frozen by the independently approved v0.3-E
+  design (candidate `9f4a01804b9affe8938a272553df345b5a60aeed`; design-freeze review
+  **P0 = 0, P1 = 0, P2 = 0**).  This label records **design status only** and does
+  **not** authorize implementation: mandatory-core implementation still requires
+  **G0.1 / P7 PASS** under `V03E_SPEC.md` §25, and there is no
+  degraded-implementation path.
 * **PROOF REQUIRED** — cannot be implemented or accepted until the named platform
   proof passes (proof gate in `V03E_SPEC.md` §25).
 * **DISABLED** — documented but refused at runtime until its gate passes.
 * **FUTURE / NOT RUN** — evidence the implementation round must produce; nothing
   here is claimed as passed.
 
-## A. Mandatory core (implementable without remote platform proofs)
+## A. Mandatory core (no remote platform proof required; G0.1/P7 still required)
+
+Design freeze does **not** authorize implementation.  The mandatory-core ordering
+remains **design frozen → G0.1 / P7 PASS → implementation may be authorized**; if
+G0.1/P7 fails, mandatory-core implementation remains **blocked** (no
+degraded-implementation path), and `evidence_gap` stays a future *runtime*
+fail-closed outcome rather than a substitute for G0.1/P7 PASS.  Optional adoption
+remains **DISABLED** until P1 + P2 + P3 + P8 (plus P9 only if timestamp/order
+correlation is used), gated by G1/G2; the proof gate has **NOT run**.
 
 | # | Criterion | Design status | Reference |
 | --- | --- | --- | --- |
-| E1 | Scope split: mandatory core (report + `mark_unrecoverable`, no submission, no retry, no auto-resume, no adoption) vs optional gated adoption vs report-only pending vs informational non-delivery | FROZEN-PENDING-REVIEW | SPEC §1, §19 |
-| E2 | The recovery problem is split into distinct cases A–H **plus X (corrupt)** and never collapsed into one "retryable" bucket | FROZEN-PENDING-REVIEW | SPEC §4 |
-| E3 | RECONCILE / MATERIALIZE / RESUME / RETRY are defined separately; bridge `retry_safe` has no recovery authority; v0.3-E has no retry protocol | FROZEN-PENDING-REVIEW | SPEC §5, §18 |
-| E4 | Recovery authority = deterministic evidence **and** an explicit external planner action; provider/reviewer prose has zero recovery authority | FROZEN-PENDING-REVIEW | SPEC §7 |
-| E5 | **Entry is an explicit legal action**: `resolve_recovery` accepts (1) a valid v2 non-terminal document with a legal live intent and (2) a document already in `RECOVERY_REQUIRED`; v2 phase/decide calls refuse **without mutating** | FROZEN-PENDING-REVIEW | SPEC §7 |
-| E6 | **One legal attempt representation**: one `recovery.attempt` record while in `RECOVERY_REQUIRED`; resolution converts it once into exactly one role turn | FROZEN-PENDING-REVIEW | SPEC §8.1 |
-| E7 | **Exact `RECOVERY_REQUIRED` document shape** with pinned accounting equations (`turn_attempts == model_turns_used`; `impl + rev + ra == model_turns_used`; no refund; counted exactly once) and the new `recover` edges | FROZEN-PENDING-REVIEW | SPEC §8.2, §8.3, §8.4 |
-| E8 | **Corruption is never recovery**: violations outside the enumerated deltas → `orchestration_state_corrupt`, no entry, no override, no repair | FROZEN-PENDING-REVIEW | SPEC §6 |
-| E9 | **Strict recovery evidence reader**: identity-scoped, no silent skipping, no truncation-as-proof, interval proof, `evidence_gap` otherwise; absence is never proof of non-delivery | FROZEN-PENDING-REVIEW (correctness proof = G0.1/P7) | SPEC §9 |
-| E10 | `mark_unrecoverable` independence: requires only a legal recovery document/action, planner authority, local invariants and no corruption; **never** requires remote session history | FROZEN-PENDING-REVIEW | SPEC §11 (intro), §19 |
-| E11 | Terminal states never enter recovery and never reopen; recovery actions against them are local, mutation-free and model-call-free | FROZEN-PENDING-REVIEW | SPEC §12.5 |
-| E12 | `devrelay_get_run` stays read-only; reconciliation/materialization requires an explicit recovery action | FROZEN-PENDING-REVIEW | SPEC §21 |
-| E13 | Budget/accounting: the §8.3 equations, no refund, no reset, no recomputation, no restart budget | FROZEN-PENDING-REVIEW | SPEC §8.3, §22 |
-| E14 | Route snapshot authoritative; current configuration is drift detection only; no fallback, no snapshot rewrite | FROZEN-PENDING-REVIEW | SPEC §12.3 |
-| E15 | Workspace/session identity re-verified; copied/foreign/missing session bounds recovery (adoption unavailable; report/`mark_unrecoverable` still work) | FROZEN-PENDING-REVIEW | SPEC §12.4 |
-| E16 | Concurrency: recovery shares the accepted per-surface lock; multi-surface/multi-process remains unsupported; no process-wide claim | FROZEN-PENDING-REVIEW | SPEC §22 |
-| E17 | Privacy: digests/ids/metadata only; no prompt/response/reasoning/credential persistence | FROZEN-PENDING-REVIEW | SPEC §22 |
-| E18 | Crash-window matrix W0–W7 (**including W4: response received, ledger settle not durably written**) with no cell authorizing behaviour forbidden elsewhere | FROZEN-PENDING-REVIEW | SPEC §16 |
-| E19 | Restart matrix: no restart performs work, creates budget, refunds a slot or issues a request | FROZEN-PENDING-REVIEW | SPEC §17 |
-| E20 | **Schema v1/v2 dispatch**: v1 validated by the frozen v0.3-D validator, never written/migrated, no recovery entry, resolve refuses locally, v1 live-intent behaviour exactly v0.3-D; v2 uses v0.3-E rules; anything else is corrupt.  New runs are v2 | FROZEN-PENDING-REVIEW | SPEC §10 |
-| E21 | `evidence_sha256` canonical input (field list, order, encoding, null representation, version marker), no raw text hashed; repeat resolve → stable `orchestration_recovery_already_resolved` error with no write | FROZEN-PENDING-REVIEW | SPEC §13 |
-| E22 | Prompt-digest semantics pinned to the accepted joined-text representation (multiple parts joined with `\n`, no line-ending normalization, UTF-8, empty/missing → fail closed); canonical fidelity still depends on P2 | FROZEN-PENDING-REVIEW (fidelity = P2) | SPEC §12.2 |
-| E23 | Minimum tool surface: `devrelay_reconcile_run` (read-only) + `devrelay_resolve_recovery` (only write, gated adoption); no hidden phase turn, no wait, no polling, no retry | FROZEN-PENDING-REVIEW | SPEC §21 |
-| E24 | Non-goals explicit (retry, auto-decisions, sequencing, fallback, pending adoption, distributed locking, daemons, WebUI/HTTP, release work, heuristics) | FROZEN-PENDING-REVIEW | SPEC §23 |
-| E25 | Test strategy defined before implementation, including entry, accounting, strict-reader, corruption, gate-refusal, `mark_unrecoverable`-independence, no-submission, terminal, restart, dispatch, privacy and mutation tests | FROZEN-PENDING-REVIEW | SPEC §24 |
+| E1 | Scope split: mandatory core (report + `mark_unrecoverable`, no submission, no retry, no auto-resume, no adoption) vs optional gated adoption vs report-only pending vs informational non-delivery | FROZEN | SPEC §1, §19 |
+| E2 | The recovery problem is split into distinct cases A–H **plus X (corrupt)** and never collapsed into one "retryable" bucket | FROZEN | SPEC §4 |
+| E3 | RECONCILE / MATERIALIZE / RESUME / RETRY are defined separately; bridge `retry_safe` has no recovery authority; v0.3-E has no retry protocol | FROZEN | SPEC §5, §18 |
+| E4 | Recovery authority = deterministic evidence **and** an explicit external planner action; provider/reviewer prose has zero recovery authority | FROZEN | SPEC §7 |
+| E5 | **Entry is an explicit legal action**: `resolve_recovery` accepts (1) a valid v2 non-terminal document with a legal live intent and (2) a document already in `RECOVERY_REQUIRED`; v2 phase/decide calls refuse **without mutating** | FROZEN | SPEC §7 |
+| E6 | **One legal attempt representation**: one `recovery.attempt` record while in `RECOVERY_REQUIRED`; resolution converts it once into exactly one role turn | FROZEN | SPEC §8.1 |
+| E7 | **Exact `RECOVERY_REQUIRED` document shape** with pinned accounting equations (`turn_attempts == model_turns_used`; `impl + rev + ra == model_turns_used`; no refund; counted exactly once) and the new `recover` edges | FROZEN | SPEC §8.2, §8.3, §8.4 |
+| E8 | **Corruption is never recovery**: violations outside the enumerated deltas → `orchestration_state_corrupt`, no entry, no override, no repair | FROZEN | SPEC §6 |
+| E9 | **Strict recovery evidence reader**: identity-scoped, no silent skipping, no truncation-as-proof, interval proof, `evidence_gap` otherwise; absence is never proof of non-delivery | FROZEN (correctness proof = G0.1/P7) | SPEC §9 |
+| E10 | `mark_unrecoverable` independence: requires only a legal recovery document/action, planner authority, local invariants and no corruption; **never** requires remote session history | FROZEN | SPEC §11 (intro), §19 |
+| E11 | Terminal states never enter recovery and never reopen; recovery actions against them are local, mutation-free and model-call-free | FROZEN | SPEC §12.5 |
+| E12 | `devrelay_get_run` stays read-only; reconciliation/materialization requires an explicit recovery action | FROZEN | SPEC §21 |
+| E13 | Budget/accounting: the §8.3 equations, no refund, no reset, no recomputation, no restart budget | FROZEN | SPEC §8.3, §22 |
+| E14 | Route snapshot authoritative; current configuration is drift detection only; no fallback, no snapshot rewrite | FROZEN | SPEC §12.3 |
+| E15 | Workspace/session identity re-verified; copied/foreign/missing session bounds recovery (adoption unavailable; report/`mark_unrecoverable` still work) | FROZEN | SPEC §12.4 |
+| E16 | Concurrency: recovery shares the accepted per-surface lock; multi-surface/multi-process remains unsupported; no process-wide claim | FROZEN | SPEC §22 |
+| E17 | Privacy: digests/ids/metadata only; no prompt/response/reasoning/credential persistence | FROZEN | SPEC §22 |
+| E18 | Crash-window matrix W0–W7 (**including W4: response received, ledger settle not durably written**) with no cell authorizing behaviour forbidden elsewhere | FROZEN | SPEC §16 |
+| E19 | Restart matrix: no restart performs work, creates budget, refunds a slot or issues a request | FROZEN | SPEC §17 |
+| E20 | **Schema v1/v2 dispatch**: v1 validated by the frozen v0.3-D validator, never written/migrated, no recovery entry, resolve refuses locally, v1 live-intent behaviour exactly v0.3-D; v2 uses v0.3-E rules; anything else is corrupt.  New runs are v2 | FROZEN | SPEC §10 |
+| E21 | `evidence_sha256` canonical input (field list, order, encoding, null representation, version marker), no raw text hashed; repeat resolve → stable `orchestration_recovery_already_resolved` error with no write | FROZEN | SPEC §13 |
+| E22 | Prompt-digest semantics pinned to the accepted joined-text representation (multiple parts joined with `\n`, no line-ending normalization, UTF-8, empty/missing → fail closed); canonical fidelity still depends on P2 | FROZEN (fidelity = P2) | SPEC §12.2 |
+| E23 | Minimum tool surface: `devrelay_reconcile_run` (read-only) + `devrelay_resolve_recovery` (only write, gated adoption); no hidden phase turn, no wait, no polling, no retry | FROZEN | SPEC §21 |
+| E24 | Non-goals explicit (retry, auto-decisions, sequencing, fallback, pending adoption, distributed locking, daemons, WebUI/HTTP, release work, heuristics) | FROZEN | SPEC §23 |
+| E25 | Test strategy defined before implementation, including entry, accounting, strict-reader, corruption, gate-refusal, `mark_unrecoverable`-independence, no-submission, terminal, restart, dispatch, privacy and mutation tests | FROZEN | SPEC §24 |
 
 ## B. Optional gated capability — `adopt_completed_turn` (DISABLED until proven)
 
@@ -72,9 +84,9 @@ Legend:
 
 | # | Criterion | Design status | Reference |
 | --- | --- | --- | --- |
-| E31 | **P4 pending**: OpenCode 1.18.11 exposes session-level status only (no durable per-operation handle) → `reply_pending` is report-only: no adoption, no polling loop, no automatic wait, no pending-driven state advance; a future handle needs a new reviewed capability extension | FROZEN-PENDING-REVIEW (report-only) | SPEC §14 |
-| E32 | **P5 non-delivery**: the accepted transport classification is reported as evidence only — no orchestration authority, no retry licence, no refund; `mark_unrecoverable` remains the only mandatory-core resolution | FROZEN-PENDING-REVIEW (informational) | SPEC §15 |
-| E33 | **P6 identity bound**: missing/foreign/recreated/copied session ⇒ adoption unavailable; report/`mark_unrecoverable` still work without claiming remote completion | FROZEN-PENDING-REVIEW (bound) | SPEC §12.4 |
+| E31 | **P4 pending**: OpenCode 1.18.11 exposes session-level status only (no durable per-operation handle) → `reply_pending` is report-only: no adoption, no polling loop, no automatic wait, no pending-driven state advance; a future handle needs a new reviewed capability extension | FROZEN (report-only) | SPEC §14 |
+| E32 | **P5 non-delivery**: the accepted transport classification is reported as evidence only — no orchestration authority, no retry licence, no refund; `mark_unrecoverable` remains the only mandatory-core resolution | FROZEN (informational) | SPEC §15 |
+| E33 | **P6 identity bound**: missing/foreign/recreated/copied session ⇒ adoption unavailable; report/`mark_unrecoverable` still work without claiming remote completion | FROZEN (bound) | SPEC §12.4 |
 
 ## D. Local platform proofs (no real provider needed)
 

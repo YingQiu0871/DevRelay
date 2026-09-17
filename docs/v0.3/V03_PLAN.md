@@ -53,8 +53,10 @@ An independent review of the first v0.3-D candidate returned `REQUEST_CHANGES`
 (P0 = 0, one blocking P1: persisted run state was trusted as input, plus P2/P3
 findings), and a second review returned `REQUEST_CHANGES` with **three** blocking
 P1s: a persisted run needed only plausible fields, not a state provable from its
-history.  Both **remediations are complete and ready for independent re-review**:
-the first closed the trusted-input boundary, the second added reachability
+history.  Historically, both **remediations were complete and ready for independent
+re-review** at that point; that re-review later passed and v0.3-D was accepted and
+closed (see the stage table and `V03D_ACCEPTANCE.md` §L).  The first closed the
+trusted-input boundary, the second added reachability
 validation (`READY_REVIEWER` requires this cycle's completed implementer turn, a
 blocked turn implies `BLOCKED`, the last transition must end at the current state,
 the decision history must equal the completed cycles, no future-cycle evidence,
@@ -85,10 +87,11 @@ The remediated contract splits a **mandatory fail-closed core** (reconcile/repor
 **optional gated** `adopt_completed_turn` capability and a **report-only** pending
 capability; the core needs no remote platform proof, while adoption requires the
 proof gate (P1, P2, P3, P8, plus P9 if timestamps are used).
-**No recovery code exists**, the accepted v0.3-D runtime candidate
-`8b70610a5cdda600ef57cf8378c4f69cd33d5be4` is untouched, and implementation must not
-start until an independent re-review of the remediated design passes and the
-required proofs are obtained.  The mandatory core's gate is: **G0.1/P7 must PASS
+**No recovery code exists** and the accepted v0.3-D runtime candidate
+`8b70610a5cdda600ef57cf8378c4f69cd33d5be4` is untouched.  The design re-review
+**has passed** and the v0.3-E design is **frozen** (candidate `9f4a018`, P0 = 0,
+P1 = 0, P2 = 0); mandatory-core implementation nonetheless must not start until
+**G0.1/P7 passes**.  The mandatory core's gate is: **G0.1/P7 must PASS
 first**, and the ordering is design frozen → G0.1/P7 PASS → mandatory-core
 implementation may be authorized; if G0.1/P7 fails, core implementation stays
 **blocked** (no degraded-implementation path; a degraded scope would need its own
