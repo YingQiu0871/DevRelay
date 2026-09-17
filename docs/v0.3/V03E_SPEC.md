@@ -667,7 +667,16 @@ or replies · heuristic or probabilistic attribution.
   evidence variants) with a per-mutation differential battery;
 * zero real provider/model calls during unit/integration testing.
 
-## 25. Platform proof gate (design only — not run, not authorized)
+## 25. Platform proof gate (partially executed — not complete)
+
+**Current gate status (updated after the G0.1/P7 execution):** platform proof gate =
+**PARTIALLY EXECUTED / NOT COMPLETE**.  **G0.1 / P7 = EXECUTED ONCE / CANDIDATE PASS /
+AWAITING INDEPENDENT REVIEW** (`V03E_G0_1_P7_PROOF.md`); **G0.2 = NOT RUN**,
+**G0.3 = NOT RUN**, **G0.4 = NOT RUN**, **G0.5 = NOT RUN**, **G1 = NOT RUN**,
+**G2 = NOT RUN**.  Mandatory-core implementation = **NOT AUTHORIZED**;
+`adopt_completed_turn` = **DISABLED**.  There is no authoritative "G0.1 PASS" and no
+"proof gate passed" until an independent reviewer approves the proof; the executing
+agent cannot self-approve it.
 
 To be executed **before any implementation** that trusts remote/local recovery
 evidence.  Maximum real provider/model calls: **0** (a local fake

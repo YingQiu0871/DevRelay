@@ -23,8 +23,10 @@ but before settlement, during settlement publication, after settlement publicati
 and a corrupted-record control) all met their predefined criteria against the real
 accepted ledger persistence path, with the corruption-strict scanner never treating
 malformed evidence as absence while the tolerant accounting reader demonstrably did.
-The remaining gate steps (G0.2-G0.5, G1, G2) have not run; mandatory-core
-implementation remains **not authorized**, `adopt_completed_turn` remains disabled,
+The remaining gate steps (G0.2-G0.5, G1, G2) have not run, so the platform proof
+gate is **partially executed / not complete** (no step is an authoritative PASS
+before independent approval); mandatory-core implementation remains **not
+authorized**, `adopt_completed_turn` remains disabled,
 and 0 real provider/model calls were made.  Evidence:
 `docs/v0.3/V03E_G0_1_P7_PROOF.md`.
 

@@ -28,7 +28,7 @@ identity.
 | Aspect | Finding | Source |
 | --- | --- | --- |
 | Record location | `<workspace>/.devrelay/opencode/calls/OC-NNNN.json` | `src/devrelay/opencode/accounting.py::FilesystemOpenCodeLedger` (`root`, `calls_dir`) |
-| Identity allocation | durable monotonic `OC-NNNN`; `sequence.json` (`{"next_call_sequence": N}`) written via a fixed-name temp file `.{name}.tmp` + `Path.replace`; a corrupt/absent sequence falls back to `max(existing)+1`, never reuse | `allocate_call_id`, `_existing_ids`, `_read_sequence`, `_write`… (`accounting.py`) |
+| Identity allocation | durable monotonic `OC-NNNN`; `sequence.json` (`{"next_call_sequence": N}`) written via a fixed-name temp file `.{name}.tmp` + `Path.replace`.  **Absent vs corrupt differ** (corrected after independent review, P3-1): a **missing** sequence file is recovered from the existing ledger as `max(existing ids)+1`; a **corrupt/unreadable** sequence file does **not** fall back — `_read_sequence` raises `OpenCodeLedgerError` and the allocator **fails closed**, precisely so numbering can never be reused.  Identity reuse is additionally refused by the create-new `begin()` write | `allocate_call_id`, `_existing_ids`, `_read_sequence` (`accounting.py`) |
 | ISSUED write path | `begin(record)`: `open(target, "xb")` **create-new, direct write, no temp file, no `fsync`**; refuses to reuse an existing identity (`FileExistsError` → `OpenCodeLedgerError`) | `accounting.py::begin` (lines ~140-170) |
 | Settlement write path | `finish(record)` → `_write(record)`: fixed-name temp file `.{target.name}.tmp` written complete, then `tmp.replace(target)` (atomic publication of the *final* artifact — the settle **replaces** the same artifact, it does not append a new one) | `accounting.py::finish`, `accounting.py::_write` |
 | Temp-file naming | fixed name (`.OC-0001.json.tmp`), i.e. a hard kill can leave an inert temp artifact | `_write` |
@@ -82,7 +82,15 @@ Rules implemented (`strict_scanner.py`):
   **reported, never `continue`d over**;
 * no newest-20/newest-200 (or any) truncation window;
 * the relevant file/sequence interval is established by that full enumeration and
-  recorded as an explicit interval statement;
+  recorded as an explicit interval statement.  **Recorded construction (P3-4
+  clarification, documentary only):** the executed scanner's interval statement is
+  the verbatim full-enumeration form recorded in the per-case evidence —
+  `full recursive enumeration of <ledger dir> (N file(s)); no pagination/window
+  applied` — i.e. the "proven interval" is the complete set of artifacts present in
+  the disposable ledger directory at scan time.  It is **not** a sequence-arithmetic
+  floor/ceiling proof, and absence is therefore only ever reported as the scoped,
+  report-only `NO_RECORD_IN_PROVEN_INTERVAL`; no stronger interval claim is made or
+  reconstructed after the fact;
 * duplicate identities and temp/inert artifacts are detected separately;
 * classifications: `VALID_ISSUED`, `VALID_SETTLED`, `EVIDENCE_GAP`, `CORRUPTION`,
   `MULTIPLE_MATCHES`, plus `TEMP_RESIDUE` and the report-only
@@ -115,10 +123,17 @@ case; it is listed here once per case for completeness.
 
 ### G0.1-A2 — during the durable ISSUED write (created-new, not yet committed)
 
-* boundary reached: `A2_mid_issued_write` (the production `open(target, "xb")`
-  create-new write was truncated to half of the production payload, flushed, then
-  the child idled); child PID 2144; kill: `Popen.kill()` (TerminateProcess);
-  exit code 1.
+* boundary reached: `A2_mid_issued_write`; child PID 2144; kill: `Popen.kill()`
+  (TerminateProcess); exit code 1.
+* **disclosure nuance (P3-2, stated after independent review):** the partial
+  artifact was produced by a **fault-injected short write inside the real
+  production create-new ISSUED path** (`begin()`'s production payload, truncated to
+  half its bytes by the harness wrapper), then flushed, and the child was killed
+  while idling.  It was therefore *not* literally a process kill interrupting an
+  otherwise normal full-length write at an arbitrary CPU instruction; the
+  interrupted-write state itself is harness-injected, while the write path, payload
+  and persistence code are production.  The resulting 318-byte artifact is a real
+  malformed production-path artifact.
 * artifacts: `calls/OC-0001.json` 318 B
   `0d83469f6992ede5fc7f59aea46dcb3c47e56ec598b1fac743e8c18acc53a60b` (truncated
   JSON: `invalid JSON at byte 318`), `sequence.json` 31 B.
@@ -128,7 +143,11 @@ case; it is listed here once per case for completeness.
   concrete demonstration that the tolerant reader must not be used as recovery
   proof.
 * predefined criterion: no valid ISSUED record; partial residue visible and
-  classifiable as corruption/gap → **MET**.
+  classifiable as corruption/gap → **MET**.  The excluded invalid harness attempt
+  that produced a 0-byte pre-boundary artifact (below) is **not** counted as safety
+  evidence; both that 0-byte state and the 318-byte truncated state belong to the
+  same fail-closed corruption class for the narrow claim made here, and only the
+  318-byte run is the recorded A2 result.
 
 ### G0.1-B — after ISSUED is durable, before settlement
 
@@ -215,6 +234,11 @@ full, and no additional cases were probed to search for a passing outcome.
 | E | corrupted-record control | `CORRUPTION` | 0 records (silently skipped) | MET |
 
 **Candidate result: G0.1 CANDIDATE PASS — REQUIRES INDEPENDENT REVIEW.**
+Platform proof gate after this execution: **PARTIALLY EXECUTED / NOT COMPLETE**
+(G0.1/P7 executed once; G0.2-G0.5, G1, G2 NOT RUN).  Mandatory-core implementation:
+**NOT AUTHORIZED**.  `adopt_completed_turn`: **DISABLED**.  No step is an
+authoritative PASS before independent approval, and the executing agent cannot
+self-approve the gate.
 
 * No relevant malformed/torn artifact was silently treated as absence by the strict
   scanner; the tolerant reader demonstrably does treat A2/E corruption as absence
@@ -225,6 +249,44 @@ full, and no additional cases were probed to search for a passing outcome.
 * The strict scanner can fail closed on incomplete/corrupt persistence.
 * The proof does not rely on the tolerant accounting reader.
 * Real provider/model inference calls: **0**.
+
+## 7.1 Independent proof review (recorded outcome)
+
+The independent review of this proof returned **REQUEST_CHANGES** with **P0 = 0,
+P1 = 0, P2 = 1** — the single P2 being a *status-bookkeeping wording* issue (an
+active README line still said the proof gate had not run while the same surface
+recorded the G0.1 execution), now corrected, plus the P3 notes handled below.  The
+proof evidence itself was found **sufficient**, and the following independently
+established conclusions are recorded here verbatim and are not weakened:
+
+* harness fidelity: **acceptable**; hard-kill mechanism: **acceptable**;
+* A1 **MET**; A2 **MET** (with the disclosure nuance recorded in §6); B **MET**;
+  C **MET**; D **MET**; E **MET** (scanner control);
+* the sequence-allocation window is **not** a missing safety-critical G0.1 probe;
+* replace-success / pre-return state is covered by the D-equivalent persistent
+  state;
+* **no probe shopping**: confirmed;
+* the future recovery path must **not** use the tolerant `read_records()` as
+  authoritative recovery evidence;
+* this process-kill proof does **not** claim power-loss / `fsync` durability.
+
+Recorded P3 notes (non-blocking, no scope expansion):
+
+* **P3-1** (corrected above): a missing `sequence.json` may be recovered as
+  `max(existing)+1`, but a **corrupt** one fails closed with `OpenCodeLedgerError`;
+  the earlier single-sentence summary conflated the two.
+* **P3-2** (clarified above): A2's partial artifact is a fault-injected short write
+  inside the real production create-new path, not an arbitrary-instruction
+  interruption of a normal full write; the excluded invalid attempt (0-byte
+  pre-boundary artifact) remains excluded.
+* **P3-3** (auditability limitation, recorded only): the disposable harness and
+  strict scanner were **not** committed into `src/` or `tests/`, and they are
+  deliberately **not** reconstructed or re-run after the fact; a future proof round
+  may choose to commit an equivalent harness under a reviewed location.
+* **P3-4** (documentary clarification above): the interval construction is the
+  recorded full-enumeration statement, not a sequence-arithmetic floor/ceiling
+  proof; if a stronger interval proof is wanted, it must be designed and executed
+  in a future (separately authorized) probe rather than invented now.
 
 ## 8. Limitations and non-claims
 

@@ -95,7 +95,9 @@ P1 = 0, P2 = 0); mandatory-core implementation nonetheless must not start until
 AWAITING INDEPENDENT REVIEW** (`docs/v0.3/V03E_G0_1_P7_PROOF.md`: six hard-kill case
 executions, all meeting their predefined criteria, 0 real provider/model calls);
 implementation stays **NOT AUTHORIZED** until an independent reviewer approves it,
-and G0.2-G0.5/G1/G2 remain unrun.  The mandatory core's gate is: **G0.1/P7 must PASS
+and G0.2-G0.5/G1/G2 remain unrun, so the platform proof gate is **PARTIALLY EXECUTED /
+NOT COMPLETE** (G0.1/P7 executed once as a candidate; no step is an authoritative
+PASS).  The mandatory core's gate is: **G0.1/P7 must PASS
 first**, and the ordering is design frozen → G0.1/P7 PASS → mandatory-core
 implementation may be authorized; if G0.1/P7 fails, core implementation stays
 **blocked** (no degraded-implementation path; a degraded scope would need its own
