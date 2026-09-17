@@ -144,6 +144,12 @@ def test_tool_inventory_annotations_and_descriptions(tmp_path):
         "devrelay_list_roles",
         "devrelay_get_role",
         "devrelay_send_role_prompt",
+        # ... and v0.3-D exactly five bounded-orchestration tools.
+        "devrelay_start_run",
+        "devrelay_get_run",
+        "devrelay_run_implementer",
+        "devrelay_run_reviewer",
+        "devrelay_decide_run",
     ]
     by_name = {tool.name: tool for tool in tools}
     for name in (

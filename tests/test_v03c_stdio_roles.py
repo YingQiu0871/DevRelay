@@ -71,9 +71,16 @@ def test_stdio_advertises_twelve_tools_and_the_role_tools(fake_opencode, tmp_pat
         return [tool.name for tool in tools.tools]
 
     names = run_over_stdio(ws, script)
-    assert len(EXACT_TOOLS) == 12
+    assert len(EXACT_TOOLS) == 17
     assert names == EXACT_TOOLS
-    assert names[9:] == ROLE_TOOLS
+    assert names[9:12] == ROLE_TOOLS
+    assert names[12:] == [
+        "devrelay_start_run",
+        "devrelay_get_run",
+        "devrelay_run_implementer",
+        "devrelay_run_reviewer",
+        "devrelay_decide_run",
+    ]
 
 
 def test_stdio_role_views_report_the_configured_routes(fake_opencode, tmp_path):
@@ -240,7 +247,7 @@ def test_stdio_workspace_without_roles_still_serves_every_raw_tool(fake_opencode
         }
 
     observed = run_over_stdio(ws, script)
-    assert observed["tool_count"] == 12, "role routing absent must not shrink the surface"
+    assert observed["tool_count"] == 17, "role routing absent must not shrink the surface"
     assert observed["status"]["data"]["roles"]["configured"] is False
     assert observed["raw"]["ok"] is True
     assert observed["role"]["ok"] is False and observed["role"]["error"]["type"] == "role_unconfigured"

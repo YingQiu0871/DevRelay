@@ -186,7 +186,7 @@ def test_role_tools_share_the_one_execution_lock(tmp_path):
 
     harness = build_roles_server(tmp_path, DISTINCT_ROLES)
     surface = harness.surface
-    assert len(TOOL_NAMES) == 12
+    assert len(TOOL_NAMES) == 17
     acquired = surface._execution_lock.acquire(timeout=2)
     assert acquired
     surface._execution_lock.release()

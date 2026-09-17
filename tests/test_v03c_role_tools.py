@@ -52,7 +52,7 @@ def test_inventory_is_the_accepted_nine_plus_exactly_three(tmp_path):
     harness = build_roles_server(tmp_path)
     names = [tool.name for tool in asyncio.run(harness.server.list_tools())]
     assert names == list(TOOL_NAMES)
-    assert len(names) == 12
+    assert len(names) == 17
     assert names[:9] == [
         "devrelay_status",
         "opencode_health",
@@ -64,7 +64,14 @@ def test_inventory_is_the_accepted_nine_plus_exactly_three(tmp_path):
         "opencode_wait_idle",
         "opencode_interrupt",
     ]
-    assert names[9:] == ["devrelay_list_roles", "devrelay_get_role", ROLE_TOOL]
+    assert names[9:12] == ["devrelay_list_roles", "devrelay_get_role", ROLE_TOOL]
+    assert names[12:] == [
+        "devrelay_start_run",
+        "devrelay_get_run",
+        "devrelay_run_implementer",
+        "devrelay_run_reviewer",
+        "devrelay_decide_run",
+    ]
     assert set(READ_ONLY_TOOLS) | set(SIDE_EFFECTING_TOOLS) == set(TOOL_NAMES)
 
 
@@ -612,7 +619,7 @@ def test_no_role_tool_can_accept_reject_or_sequence_anything(tmp_path):
             assert phrase not in description, name
     assert "no acceptance authority" in (tools[ROLE_TOOL].description or "")
     # The three new tools are exactly: two read-only views + one bounded send.
-    assert {name for name in TOOL_NAMES[9:]} == {
+    assert {name for name in TOOL_NAMES[9:12]} == {
         "devrelay_list_roles",
         "devrelay_get_role",
         "devrelay_send_role_prompt",
