@@ -12,11 +12,13 @@ the only way out of ``AWAITING_DECISION``.
 
 from __future__ import annotations
 
+from devrelay.orchestration.invariants import validate_run_semantics
 from devrelay.orchestration.models import (
     DECISION_SOURCE,
     DEFAULT_MAX_CYCLES,
     HARD_MAX_CYCLES,
     MIN_MAX_CYCLES,
+    SUPPORTED_RUN_ROLES,
     ORCHESTRATION_SCHEMA_VERSION,
     TERMINAL_STATES,
     Decision,
@@ -26,6 +28,7 @@ from devrelay.orchestration.models import (
     RoleRouteSnapshot,
     RunState,
     TransitionRecord,
+    TurnOutcomeState,
     TurnRecord,
 )
 from devrelay.orchestration.service import OrchestrationOutcome, OrchestrationService
@@ -56,9 +59,11 @@ __all__ = [
     "RunState",
     "TransitionRecord",
     "TurnOutcome",
+    "TurnOutcomeState",
     "TurnRecord",
     "after_decision",
     "after_role_turn",
     "generate_run_id",
+    "validate_run_semantics",
     "valid_run_id",
 ]

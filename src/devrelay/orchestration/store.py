@@ -7,15 +7,18 @@ Layout::
 * run ids are **generated** (``DR-<32 hex>``) and validated against a strict
   pattern before they ever touch the filesystem, so a caller-supplied id can
   never become a traversal primitive;
-* writes are atomic (unique temp file + ``os.replace``), so a partially written
-  document never appears as a valid run;
+* writes are atomic (unique temp file + ``os.replace``) against a crash of this
+  process; durability against power loss is **not** claimed (no ``fsync``);
 * a missing run is ``orchestration_run_not_found``; an unreadable/corrupt run is
   ``orchestration_state_corrupt`` - the store never silently recreates or resets
   a run.
 
-Only one MCP server process writes here (the accepted v0.3-B execution boundary
-serializes all tool bodies); multi-process orchestration locking is explicitly
-out of scope for v0.3-D.
+Single-writer scope: the shipped stdio MCP server builds exactly one tool
+surface, and that surface serializes every tool body with one execution lock, so
+one server process is the only writer here.  Running several surfaces or several
+processes against one workspace is explicitly **unsupported** for v0.3-D (no
+cross-process locking, no lease, no recovery); every document is additionally
+bound to the workspace it was created in, so a copied-in run is refused.
 """
 
 from __future__ import annotations
@@ -28,6 +31,7 @@ from typing import Any, Callable
 from uuid import uuid4
 
 from devrelay.errors import OrchestrationRunNotFoundError, OrchestrationStateCorruptError
+from devrelay.orchestration.invariants import validate_run_semantics
 from devrelay.orchestration.models import OrchestrationRun
 
 #: Generated run identity: prefix + 32 lowercase hex characters.
@@ -44,7 +48,8 @@ def generate_run_id() -> str:
 
 
 def valid_run_id(run_id: object) -> bool:
-    return isinstance(run_id, str) and bool(_RUN_ID_RE.match(run_id))
+    """Strict full match: no prefix/suffix, no trailing newline or CR."""
+    return isinstance(run_id, str) and bool(_RUN_ID_RE.fullmatch(run_id))
 
 
 class OrchestrationStore:
@@ -106,6 +111,9 @@ class OrchestrationStore:
             ) from exc
         try:
             run = OrchestrationRun.model_validate(payload)
+        except OrchestrationStateCorruptError:
+            # semantic invariants already explained the problem precisely
+            raise
         except Exception as exc:  # noqa: BLE001 - pydantic validation surface
             raise OrchestrationStateCorruptError(
                 f"orchestration run {run_id} is malformed ({type(exc).__name__}); "
@@ -115,10 +123,38 @@ class OrchestrationStore:
             raise OrchestrationStateCorruptError(
                 f"orchestration run {run_id} contains a different run id; refusing to use it"
             )
+        self._require_provenance(run)
+        self._require_bound_workspace(run)
         return run
 
+    def _require_provenance(self, run: OrchestrationRun) -> None:
+        """A persisted run must record the transition that produced its state."""
+        if run.last_transition is None:
+            raise OrchestrationStateCorruptError(
+                f"orchestration run {run.run_id} carries no transition provenance; "
+                "refusing to treat it as authoritative"
+            )
+
+    def _require_bound_workspace(self, run: OrchestrationRun) -> None:
+        """A run copied in from another workspace is corrupt here, never adopted."""
+        bound = str(self.devrelay_dir.parent.resolve())
+        stored = str(Path(run.workspace).resolve()) if run.workspace else ""
+        if not stored or stored != bound:
+            raise OrchestrationStateCorruptError(
+                f"orchestration run {run.run_id} is bound to workspace "
+                f"{run.workspace!r}, which is not this store's workspace "
+                f"({bound}); refusing to adopt or rewrite it"
+            )
+
     def save(self, run: OrchestrationRun) -> None:
-        """Atomically persist *run* (unique temp file + replace)."""
+        """Atomically persist *run* (unique temp file + replace).
+
+        The semantic invariants are re-checked here as well as on load, so an
+        internally inconsistent run can never reach the disk in the first place.
+        """
+        validate_run_semantics(run)
+        self._require_provenance(run)
+        self._require_bound_workspace(run)
         path = self.path_for(run.run_id)
         path.parent.mkdir(parents=True, exist_ok=True)
         payload = json.dumps(run.model_dump(mode="json"), indent=2, sort_keys=False)

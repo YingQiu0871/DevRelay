@@ -11,7 +11,7 @@ from __future__ import annotations
 from enum import Enum
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from devrelay.models import utcnow_iso
 
@@ -25,6 +25,9 @@ DEFAULT_MAX_CYCLES = 2
 
 #: Every decision recorded by v0.3-D comes from outside DevRelay.
 DECISION_SOURCE = "external_planner"
+
+#: The semantic roles a run may reference (matches the v0.3-C vocabulary).
+SUPPORTED_RUN_ROLES: tuple[str, ...] = ("implementer", "reviewer")
 
 
 class RunState(str, Enum):
@@ -63,6 +66,14 @@ class OrchestrationAction(str, Enum):
     RUN_REVIEWER = "run_reviewer"
     DECIDE = "decide"
     BLOCK = "block"
+
+
+class TurnOutcomeState(str, Enum):
+    """The exact outcome vocabulary of a recorded orchestration turn."""
+
+    IN_FLIGHT = "in_flight"
+    COMPLETED = "completed"
+    BLOCKED = "blocked"
 
 
 class RoleRouteSnapshot(BaseModel):
@@ -117,10 +128,19 @@ class TurnRecord(BaseModel):
     retry_safe: bool = False
     call_ids: list[str] = Field(default_factory=list)
     assistant_message_ids: list[str] = Field(default_factory=list)
-    #: "in_flight" until the accepted role result is recorded; then
-    #: "completed" or "blocked".
-    outcome: str = "in_flight"
+    #: ``in_flight`` until the accepted role result is recorded, then
+    #: ``completed`` or ``blocked`` (constrained vocabulary).
+    outcome: str = TurnOutcomeState.IN_FLIGHT.value
     blocked_reason: str = ""
+
+    @model_validator(mode="after")
+    def _known_outcome(self) -> "TurnRecord":
+        allowed = {item.value for item in TurnOutcomeState}
+        if self.outcome not in allowed:
+            raise ValueError(
+                f"turn outcome {self.outcome!r} is not one of {sorted(allowed)}"
+            )
+        return self
 
     def public(self) -> dict[str, Any]:
         data = self.model_dump(mode="json")
@@ -171,8 +191,17 @@ class OrchestrationRun(BaseModel):
     current_cycle: int = 1
     completed_cycles: int = 0
 
+    #: One per reserved model-bearing turn slot (equal to ``model_turns_used``).
     turn_attempts: int = 0
     model_turn_budget: int = 0
+    #: **Consumed orchestration model-turn budget slots** - NOT a count of
+    #: confirmed provider/HTTP submissions.  A slot is consumed when the durable
+    #: in-flight intent is committed, before the role/model call is entered, so
+    #: ``model_turns_used = 1`` with zero actual POSTs (for example a connect
+    #: failure after the slot was reserved) is valid and intentional.  The truth
+    #: about an actual submission lives in the ledger and in the per-turn
+    #: ``submission_attempted``/``submission_status``/``submission_uncertain``/
+    #: ``call_ids`` evidence.
     model_turns_used: int = 0
 
     created_at: str = Field(default_factory=utcnow_iso)
@@ -189,6 +218,18 @@ class OrchestrationRun(BaseModel):
     #: is never replayed: the next mutating operation fails the run closed.
     in_flight_turn: TurnRecord | None = None
     blocked_reason: str = ""
+
+    @model_validator(mode="after")
+    def _semantic_invariants(self) -> "OrchestrationRun":
+        """Every constructed/loaded run must be semantically honest.
+
+        The validator is imported lazily so this module stays import-cycle free;
+        it is the same rule set the store applies on load and on save.
+        """
+        from devrelay.orchestration.invariants import validate_run_semantics
+
+        validate_run_semantics(self)
+        return self
 
     # ------------------------------------------------------------------
     @property
@@ -235,7 +276,12 @@ class OrchestrationRun(BaseModel):
             "decision_history": [
                 record.model_dump(mode="json") for record in self.decision_history
             ],
-            "legal_next_actions": legal_next_actions(self.state),
+            # While a model-bearing turn is in flight no further model-bearing
+            # action is legal: invoking one only materializes the interruption
+            # (recovery belongs to v0.3-E), so it must not be advertised.
+            "legal_next_actions": (
+                [] if self.in_flight_turn is not None else legal_next_actions(self.state)
+            ),
             "acceptance_authority": False,
         }
 
@@ -253,6 +299,7 @@ def legal_next_actions(state: RunState) -> list[str]:
 
 __all__ = [
     "DECISION_SOURCE",
+    "SUPPORTED_RUN_ROLES",
     "DEFAULT_MAX_CYCLES",
     "HARD_MAX_CYCLES",
     "MIN_MAX_CYCLES",
@@ -265,6 +312,7 @@ __all__ = [
     "RoleRouteSnapshot",
     "RunState",
     "TransitionRecord",
+    "TurnOutcomeState",
     "TurnRecord",
     "legal_next_actions",
 ]
