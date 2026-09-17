@@ -19,6 +19,7 @@ from typing import Any, Callable
 
 from devrelay.errors import (
     DevRelayError,
+    RoleRoutingError,
     OrchestrationCycleLimitError,
     OrchestrationInvalidTransitionError,
     OrchestrationRouteChangedError,
@@ -38,6 +39,7 @@ from devrelay.orchestration.models import (
     OrchestrationRun,
     RoleRouteSnapshot,
     RunState,
+    TurnOutcomeState,
     TurnRecord,
 )
 from devrelay.orchestration.store import OrchestrationStore
@@ -117,7 +119,25 @@ class OrchestrationService:
         }
 
     def _require_route_unchanged(self, run: OrchestrationRun, role: str) -> RoleRouteSnapshot:
-        current = RoleRouteSnapshot.from_route(self._router.resolve(role))
+        try:
+            resolved = self._router.resolve(role)
+        except RoleRoutingError as exc:
+            # The role captured by this run can no longer be resolved (the
+            # workspace configuration became unconfigured or invalid).  That is
+            # route invalidation for an existing run - fail it closed, keep the
+            # snapshot, and never fall back to another route or model.
+            self._block(
+                run,
+                reason="route_changed",
+                role=role,
+                note=f"role route unresolvable: {getattr(exc, 'code', type(exc).__name__)}",
+            )
+            raise OrchestrationRouteChangedError(
+                f"the configured route for role {role} can no longer be resolved "
+                f"({getattr(exc, 'code', type(exc).__name__)}); run {run.run_id} is failed "
+                "closed (no route replacement, no default model, no fallback)"
+            ) from exc
+        current = RoleRouteSnapshot.from_route(resolved)
         snapshot = run.route_snapshot.get(role)
         if snapshot is None or snapshot.model_dump() != current.model_dump():
             self._block(run, reason="route_changed", role=role, note="role route changed")
@@ -150,19 +170,46 @@ class OrchestrationService:
         return run
 
     def _materialize_interrupted_turn(self, run: OrchestrationRun) -> None:
-        """A persisted in-flight turn is never replayed: fail the run closed."""
-        if run.in_flight_turn is None:
+        """Finalize a persisted in-flight turn into the role history, then block.
+
+        The interrupted attempt is *never* replayed, but its sanitized evidence
+        must survive: the record is completed as ``blocked``/``turn_interrupted``
+        and appended to the correct role history (so ``model_turns_used`` keeps a
+        matching turn record), the transition keeps the phase action and role as
+        provenance, and only then is the run failed closed.
+        """
+        attempt = run.in_flight_turn
+        if attempt is None:
             return
-        run.in_flight_turn.outcome = "blocked"
-        run.in_flight_turn.blocked_reason = "turn_interrupted"
-        run.in_flight_turn.completed_at = utcnow_iso()
+        attempt.outcome = TurnOutcomeState.BLOCKED.value
+        attempt.blocked_reason = "turn_interrupted"
+        attempt.completed_at = utcnow_iso()
+        if attempt.role == "implementer":
+            run.implementer_turns.append(attempt)
+        else:
+            run.reviewer_turns.append(attempt)
         run.in_flight_turn = None
-        self._block(
-            run,
-            reason="turn_interrupted",
-            role="",
-            note="a model turn was in flight when the process stopped; no replay",
+        transition = policy.Transition(
+            state=RunState.BLOCKED,
+            current_cycle=run.current_cycle,
+            completed_cycles=run.completed_cycles,
+            blocked_reason="turn_interrupted",
         )
+        record = policy.transition_record(
+            action=(
+                OrchestrationAction.RUN_IMPLEMENTER
+                if attempt.role == "implementer"
+                else OrchestrationAction.RUN_REVIEWER
+            ),
+            source=SOURCE_MODEL,
+            run=run,
+            next_state=RunState.BLOCKED,
+            role=attempt.role,
+            note="interrupted before the accepted result was recorded; never replayed",
+        )
+        transition.apply(run, record)
+        run.updated_at = utcnow_iso()
+        self.store.save(run)
 
     def _load_for_action(self, run_id: object) -> OrchestrationRun:
         run = self.store.load(run_id)
@@ -209,7 +256,17 @@ class OrchestrationService:
                 "the implementer and reviewer sessions must be different: one session "
                 "for both roles would destroy reviewer independence"
             )
-        routes = self._current_routes()
+        try:
+            routes = self._current_routes()
+        except RoleRoutingError as exc:
+            # Nothing durable exists yet, so there is no run to fail closed; the
+            # planner still gets the route-change code rather than a
+            # provider-shaped or generic error, and no model is ever called.
+            raise OrchestrationRouteChangedError(
+                "the configured role routes could not be resolved "
+                f"({getattr(exc, 'code', type(exc).__name__)}); no orchestration run "
+                "was created and no default model or fallback route is substituted"
+            ) from exc
         # Ownership is verified before any run exists.
         self._verify_session(implementer_session_id)
         self._verify_session(reviewer_session_id)
@@ -232,6 +289,8 @@ class OrchestrationService:
             next_state=transition.state,
             note=f"external start with max_cycles={max_cycles}",
         )
+        # A brand-new run has no previous state; do not claim otherwise.
+        run.last_transition.previous_state = ""
         transition.apply(run, run.last_transition)
         return self.store.create(run)
 
@@ -326,7 +385,9 @@ class OrchestrationService:
                 "never retried automatically"
             )
 
-        attempt.outcome = "completed" if achieved else "blocked"
+        attempt.outcome = (
+            TurnOutcomeState.COMPLETED.value if achieved else TurnOutcomeState.BLOCKED.value
+        )
         attempt.blocked_reason = "" if achieved else error_type
         attempt.completed_at = utcnow_iso()
         run.in_flight_turn = None
