@@ -9,11 +9,14 @@ REQUIRED BEFORE IMPLEMENTATION**.  The design is therefore **frozen**; the
 implementation is **NOT authorized**, the pre-implementation platform proof gate is
 **NOT complete** (**G0.1 / P7 = PASS — AUTHORITATIVE PASS / INDEPENDENTLY APPROVED**
 by the final proof review *APPROVE V0.3-E G0.1 / P7 PLATFORM PROOF* (P0 = 0, P1 = 0,
-P2 = 0) — `V03E_G0_1_P7_PROOF.md`; **G0.2 = CANDIDATE PASS / AWAITING INDEPENDENT
-REVIEW** — executed once offline at `4448f92`, cases A-J fail-closed, 0 provider/model
-calls — `V03E_G0_2_FALSE_CORRELATION_PROOF.md`; steps G0.3-G0.5, G1 and G2 have
-**not** run), `adopt_completed_turn` remains **DISABLED**, and no provider/model call
-occurred during the review (the reviews were static/documentary).
+P2 = 0) — `V03E_G0_1_P7_PROOF.md`; **G0.2 = CLEAN CANDIDATE PASS / AWAITING
+INDEPENDENT REVIEW** — the original round was followed by one `REQUEST_CHANGES` review
+and a separately authorized clean re-run under the oracle precommitted in commit
+`12ea1b7`; the ten fixed cases A-J ran once each, all fail-closed, 0 provider/model
+calls — `V03E_G0_2_CLEAN_RERUN_PROOF.md` (original record preserved:
+`V03E_G0_2_FALSE_CORRELATION_PROOF.md`); steps G0.3-G0.5, G1 and G2 have **not** run),
+`adopt_completed_turn` remains **DISABLED**, and no provider/model call occurred during
+the reviews (the reviews were static/documentary).
 
 * Frozen contract: this document; acceptance target:
   `docs/v0.3/V03E_ACCEPTANCE.md`.
@@ -679,11 +682,14 @@ run):** platform proof gate = **PARTIALLY EXECUTED / NOT COMPLETE**.  **G0.1 / P
 PASS** (authoritative, independently approved: the final proof review issued *APPROVE
 V0.3-E G0.1 / P7 PLATFORM PROOF* with P0 = 0, P1 = 0, P2 = 0 — this PASS comes from
 that independent review of the proof candidate, never from executor self-approval);
-**G0.2 = CANDIDATE PASS / AWAITING INDEPENDENT REVIEW** (executed once offline at
-`4448f92`; ten planned cases A-J fail-closed: a unique `MATCH` only when the complete
-identity tuple matches exactly one record in the run's role session, otherwise
-`NO_MATCH` / `evidence_conflict` / `evidence_gap` / `corruption`; no timestamp
-tie-break; 0 provider/model calls — `V03E_G0_2_FALSE_CORRELATION_PROOF.md`);
+**G0.2 = CLEAN CANDIDATE PASS / AWAITING INDEPENDENT REVIEW** (the original round was
+reviewed once with `REQUEST_CHANGES` and then cleanly re-run under the oracle
+precommitted in commit `12ea1b7`; the ten fixed cases A-J ran once each and failed
+closed: a unique `MATCH` only when the complete identity tuple matches exactly one
+record in the run's role session, otherwise `NO_MATCH` / `evidence_conflict` /
+`evidence_gap` / `corruption`; no timestamp tie-break; the oracle was unchanged during
+execution; 0 provider/model calls — `V03E_G0_2_CLEAN_RERUN_PROOF.md`; original round:
+`V03E_G0_2_FALSE_CORRELATION_PROOF.md`);
 **G0.3 = NOT RUN**, **G0.4 = NOT RUN**, **G0.5 = NOT RUN**,
 **G1 = NOT RUN**, **G2 = NOT RUN**.  The design's local hard prerequisite is
 therefore **satisfied**: G0.1/P7 **no longer blocks mandatory-core implementation

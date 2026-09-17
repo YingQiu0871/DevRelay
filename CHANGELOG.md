@@ -13,7 +13,7 @@ F1-F12 **CLOSED**, decision *APPROVE V0.3-E FAIL-CLOSED CORE DESIGN; PLATFORM PR
 GATE REQUIRED BEFORE IMPLEMENTATION*.  Implementation is **not authorized**, the
 platform proof gate is **not complete** (**G0.1 / P7 = PASS** — authoritative,
 independently approved by *APPROVE V0.3-E G0.1 / P7 PLATFORM PROOF* with
-P0 = 0, P1 = 0, P2 = 0; G0.3-G0.5, G1, G2 not run; G0.2 ran once with a candidate pass, see below), `adopt_completed_turn`
+P0 = 0, P1 = 0, P2 = 0; G0.3-G0.5, G1, G2 not run; G0.2 ran and, after one `REQUEST_CHANGES` review, was cleanly re-run under a precommitted oracle with a clean candidate pass, see below), `adopt_completed_turn`
 remains **disabled**, and
 the recorded P3 observations (P3-1, P3-2, P3-4/P3-5) stay non-blocking.
 
@@ -50,11 +50,17 @@ with no false attribution and no timestamp tie-break, and the corruption-strict 
 wins over a clean unique candidate (the tolerant accounting reader would silently skip
 the torn artifact and claim uniqueness).  Two central findings: the ledger carries
 **no run identity and no cycle/attempt identity**, and a live in-flight attempt never
-durably contains the ledger `call_id`.  Result: **G0.2 = CANDIDATE PASS / AWAITING
-INDEPENDENT REVIEW** (self-approval forbidden); the platform proof gate stays
-**partially executed / not complete**, mandatory-core implementation stays **not
-authorized** and `adopt_completed_turn` stays **disabled**.  Evidence:
-`docs/v0.3/V03E_G0_2_FALSE_CORRELATION_PROOF.md`.
+durably contains the ledger `call_id`.  That round's result was a candidate pass; the
+first independent review returned `REQUEST_CHANGES` (P0 = 0, P1 = 0, P2 = 2), and a
+separately authorized **clean G0.2 re-run** was then executed under an oracle
+precommitted in commit `12ea1b7` (`docs/v0.3/V03E_G0_2_RERUN_ORACLE.md`): the ten fixed
+cases A-J ran once each, every verdict stayed inside its precommitted allowed set, the
+oracle was unchanged during execution and no weak metadata produced an attribution.
+Result: **G0.2 = CLEAN CANDIDATE PASS / AWAITING INDEPENDENT REVIEW** (self-approval
+forbidden); the platform proof gate stays **partially executed / not complete**,
+mandatory-core implementation stays **not authorized** and `adopt_completed_turn` stays
+**disabled**.  Clean-rerun evidence: `docs/v0.3/V03E_G0_2_CLEAN_RERUN_PROOF.md`;
+original record (preserved): `docs/v0.3/V03E_G0_2_FALSE_CORRELATION_PROOF.md`.
 
 That approval followed three earlier review rounds: the first independent design
 review returned `REQUEST_CHANGES` (P0 = 1, P1 = 6, P2 = 5) and the

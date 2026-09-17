@@ -2,7 +2,17 @@
 
 Status: **G0.2 CANDIDATE PASS — REQUIRES INDEPENDENT REVIEW** (self-approval is
 forbidden; the mandatory-core implementation stays **NOT AUTHORIZED** until a
-separately issued implementation authorization).
+separately issued implementation authorization).  This file is the **original**
+G0.2 proof record and is preserved as history.
+
+> **Historical pointer (added later; this document's evidence and conclusions are
+> unchanged):** after the first independent review returned `REQUEST_CHANGES`
+> (P0 = 0, P1 = 0, P2 = 2), a separately authorized **clean G0.2 re-run** was
+> performed under an oracle precommitted in commit `12ea1b7`
+> (`docs/v0.3/V03E_G0_2_RERUN_ORACLE.md`) and is recorded in
+> `docs/v0.3/V03E_G0_2_CLEAN_RERUN_PROOF.md`.  This original record — including the
+> first complete-pass oracle bug, the invalid harness attempts and the first review —
+> is neither erased nor rewritten.
 
 * Platform proof gate: **PARTIALLY EXECUTED / NOT COMPLETE** — **G0.1 / P7 = PASS**
   (authoritative, independently approved); **G0.2 = CANDIDATE PASS / AWAITING
@@ -52,19 +62,19 @@ was invented.
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | `run_id` | Y (`DR-<32hex>`) | **–** | §13 lists it in the evidence set; the ledger schema has no such field | none across the two sides (no join key) | **no** | n/a | **Y** (ledger-side run identity does not exist) |
 | `workspace` | Y | – (only `session_id`) | §12.4 workspace binding | binding assertion only | no | n/a | Y (needs the remote session read; G0.5) |
-| `role` | Y (`attempt.role`) | **–** | §8.4/§11.7 | derived only through the role→session binding | only via `session_id` | Y (wrong role session) | Y on its own |
+| `role` | Y (`attempt.role`) | **–** | §8.4/§11 item 7 | derived only through the role→session binding | only via `session_id` | Y (wrong role session) | Y on its own |
 | `cycle` | Y (`attempt.cycle`) | **–** | §8.2/§8.4 | none on the ledger side | **no** | no (cannot be checked) | **Y** (never inferred from timestamps — P9 unrun) |
-| `session_id` | Y (implementer/reviewer session) | Y | §9.1 identity field, §11.7 | strong inside one run; **shared by all cycles of a role**, not unique across runs | yes, but only as one element of the full tuple | Y (different session) | Y alone (session equality is not attribution) |
-| `operation` | **–** (only `operation_state` after the call) | Y | §9.1 identity field | label only — the accepted ownership probe carries the **same** label (`send_prompt`) with no prompt | yes, as part of the tuple **together with identity carriage** | Y (different operation) | **Y alone** (it is not a submission marker) |
-| `method` / `path` | – | Y | not in §9.1 | corroborating evidence only | **no** (not authorized as a filter) | no | Y |
-| `prompt_sha256` | Y | Y | §9.1, §12.2 | pinpoint equality of the exact prompt string (unsalted identifier, not secrecy) | yes (required) | Y (different digest) | Y alone (P2/G2 unrun; remote text fidelity unproven) |
-| `prompt_chars` | Y | Y | §9.1 | corroborating equality | yes (required) | Y | Y alone |
-| `model` | Y (`resolved_model` snapshot) | Y (sanitized, clipped to 128) | §9.1, §11.7 | equality with a sanitize/clip asymmetry | yes (required) | Y (mismatch → no match) | Y alone |
-| `agent` | Y (`resolved_agent` snapshot) | Y (sanitized, clipped to 64) | §9.1, §11.7 | as `model` (empty on both sides is equal) | yes (required) | Y | Y alone |
+| `session_id` | Y (implementer/reviewer session) | Y | §9 item 1 identity field, §11 item 7 | strong inside one run; **shared by all cycles of a role**, not unique across runs | yes, but only as one element of the full tuple | Y (different session) | Y alone (session equality is not attribution) |
+| `operation` | **–** (only `operation_state` after the call) | Y | §9 item 1 identity field | label only — the accepted ownership probe carries the **same** label (`send_prompt`) with no prompt | yes, as part of the tuple **together with identity carriage** | Y (different operation) | **Y alone** (it is not a submission marker) |
+| `method` / `path` | – | Y | not in §9 item 1 | corroborating evidence only | **no** (not authorized as a filter) | no | Y |
+| `prompt_sha256` | Y | Y | §9 item 1, §12.2 | pinpoint equality of the exact prompt string (unsalted identifier, not secrecy) | yes (required) | Y (different digest) | Y alone (P2/G2 unrun; remote text fidelity unproven) |
+| `prompt_chars` | Y | Y | §9 item 1 | corroborating equality | yes (required) | Y | Y alone |
+| `model` | Y (`resolved_model` snapshot) | Y (sanitized, clipped to 128) | §9 item 1, §11 item 7 | equality with a sanitize/clip asymmetry | yes (required) | Y (mismatch → no match) | Y alone |
+| `agent` | Y (`resolved_agent` snapshot) | Y (sanitized, clipped to 64) | §9 item 1, §11 item 7 | as `model` (empty on both sides is equal) | yes (required) | Y | Y alone |
 | `call_id` | **Y only on a settled turn** (`TurnRecord.call_ids`); **– in a live in-flight attempt** | Y (identity + filename) | §13 (`attempt.call_ids…`, `ledger.call_id`) | exact — when it is durable, which it is **not** for the recovery input | **no for the recovery input** (see §8); if ever present, only as a lookup key with the invariants re-checked | n/a | Y for the crash boundary |
-| `assistant_message_ids` | Y on settled turns | – | §11.3-§11.5 (session-history side) | session-history correlation, not ledger correlation | no (not a ledger field) | n/a | Y here |
-| `state` (`ISSUED`/`COMPLETED`/…) | Y only after the call (`operation_state`) | Y | §11.2 | outcome class, not identity | no | Y for adoption (§11.2 requires settled `COMPLETED`) | Y |
-| `http_status`, `response_media_type`, `submission_uncertain` | Y only after the call (`submission_*`) | Y | §11.2 | classification, not identity | no | Y for adoption | Y |
+| `assistant_message_ids` | Y on settled turns | – | §11 items 3-5 (session-history side) | session-history correlation, not ledger correlation | no (not a ledger field) | n/a | Y here |
+| `state` (`ISSUED`/`COMPLETED`/…) | Y only after the call (`operation_state`) | Y | §11 item 2 | outcome class, not identity | no | Y for adoption (§11 item 2 requires settled `COMPLETED`) | Y |
+| `http_status`, `response_media_type`, `submission_uncertain` | Y only after the call (`submission_*`) | Y | §11 item 2 | classification, not identity | no | Y for adoption | Y |
 | `issued`, `external_request_count` | – | Y | accounting only | accounting | no | no | Y |
 | `started_at` / `completed_at` | Y (`attempt.started_at`) | Y | §12.2 last bullet; **P9 unrun** | timestamps are **not** identity authority | **no** | no | **Y** (recorded descriptively only) |
 | `route_source` | Y | – | §12.3 drift detection | route provenance, not identity | no | n/a | Y |
@@ -74,7 +84,7 @@ was invented.
 **Consequence of the table:** the only durable join that can exist between a live
 in-flight attempt and the accepted ledger is the tuple
 `(operation, session_id, prompt_sha256, prompt_chars, model, agent)` — exactly
-§9.1 — with `role` supplied by the run document's role→session binding and with
+§9 item 1 — with `role` supplied by the run document's role→session binding and with
 "identity carriage" (a non-empty `prompt_sha256`) distinguishing a real submission
 from the ownership probe that shares the operation label.
 
@@ -82,7 +92,11 @@ from the ownership probe that shares the operation label.
 
 The oracle is a **disposable proof harness** (`oracle.py` in the OS temp area; not
 production code, not committed).  It was frozen before the cases ran and derives
-only from §9/§11/§12.
+only from §9/§11/§12.  **Citation note (P3 cleanup):** the frozen SPEC uses numbered
+list items for §9 and §11, so the oracle rules are cited as "§9 item N" / "§11 item
+N"; §12.1-§12.6 and §8.1-§8.4 are real subsections.  Earlier versions of this file
+used `§9.1`/`§9.2`/`§11.2`-style labels; those were wrong and are corrected here
+without changing any rule or result.
 
 **Scope filter** (a record is *in scope* when both hold):
 
@@ -110,7 +124,7 @@ only from §9/§11/§12.
 | 4 | no candidate | `NO_MATCH` (report-only "no record in the proven interval", **never** "not submitted") |
 | 5 | two or more candidates | `MULTIPLE_MATCHES` (→ `evidence_conflict`) |
 
-For a `MATCH`, the oracle additionally evaluates the **§11.2 ledger half** of the
+For a `MATCH`, the oracle additionally evaluates the **§11 item 2 ledger half** of the
 adoption gate (settled `COMPLETED`, 2xx, JSON media type, `submission_uncertain ==
 false`) and labels it as the adoption gate only — the mandatory core never adopts.
 
@@ -199,7 +213,7 @@ and every case-level assertion held".
   (636-byte ISSUED record `calls/OC-0017.json`, sha256
   `38f542e8714a47fd77e1e4a8d4f5b8fcb984bf47812f795f80ad9cec085316a3`); attempt digest
   `bdf56b51b85ae866962d1e451c66b75498d079812a9809210b73cbcf29bde557`, `prompt_chars = 18`,
-  `attempt.call_ids = []`.  The matched record is **ISSUED**, so the §11.2 ledger half
+  `attempt.call_ids = []`.  The matched record is **ISSUED**, so the §11 item 2 ledger half
   is *not* met (a crash during submission is not adoptable evidence of completion).
 * **G0.2-B** — same corpus shape; the rejected look-alike is the settled cycle-1
   implementer submission (`OC-0007`, digest `ff1c547022333d0e…`, 16 chars).
@@ -219,7 +233,7 @@ and every case-level assertion held".
 * **G0.2-F** — constructed `OC-0904` (reviewer session, target digest and route) is
   out of scope by session; constructed `OC-0905` (`read_messages` with the target
   digest) is out of scope by operation.  *Limitation:* `method`/`path` are not part of
-  the §9.1 tuple, so a same-operation record with a different endpoint path is not
+  the §9 item 1 tuple, so a same-operation record with a different endpoint path is not
   distinguishable; no path rule was invented.
 * **G0.2-G** — a second production run (`DR-bbbb…`, sessions `ses_impl_b`/`ses_rev_b`)
   wrote into the **same** ledger (records `OC-0018`–`OC-0024`); none is a candidate.
@@ -241,7 +255,7 @@ and every case-level assertion held".
   / 1 malformed → `CORRUPTION`.  Tolerant `read_records()` on the *same* corpus
   returned 17 records and would have reported a unique `MATCH` on `OC-0017`: the
   contrast is the concrete reason the frozen design requires a dedicated
-  corruption-strict reader (§9.2).
+  corruption-strict reader (§9 item 2).
 
 ## 8. Special case — `call_id`
 
@@ -268,7 +282,7 @@ Consequences recorded: the association "attempt ↔ `call_id`" becomes durable *
 together with the settlement** (i.e. when the run is no longer in an in-flight state),
 so `call_id` cannot be used as a lookup key by the recovery reader for the recovery
 input; and there is no accepted ordering in which the id is persisted earlier.  If it
-were ever available (settled turn), it would still be a lookup key only — every §9.1
+were ever available (settled turn), it would still be a lookup key only — every §9 item 1
 identity value plus the document invariants would have to agree; a bare `call_id`
 match is never sufficient on its own.  **No `call_id` was retrofitted into the
 oracle**: the oracle consumes no `call_id` input (it only reports the ids of the
@@ -282,13 +296,13 @@ case G found neither run id anywhere in the ledger.  There is therefore **no dir
 run↔ledger identity**, and the proof does not claim one.
 
 The weaker relation that actually exists is: `run document → role session id` (one
-of exactly two ids bound to the run) `+` the §9.1 identity tuple carried by a
+of exactly two ids bound to the run) `+` the §9 item 1 identity tuple carried by a
 submission record.  Consequences: (a) a call from another run in the same workspace
 can only be excluded by the session binding, never by run identity; (b) if a foreign
 call shares the target's session *and* the full tuple, the durable evidence cannot
 separate them (case G) → fail closed; (c) positive correlation stays bounded to
 "exactly one record matching the attempt identity in the role session", which is
-precisely §9.1 and §11.2.
+precisely §9 item 1 and §11 item 2.
 
 ## 10. Session identity
 
@@ -331,7 +345,7 @@ descriptively only and were **never** used to select, rank or break a tie:
 2. **Interpretation decision (flagged for the independent review).**  A complete,
    schema-valid, in-scope record that carries **no** prompt identity is treated as a
    non-match (reported, never matched) rather than as a per-record evidence gap.
-   Rationale: §9.2's no-silent-skip rule names *unreadable, unparsable, torn or
+   Rationale: §9 item 2's no-silent-skip rule names *unreadable, unparsable, torn or
    schema-invalid* records — this record is none of those; it is a different,
    complete call, and the accepted code path can only produce prompt-free
    `send_prompt` records (the submission path requires a non-empty prompt and always
@@ -353,7 +367,7 @@ descriptively only and were **never** used to select, rank or break a tie:
    create one.  A pathological (very long or sanitized) model string could therefore
    turn a true correlation into `NO_MATCH` — recorded as a limitation, not a safety
    defect.
-5. **`method`/`path` are not part of the §9.1 tuple** (case F): the accepted ledger
+5. **`method`/`path` are not part of the §9 item 1 tuple** (case F): the accepted ledger
    does distinguish the probe from the submission by method/path, but the frozen
    identity list does not include them, so no path rule was invented and no claim is
    made about same-operation/other-path records.
@@ -380,7 +394,7 @@ recorded here in full and **excluded from the evidence of record**:
    complete pass applied an invented rule ("any in-scope record without a prompt
    identity ⇒ per-record evidence gap"); because the accepted ownership probe is such
    a record, all cases except I returned `EVIDENCE_GAP`.  The rule was corrected to the
-   §9.1/§9.2 reading documented in §4/§12.  **This correction increases `MATCH`
+   §9 items 1/2 reading documented in §4/§12.  **This correction increases `MATCH`
    outcomes and is therefore explicitly flagged for independent scrutiny**; the
    reasoning from the frozen text is recorded in §12.2, both readings are reported,
    and no verdict from that pass is used.
@@ -411,7 +425,7 @@ The G0.2 candidate result does **not** establish any of the following:
 * session ownership / workspace binding (`workspace_match`) or P6 — not provable
   offline;
 * that a `MATCH` means the provider completed anything: the crash-boundary match is an
-  **ISSUED** record; adoption requires the §11.2 settled/2xx/JSON/uncertain-false
+  **ISSUED** record; adoption requires the §11 item 2 settled/2xx/JSON/uncertain-false
   evidence plus the session-history conditions, and remains **DISABLED**;
 * that `adopt_completed_turn` is enabled or authorized, or that mandatory-core
   implementation is authorized;
@@ -437,7 +451,7 @@ against `http://opencode.invalid`); the ledger and run documents are workspace-l
 behaved fail-closed:
 
 * a unique exact correlation **is** possible when, and only when, exactly one ledger
-  record matches the §9.1 identity tuple in the run's role session (case A: `MATCH`);
+  record matches the §9 item 1 identity tuple in the run's role session (case A: `MATCH`);
 * every ambiguity resolved to a fail-closed outcome — same session/different attempt
   → `NO_MATCH` (case B); identical prompt digests → `MULTIPLE_MATCHES` (case C); weak
   field equality → no candidate (case D); stale/unprovable cycle → conflict (case E);
