@@ -95,10 +95,15 @@ P1 = 0, P2 = 0); mandatory-core implementation nonetheless must not start until
 (`docs/v0.3/V03E_G0_1_P7_PROOF.md`: six hard-kill case executions, all meeting their
 predefined criteria, 0 real provider/model calls) and the final independent proof
 review issued *APPROVE V0.3-E G0.1 / P7 PLATFORM PROOF* (**P0 = 0, P1 = 0, P2 = 0**),
-making **G0.1 / P7 = PASS** (authoritative, independently approved).  G0.1/P7
-therefore no longer blocks mandatory-core implementation *eligibility*;
-implementation nonetheless remains **NOT AUTHORIZED** until a separately issued
-implementation authorization, and G0.2-G0.5/G1/G2 remain unrun, so the platform
+making **G0.1 / P7 = PASS** (authoritative, independently approved).  **G0.2**
+(offline run<->call false-correlation) was then executed once at `4448f92` and
+returned a **candidate pass** awaiting independent review: all ten planned cases A-J
+behaved fail-closed against production-generated corpora, with a unique correlation
+only when the complete frozen identity tuple matches exactly one record in the run's
+role session and 0 real provider/model calls.  G0.1/P7 therefore no longer blocks
+mandatory-core implementation *eligibility*; implementation nonetheless remains
+**NOT AUTHORIZED** until a separately issued implementation authorization, and
+G0.3-G0.5/G1/G2 remain unrun (G0.2 ran once with a candidate pass), so the platform
 proof gate is **PARTIALLY EXECUTED / NOT COMPLETE** (not passed, not complete).  The mandatory core's gate was **G0.1/P7 PASS
 first** — and it **has** passed, so the second step of the ordering design frozen →
 G0.1/P7 PASS → mandatory-core implementation may be authorized is now satisfied;

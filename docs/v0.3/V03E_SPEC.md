@@ -9,9 +9,11 @@ REQUIRED BEFORE IMPLEMENTATION**.  The design is therefore **frozen**; the
 implementation is **NOT authorized**, the pre-implementation platform proof gate is
 **NOT complete** (**G0.1 / P7 = PASS — AUTHORITATIVE PASS / INDEPENDENTLY APPROVED**
 by the final proof review *APPROVE V0.3-E G0.1 / P7 PLATFORM PROOF* (P0 = 0, P1 = 0,
-P2 = 0) — `V03E_G0_1_P7_PROOF.md`; steps G0.2-G0.5, G1 and G2 have **not** run),
-`adopt_completed_turn` remains **DISABLED**, and no provider/model call
-occurred during the review (the review was static/documentary).
+P2 = 0) — `V03E_G0_1_P7_PROOF.md`; **G0.2 = CANDIDATE PASS / AWAITING INDEPENDENT
+REVIEW** — executed once offline at `4448f92`, cases A-J fail-closed, 0 provider/model
+calls — `V03E_G0_2_FALSE_CORRELATION_PROOF.md`; steps G0.3-G0.5, G1 and G2 have
+**not** run), `adopt_completed_turn` remains **DISABLED**, and no provider/model call
+occurred during the review (the reviews were static/documentary).
 
 * Frozen contract: this document; acceptance target:
   `docs/v0.3/V03E_ACCEPTANCE.md`.
@@ -672,18 +674,25 @@ or replies · heuristic or probabilistic attribution.
 
 ## 25. Platform proof gate (partially executed — not complete)
 
-**Current gate status (updated after the G0.1/P7 execution):** platform proof gate =
-**PARTIALLY EXECUTED / NOT COMPLETE**.  **G0.1 / P7 = PASS** (authoritative,
-independently approved: the final proof review issued *APPROVE V0.3-E G0.1 / P7
-PLATFORM PROOF* with P0 = 0, P1 = 0, P2 = 0 — this PASS comes from that independent
-review of the proof candidate, never from executor self-approval);
-**G0.2 = NOT RUN**, **G0.3 = NOT RUN**, **G0.4 = NOT RUN**, **G0.5 = NOT RUN**,
+**Current gate status (updated after the G0.1/P7 execution and the G0.2 offline
+run):** platform proof gate = **PARTIALLY EXECUTED / NOT COMPLETE**.  **G0.1 / P7 =
+PASS** (authoritative, independently approved: the final proof review issued *APPROVE
+V0.3-E G0.1 / P7 PLATFORM PROOF* with P0 = 0, P1 = 0, P2 = 0 — this PASS comes from
+that independent review of the proof candidate, never from executor self-approval);
+**G0.2 = CANDIDATE PASS / AWAITING INDEPENDENT REVIEW** (executed once offline at
+`4448f92`; ten planned cases A-J fail-closed: a unique `MATCH` only when the complete
+identity tuple matches exactly one record in the run's role session, otherwise
+`NO_MATCH` / `evidence_conflict` / `evidence_gap` / `corruption`; no timestamp
+tie-break; 0 provider/model calls — `V03E_G0_2_FALSE_CORRELATION_PROOF.md`);
+**G0.3 = NOT RUN**, **G0.4 = NOT RUN**, **G0.5 = NOT RUN**,
 **G1 = NOT RUN**, **G2 = NOT RUN**.  The design's local hard prerequisite is
 therefore **satisfied**: G0.1/P7 **no longer blocks mandatory-core implementation
 eligibility**, but implementation remains **NOT AUTHORIZED** until a separately
-issued implementation authorization.  `adopt_completed_turn` = **DISABLED**.  The
-platform proof gate is **not** passed and **not** complete (G0.2-G2 unrun), and no
-part of this status may be read as an implementation or smoke authorization.
+issued implementation authorization.  `adopt_completed_turn` = **DISABLED**.  G0.2
+is a *candidate* result only: it is not an authoritative PASS, and the executing agent
+cannot self-approve it.  The platform proof gate is **not** passed and **not** complete
+(G0.3-G2 unrun), and no part of this status may be read as an implementation or smoke
+authorization.
 
 To be executed **before any implementation** that trusts remote/local recovery
 evidence.  Maximum real provider/model calls: **0** (a local fake
@@ -702,6 +711,9 @@ OpenAI-compatible provider may be used in G2; nothing runs in this design round)
 Rules: **no probe shopping** — one planned probe per case; a failed proof *removes*
 the gated capability instead of triggering another probe; results are recorded in
 `V03E_ACCEPTANCE.md`, whose implementation rows stay FUTURE / NOT RUN until then.
+Harness-invalid attempts (a case that never reached its assertion point because of a
+harness defect) are recorded separately and excluded; a case is never re-run to search
+for a passing configuration.
 
 **G0.1 / P7 was the hard gate on the mandatory core, and the only such gate.**
 Implementation ordering is: **design frozen → G0.1 / P7 PASS → mandatory-core
