@@ -1,661 +1,739 @@
-# DevRelay v0.3-E — recovery and reconciliation (design)
+# DevRelay v0.3-E — recovery and reconciliation (design, remediated)
 
-Status: **DESIGN / NOT IMPLEMENTED / NOT ACCEPTED / UNRELEASED** — this document
-freezes the v0.3-E *contract* for independent review; **no recovery code exists**,
-no runtime source or test was modified by this design round, no real provider/model
-call was made, and v0.3-E implementation must not start until the design is
-independently reviewed and the open platform proofs in §15 are resolved.
+Status: **DESIGN REMEDIATED / NOT IMPLEMENTED / NOT ACCEPTED / UNRELEASED** —
+this is the design contract after the independent design review's
+`REQUEST_CHANGES` (P0 = 1, P1 = 6, P2 = 5).  **No implementation is authorized**:
+no recovery code exists, no runtime source or test was modified, no platform proof
+was run, no OpenCode instance was started, and no provider/model call was made.
+The design is **not** "frozen": an independent re-review of this remediation comes
+first.
 
 * Branch: `v0.3-e-recovery-reconciliation` (design only).
-* Parent: `56e7842a414777d20a3882cad641da383964bab3` (v0.3-D acceptance closeout
-  follow-up).  Accepted v0.3-D runtime candidate:
-  `8b70610a5cdda600ef57cf8378c4f69cd33d5be4`.
+* Design lineage: `673632d` (first design) → **this remediation**; the branch's
+  parent is `56e7842a414777d20a3882cad641da383964bab3` (v0.3-D closeout follow-up).
+* Accepted v0.3-D runtime candidate:
+  `8b70610a5cdda600ef57cf8378c4f69cd33d5be4` (ACCEPTED / CLOSED / UNRELEASED).
 * Package version stays `0.1.0`; the only public tag is `v0.1.0`; nothing is
   pushed, merged, tagged or released.
 
-## 1. Purpose and boundary
+## 1. Scope decision — the mandatory core vs the gated capability
 
-v0.3-D fails closed: when DevRelay cannot *know* what happened to a model-bearing
-turn, it materializes the interruption and blocks the run
-(`blocked_reason=turn_interrupted`) or blocks on a failed/uncertain submission.
-That is safe, and it is deliberately terminal — an interrupted v0.3-D run is
-resolved by a human, not by DevRelay.
+v0.3-E is split so that the fail-closed core can be implemented and accepted
+**without** any remote platform proof, and so that no optional capability can
+block it.
 
-v0.3-E exists to define **safe** behaviour when the outcome of exactly one
-already-issued orchestration model turn can be determined *after the fact* from
-evidence that still exists, without ever issuing a second provider call on a
-guess.  Its scope is: read evidence, decide what already happened, and — only when
-that is provable — write the already-established truth into durable run state so
-the Planner can continue legally.
+**MANDATORY v0.3-E CORE (implementable; no remote platform proof required):**
 
-It is **not** a retry engine, not a scheduler, not a background daemon, and not a
-repair tool for arbitrary corruption.
+| # | Capability | Meaning |
+| --- | --- | --- |
+| A | `devrelay_reconcile_run` (**report**) | read the durable and (when available) remote evidence for one interrupted attempt and *report* it: identity, strict-reader result, session-history candidates, per-item proof checklist, blockers.  Read-only: no mutation, no model call, no submission. |
+| B | `devrelay_resolve_recovery(mark_unrecoverable)` | the explicit, planner-authorized, fail-closed exit: convert the recovery attempt into exactly one blocked role turn and enter terminal `BLOCKED`.  Local only. |
+| C | no provider/model submission | no recovery action ever submits a model turn. |
+| D | no retry | v0.3-E contains **no** retry protocol; a timeout or transport classification never becomes a free retry. |
+| E | no auto-resume | nothing runs by itself: no scheduler, no daemon, no polling loop, no work on restart. |
+| F | no adoption | a remote result is **never** adopted unless the optional adoption capability gate (§11) has independently passed. |
+
+**OPTIONAL GATED CAPABILITY (not part of the mandatory implementation scope):**
+
+* `adopt_completed_turn` — materialize an already-completed remote turn *without*
+  a new submission.  Requires the operation-attribution proofs P1, P2, P3, P8
+  (+ P9 if timestamp correlation is used) plus the verified local ledger/session
+  integrity rules (§11, §12.6).  Until then it is documented and **refused**.
+
+**PENDING-RESULT capability:** report-only (§14) unless a future proof establishes
+an operation-specific handle.
+
+**NON-DELIVERY classification:** informational transport evidence only (§15); no
+orchestration authority, and it can never authorize a submission.
+
+Rule: optional capabilities never block the core, and the core never performs an
+optional capability's work "as a fallback".
 
 ## 2. Inventory: the recovery-related surface that exists today
 
-Read-only inventory taken on the design parent `56e7842` (accepted v0.3-D runtime
-`8b70610`).  Nothing below was modified by this round.
+Read-only inventory on this design lineage (accepted v0.3-D runtime `8b70610`).
+Nothing below was modified.
 
 **Orchestration (v0.3-D, accepted)**
 
 * `src/devrelay/orchestration/models.py` — `RunState`
   (`READY_IMPLEMENTER`, `READY_REVIEWER`, `AWAITING_DECISION`, `COMPLETED`,
-  `STOPPED`, `BLOCKED`, `LIMIT_REACHED`; the last four are terminal);
-  `TurnRecord` carries the sanitized per-turn evidence
-  (`prompt_sha256`, `prompt_chars`, `resolved_model`, `resolved_agent`,
-  `route_source`, `operation_state`, `submission_attempted`,
+  `STOPPED`, `BLOCKED`, `LIMIT_REACHED`; last four terminal); `TurnRecord`
+  (sanitized evidence: `prompt_sha256`, `prompt_chars`, `resolved_model`,
+  `resolved_agent`, `route_source`, `operation_state`, `submission_attempted`,
   `submission_status`, `submission_uncertain`, `reply_pending`, `retry_safe`,
   `call_ids`, `assistant_message_ids`, `outcome`, `blocked_reason`);
-  `OrchestrationRun.in_flight_turn` is the live durable intent;
-  `summary()["legal_next_actions"]` is empty while an intent is live.
+  `OrchestrationRun.in_flight_turn`; `summary()["legal_next_actions"]`.
 * `src/devrelay/orchestration/service.py` — `_run_role` persists the in-flight
-  intent **before** the role call (`store.save`), captures the accepted role
-  result's evidence afterwards, and finalizes the turn;
-  `_materialize_interrupted_turn` (called from `_load_for_action`) turns a
-  persisted live intent into a finished `blocked`/`turn_interrupted` record and
-  blocks the run; `_block(reason=...)` handles route invalidation and ownership
-  loss; `_require_route_unchanged` compares the live route against the immutable
-  snapshot; `_verify_session` re-checks workspace ownership.
+  intent **before** the role call and finalizes the turn afterwards;
+  `_materialize_interrupted_turn` (reached from `_load_for_action`) currently
+  converts a live intent into a finished `blocked`/`turn_interrupted` turn **as a
+  side effect of the next mutating action**; `_block`; `_require_route_unchanged`;
+  `_verify_session`.
 * `src/devrelay/orchestration/state_machine.py` — `require_not_terminal`,
-  `require_no_in_flight_turn` (message: *"recovery is out of scope for v0.3-D"*),
-  `require_state`, `require_cycle_budget`, `after_role_turn`, `after_decision`.
+  `require_no_in_flight_turn`, `require_state`, `require_cycle_budget`,
+  `after_role_turn`, `after_decision`.
 * `src/devrelay/orchestration/store.py` + `invariants.py` — strict single-writer
-  store; load/save re-derive every structural and reachability invariant;
-  corruption fails closed and is never repaired.
-* `src/devrelay/orchestration/models.py` — `model_turns_used` means **consumed
-  orchestration model-turn budget slots**, not confirmed POSTs; nothing refunds a
-  slot.
+  store; load/save re-derive structural and reachability invariants; corruption
+  fails closed and is never repaired.
+* `model_turns_used` = **consumed orchestration model-turn budget slots**, never
+  refunded.
 
 **OpenCode bridge (accepted v0.3-A)**
 
-* `src/devrelay/opencode/bridge.py` — operations: `health`, `list_sessions`,
-  `get_session`, `read_messages` (explicit cursor, read-only),
-  `send_prompt` (exactly one submission POST), `wait_idle` (bounded session-status
-  polling), `interrupt` (an accepted abort request is **not** a verified terminal
-  state).  `_request` allocates a durable call id and writes the ledger record
-  **before the request leaves the machine**, then settles it with the outcome.
-* `src/devrelay/opencode/accounting.py` — `allocate_call_id` (durable, monotonic
+* `src/devrelay/opencode/bridge.py` — `health`, `list_sessions`, `get_session`,
+  `read_messages` (explicit cursor, read-only), `send_prompt` (exactly one
+  submission POST), `wait_idle` (bounded session-status polling), `interrupt` (an
+  accepted abort is **not** a verified terminal state); `_request` allocates a
+  durable call id and writes the ledger record **before the request leaves the
+  machine**, then settles it.
+* `src/devrelay/opencode/accounting.py` — `allocate_call_id` (durable monotonic
   `OC-NNNN`, never reused; a corrupt sequence fails closed), `begin` (immutable
-  create-new record), `finish` (settle in place), `read_records` (read every
-  persisted record).
+  create-new), `finish` (settle in place), `records`, `read_records`.
 * `src/devrelay/opencode/models.py` — `OpenCodeCallRecord` (durable per-request
-  evidence: `call_id`, `operation`, `state` ∈ `ISSUED|COMPLETED|TIMED_OUT|
-  PROVIDER_UNAVAILABLE|MALFORMED_RESPONSE`, `method`, `path`, `session_id`,
+  evidence: `call_id`, `operation`, `state`, `method`, `path`, `session_id`,
   `issued`, `external_request_count`, `http_status`, `error_type`, `started_at`,
   `completed_at`, `duration_ms`, `submission_uncertain`, `response_media_type`,
-  `prompt_sha256`, `prompt_chars`, `agent`, `model` — **never** prompt text,
-  transcript or credential); `OpenCodeOperationResult` (in-memory result of one
-  operation, including `submission_attempted`, `submission_status`,
-  `submission_uncertain`, `submission_contract`, `reply_pending`,
-  `reply_boundary`, `follow_up_state`, `call_ids`, `messages`);
-  `OpenCodeMessage` (`message_id`, `role`, `created_at`, `parts[].text` — the
-  session history exposes both user and assistant text); `prompt_digest`
-  (unsalted SHA-256 of the exact prompt: an identifier, not a secrecy mechanism).
-* Existing read surfaces over the same evidence: `opencode_read_messages`,
-  `opencode_get_session`, `opencode_wait_idle`, `opencode_calls` (read-only MCP
-  tools; the ledger projection is bounded and reports corruption instead of
-  hiding it).
+  `prompt_sha256`, `prompt_chars`, `agent`, `model`; **never** prompt text);
+  `OpenCodeOperationResult`; `OpenCodeMessage` (`message_id`, `role`,
+  `created_at`, `parts[].text`, with `.text` = `"\n".join(part.text …)`);
+  `prompt_digest` (unsalted SHA-256 of the exact prompt string).
+* Read surfaces over that evidence: `opencode_read_messages`,
+  `opencode_get_session`, `opencode_wait_idle`, `opencode_calls`.
 
 **MCP surface (accepted v0.3-B / v0.3-D)**
 
 * 17 tools; orchestration tools `devrelay_start_run`, `devrelay_get_run`
   (read-only), `devrelay_run_implementer`, `devrelay_run_reviewer`,
-  `devrelay_decide_run`.  One re-entrant execution lock **per tool surface**
-  serializes every tool body; the shipped stdio server builds exactly one surface.
+  `devrelay_decide_run`; one re-entrant execution lock **per tool surface**.
 
-**Documents that already describe the gap**
+**Documents**
 
-* `docs/v0.3/V03D_SPEC.md` §6/§10 ("crash reconciliation … out of scope"),
-  `docs/v0.3/V03D_ACCEPTANCE.md` (E2), `docs/BACKLOG.md` §5 (v0.3-E recovery,
-  multi-surface/multi-process, read-only `get_run`).
+* `docs/v0.3/V03D_SPEC.md` §6/§10, `docs/v0.3/V03D_ACCEPTANCE.md` (E2),
+  `docs/BACKLOG.md` §5 (v0.3-E recovery; platform proofs P1-P7 recorded).
 
-**Not v0.3-E.**  `src/devrelay/pipeline/engine.py`
-(`recover_pending_implementation`, `recover_pending_review`) and
-`src/devrelay/providers/codex_runtime.py` (`reconcile_observed_files`) are
-pre-existing **v0.2 Codex-pipeline** functions.  They are unrelated to
-orchestration recovery, were not touched, and must not be reused or cited as
-v0.3-E machinery.
+**Not v0.3-E.**  `recover_pending_implementation` / `recover_pending_review`
+(`src/devrelay/pipeline/engine.py`) and `reconcile_observed_files`
+(`src/devrelay/providers/codex_runtime.py`) are pre-existing **v0.2 Codex-pipeline**
+functions, unrelated to orchestration recovery, untouched, and not to be reused.
 
-## 3. Preserved v0.3-D invariants (all of them bind v0.3-E)
+## 3. Preserved v0.3-D invariants (all binding)
 
 1. Reviewer prose has **zero** state-machine authority.
-2. Only an explicit external planner decision leaves `AWAITING_DECISION`
-   (`decision_history` source is always `external_planner`).
-3. `1 <= max_cycles <= 3`; `model_turn_budget = 2 × max_cycles`; absolute ceiling
-   six slots per run.
-4. No hidden retry; no fallback model or route; no automatic
-   implementer→reviewer sequencing; one explicit phase call causes at most one
-   model submission.
-5. Terminal runs never reopen (this document's §7 explains how v0.3-E keeps that
-   true while still allowing a *provable* completion to be adopted).
-6. Route snapshots are immutable historical identity; session/workspace ownership
-   stays explicit; implementer and reviewer sessions stay distinct.
-7. Persisted-state corruption fails closed and is never repaired; persisted types
-   stay strict; reachability rules stay enforced on load and save.
+2. Only an explicit external planner decision leaves `AWAITING_DECISION`.
+3. `1 <= max_cycles <= 3`; `model_turn_budget = 2 × max_cycles`; six-slot ceiling.
+4. No hidden retry, no fallback model/route, no automatic
+   implementer→reviewer sequencing, at most one submission per explicit phase call.
+5. Terminal runs never reopen.
+6. Route snapshots are immutable; workspace/session ownership stays explicit;
+   implementer and reviewer sessions stay distinct.
+7. Corruption fails closed and is never repaired; persisted types stay strict;
+   reachability rules stay enforced on load and save.
 8. No raw prompt, provider response, reasoning or credential is persisted.
-9. Accounting semantics stay intact: a consumed slot is never refunded, and no
-   restart creates budget.
-
-Any recovery mechanism that weakens any of these is unacceptable, and the design
-below is written so that a violation is a design bug, not a trade-off.
+9. Accounting stays intact: a consumed slot is never refunded; no restart creates
+   budget; `turn_attempts == model_turns_used` always.
 
 ## 4. Recovery problem taxonomy
 
-These are **distinct** outcomes with distinct evidence and distinct allowed
-actions.  They must never collapse into one "retryable" bucket.
+Distinct cases, never one "retryable" bucket.
 
-| # | Case | What is known | Evidence (durable → remote) | Model call allowed to resolve? |
+| # | Case | What is known | Evidence | May a model call resolve it? |
 | --- | --- | --- | --- | --- |
-| A | **Pre-submission failure** | No durable intent exists, or submission provably never started | Run document (no intent / intent with no ledger call), ledger (no record for the intended operation), accepted guards | No |
-| B | **Definitely not delivered** | The accepted v0.3-A taxonomy proves the request never reached the provider (connect-phase failure: `connect_error`, `connect_timeout`, `pool_timeout`) | Ledger record settled with that state, `submission_uncertain = false`, `submission_attempted` as reported | No |
-| C | **Submission attempted, response known** | The normal completed turn | Turn record with `call_ids`, `assistant_message_ids`, `operation_state`, `submission_*` | No |
-| D | **Submission uncertain** | The request may have reached OpenCode/provider; local evidence cannot prove either way (read/write timeout, mid-transfer failure, or a 2xx body that did not match the media/JSON contract) | Ledger record with `submission_uncertain = true` and/or `submission_contract` evidence; run intent | **Never automatically**; only §12/§13 proofs |
-| E | **Reply pending** | Positive evidence that an accepted submission may still produce an observable reply (`reply_pending = true`, `reply_boundary` cursor) | Ledger record (2xx, JSON contract) plus the run intent; session history readable | No model call: resolution is a **read** (§11) |
-| F | **Process crash with durable in-flight intent** | DevRelay died between intent persistence and turn finalization | Run document with live `in_flight_turn`; ledger record (ISSUED or settled) | No |
-| G | **Remote completion / local persistence gap** | The provider really produced the reply, but DevRelay never recorded the finished turn | Ledger record settled `COMPLETED` matching the intent identity **and** a session-history match per §12 | No — adopting existing evidence is not a submission |
-| H | **Contradictory or insufficient evidence** | Yes/no cannot be decided (two candidate matches, mismatch on identity, missing session, unreadable ledger, route/model mismatch) | Any combination above | No — **fail closed** |
+| A | Pre-submission failure | no durable intent, or submission provably never started | run document, strict ledger reader, accepted guards | no |
+| B | Transport-classified non-delivery | the accepted v0.3-A connect-phase classes were recorded | ledger record; **reported as evidence only** (§15) | no |
+| C | Submission attempted, response known | the normal completed turn | turn record | no |
+| D | Submission uncertain | the request may have reached OpenCode/provider | ledger `submission_uncertain`, run intent | no — only gated adoption (§11) or `mark_unrecoverable` |
+| E | Reply pending | positive evidence that an accepted submission may still produce a reply | ledger 2xx + JSON contract, session state (**session-level only**, §14) | no — report-only |
+| F | Process crash with durable in-flight intent | DevRelay died between intent persistence and finalization | live `in_flight_turn`, strict ledger reader | no |
+| G | Remote completion / local persistence gap | the provider really produced the reply but the finished turn was never persisted | strict ledger reader + session history, only under §11 | no (adoption is local materialization, not a submission) |
+| H | Contradictory or insufficient evidence | yes/no cannot be decided | any combination | no — fail closed |
+| **X** | **Corrupt document** | the persisted document violates accepted invariants outside the enumerated recovery deltas | strict validation | **not recovery**: `orchestration_state_corrupt`, no entry, no override (§6) |
 
-## 5. Terms: reconcile, materialize, resume, retry
+## 5. Terms
 
 * **RECONCILE** — read existing durable/local/remote evidence and determine what
-  already happened.  Read-only.  Never a model call.  Never mutates run state.
+  already happened.  Read-only; never a model call; never mutates run state.
 * **MATERIALIZE** — write an already-established fact into durable run state
-  (for example: "this turn completed").  Mutating, explicit, idempotent, never a
-  model call, allowed only when reconciliation proved the fact.
-* **RESUME** — continue orchestration from a state that reconciliation produced
-  legally.  Resume itself issues nothing: the next model call still requires an
-  explicit planner phase action in the legal state.
-* **RETRY** — issue another model submission.  v0.3-E does **not** do this
-  implicitly, ever; §7 defines the only (explicit, planner-authorized,
-  evidence-gated) form in which a *new attempt* could ever exist, and the design
-  prefers not to have one at all.
-
-Reconcile/resume must never be *implemented as* retry, and a timeout must never
-become a free retry.
-
-## 6. Recovery authority
-
-* The provider/reviewer/model has **zero** recovery authority.  Model prose is
-  never parsed, never a signal, never an input to a recovery decision.
-* Recovery is driven by (a) deterministic evidence and (b) an explicit external
-  planner action.  Both are required for any mutation: evidence establishes the
-  fact, the planner authorizes the write.
-* Recovery actions are **explicit tools** with strict arguments — not semantic
-  parsing, not heuristics, not "best guess".
-* The planner cannot authorize a fact into existence: a `resolve` call whose
-  evidence cannot be re-verified at mutation time is refused.
-
-## 7. State model
-
-**Decision: add exactly one new run state, non-terminal and execution-frozen.**
-
-v0.3-D's `BLOCKED` is terminal by accepted invariant, and "terminal runs never
-reopen" is a preserved invariant (§3, invariant 5).  A provable remote completion therefore
-cannot be adopted by moving a `BLOCKED` run forward — that would be a silent
-reinterpretation of accepted history.  At the same time, leaving the run
-recoverable-but-invisible inside `BLOCKED` would either weaken the invariant or
-force v0.3-E to reopen terminal runs.
-
-Proposal (to be reviewed and frozen; not implemented):
-
-* new state **`RECOVERY_REQUIRED`** (spelled exactly; added to `RunState`);
-* nature: **non-terminal**, **execution-frozen** — while a run is in this state
-  *no* model-bearing action (`run_implementer`, `run_reviewer`), *no*
-  `decide_run`, *no* `start_run` side effects on it, and *no* automatic anything
-  is legal; `legal_next_actions` is exactly the recovery actions (plus read-only
-  reads);
-* entry conditions: (i) a live persisted `in_flight_turn` is materialized after a
-  restart (v0.3-D would have produced `BLOCKED`/`turn_interrupted`); (ii) a turn
-  ends with `submission_uncertain` or `reply_pending`; (iii) an interrupted turn's
-  role/cycle evidence cannot be finalized into a role history entry;
-* required metadata: `recovery_reason` (constrained vocabulary:
-  `turn_interrupted`, `submission_uncertain`, `reply_pending`, `evidence_gap`,
-  `evidence_conflict`) and a `recovery` block (§10);
-* legal exits: (a) explicit `resolve` adopting a **proved** completed turn →
-  the state that turn legally produces (implementer completed → `READY_REVIEWER`;
-  reviewer completed → `AWAITING_DECISION`); (b) explicit `resolve` marking the
-  run unrecoverable → `BLOCKED` with the same reason (still terminal);
-  (c) nothing else — no exit to `READY_*` without a materialized completion;
-* model-call allowance: **zero** in this state, for every action;
-* restart semantics: after a restart the state is re-derived from the document
-  (it is persisted), reconciliation is idempotent, and no restart performs work.
-
-Alternatives considered and rejected:
-
-* *keep `BLOCKED` only* — rejected: either the completion can never be adopted
-  (v0.3-E would do nothing) or terminal runs would reopen (invariant violation).
-* *a dedicated `RECONCILIATION_REQUIRED` + `RECOVERY_REQUIRED` pair* — rejected as
-  state inflation: one state plus explicit recovery evidence covers both "needs
-  evidence" and "evidence gathered"; the distinction lives in the `recovery`
-  metadata, not in the state machine.
-* *putting `submission_uncertain`/`reply_pending` into run state as new states* —
-  rejected: they are **turn/reconciliation evidence**, not lifecycle states.  They
-  stay in the turn audit (they already exist there) and are copied into the
-  recovery metadata for the crashed turn only.
-
-## 8. Exact call identity
-
-What exists, and when (all facts verified against the accepted bridge code):
-
-| Identifier | Before submission | During submission | After response | Durable? |
-| --- | --- | --- | --- | --- |
-| `run_id`, `role`, `cycle`, session id, route snapshot | yes (run document) | yes | yes | yes |
-| prompt `prompt_sha256` + `prompt_chars` (intent) | yes | yes | yes | yes |
-| DevRelay `call_id` (`OC-NNNN`, monotonic, never reused) | allocated and **written as an ISSUED ledger record before the request leaves the machine** | yes | yes (same id, settled) | yes |
-| ledger settle fields (`state`, `http_status`, `external_request_count`, `submission_uncertain`, `response_media_type`, `completed_at`) | no (record is ISSUED) | ISSUED | yes | yes |
-| `reply_boundary` cursor | no | in memory | in memory | **no** |
-| assistant `message_id`(s) | no | no | in memory (run turn record only if the turn was finalized) | only via the run document |
-| OpenCode-side operation/job id or idempotency key | **does not exist** in the accepted client path (the submission is a single synchronous `POST /session/{id}/message`; OpenCode assigns message ids server-side and DevRelay sends no client id) | — | — | — |
-
-Design consequences (no invented facilities):
-
-* The **durable pre-submission identity** of an attempt is
-  `(run_id, role, cycle, session_id, model, agent, prompt_sha256, prompt_chars,
-  call_id)` — the run intent provides the first eight, the ledger record the last
-  plus the transport evidence.
-* There is **no OpenCode idempotency key**; v0.3-E therefore cannot ask OpenCode
-  "did *this* request complete?" by id.  It must match *evidence* (§12).
-* A crash between the response and the finalized turn loses the assistant
-  `message_id` from *local* memory; §12 defines how it can be re-derived from the
-  session history without persisting prompt text.
-
-## 9. Reconciliation sources
-
-| Source | Authoritative for | Mode | Absence / failure meaning | Ambiguity meaning | Survives restart | Distinguishes "not submitted" from "submitted, unobserved"? |
-| --- | --- | --- | --- | --- | --- | --- |
-| DevRelay run document | state, cycle, counters, intent, decision history, route snapshot | read (strict validation) | no run / corrupt run → fail closed | contradictory fields → fail closed (existing invariants) | yes (filesystem) | It records *intent*, never delivery |
-| DevRelay ledger (`OC-*` records) | that DevRelay issued exactly one request, its transport outcome class, and the prompt/session/model identity of that request | read-only (`opencode_calls`, `read_records`) | no record → no submission was issued by DevRelay | two matching records → fail closed | yes (filesystem) | Yes for the "no record ⇒ never issued" direction; for delivery it is evidence, not proof (see §13) |
-| OpenCode session history (`read_messages`) | what the provider actually produced in that session: message ids, roles, timestamps, text of user/assistant messages | read-only (explicit cursor) | session missing / empty / unreadable → fail closed | more than one candidate match → fail closed | **PROOF REQUIRED** (P1/P2 in §15) | Yes, when the sent user message is present (its text hashes to the stored digest) |
-| OpenCode session state (`get_session`, `wait_idle`) | whether the session is busy/idle right now | read-only; **not** a model call; never a wait-for-result | unknown state → do not act | busy with no matching message → stay frozen | session existence survives; *state* does not | Only "may still be running", never "definitely delivered" |
-| Current role configuration | drift detection only | read-only | missing/invalid route → the run cannot legally proceed under that route | drift → fail closed for the run (existing v0.3-D rule) | yes | n/a — must never rewrite the snapshot |
-| Accepted v0.3-A failure taxonomy | the *classification* of a transport outcome (definitely-not-delivered vs uncertain) | static (code/docs) | unknown class → treat as uncertain | conflicting classes → treat as uncertain | yes | Yes for connect-phase classes, by accepted evidence |
-
-## 10. Run-document additions (proposal, not implemented)
-
-New persisted fields on `OrchestrationRun` (all strict):
-
-* `recovery_reason: str` — constrained vocabulary (§7); required non-empty when
-  `state == RECOVERY_REQUIRED`, empty otherwise (mirroring the `blocked_reason`
-  discipline).
-* `recovery: RecoveryRecord | None` — the durable recovery record for the *one*
-  in-flight/interrupted attempt (never a log):
-  * `attempt` — the materialized sanitized turn identity (role, cycle,
-    `prompt_sha256`, `prompt_chars`, `resolved_model`, `resolved_agent`,
-    `route_source`, `started_at`, ledger `call_ids`);
-  * `evidence` — the frozen evidence snapshot used by the last reconcile:
-    run-intent digest, ledger `call_id` + state + `http_status` +
-    `submission_uncertain` + `response_media_type`, remote match
-    (`message_id`, `role`, `created_at`, matched-digest flag), and a *digest of
-    the evidence set* (`evidence_sha256`) that the mutating `resolve` must
-    re-derive;
-  * `resolution` — `""` | `adopted_completed_turn` | `marked_unrecoverable`;
-  * `resolved_at: str`.
-
-`schema_version` becomes **2** for documents written by v0.3-E (policy in §14).
-No safety-critical field gets a silent default: a document claiming
-`RECOVERY_REQUIRED` without a reason or without a recovery record is corrupt.
-
-## 11. Crash-window matrix
-
-W0–W6 as required, with the accepted code's actual ordering (intent → ledger
-ISSUED → request → response → turn finalization):
-
-| Window | Durable disk evidence | Possible remote evidence | Slot consumed? | `submission_uncertain`? | `reply_pending`? | Allowed recovery action | Forbidden | Final safe state |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| **W0** before durable intent | run document unchanged (no intent, counters unchanged) | none | no | n/a | n/a | none needed (the phase was never attempted) | any recovery | unchanged state |
-| **W1** after intent, before HTTP submission | live `in_flight_turn`; no ledger record for that operation | none | yes | no | no | materialize `RECOVERY_REQUIRED` with reason `turn_interrupted`; planner may resolve as unrecoverable → `BLOCKED` | any automatic submission; any refund | `RECOVERY_REQUIRED` (or `BLOCKED` by explicit resolve) |
-| **W2** during connection establishment | live intent; ledger record settled with a connect-phase state | none (connect never reached the provider) | yes | no (`submission_uncertain = false`) | no | as W1, with evidence "definitely not delivered" (case B) recorded | auto-resubmit | `RECOVERY_REQUIRED`; never a free retry |
-| **W3** request may have been delivered, before response headers | live intent; ledger record ISSUED (never settled) or settled mid-transfer | unknown: the provider may have produced a reply | yes | yes | unknown | reconcile only; if the session history yields exactly one matching completion → §12 adoption; else stay frozen | any submission; guessing from session busy/idle | `RECOVERY_REQUIRED` (adopted only on proof) |
-| **W4** response received, assistant identity not yet captured | live intent; ledger record settled `COMPLETED` (2xx, JSON contract) | the assistant message exists in the session | yes | no | no | reconcile via §12 (ledger + session-history digest match) | treating "ledger COMPLETED" alone as a finished turn | adopted turn or `RECOVERY_REQUIRED` |
-| **W5** assistant result known, completed turn not persisted | live intent; ledger settled `COMPLETED` | assistant message exists | yes | no | no | §12 adoption (strongest case) | issuing any provider call | legal post-turn state |
-| **W6** completed turn persisted, response not returned to the MCP client | no intent; the finished turn is in the run document | n/a | yes | recorded as false | recorded as false | none (state is already the truth); the client may simply re-read | re-running the phase | unchanged (truthful) state |
-
-Explicit non-claims: "HTTP client raised" ≠ "provider did not receive"; a session
-that is `busy` ≠ "the reply will arrive"; a ledger `COMPLETED` ≠ "the run's turn
-completed" (adoption needs the §12 match).
-
-## 12. Reconciled completion (the strongest safe case)
-
-Adoption of an already-completed turn is allowed only when **all** of the
-following are re-derived at mutation time (not trusted from a previous dry run):
-
-1. the run is in `RECOVERY_REQUIRED` with exactly one materialized attempt;
-2. the ledger contains **exactly one** record for the intended operation whose
-   `operation` is the submission, `session_id` equals the run's session for that
-   role, `model`/`agent` equal the immutable route snapshot entry, and
-   `prompt_sha256`/`prompt_chars` equal the intent's;
-3. that record is settled `COMPLETED`, `http_status` 2xx, JSON media type,
-   `submission_uncertain = false`;
-4. the OpenCode session history (read-only, bounded, explicit cursor) contains
-   **exactly one** user message whose `parts[].text` hashes to the stored
-   `prompt_sha256`, and **exactly one** assistant message that directly follows it
-   in that session (the "corresponding response");
-5. workspace ownership, session ownership and role/session distinctness re-verify
-   (the same checks v0.3-D performs);
-6. the cycle and role of the attempt still match the run's current cycle and the
-   phase the state expects;
-7. the run's route snapshot is unchanged (drift → fail closed, §12.1);
-8. no second candidate matches (two sessions, two messages, two ledger records →
-   fail closed).
-
-Only then may `devrelay_resolve_recovery` write the already-completed turn
-(objective C semantics: `outcome=completed`, `call_ids` from the ledger,
-`assistant_message_ids` from the matched message) and move the run to the state
-that turn legally produces — **without any provider call**, with the consumed slot
-unchanged and with `decision_history` untouched.
-
-**What is not proven by the above:** that the provider's stored user text is
-byte-identical to what DevRelay sent (P2 in §15).  If it is not, step 4 cannot
-match and the run stays frozen — which is the required failure mode, not a bug.
-
-## 12.1 Route drift during recovery
-
-The captured route snapshot remains the authoritative historical identity.
-Current configuration is read **only** to detect drift.  If the current route for
-the role differs from the snapshot (or is unresolvable), reconciliation cannot
-adopt a completion for a *different* route: the attempt is recorded as
-`evidence_gap`/`evidence_conflict` and the run stays `RECOVERY_REQUIRED` until the
-planner resolves it as unrecoverable (`BLOCKED`).  Remote evidence that does not
-match the snapshot model/agent is never adopted.
-
-## 13. Reconciled non-delivery
-
-Only the accepted v0.3-A taxonomy's connect-phase classes (`connect_error`,
-`connect_timeout`, `pool_timeout`) are treated as evidence that the request never
-reached the provider; every other failure class (read/write timeout, mid-transfer
-error, unusable 2xx body, unknown) is *uncertain* by definition.
-
-For a proved non-delivery:
-
-* the consumed slot **stays consumed** (no refund, ever);
-* the run does **not** silently return to `READY_*`; it becomes
-  `RECOVERY_REQUIRED` with reason `submission_uncertain`/`turn_interrupted` and
-  remains execution-frozen;
-* the planner's options are exactly: (a) resolve as unrecoverable → `BLOCKED`
-  (terminal, human decides what to do next), or (b) — **only if a future,
-  separately reviewed retry protocol exists** — authorize a *new* attempt; the
-  design does **not** include that protocol, and without it a new attempt requires
-  a new run;
-* no design path creates a same-cycle or new-cycle retry, and no path rewrites the
-  materialized attempt's history (the attempt stays in the role history exactly
-  once).
-
-## 14. Pending replies
-
-If `reply_pending` is recorded (or an ISSUED ledger record exists without a
-settlement and the session is still busy), the run is `RECOVERY_REQUIRED` and
-execution-frozen.  Resolution is a **read**, never a model call:
-
-* `devrelay_reconcile_run` may read the session history (bounded page window, the
-  accepted `read_messages` cursor semantics) and/or the session state;
-* **no automatic waiting, no unbounded polling, no daemon**: each reconcile call
-  is one bounded, explicit, read-only evidence pass (at most a fixed small number
-  of read requests, defined at implementation time);
-* when the history finally shows the matching completion, the same §12 adoption
-  applies; when it shows nothing and the session is idle, the evidence remains
-  insufficient and the run stays frozen (or the planner marks it unrecoverable);
-* `wait_idle` is session-level only and must never be used as "the reply arrived";
-* reconciliation reads are not model calls and must never be counted as slots.
-
-## 15. Open platform proofs (DESIGN BLOCKERS / PROOF REQUIRED)
-
-These cannot be settled offline in a design-only round (a real platform probe is
-not authorized here), and the corresponding policies must not be implemented
-until they are:
-
-* **P1 — history durability.** Does an OpenCode session's message history survive
-  a *server* restart (and a client restart) with the same message ids and text?
-  The accepted client can read history after a client restart, but server-side
-  persistence of the exact messages has not been proven.
-* **P2 — verbatim user text.** Is the user message stored byte-identical to what
-  was sent, so that `sha256(stored text)` equals the stored `prompt_sha256`?
-  Known normalization exists elsewhere in the platform (the accepted v0.3-A
-  reasoning-part normalization), so this must be proven before §12 step 4 can be
-  relied on.
-* **P3 — uniqueness/ordering.** Can two identical prompts in one session be
-  disambiguated deterministically (time window + exclusivity)?  The design
-  requires "exactly one candidate" and fails closed otherwise, but whether a
-  bounded window is always sufficient is unproven.
-* **P4 — pending-operation visibility.** Does OpenCode expose any per-operation
-  pending/queued handle for a submission (beyond session busy/idle) that a
-  restarted client could query without issuing a model call?  The accepted client
-  path suggests "no", but this must be confirmed.
-* **P5 — failure-class semantics.** Are the accepted taxonomy's connect-phase
-  classes *always* pre-delivery on this platform and transport stack (including
-  proxies/retries inside the client), i.e. is "definitely not delivered" a proof
-  and not just a classification?
-* **P6 — session identity strength.** Is a session id + workspace `directory`
-  check sufficient to exclude a deleted/recreated or copied session, and what
-  happens to reconciliation when a session disappeared entirely?
-* **P7 — ledger settle atomicity under kill.** The ledger writes ISSUED before
-  the request and settles afterwards; is a *partially* written settle record
-  possible under a hard kill, and how must reconciliation treat it?  (The design
-  treats an unreadable/unsettled record as insufficient evidence and fails
-  closed either way.)
-
-Until P1–P4 are proven, the **adoption** path (§12) and the **pending** policy
-(§14) are design-only; until P5 is proven, the **non-delivery** policy (§13) rests
-on accepted evidence rather than a platform proof.  Everything else in this
-document — the frozen fail-closed core — is provable offline today.
-
-## 16. Dedicated states: entry/exit summary
-
-| State | Entry | Legal exits | Terminal? | Planner actions | Model calls | Restart semantics |
-| --- | --- | --- | --- | --- | --- | --- |
-| existing `READY_IMPLEMENTER` / `READY_REVIEWER` / `AWAITING_DECISION` | unchanged (v0.3-D) | unchanged | no | unchanged | unchanged | unchanged |
-| existing `COMPLETED` / `STOPPED` / `LIMIT_REACHED` / `BLOCKED` | unchanged | unchanged (never reopen) | yes | read-only; recovery tools refuse locally | none | unchanged |
-| **`RECOVERY_REQUIRED`** (new in v0.3-E) | §7 entry conditions | (a) `resolve` adopting a proved completed turn → `READY_REVIEWER` / `AWAITING_DECISION`; (b) `resolve` as unrecoverable → `BLOCKED` | **no** (but execution-frozen) | `devrelay_reconcile_run` (read-only), `devrelay_resolve_recovery` (mutating), `devrelay_get_run` | **none, ever** | persisted; reconciliation idempotent; no work on restart |
-
-## 17. Explicit recovery tools (minimum surface)
-
-Exactly **two** new tools (preferred over three; the read/write split is the
-safety boundary):
-
-1. `devrelay_reconcile_run(run_id)` — **read-only**.  Legal for any
-   non-terminal run and for `RECOVERY_REQUIRED`; refuses locally for terminal
-   states (no model call, no mutation).  Returns the structured reconciliation
-   report: the materialized attempt identity, the ledger evidence, the remote
-   match candidates, the proof checklist of §12 with per-item pass/fail, and the
-   blockers (P1–P6).  **No durable mutation, no model call, idempotent by
-   construction, restart-safe.**  It never performs a phase turn.
-2. `devrelay_resolve_recovery(run_id, resolution)` — **mutating**, the only
-   recovery write.  `resolution ∈ {adopt_completed_turn, mark_unrecoverable}`.
-   Legal only in `RECOVERY_REQUIRED`; refuses for terminal states and for any
-   other state.  It re-derives **all** §12 evidence at call time (a previous
-   reconcile report is not a token), performs no provider call, appends the
-   already-completed turn exactly once (idempotent per `evidence_sha256`), and
-   moves the run through the single legal exit.  Errors use the accepted envelope
-   with a stable code (proposed `orchestration_recovery_invalid` /
-   `orchestration_recovery_unproven`) and the run state visible.
-
-Rejected alternatives: a mutating `get_run` (would break v0.3-D's read-only
-guarantee), a combined reconcile+resolve tool (mixes proof and write), an
-`auto_recover` flag, a background recovery runner, and any tool that performs an
-implementer/reviewer phase.  `devrelay_get_run` stays **read-only** (v0.3-D's
-decision is preserved: reads never mutate).
-
-## 18. Terminal runs
-
-`COMPLETED`, `STOPPED`, `LIMIT_REACHED` and `BLOCKED` never enter recovery: they
-are terminal, they never reopen, and a recovery tool aimed at them fails locally
-(`orchestration_invalid_transition`) with zero model calls and zero mutation.  A
-terminal document that carries a live in-flight intent remains **corrupt**
-(v0.3-D rule) and is never repaired.
-
-## 19. Workspace, session and route identity during recovery
-
-Re-verified before any adoption: workspace binding (the run's workspace is this
-store's workspace), implementer/reviewer session ownership (`workspace_match`),
-role/session distinctness, and the immutable route snapshot.  A run document
-copied into another workspace is **not recoverable** (it is corrupt there, as in
-v0.3-D).  If a session has disappeared, or the session belongs to another
-workspace, reconciliation stops with `evidence_gap` and the run stays frozen
-(`resolve` may only mark it unrecoverable) — never "adopt into another session".
-
-## 20. Budget and accounting policy
-
-`model_turns_used` keeps its accepted meaning (**consumed slots**, not confirmed
-POSTs) and no recovery path may reset, decrement, refund or recompute it:
-
-| Case | Slot | Run state | Can a model call happen afterwards? |
-| --- | --- | --- | --- |
-| pre-intent failure (W0) | not consumed | unchanged | yes, by a new explicit phase call in the legal state |
-| intent persisted, nothing sent (W1) | consumed | `RECOVERY_REQUIRED` | no |
-| intent + connect-phase failure (W2) | consumed | `RECOVERY_REQUIRED` | no (no retry protocol) |
-| submission attempted (W3/W4) | consumed | `RECOVERY_REQUIRED` → adopted or blocked | only via the legal post-adoption state |
-| submission uncertain | consumed | `RECOVERY_REQUIRED` | no |
-| reply pending | consumed | `RECOVERY_REQUIRED` (reads only) | no |
-| reconciled completion adopted | consumed exactly once | legal post-turn state | the normal next phase (new slot) |
-| reconciled failure / non-delivery | consumed | `RECOVERY_REQUIRED` → `BLOCKED` | no |
-| unrecoverable ambiguity | consumed | `BLOCKED` | no |
-
-Restart never creates budget: the counters come from the document and the
-invariants re-derive them.
-
-## 21. Concurrency
-
-Recovery actions run through the accepted per-`McpToolSurface` execution lock,
-exactly like `run_implementer`, `run_reviewer` and `decide_run`, so no recovery
-read/write can interleave with a phase or a decision within one surface.  The
-stdin/session-level "one surface" scope is unchanged: **multi-surface or
-multi-process coordination on one workspace remains unsupported** unless a later
-stage explicitly expands that scope, and no part of v0.3-E may claim a
-process-wide lock.  A crash during recovery leaves the document in either the
-pre-recovery or the post-recovery shape (single atomic write), never in between.
-
-## 22. Privacy
-
-Reconciliation must never require persisting raw prompt text, raw model responses,
-reasoning, credentials or authorization headers.  Matching uses digests, ids,
-roles, timestamps and metadata only:
-
-* the run document keeps digests/lengths/ids (already true);
-* the reconciliation record keeps a *digest* of the evidence set, ledger ids and
-  matched message ids — never message text;
-* reading the session history transiently exposes message text **in memory** (and
-  it is already exposed to the Planner by the accepted read-only tools); the
-  design performs digest comparison in memory, redacts as the accepted bridge
-  does, and persists nothing derived from the text except the comparison result.
-
-## 23. Persisted schema and versioning
-
-* `schema_version` becomes **2** for documents written by v0.3-E.
-* New strict fields: `recovery_reason` (constrained vocabulary) and `recovery`
-  (`RecoveryRecord | None`) as defined in §10, plus the new `RunState` member.
-* **No silent defaults for safety-critical fields**: a v2 document in
-  `RECOVERY_REQUIRED` without `recovery_reason` or without a `recovery` record is
-  corrupt; unknown/extra fields stay forbidden.
-* **Migration policy**: v0.3-E **does not migrate** v1 documents.  A v1 document
-  keeps loading under its own rules and behaves exactly as accepted in v0.3-D
-  (including `BLOCKED` staying terminal, and a live in-flight intent
-  materializing to `BLOCKED`/`turn_interrupted`).  A v1 run cannot be "upgraded
-  into" recovery; if the planner wants recovery, that requires a new run
-  (v0.3-E writes v2 documents only).  This avoids reinterpreting accepted history.
-* Corrupt/unknown-version documents fail closed as `orchestration_state_corrupt`;
-  the reachability invariants extend to the new fields (a `RECOVERY_REQUIRED`
-  document must be reachable: exactly one materialized attempt, counters
-  accounting for it, no decision history entry for it, and a legal
-  `last_transition` edge into the new state).
-
-## 24. Backward compatibility with v0.3-D documents
-
-| Existing document | v0.3-E behaviour |
+  (adopting a proven completion).  Explicit, atomic, idempotent per evidence, only
+  after reconciliation proved it, and only when the adoption capability is enabled.
+* **RESUME** — continue orchestration from a state reconciliation produced
+  legally.  Resume itself issues nothing; the next model call still requires an
+  explicit planner phase action in a legal state.
+* **RETRY** — issue another model submission.  **v0.3-E has no retry protocol of
+  any kind** (§18); bridge-level `retry_safe` metadata has **no orchestration
+  recovery authority** and is never an input to a recovery decision.
+
+## 6. Corruption is never recovery
+
+Recovery operates **only** on an otherwise-valid document whose ambiguity comes
+from the known crash/submission boundary.  If the persisted document violates any
+accepted structural or semantic invariant outside the explicitly enumerated
+recovery deltas below, the result is `orchestration_state_corrupt`: **no recovery
+action, no transition into `RECOVERY_REQUIRED`, no planner override, no repair**.
+
+Enumerated recovery deltas (the only relaxations while `state ==
+RECOVERY_REQUIRED`, v2 documents only):
+
+1. one consumed slot is held by the single `recovery.attempt` record instead of a
+   role-history turn (see the accounting equations in §8.3);
+2. `recovery_reason` is required and `blocked_reason` is empty;
+3. `last_transition.action == "recover"` is a legal edge (the new edges in §8.4);
+4. `legal_next_actions` is exactly the recovery actions (§8.2).
+
+Removed from the earlier design: "an interrupted attempt whose role/cycle evidence
+cannot be finalized into a role history entry" as an entry into recovery — that is
+either a crash-boundary case handled by §8 (whose attempt evidence is complete by
+construction) or corruption (this section).
+
+## 7. Authority, actions and the entry deadlock fix (F1)
+
+**Authority.** Deterministic evidence **and** an explicit external planner action
+are both required for any write.  The provider/reviewer/model has zero recovery
+authority; no prose parsing, no heuristics.  The planner cannot authorize a fact
+into existence: `adopt_completed_turn` re-verifies every condition at call time.
+
+**Entry deadlock (review P0) and its fix.**  A v0.3-D-shaped document can be
+`READY_IMPLEMENTER`/`READY_REVIEWER` with a live `in_flight_turn`; `reconcile` and
+`get_run` are read-only, and `resolve_recovery` was legal only *in*
+`RECOVERY_REQUIRED` — so no legal action could ever create that state, and the only
+existing materialization path was a hidden side effect of a *refused* phase call.
+Fixed normatively:
+
+> **Every transition into `RECOVERY_REQUIRED` has a named, explicit, legal planner
+> action.  No transition is ever a side effect of an invalid action.**
+
+`devrelay_resolve_recovery(run_id, resolution)` is legal for exactly two input
+shapes:
+
+| # | Input document | What the action does (one atomic state write) |
+| --- | --- | --- |
+| 1 | a **valid, non-terminal** v2 document carrying a legal live `in_flight_turn` (`READY_IMPLEMENTER` + implementer intent, or `READY_REVIEWER` + reviewer intent) and satisfying §8 | validate the document as otherwise legal → materialize the interrupted attempt into the single `recovery.attempt` record → enter `RECOVERY_REQUIRED` → apply exactly one resolution that is legal for the enabled scope.  In the mandatory core that resolution is `mark_unrecoverable` (so the core always has a legal exit in one call); `adopt_completed_turn` is accepted here only when the adoption capability is enabled and §11 passes |
+| 2 | a document already in `RECOVERY_REQUIRED` | apply exactly one resolution (`mark_unrecoverable`, or `adopt_completed_turn` when the capability is enabled and §11 passes) |
+
+Consequences, stated normatively:
+
+* for a **v2** document with a live intent, the model-bearing tools
+  (`run_implementer`, `run_reviewer`) and `decide_run` **refuse without mutating**
+  with a stable local error (`orchestration_recovery_required`) — they no longer
+  materialize anything as a side effect;
+* for a **v1** document the accepted v0.3-D behaviour is preserved *exactly* (its
+  next mutating action materializes `BLOCKED`/`turn_interrupted`); v0.3-E's explicit
+  entry applies to v2 documents only (§10);
+* `devrelay_start_run` never creates a document with a live intent, so it is not an
+  entry path.
+
+## 8. `RECOVERY_REQUIRED`: one state, one attempt representation, exact shape
+
+### 8.1 One legal attempt representation (F2)
+
+> The interrupted attempt is represented by **exactly one `recovery.attempt`
+> record** — never by a normal role-history turn — while the run is in
+> `RECOVERY_REQUIRED`.  Normal `implementer_turns`/`reviewer_turns` contain only
+> finalized normal orchestration history.
+
+Resolution converts that *same* attempt exactly once, in one atomic write:
+
+* `mark_unrecoverable` → the recovery attempt becomes **exactly one blocked role
+  turn** and the run enters terminal `BLOCKED`;
+* `adopt_completed_turn` (gated) → the same attempt becomes **exactly one
+  completed role turn** and the run enters the legal post-turn state
+  (`READY_REVIEWER` for an implementer attempt, `AWAITING_DECISION` for a reviewer
+  attempt).
+
+Hard rules: never two role records for the same role/cycle; no normal blocked turn
+exists while `state != BLOCKED`; the recovery record never again authorizes a write
+after resolution (it is retained only as that attempt's resolution audit).  This
+removes the earlier contradiction between "adoption appends a turn" and "recovery
+never rewrites the attempt": the attempt is not appended *and* rewritten, it is
+**converted once**.
+
+### 8.2 Normative document shape (F3)
+
+Every v2 document in `RECOVERY_REQUIRED` must satisfy exactly this shape (all
+fields strict; anything else is corrupt per §6):
+
+| Field | Required value in `RECOVERY_REQUIRED` |
 | --- | --- |
-| completed v0.3-D run | loads, terminal, never enters recovery |
-| `STOPPED` / `LIMIT_REACHED` | unchanged, terminal |
-| `BLOCKED` (any v0.3-D reason) | unchanged, terminal, **not** recoverable (no reopening) |
-| valid v1 interrupted/in-flight document | loads under v1 rules; its next mutating action materializes `BLOCKED`/`turn_interrupted` exactly as v0.3-D did, unless the implementation explicitly adopts v2 materialization **for new attempts only** (design decision: v1 documents keep v1 semantics; new v2 runs get `RECOVERY_REQUIRED`) |
-| old `schema_version` (1) | never migrated, never rewritten, never reinterpreted |
-| no recovery metadata | legal for v1 documents; required for v2 `RECOVERY_REQUIRED` |
+| `schema_version` | `2` |
+| `state` | `RECOVERY_REQUIRED` |
+| `current_cycle` | `completed_cycles + 1` (open-cycle relation) and `1 <= current_cycle <= max_cycles` |
+| `completed_cycles` | `0 <= completed_cycles <= max_cycles`; equals the number of completed reviewer turns in the normal history |
+| `max_cycles` | `1..3` (unchanged) |
+| `model_turn_budget` | exactly `2 × max_cycles` |
+| `model_turns_used` | unchanged by recovery: identical to the pre-entry value; never refunded |
+| `turn_attempts` | `== model_turns_used` |
+| `in_flight_turn` | **`null`** — the entry mutation cleared it in the same atomic write |
+| `recovery` | present: exactly one record with `attempt` (the materialized sanitized attempt), `resolution == ""`, `resolved_at == ""`, and the frozen `evidence` snapshot (incl. `evidence_sha256`) |
+| `recovery_reason` | non-empty, one of `turn_interrupted`, `submission_uncertain`, `reply_pending` |
+| normal `implementer_turns` + `reviewer_turns` | only finalized history; at most one turn per role per cycle, implementer before reviewer, every completed reviewer turn has exactly one completed implementer turn in the same cycle |
+| `decision_history` | `len == completed_cycles` (the state is not `AWAITING_DECISION`), accepted edges only |
+| `blocked_reason` | empty |
+| `last_transition` | the `recover` edge that entered the state (§8.4), `source == external_planner`, `cycle == current_cycle`, `role == attempt.role` |
+| `legal_next_actions` | `["devrelay_reconcile_run", "devrelay_resolve_recovery(mark_unrecoverable)"]`; `adopt_completed_turn` is appended only when the adoption capability is enabled and §11 passes |
 
-## 25. Non-goals (kept out of v0.3-E)
+### 8.3 Accounting equations (pinned)
+
+Let `impl = len(implementer_turns)`, `rev = len(reviewer_turns)`,
+`ra = 1 if recovery.attempt else 0`, `live = 1 if in_flight_turn else 0`.
+
+* **Always, every state:** `turn_attempts == model_turns_used`.
+* **Before the entry mutation (live-intent document):**
+  `impl + rev + live == model_turns_used` and `ra == 0`.
+* **During the single entry write:** the live intent is replaced by the recovery
+  attempt — `live: 1→0`, `ra: 0→1` — so the sum is preserved and
+  `model_turns_used` is unchanged.  No intermediate document is observable (one
+  atomic write).
+* **In `RECOVERY_REQUIRED`:** `impl + rev + ra == model_turns_used`, `live == 0`,
+  and the recovery attempt accounts for exactly one consumed slot.
+* **After `mark_unrecoverable`:** `impl + rev == model_turns_used`, the recovery
+  record is retained as the resolution audit, `state == BLOCKED`,
+  `blocked_reason == recovery_reason`, `legal_next_actions == []`.
+* **After `adopt_completed_turn`:** `impl + rev == model_turns_used` with the
+  converted attempt now counted as one completed role turn.
+* **Never:** any equation that refunds a slot, decrements a counter, or counts the
+  same slot twice.
+
+### 8.4 New `last_transition` edges
+
+| From | Action (`source == external_planner`) | To | role / cycle |
+| --- | --- | --- | --- |
+| `READY_IMPLEMENTER` + implementer live intent | `recover` (`resolve_recovery`) | `RECOVERY_REQUIRED` | `implementer` / `current_cycle` |
+| `READY_REVIEWER` + reviewer live intent | `recover` (`resolve_recovery`) | `RECOVERY_REQUIRED` | `reviewer` / `current_cycle` |
+| `RECOVERY_REQUIRED` | `recover` (`mark_unrecoverable`) | `BLOCKED` | `attempt.role` / `current_cycle` |
+| `RECOVERY_REQUIRED` | `recover` (`adopt_completed_turn`, gated) | `READY_REVIEWER` | `implementer` / `current_cycle` |
+| `RECOVERY_REQUIRED` | `recover` (`adopt_completed_turn`, gated) | `AWAITING_DECISION` | `reviewer` / `current_cycle` |
+
+The accepted reachability validator extends with exactly these edges; no other
+transition into or out of `RECOVERY_REQUIRED` exists.
+
+## 9. Strict recovery evidence reader (F5)
+
+The earlier claim "no ledger record ⇒ never issued" is **removed**: absence of
+visible evidence is not proof of absence.  v0.3-E therefore defines a dedicated
+**strict recovery evidence reader** (design; not implemented) with these normative
+properties:
+
+1. **identity-scoped scan** — scan the workspace ledger for records matching the
+   attempt identity (operation, `session_id`, `prompt_sha256`, `prompt_chars`,
+   `model`, `agent`) within the proven interval;
+2. **no silent skipping** — an unreadable, unparsable, torn or schema-invalid
+   record is **never** skipped; it yields `evidence_gap` (the ordinary MCP
+   accounting reader may keep its tolerant UX behaviour, but recovery never uses it
+   as proof);
+3. **no truncation as proof** — the accounting reader's newest-N / max-N window
+   must never be used to conclude that no record exists; the recovery reader proves
+   the scanned interval instead;
+4. **interval proof** — the reader must demonstrate that the full relevant
+   sequence interval was scanned (from a proven floor to a proven ceiling using the
+   durable call-sequence evidence) or return `evidence_gap`;
+5. **outcomes** — `exactly_one_match` · `multiple_matches` (→ `evidence_conflict`)
+   · `no_record_in_proven_interval` (reportable as "no DevRelay ledger record found
+   in the proven interval", **never** as "never submitted") · `evidence_gap`
+   (unreadable/corrupt/unproven interval);
+6. **no inference from absence** — no recovery decision may treat a missing record
+   as proof of non-delivery; only §15's transport classification is reported, and
+   `mark_unrecoverable` needs none of it.
+
+## 10. Schema dispatch (F7)
+
+Validation is **version-dispatched**; there is no single-equality check and no
+migration:
+
+```text
+if schema_version == 1:
+    validate with the frozen v0.3-D v1 validator (unchanged)
+    the document is never written, never migrated, never upgraded
+    no entry into RECOVERY_REQUIRED
+    reconcile         -> report only (local evidence; remote reads optional, report-only)
+    resolve_recovery  -> refuse locally (stable error, no mutation)
+    a v1 live-in-flight document keeps EXACTLY the accepted v0.3-D behaviour
+    (its next mutating action materializes BLOCKED/turn_interrupted)
+
+if schema_version == 2:
+    validate with the v0.3-E v2 rules (accepted v1 rules + the §8 shape and edges)
+    recovery metadata and RECOVERY_REQUIRED are legal
+
+otherwise:
+    orchestration_state_corrupt (unsupported schema_version; no default insertion)
+```
+
+**How new runs become v2:** `devrelay_start_run` in a v0.3-E build writes
+`schema_version = 2` for **new** runs (the exact switch is an implementation-time
+change with its own tests).  No existing document is rewritten, and a missing
+`schema_version` remains a malformed document (no default).
+
+## 11. Adoption capability gate (F6)
+
+`adopt_completed_turn` is an **optional gated capability**.  The earlier claim that
+an eight-item checklist *proves* exact operation attribution is withdrawn: it does
+not.  Reconcile may therefore **report a candidate**, but `resolve_recovery` MUST
+**refuse** `adopt_completed_turn` as long as the gate has not independently passed —
+no "likely match", no heuristic, no partial credit.
+
+When (and only when) the platform proofs pass, adoption requires **all** of:
+
+1. every §12.6 local-integrity condition (strict reader, workspace binding, session
+   ownership, role/session distinctness, route snapshot unchanged, atomic writes,
+   execution lock);
+2. exactly one ledger record matching the attempt identity, settled `COMPLETED`,
+   2xx, JSON media type, `submission_uncertain == false`;
+3. exactly one session-history user message whose accepted joined text hashes to
+   the stored `prompt_sha256`, and that message is the **last relevant user
+   message** in the evidence window;
+4. exactly one assistant message **directly associated with** that user message,
+   and it is the **final relevant assistant message** in the window;
+5. **no unexpected session message** appears inside the evidence window;
+6. **no other DevRelay ledger operation touches that session** inside the window
+   (the local half of P8);
+7. captured workspace/session/role/model identity all match;
+8. **P1** history durability, **P2** submitted-text fidelity, **P3**
+   identical-prompt uniqueness and **P8** session exclusivity all PASS — plus
+   **P9** if any timestamp or relative-order correlation is used;
+9. the run's cycle/role/phase expectation still matches the attempt.
+
+Any missing or ambiguous item → refuse; the run stays `RECOVERY_REQUIRED` and the
+only remaining resolution is `mark_unrecoverable`.
+
+**`mark_unrecoverable` independence (F8).**  The checklist above applies to
+`adopt_completed_turn` **only**.  `mark_unrecoverable` requires nothing more than a
+legal recovery entry/document (§7), planner authority, local state invariants and an
+uncorrupted document: it must **never** require remote session history to exist, and
+a missing/foreign/unreadable session, an absent ledger record, or `evidence_gap`
+must never block it.  It is the fail-closed safety exit and is always available.
+
+## 12. Reconciliation sources and identity
+
+### 12.1 Sources
+
+| Source | Authoritative for | Mode | Absence / failure | Ambiguity | Survives restart | Distinguishes not-submitted from unobserved? |
+| --- | --- | --- | --- | --- | --- | --- |
+| run document | state, cycle, counters, intent, decision history, snapshot | read (strict) | corrupt → fail closed | contradictory → corrupt (§6) | yes | records intent only |
+| ledger via the **strict reader** (§9) | that DevRelay issued a request, its transport outcome class and the request identity | read-only | `evidence_gap` or `no_record_in_proven_interval` (report-only) | `multiple_matches` → conflict | yes | only in the report-only sense (§15); never a proof |
+| session history (`read_messages`) | what the provider produced in that session | read-only | missing/empty/unreadable → `evidence_gap` | more than one candidate → refuse | **P1** | yes under P2/P3/P8 |
+| session state (`get_session`, `wait_idle`) | current session busy/idle | read-only, not a model call | unknown → do not act | busy with no matching message → stay frozen | session existence only | "may still be running", never delivery |
+| current role configuration | drift detection only | read-only | missing/invalid → cannot proceed under that route | drift → fail closed | yes | n/a — never rewrites the snapshot |
+| accepted v0.3-A taxonomy | transport classification (report-only) | static | unknown class → report `evidence_gap` | conflicting classes → report uncertain | yes | classification, not proof (§15) |
+
+### 12.2 Prompt digest and text semantics (F12)
+
+* `prompt_sha256` is the accepted bridge's digest of the **exact prompt string the
+  tool received** (UTF-8, no normalization, no stripping, no BOM insertion).
+* The remote comparison uses the **accepted joined-text representation** of a
+  session message: `"\n".join(part.text for part in parts if part.text)` — the same
+  rule the accepted `OpenCodeMessage.text` implements.  A "single content part" is
+  **not** assumed:
+  * multiple text parts are joined with `\n` in part order;
+  * line endings are **not** normalized (a `\r\n` in the sent text must appear as
+    `\r\n` in the stored text);
+  * encoding is UTF-8 throughout;
+  * an empty prompt is impossible (the tool boundary rejects it); an empty or
+    missing remote text counts as **no match** (fail closed);
+  * missing or invalid timestamps are never used as identity evidence unless
+    **P9** passes.
+* If canonical text fidelity cannot be established, that is exactly **P2**, and
+  adoption stays disabled.
+
+### 12.3 Route drift
+
+Snapshot is authoritative; current configuration is drift detection only.  Drift
+(or an unresolvable role) → no adoption; the run stays `RECOVERY_REQUIRED` until
+`mark_unrecoverable`.  No fallback, no snapshot rewrite.
+
+### 12.4 Workspace and session identity (P6)
+
+Before any adoption: workspace binding, session ownership (`workspace_match`),
+role/session distinctness and the route snapshot are re-verified.  A run document
+copied into another workspace is **not** recoverable.  If a session is missing,
+foreign, recreated, copied or otherwise cannot be proven to be the original owned
+session, **adoption is unavailable** — the mandatory report/`mark_unrecoverable`
+still works and never claims remote completion.
+
+### 12.5 Terminal states
+
+`COMPLETED`, `STOPPED`, `LIMIT_REACHED`, `BLOCKED` never enter recovery and never
+reopen; recovery tools against them fail locally with zero mutation and zero model
+calls; a terminal document with a live intent remains **corrupt**.
+
+### 12.6 Local integrity conditions (required for adoption; locally provable)
+
+Strict reader per §9; ledger/session integrity per P7; the run's own invariants and
+reachability; atomic single-writer document updates; and the per-surface execution
+lock held for the whole recovery action.
+
+## 13. `evidence_sha256` (F10)
+
+`evidence_sha256` is the digest of the **canonical metadata-only evidence set** used
+by a resolution; it is deterministic and contains no prompt/response/reasoning text.
+
+* **Fields, in exactly this order:**
+  `["devrelay-evidence-v1", run_id, schema_version, state, current_cycle,
+  completed_cycles, model_turns_used, turn_attempts, attempt.role, attempt.cycle,
+  attempt.prompt_sha256, attempt.prompt_chars, attempt.resolved_model,
+  attempt.resolved_agent, attempt.route_source, attempt.started_at,
+  attempt.call_ids…, ledger.call_id, ledger.state, ledger.http_status,
+  ledger.submission_uncertain, ledger.response_media_type, ledger.completed_at,
+  remote.message_id, remote.role, remote.created_at, remote.matched_digest]`
+* **Ordering:** the listed field order; list fields (`attempt.call_ids`) in their
+  recorded order.
+* **Encoding:** UTF-8; each value serialized as a JSON scalar; fields joined with
+  `"\n"`; no trailing newline; the **version marker** `devrelay-evidence-v1` is the
+  first line so the canonical form can evolve explicitly.
+* **Absent/null representation:** the empty string for absent strings, `null` for
+  absent numbers/ids — never omitted (the position always exists).
+* **Never hashed:** raw prompt text, provider response text, reasoning, credentials.
+* **Repeated resolve after success — decision: B (stable local error).**  A second
+  `resolve_recovery` for an already-resolved run returns the stable local error
+  `orchestration_recovery_already_resolved` carrying the recorded resolution and
+  `resolved_at`, and performs **no** write.  (Option A, "idempotent success", was
+  rejected: a mutating tool must not report success for a write it did not
+  perform.)
+
+## 14. Pending results (P4) — report-only
+
+Recorded independent-review conclusion: **OpenCode 1.18.11 exposes session-level
+status only; there is no durable per-operation pending handle.**  Therefore, in the
+current v0.3-E scope:
+
+* `reply_pending` is **report-only**: `reconcile` may report it as evidence;
+* there is **no** pending-result adoption, **no** polling loop, **no** automatic
+  wait, and **no** pending-driven state advance;
+* a session that is merely `busy` never advances anything;
+* if a future platform version exposes an operation handle, using it requires a new
+  reviewed capability extension (new proof, new design).
+
+## 15. Non-delivery classification (P5) — informational only
+
+The accepted transport classification (`connect_error`, `connect_timeout`,
+`pool_timeout` = pre-delivery; read/write timeouts and unusable 2xx bodies =
+uncertain) is **reported as transport evidence only**.  It has **no execution
+authority**: it never authorizes a submission, never authorizes a retry, never
+refunds a slot, and never changes a run state by itself.  `mark_unrecoverable`
+remains the only mandatory-core resolution, and a future retry protocol would need
+a stronger, separately reviewed proof (including P5-class semantics and an
+exclusivity proof) before it could exist at all.
+
+## 16. Crash-window matrix (F11)
+
+Ordering follows the accepted code: intent (run document) → ledger `ISSUED` →
+request → response → ledger settle → turn finalization → MCP response.
+
+| Window | Durable disk evidence | Possible remote evidence | Slot consumed? | `submission_uncertain`? | `reply_pending`? | Allowed action | Forbidden | Final safe state |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| **W0** before durable intent | document unchanged | none | no | n/a | n/a | none needed | any recovery | unchanged |
+| **W1** after intent, before HTTP submission | live intent; strict reader: no record in the proven interval | none | yes | no | no | `resolve_recovery` → `RECOVERY_REQUIRED` (reason `turn_interrupted`), then `mark_unrecoverable` | submission; refund; any side-effect entry | `RECOVERY_REQUIRED` → `BLOCKED` |
+| **W2** during connection establishment | live intent; ledger record settled with a connect-phase state | none (reported only) | yes | no | no | as W1 (non-delivery is reported, never acted on) | auto-resubmit; treating the class as a retry licence | `RECOVERY_REQUIRED` → `BLOCKED` |
+| **W3** request may have been delivered, before response headers | live intent; ledger record `ISSUED` (unsettled) or settled mid-transfer | unknown | yes | yes | unknown | `resolve_recovery` → `RECOVERY_REQUIRED` (reason `submission_uncertain`); reconcile may **report** a candidate; resolve may **only** `mark_unrecoverable` until the adoption gate passes | adoption without the gate; guessing from session busy/idle; any submission | `RECOVERY_REQUIRED` → `BLOCKED` (adoption only if gated) |
+| **W4** *(added)* response received / local bridge result exists, **ledger settle not durably written** | live intent; ledger record still `ISSUED` (or an unreadable settle → `evidence_gap`) | the provider's reply exists | yes | no | no | as W3: report + `mark_unrecoverable`; adoption only under the gate, and then only if the strict reader proves the settle record (an unreadable settle is `evidence_gap`, not a match) | treating an in-memory result as durable evidence; adoption on `evidence_gap` | `RECOVERY_REQUIRED` → `BLOCKED` |
+| **W5** ledger settled, assistant identity not yet captured | live intent; settled `COMPLETED` record | assistant message exists | yes | no | no | report; adoption only under the full §11 gate; otherwise `mark_unrecoverable` | "ledger COMPLETED ⇒ finished turn" | `RECOVERY_REQUIRED` → `BLOCKED` (or adopted, gated) |
+| **W6** result known locally, completed turn not persisted | live intent; settled record | assistant message exists | yes | no | no | as W5 | issuing any provider call | as W5 |
+| **W7** completed turn persisted, MCP response not returned | no intent; the finished turn is in the document | n/a | yes | recorded | recorded | none (the document is already the truth); the client re-reads | re-running the phase | unchanged truthful state |
+
+No cell authorizes behaviour forbidden elsewhere; every "adoption" cell is
+conditioned on the §11 gate, and every window's mandatory-core action ends in
+terminal `BLOCKED`.
+
+## 17. Restart matrix
+
+| Persisted situation | After restart | Allowed | Forbidden |
+| --- | --- | --- | --- |
+| `READY_IMPLEMENTER` / `READY_REVIEWER`, no intent | unchanged | the normal phase action | nothing new |
+| `READY_IMPLEMENTER` / `READY_REVIEWER` + live intent (v2) | unchanged; `get_run` reports `in_flight: true`, `legal_next_actions = ["devrelay_resolve_recovery"]` | explicit `resolve_recovery` (entry per §7) | phase/decide calls (they refuse without mutating); any submission |
+| `RECOVERY_REQUIRED` | persisted state | `reconcile` (read-only), `resolve_recovery` | model calls; automatic work |
+| `AWAITING_DECISION` | unchanged | `decide_run` | phases |
+| `BLOCKED` / `COMPLETED` / `STOPPED` / `LIMIT_REACHED` | unchanged | read-only | recovery and phases |
+| v1 document with live intent | accepted v0.3-D behaviour | its next mutating action materializes `BLOCKED`/`turn_interrupted` | v0.3-E recovery entry |
+| uncertain submission / pending reply (v2) | `RECOVERY_REQUIRED` | report + `mark_unrecoverable` | adoption without the gate; waiting loops |
+
+No restart performs work, creates budget, refunds a slot or issues a request.
+
+## 18. Retry wording (F9) and the no-retry guarantee
+
+A wording rule for this design and its future implementation:
+
+* bridge-level `retry_safe` is **accepted v0.3-A transport metadata**: it says
+  whether *DevRelay could re-issue a request at the bridge level*.  It has **no
+  orchestration recovery authority** — recovery never reads it, it never gates an
+  action, and it never authorizes a submission.
+* v0.3-E contains **no retry protocol**: no automatic retry, no retry tool, no
+  "try again" / "resubmit" / "resume submission" behaviour — **no recovery
+  resolution submits a model turn**, and no resolution may cause a submission
+  indirectly (no phase call, no auto-resume, no background work).
+* the words *retry* / *retryable* / *resubmit* appear here only in negated form or
+  as the name of the accepted bridge field explicitly excluded from recovery
+  authority.
+* a future retry protocol would require its own design, proof gate and independent
+  review; it is not implied, planned or pre-authorized by v0.3-E.
+
+## 19. Capability dependency table
+
+| Capability | Remote platform proofs | Local requirements | Consequence if unavailable |
+| --- | --- | --- | --- |
+| **A — reconcile/report** | none (remote reads are optional and report-only) | strict recovery evidence reader (§9) implemented and correct | reporting degrades to `evidence_gap`; it never guesses |
+| **B — `mark_unrecoverable` → `BLOCKED`** | **none** | legal recovery entry/document (§7), planner authority, local invariants, no corruption | none: this is the fail-closed safety exit and is always available |
+| **C — `adopt_completed_turn`** | **P1 + P2 + P3 + P8** (+ **P9** if timestamps/order are used) | strict reader, local ledger/session integrity (P7), the §11 checklist | capability stays disabled; resolve refuses it; reconcile reports candidates only |
+| **D — pending-result handling** | would require an operation-specific handle proof | — | **report-only in v0.3-E**; no mutation capability |
+| **E — non-delivery classification** | would require a P5-class proof for any authority | — | informational only; no orchestration authority |
+
+## 20. `RECOVERY_REQUIRED` state summary
+
+| Aspect | Value |
+| --- | --- |
+| Nature | **non-terminal**, execution-frozen (no model-bearing action, no `decide_run`, no automatic anything) |
+| Entry | exactly one explicit planner action: `devrelay_resolve_recovery` on a valid v2 live-intent document or on an existing `RECOVERY_REQUIRED` document (§7) |
+| Reasons (vocabulary) | `turn_interrupted`, `submission_uncertain`, `reply_pending` |
+| Legal exits | `mark_unrecoverable` → `BLOCKED`; `adopt_completed_turn` (gated) → `READY_REVIEWER` / `AWAITING_DECISION` |
+| Model calls | **zero**, for every action |
+| Restart | persisted; reconciliation idempotent; no work on restart |
+| `legal_next_actions` | `["devrelay_reconcile_run", "devrelay_resolve_recovery(mark_unrecoverable)"]` (+ `adopt_completed_turn` when the capability is enabled) |
+
+## 21. MCP tool surface (minimum, not implemented)
+
+1. `devrelay_reconcile_run(run_id)` — **read-only** report: legal for any
+   non-terminal v2 document (including a live-intent document) and for
+   `RECOVERY_REQUIRED`; refuses locally for terminal states and for v1 documents
+   (report-only, no mutation); returns the attempt identity, strict-reader result,
+   session-history candidates, the per-item checklist with pass/fail/unknown, and
+   the blockers.  No durable mutation, no model call, idempotent by construction.
+2. `devrelay_resolve_recovery(run_id, resolution)` — the **only** recovery write;
+   legal exactly per §7; `resolution ∈ {mark_unrecoverable, adopt_completed_turn}`;
+   `adopt_completed_turn` is refused unless the capability is enabled and §11
+   passes; performs no provider call; one atomic write; a repeat after success
+   returns `orchestration_recovery_already_resolved` with the recorded outcome
+   (§13).
+
+Both run under the accepted per-surface execution lock.  `devrelay_get_run` stays
+**read-only**.  No tool performs a phase turn, waits, polls or retries.
+
+## 22. Privacy, concurrency, budget
+
+* **Privacy:** digests, ids, roles, timestamps and metadata only; the recovery
+  record keeps `evidence_sha256` and matched message ids, never message text; no
+  prompt/response/reasoning/credential is persisted; session-history text is
+  transient in memory for digest comparison and redacted as the accepted bridge
+  does.
+* **Concurrency:** recovery actions share the accepted per-`McpToolSurface`
+  execution lock; multi-surface/multi-process same-workspace coordination remains
+  **unsupported** and no part of v0.3-E claims a process-wide lock; a crash during
+  recovery leaves either the pre- or the post-recovery document.
+* **Budget:** `model_turns_used`/`turn_attempts` semantics unchanged; the §8.3
+  equations are the only accounting; no refund, no reset, no recomputation, no
+  restart budget.
+
+## 23. Non-goals
 
 Automatic retry · automatic planner decisions · automatic role sequencing ·
-provider/model fallback · automatic interrupt/resubmission · distributed
-multi-process or multi-surface locking · cross-machine recovery · background
-daemon or scheduler polling · WebUI recovery UI · HTTP control plane ·
-release/version bump · automatic resume without explicit planner action ·
-semantic interpretation of any model output · repairing arbitrary corruption ·
-reconstructing lost prompts or replies.
+provider/model fallback · automatic interrupt or resubmission · pending-result
+adoption · distributed multi-process/multi-surface locking · cross-machine
+recovery · background daemon or scheduler polling · WebUI recovery UI · HTTP
+control plane · release/version bump · automatic resume without explicit planner
+action · parsing model output · repairing corruption · reconstructing lost prompts
+or replies · heuristic or probabilistic attribution.
 
-## 26. Test strategy (designed now, implemented later)
+## 24. Test strategy (designed, not implemented)
 
-* deterministic offline crash-window simulations: the existing crash doubles
-  (`SystemExit` at submission, gated transports) extended to kill at each of
-  W0–W6, with the *real* service/router/bridge against the stub;
-* restart/reconciliation tests: save → destroy the surface → recreate → reconcile
-  → resolve → verify, for every case A–H;
-* no-duplicate-submission assertions: the total prompt-POST count is asserted
-  unchanged across every recovery scenario (the central safety test);
-* budget preservation: `model_turns_used` never changes except by a normal
-  consumed slot;
-* route/workspace/session matching: drift, foreign session, copied document, and
-  deleted-session cases all fail closed;
-* ambiguity: two candidate messages / two ledger records / mismatched digests →
-  refuse and stay frozen;
-* terminal immunity: recovery tools against every terminal state are local,
-  mutation-free and model-call-free;
-* reviewer authority stays zero (prose variants, unchanged);
-* mutation tests for recovery-critical invariants (no second submission, no
-  refund, no adoption without the §12 checklist, no reopening of terminals,
-  read-only reconcile);
-* a production-generated honest recovery corpus (each case A–H produced by the
-  real service plus fake remote evidence variants) with a per-mutation
-  differential battery, mirroring the v0.3-D corpus discipline;
-* zero real provider calls during unit/integration testing.
+* deterministic offline crash-window kills W0–W7 with the real service/router/bridge
+  against the stub, asserting the §8 shape after each entry;
+* entry tests: the explicit `resolve_recovery` entry (both input shapes) plus the
+  assertion that phase/decide calls refuse **without mutating** on a v2 live-intent
+  document;
+* accounting tests: the §8.3 equations before/at/after every resolution, including
+  "the recovery attempt is counted exactly once";
+* strict-reader tests: unreadable/torn/unparsable records → `evidence_gap`; the
+  newest-N accounting window never used as proof of absence; interval proof;
+* corruption tests: every invariant violation outside the enumerated deltas →
+  `orchestration_state_corrupt`, no entry, no override, byte-identical document;
+* adoption-gate tests: every §11 item individually false → refuse; the checklist is
+  never satisfiable while the capability flag is off;
+* `mark_unrecoverable` independence: works with no session history at all and with
+  a missing/foreign session;
+* no-submission assertions: the prompt-POST count and `external_request_count` are
+  unchanged across every recovery scenario;
+* terminal immunity, restart matrix, v1/v2 dispatch, privacy scans, and mutation
+  tests for the recovery-critical invariants;
+* a production-generated honest recovery corpus (cases A–H plus fake remote
+  evidence variants) with a per-mutation differential battery;
+* zero real provider/model calls during unit/integration testing.
 
-## 27. Future real-smoke design (not authorized now)
+## 25. Platform proof gate (design only — not run, not authorized)
 
-One minimal bounded scenario, **only if §15 P1–P4 are proven**: a real implementer
-turn succeeds remotely → a *controlled* local interruption is injected before the
-completed turn is persisted (for example a persistence failure right after the
-response, or a hard kill of the DevRelay process while the provider reply
-exists) → restart → explicit `devrelay_reconcile_run` shows a provable match →
-explicit `devrelay_resolve_recovery(adopt_completed_turn)` → the existing remote
-result is materialized with **zero additional provider calls** (asserted by the
-provider log and the ledger's `external_request_count`), the slot count unchanged,
-and the run legal to continue.  If P1–P4 cannot be proven, this smoke cannot be
-made reliable and v0.3-E must ship as "reconcile and report, never adopt, always
-fail closed" — which is an acceptable, honest outcome to design for.
+To be executed **before any implementation** that trusts remote/local recovery
+evidence.  Maximum real provider/model calls: **0** (a local fake
+OpenAI-compatible provider may be used in G2; nothing runs in this design round).
 
-## 28. Design decisions table
+| Step | Purpose | Real provider calls | Scope |
+| --- | --- | --- | --- |
+| **G0.1** | local DevRelay hard-kill around `ISSUED`/settle writes; the strict reader must return a complete valid record or `evidence_gap`/corruption, never silently skip (**P7/F5**) | 0 | local |
+| **G0.2** | offline run↔call false-correlation cases (two runs, reused prompts, reused sessions, neighbouring call ids) | 0 | local |
+| **G0.3** | transport/non-delivery classification checks against the accepted taxonomy (**P5**) | 0 | local/fake transport |
+| **G0.4** | OpenCode installed-API inspection for a per-operation pending handle (**P4**) | 0 | read-only inspection |
+| **G0.5** | session identity/bound checks: missing, foreign, recreated, copied sessions (**P6**) | 0 | local |
+| **G1** | real **LOCAL** OpenCode `1.18.11` session-history restart proof (**P1**: durability of ids/text across a server restart) | 0 | local OpenCode, no inference |
+| **G2** | real **LOCAL** OpenCode + **local fake OpenAI-compatible provider**: submitted-text fidelity (**P2**), duplicate-identical-prompt uniqueness (**P3**), session-exclusivity assumptions as far as observable (**P8**), timestamp/order fidelity if used (**P9**) | 0 | local fake provider |
+
+Rules: **no probe shopping** — one planned probe per case; a failed proof *removes*
+the gated capability instead of triggering another probe; results are recorded in
+`V03E_ACCEPTANCE.md`, whose implementation rows stay FUTURE / NOT RUN until then.
+G0.1 (and G0.4-G0.5 for the reporting language) must pass before the mandatory core
+is implemented; G1/G2 gate only the optional adoption capability.
+
+## 26. Future real acceptance smoke (not authorized)
+
+Only if `adopt_completed_turn` survives the proof gate may a later acceptance smoke
+use **exactly one** real model turn to prove: remote completion → controlled local
+persistence interruption → restart → explicit reconcile → explicit resolve/adopt →
+**no duplicate provider call**.  If adoption is removed or disabled after failed
+proofs, **no real adoption smoke is required**: the reduced core (report +
+`mark_unrecoverable`, fully local) may be accepted without any real model call.
+
+## 27. Design decisions table
 
 | Topic | Decision | Reason | Safety invariant | Open question |
 | --- | --- | --- | --- | --- |
-| Recovery state model | add one non-terminal, execution-frozen `RECOVERY_REQUIRED`; keep `BLOCKED` terminal | `BLOCKED` is terminal and terminals never reopen; adoption must not silently reinterpret history | terminal runs never reopen; no exit to `READY_*` without proof | is one state enough for both "needs evidence" and "evidence gathered"? (design says yes via metadata) |
-| Reconcile authority | deterministic evidence **and** an explicit planner action; provider prose has none | preserves the v0.3-D authority invariant | reviewer prose has zero authority | should a reconcile report be attachable to a decision record for audit? |
-| Retry policy | no implicit retry; no retry protocol in v0.3-E at all | a timeout must never become a free retry; no idempotency key exists | no hidden retry; no fallback; ≤1 submission per explicit phase call | does any real use case require an explicit retry protocol later? |
-| Exact operation identity | `(run_id, role, cycle, session_id, model, agent, prompt_sha256, prompt_chars, call_id)`; no OpenCode idempotency key | only identities that actually exist are used | no invented platform facility | can the ledger record's identity be matched to a remote message without text? (§12 mechanism, pending P2) |
-| Crash windows | W0–W6 matrix with per-window allowed/forbidden actions | makes every kill point explicit and testable | fail closed everywhere; no auto-submission | is a hard kill during the ledger settle reachable in practice? (P7) |
-| Pending replies | reads only, bounded, explicit; no waiting/polling daemon | prevents unbounded loops and hidden work | no model call to resolve; no automatic anything | does OpenCode expose a per-operation pending handle? (P4) |
-| Budget semantics | consumed slots, never refunded, no restart budget | preserves accepted v0.3-D accounting | no refund/reset/free retry | none (decision is closed) |
-| Schema/versioning | `schema_version` 2 for new documents; v1 never migrated or reinterpreted | avoids silently changing accepted history | no silent default for safety-critical fields | should v2 also be written for non-recovery runs (design: yes, one current schema) |
-| Terminal handling | terminals never enter recovery; recovery tools are local failures there | preserves v0.3-D terminal semantics | terminal runs never reopen | none (decision is closed) |
-| Route drift | snapshot is authoritative; drift blocks adoption | route identity is historical | immutable snapshot; no fallback | none (decision is closed) |
-| Workspace/session identity | re-verify workspace, ownership and role distinctness before adoption; missing session fails closed | a copied run or foreign session must never be recovered | explicit ownership; distinct sessions | is session-id + directory strong enough against recreation? (P6) |
-| Concurrency | recovery actions share the accepted per-surface lock; multi-surface/multi-process still unsupported | no new locking model, no false claims | one lock per surface; no process-wide claim | none (decision is closed) |
-| Privacy | digests/ids/metadata only; transient in-memory text allowed, never persisted | preserves the v0.3-D privacy contract | no prompt/response/reasoning/credential persistence | does digest matching need the verbatim text? (P2) |
-| Compatibility | v1 documents keep v1 semantics; new runs are v2; no migration | accepted history must not be reinterpreted | corruption fails closed; no repair | do we need a read-only "v1 run cannot be recovered" hint in the report? |
+| Scope split | mandatory core (report + `mark_unrecoverable`; no submission, no retry, no auto-resume, no adoption) vs optional gated adoption | optional capabilities must never block the fail-closed core | the core never submits; failure is always a legal terminal `BLOCKED` | none (decision closed) |
+| Entry into recovery | exactly one explicit action (`resolve_recovery`, both input shapes); no side-effect transitions | the review's P0: a read-only-only path could never create the state | every entry has a named legal action; no transition from an invalid action | none (decision closed) |
+| Attempt representation | one `recovery.attempt` record, converted once into exactly one role turn at resolution | avoids a blocked turn inside a non-`BLOCKED` run and the append-vs-rewrite contradiction | never two role records for one role/cycle | none (decision closed) |
+| Corruption | never recovery: violations outside the enumerated deltas → corrupt | recovery must not become a repair path | no planner override; no repair | none (decision closed) |
+| Evidence absence | strict reader with interval proof; absence is never proof of non-delivery | silently skipped or unreadable records would fake certainty | no inference from missing evidence | none (decision closed) |
+| Adoption | optional, gated on P1+P2+P3+P8 (+P9); report-only until then | the earlier checklist did not prove attribution | resolve refuses adoption without the gate | will the proofs be attainable at all? (the gate decides) |
+| Pending | report-only; no handle exists in 1.18.11 | no durable per-operation handle | no polling, no waiting, no advance | a future platform handle would need a new capability review |
+| Non-delivery | informational only | a transport class must never create a free retry | no orchestration authority | a retry design would need stronger proof |
+| Schema | version dispatch (v1 frozen / v2 v0.3-E / else corrupt); no migration | one equality check cannot implement the compatibility policy | no silent default, no migration, no rewrite | none (decision closed) |
+| `evidence_sha256` | canonical metadata-only field list with a version marker; repeat resolve → stable `already_resolved` error | determinism, and no false success from a mutating tool | no raw text hashed; no second write | none (decision closed) |
+| Budget | the §8.3 equations; a slot is never refunded | preserves accepted accounting | the recovery attempt is counted exactly once | none (decision closed) |
+| Terminal | never enters recovery, never reopens | preserves v0.3-D terminal semantics | terminal immunity | none (decision closed) |
+| Identity | workspace/session/role/snapshot re-verified; P6 bounds adoption | a copied or recreated session must not be adopted | explicit ownership; distinct sessions | P6 strength (proof) |
+| Concurrency | per-surface lock; multi-surface/multi-process unsupported | no new locking model, no false claims | one lock per surface | none (decision closed) |
+| Privacy | digests/ids/metadata only | preserves the v0.3-D privacy contract | no prompt/response/reasoning/credential persistence | P2 fidelity is a platform question |
 
-## 29. Explicit unresolved questions (blocks implementation)
+## 28. Open questions and proof status
 
-See §15 (P1–P7).  Until they are answered by a platform proof, the following are
-**not frozen**: reconciled-completion adoption, pending-reply resolution,
-non-delivery as a proof, and the real-smoke scenario.  The fail-closed core —
-authority, no-retry, budget, terminal immunity, privacy, concurrency,
-crash-window handling for W0/W1/W2/W6, and "reconcile reports but never guesses" —
-is frozen by this document and is provable offline today.
+| Proof | Question | Gates | Status |
+| --- | --- | --- | --- |
+| P1 | does session history survive an OpenCode server restart with the same ids/text? | adoption (C); reporting quality | PROOF REQUIRED (G1) |
+| P2 | is the submitted user text preserved verbatim so the digest match is sound? | adoption (C) | PROOF REQUIRED (G2) |
+| P3 | can identical prompts in one session be disambiguated deterministically? | adoption (C) | PROOF REQUIRED (G2) |
+| P4 | does a durable per-operation pending handle exist? | pending capability (D) | answered for 1.18.11: **no** (session-level status only) — report-only |
+| P5 | do the accepted connect-phase classes prove non-delivery? | non-delivery authority (E) | PROOF REQUIRED (G0.3); report-only until then |
+| P6 | is session identity strong enough against missing/recreated/copied sessions? | adoption (C) | PROOF REQUIRED (G0.5); bounds adoption now |
+| P7 | is the ledger settle record complete-or-absent under a hard kill? | all ledger-trusting logic | PROOF REQUIRED (G0.1) — local, no provider |
+| P8 | can session exclusivity (no other writer in the window) be established? | adoption (C) | PROOF REQUIRED (G2 + local cross-checks) |
+| P9 | is `created_at`/ordering fidelity sufficient if timestamps are used? | adoption (C) *only if* timestamps are used | PROOF REQUIRED (G2) |
 
-## 30. Minimal local setup (future)
+Until P7 passes, the core may still be implemented but its ledger reporting must
+degrade to `evidence_gap` on any unreadable record (the design already requires
+that); the proof confirms it under real hard kills.  Until P1-P3 and P8 pass,
+adoption stays **disabled** and the core ships as report + `mark_unrecoverable`.
+
+## 29. Minimal local setup (future)
 
 ```text
-devrelay mcp serve --workspace <ws>     # unchanged 17 tools; v0.3-E adds exactly
-                                        # devrelay_reconcile_run (read-only)
-                                        # devrelay_resolve_recovery (mutating)
+devrelay mcp serve --workspace <ws>   # 17 accepted tools + exactly two v0.3-E tools:
+                                      #   devrelay_reconcile_run     (read-only)
+                                      #   devrelay_resolve_recovery  (mutating, gated)
 ```
 
-An MCP Planner would: read `devrelay_get_run`, call `devrelay_reconcile_run` after
-a restart, read the proof checklist, and then either call
-`devrelay_resolve_recovery(adopt_completed_turn)` (only when every checklist item
-passed) or `devrelay_resolve_recovery(mark_unrecoverable)` and handle the terminal
-`BLOCKED` run itself.  DevRelay still never sequences anything.
+An MCP Planner would: `devrelay_get_run` → `devrelay_reconcile_run` (read the
+checklist and blockers) → `devrelay_resolve_recovery(mark_unrecoverable)` to close
+the run safely, or — only when adoption is enabled and every §11 item passed —
+`devrelay_resolve_recovery(adopt_completed_turn)` to continue from the already
+existing result.  DevRelay still never sequences anything and never retries.

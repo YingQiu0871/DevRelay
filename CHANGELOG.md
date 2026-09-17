@@ -4,11 +4,54 @@ All notable changes to DevRelay are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## Unreleased - v0.3-E design (recovery & reconciliation)
+## Unreleased - v0.3-E design, remediated (recovery & reconciliation)
 
-**Design only.  Not implemented, not accepted, unreleased.**  The
-recovery/reconciliation contract for bounded orchestration is frozen for
-independent review: `docs/v0.3/V03E_SPEC.md` (case taxonomy A-H, preserved v0.3-D
+**Design remediated.  Not implemented, not accepted, unreleased.**  After the
+independent design review returned `REQUEST_CHANGES` (P0 = 1, P1 = 6, P2 = 5) the
+recovery/reconciliation contract was repaired for re-review.  The remediated design
+splits a **mandatory fail-closed core** (reconcile/report + an explicit
+`mark_unrecoverable` exit; no provider submission, no retry, no auto-resume, no
+adoption) from an **optional gated** `adopt_completed_turn` capability and a
+**report-only** pending capability, so that no optional capability can block the
+core:
+
+* recovery entry is an explicit legal planner action
+  (`devrelay_resolve_recovery` on a valid v2 document with a live in-flight intent,
+  or on `RECOVERY_REQUIRED`), fixing the review's P0 deadlock; v2 phase/decide calls
+  refuse without mutating, so no transition is a side effect of an invalid action;
+* the interrupted attempt is represented by exactly one `recovery.attempt` record
+  and is converted once (into one blocked or one completed role turn) at
+  resolution, with the complete `RECOVERY_REQUIRED` document shape and pinned
+  accounting equations published (a consumed slot is never refunded and is counted
+  exactly once);
+* corruption is explicitly never recovery (violations outside the enumerated deltas
+  become `orchestration_state_corrupt`: no entry, no override, no repair);
+* a strict recovery evidence reader replaces "no ledger record, therefore never
+  issued" (identity-scoped, no silent skipping, no truncation-as-proof, an interval
+  proof, otherwise `evidence_gap`);
+* adoption claims are downgraded: reconcile may report a candidate, but
+  `resolve_recovery` must refuse `adopt_completed_turn` until the operation
+  attribution proofs P1, P2, P3 and P8 (plus P9 if timestamps are used) pass;
+* schema handling is version-dispatched (v1 validated by the frozen v0.3-D rules and
+  never migrated or reinterpreted; v2 uses the v0.3-E rules; anything else is
+  corrupt), `evidence_sha256` has a canonical metadata-only definition with a
+  stable already-resolved error, the crash-window matrix gains the window where the
+  response exists but the ledger settle is not durable, and pending results are
+  report-only.
+
+The full contract (case taxonomy, `RECOVERY_REQUIRED` state, crash-window and
+restart matrices, minimum two-tool surface, capability dependency table, platform
+proof gate) is in `docs/v0.3/V03E_SPEC.md` with the design-phase matrix in
+`docs/v0.3/V03E_ACCEPTANCE.md`.  It contains no retry protocol, keeps
+`model_turns_used` as consumed slots that are never refunded, keeps terminal runs
+closed and keeps `devrelay_get_run` read-only.  Implementation is gated on an
+independent design re-review and, for the gated capability, on the platform proof
+gate (which has not been run).  No runtime source, test, schema, dependency,
+version or tag changed; no real provider/model call was made and no OpenCode
+instance was started.  Design branch: `v0.3-e-recovery-reconciliation` (parent
+`56e7842`).
+
+The first design revision of this section read: `docs/v0.3/V03E_SPEC.md` (case taxonomy A-H, preserved v0.3-D
 invariants, one new non-terminal execution-frozen `RECOVERY_REQUIRED` state,
 exact call-identity model, reconciliation evidence sources, crash-window matrix
 W0-W6, restart matrix, reconciled completion / non-delivery / pending-reply

@@ -20,7 +20,7 @@ Source: <https://github.com/YingQiu0871/DevRelay> -
 | v0.3-A OpenCode Session Bridge | **accepted / unreleased** — closed at candidate `bcf9627e92ef839abb756810e3c615e6d01b6576`; real OpenCode `1.18.11` smoke passed (one prompt → `DEVRELAY_A33_OK`) |
 | v0.3-B ChatGPT/MCP tool surface | **accepted / unreleased** — closed at accepted candidate `d058d62341a173414bdba88fe357b08c236c8bb4`; final real MCP smoke `PASS — V0.3-B LOCAL REAL MCP SMOKE` |
 | v0.3-C Agent Role Routing | **accepted / unreleased** — closed at accepted candidate `eabb667d1bd9e379d3b7105d72b6a2751bc2a32b`; real routing verified for both roles (implementer `opencode-go/deepseek-v4.1-flash`, reviewer `opencode-go/glm-5.3-flash`), routing only, no orchestration |
-| v0.3-E Recovery & Reconciliation | **design only / not implemented / not accepted / unreleased** — contract frozen for review in `docs/v0.3/V03E_SPEC.md` (+ `V03E_ACCEPTANCE.md`); no recovery code, no schema change, no real model call; implementation gated on independent design review and the open platform proofs (SPEC §15 P1–P7) |
+| v0.3-E Recovery & Reconciliation | **design remediated / not implemented / not accepted / unreleased** — contract repaired after the design review (P0 = 1, P1 = 6, P2 = 5) in `docs/v0.3/V03E_SPEC.md` (+ `V03E_ACCEPTANCE.md`): mandatory fail-closed core (reconcile/report + `mark_unrecoverable`), optional gated `adopt_completed_turn`, report-only pending; no recovery code, no schema change, no real model call; implementation gated on the design re-review plus the local strict-reader proof (core) and P1/P2/P3/P8 (+P9) for adoption |
 | v0.3-D Bounded Orchestration | **accepted / closed / unreleased** — closed at candidate `8b70610a5cdda600ef57cf8378c4f69cd33d5be4` after two remediations and one authorized bounded real orchestration smoke `PASS — V0.3-D REAL BOUNDED ORCHESTRATION SMOKE` (4 real model turns / 4 POSTs, 0 retries, 0 fallbacks); durable run state, legal transitions and a hard cycle bound (at most six reserved/consumed model-turn budget slots per run) over the accepted role path, untrusted persisted state validated for **reachability**, no automatic sequencing |
 
 No `v0.3` stage is part of the `v0.1.0` release, the package version stays
@@ -108,13 +108,16 @@ real authority probes (provider `REQUEST_CHANGES` and provider `APPROVE` both le
 the run at `AWAITING_DECISION`), and the terminal guard proved without spending a
 fifth turn.  Evidence: `docs/v0.3/V03D_ACCEPTANCE.md` §J, §K and §L.
 
-`v0.3-E Orchestration Recovery` — **design only, not implemented, not accepted,
-unreleased**: the recovery/reconciliation contract is frozen for independent review
-in `docs/v0.3/V03E_SPEC.md` (design branch `v0.3-e-recovery-reconciliation`, parent
-`56e7842`), with `docs/v0.3/V03E_ACCEPTANCE.md` as the design-phase matrix.
-Implementation must not start until that review passes and the open platform proofs
-(SPEC §15 P1-P7) are resolved; a design that cannot prove an already-completed turn
-must ship as "reconcile and report, never adopt, always fail closed".  DevRelay
+`v0.3-E Orchestration Recovery` — **design remediated, not implemented, not
+accepted, unreleased**: after the design review's `REQUEST_CHANGES` (P0 = 1,
+P1 = 6, P2 = 5) the contract in `docs/v0.3/V03E_SPEC.md` splits a mandatory
+fail-closed core (reconcile/report + `mark_unrecoverable`; no submission, no retry,
+no auto-resume, no adoption) from an optional, gated `adopt_completed_turn` and a
+report-only pending capability, with `docs/v0.3/V03E_ACCEPTANCE.md` as the
+design-phase matrix (design branch `v0.3-e-recovery-reconciliation`, parent
+`56e7842`).  Implementation must not start until the design re-review passes and
+the required proofs are obtained; a design that cannot prove an already-completed
+turn ships as "reconcile and report, never adopt, always fail closed".  DevRelay
 still never decides when to invoke a role, keeps no implicit retry, fallback or
 automatic resume, and no automatic DeepSeek/GLM routing exists.
 
@@ -1120,13 +1123,15 @@ not downgrade the binary inside a workspace that v0.2-B has already written.
   durable in-flight intent is proven to precede submission.  The Planner still
   decides every phase and every decision
 - **v0.3-E** - Orchestration recovery (crash/uncertain-call reconciliation,
-  resume) - **design only / not implemented / not accepted / unreleased**: the
-  contract is frozen for review in `docs/v0.3/V03E_SPEC.md` (case taxonomy,
-  `RECOVERY_REQUIRED` state, crash-window and restart matrices, minimum two-tool
-  surface, no-implicit-retry policy) with the acceptance matrix in
-  `docs/v0.3/V03E_ACCEPTANCE.md`; implementation waits for an independent design
-  review and the open platform proofs (SPEC §15 P1-P7).  No recovery code exists
-  and no automatic resume is designed in
+  resume) - **design remediated / not implemented / not accepted / unreleased**:
+  the contract was repaired after the design review (P0 = 1, P1 = 6, P2 = 5) in
+  `docs/v0.3/V03E_SPEC.md` with the matrix in `docs/v0.3/V03E_ACCEPTANCE.md`.  The
+  mandatory fail-closed core is reconcile/report plus an explicit
+  `mark_unrecoverable` exit; `adopt_completed_turn` is an optional capability that
+  stays disabled until the platform proof gate passes; pending results are
+  report-only.  No recovery code exists, no automatic resume is designed in, and
+  implementation waits for the design re-review plus the required proofs (the local
+  strict-reader proof for the core; P1/P2/P3/P8 and P9 for adoption)
 - **later** - optional release automation with explicit approvals
 
 ## Development
