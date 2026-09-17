@@ -6,8 +6,10 @@ Independent design-freeze review of candidate
 `9f4a01804b9affe8938a272553df345b5a60aeed`: **P0 = 0, P1 = 0, P2 = 0**, F1–F12
 **CLOSED**, decision **APPROVE V0.3-E FAIL-CLOSED CORE DESIGN; PLATFORM PROOF GATE
 REQUIRED BEFORE IMPLEMENTATION**.  The design is therefore **frozen**; the
-implementation is **NOT authorized**, the pre-implementation platform proof gate has
-**NOT run**, `adopt_completed_turn` remains **DISABLED**, and no provider/model call
+implementation is **NOT authorized**, the pre-implementation platform proof gate is
+**NOT complete** (**G0.1 / P7 was executed once and returned CANDIDATE PASS /
+AWAITING INDEPENDENT REVIEW** — `V03E_G0_1_P7_PROOF.md`; steps G0.2-G0.5, G1 and G2
+have **not** run), `adopt_completed_turn` remains **DISABLED**, and no provider/model call
 occurred during the review (the review was static/documentary).
 
 * Frozen contract: this document; acceptance target:

@@ -11,8 +11,22 @@ design-freeze review approved candidate
 `9f4a01804b9affe8938a272553df345b5a60aeed` with **P0 = 0, P1 = 0, P2 = 0** and
 F1-F12 **CLOSED**, decision *APPROVE V0.3-E FAIL-CLOSED CORE DESIGN; PLATFORM PROOF
 GATE REQUIRED BEFORE IMPLEMENTATION*.  Implementation is **not authorized**, the
-platform proof gate has **not run**, `adopt_completed_turn` remains **disabled**, and
+platform proof gate is **not complete** (**G0.1 / P7 executed once: CANDIDATE PASS /
+AWAITING INDEPENDENT REVIEW**; G0.2-G0.5, G1, G2 not run), `adopt_completed_turn`
+remains **disabled**, and
 the recorded P3 observations (P3-1, P3-2, P3-4/P3-5) stay non-blocking.
+
+**G0.1 / P7 (local ledger persistence under hard kill) was executed once** after the
+freeze and produced a **CANDIDATE PASS / AWAITING INDEPENDENT REVIEW**: six planned
+case executions (before the durable ISSUED write, during that write, after ISSUED
+but before settlement, during settlement publication, after settlement publication,
+and a corrupted-record control) all met their predefined criteria against the real
+accepted ledger persistence path, with the corruption-strict scanner never treating
+malformed evidence as absence while the tolerant accounting reader demonstrably did.
+The remaining gate steps (G0.2-G0.5, G1, G2) have not run; mandatory-core
+implementation remains **not authorized**, `adopt_completed_turn` remains disabled,
+and 0 real provider/model calls were made.  Evidence:
+`docs/v0.3/V03E_G0_1_P7_PROOF.md`.
 
 That approval followed three earlier review rounds: the first independent design
 review returned `REQUEST_CHANGES` (P0 = 1, P1 = 6, P2 = 5) and the

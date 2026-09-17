@@ -6,8 +6,10 @@ Independent design-freeze review of candidate
 `9f4a01804b9affe8938a272553df345b5a60aeed`: **P0 = 0, P1 = 0, P2 = 0**, F1–F12
 **CLOSED**, decision **APPROVE V0.3-E FAIL-CLOSED CORE DESIGN; PLATFORM PROOF GATE
 REQUIRED BEFORE IMPLEMENTATION**.  The design (`docs/v0.3/V03E_SPEC.md`) is frozen;
-implementation is **NOT authorized**, the platform proof gate has **NOT run**
-(steps G0.1-G0.5, G1, G2 all unrun), `adopt_completed_turn` remains **DISABLED**,
+implementation is **NOT authorized**, the platform proof gate is **NOT complete**
+(**G0.1 / P7 executed once: CANDIDATE PASS / AWAITING INDEPENDENT REVIEW** —
+`V03E_G0_1_P7_PROOF.md`; steps G0.2-G0.5, G1, G2 not run), `adopt_completed_turn`
+remains **DISABLED**,
 and the mandatory-core gate stays **G0.1/P7 PASS first** with no
 degraded-implementation path.
 
@@ -40,7 +42,10 @@ G0.1/P7 fails, mandatory-core implementation remains **blocked** (no
 degraded-implementation path), and `evidence_gap` stays a future *runtime*
 fail-closed outcome rather than a substitute for G0.1/P7 PASS.  Optional adoption
 remains **DISABLED** until P1 + P2 + P3 + P8 (plus P9 only if timestamp/order
-correlation is used), gated by G1/G2; the proof gate has **NOT run**.
+correlation is used), gated by G1/G2.  **G0.1 / P7 was executed once and returned
+CANDIDATE PASS / AWAITING INDEPENDENT REVIEW** (`V03E_G0_1_P7_PROOF.md`); the other
+gate steps (G0.2-G0.5, G1, G2) have **NOT run**, and mandatory-core implementation
+remains **NOT AUTHORIZED** until an independent reviewer approves G0.1/P7.
 
 | # | Criterion | Design status | Reference |
 | --- | --- | --- | --- |
@@ -92,7 +97,7 @@ correlation is used), gated by G1/G2; the proof gate has **NOT run**.
 
 | # | Criterion | Status | Reference |
 | --- | --- | --- | --- |
-| E34 | **P7 / G0.1** — hard-kill DevRelay around `ISSUED`/settle writes and verify the strict reader returns a complete valid record or `evidence_gap`/corruption, never silently skipping | PROOF REQUIRED (local) | SPEC §9, §25 |
+| E34 | **P7 / G0.1** — hard-kill DevRelay around `ISSUED`/settle writes and verify the strict reader returns a complete valid record or `evidence_gap`/corruption, never silently skipping | **CANDIDATE PASS / AWAITING INDEPENDENT REVIEW** (executed once; cases A1, A2, B, C, D, E all met their predefined criteria; evidence: `docs/v0.3/V03E_G0_1_P7_PROOF.md`) | SPEC §9, §25 |
 | E35 | **G0.2** — offline run↔call false-correlation cases (two runs, reused prompts, reused sessions, neighbouring call ids) | PROOF REQUIRED (local) | SPEC §25 |
 | E36 | **G0.3** — transport/non-delivery classification checks against the accepted taxonomy (P5) | PROOF REQUIRED (local) | SPEC §25 |
 | E37 | **G0.4** — OpenCode installed-API inspection for a per-operation pending handle (P4) | PROOF REQUIRED (read-only inspection) | SPEC §25 |
