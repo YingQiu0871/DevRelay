@@ -311,3 +311,54 @@ class RoleInvalidRouteError(RoleRoutingError):
     """The configured route for this role is malformed (model/agent grammar)."""
 
     code = "role_invalid_route"
+
+
+# ---------------------------------------------------------------------------
+# v0.3-D: bounded orchestration (durable run state over the accepted role path)
+#
+# These are *local* orchestration failures: they are raised before any request
+# that could submit a model turn and are never mislabeled as provider/role
+# failures (bridge and role errors keep their accepted taxonomy).
+# ---------------------------------------------------------------------------
+
+
+class OrchestrationError(CodedError):
+    """Base class for v0.3-D bounded-orchestration failures."""
+
+    code = "orchestration_error"
+
+
+class OrchestrationRunNotFoundError(OrchestrationError):
+    """No orchestration run with that id exists in this workspace."""
+
+    code = "orchestration_run_not_found"
+
+
+class OrchestrationInvalidTransitionError(OrchestrationError):
+    """The requested orchestration action is not legal from the run's state."""
+
+    code = "orchestration_invalid_transition"
+
+
+class OrchestrationCycleLimitError(OrchestrationError):
+    """The cycle/model-turn bound of this run (or the hard bound) was exceeded."""
+
+    code = "orchestration_cycle_limit"
+
+
+class OrchestrationSessionConflictError(OrchestrationError):
+    """The run's sessions are missing, identical or otherwise unusable."""
+
+    code = "orchestration_session_conflict"
+
+
+class OrchestrationRouteChangedError(OrchestrationError):
+    """A configured role route changed during the run; the run fails closed."""
+
+    code = "orchestration_route_changed"
+
+
+class OrchestrationStateCorruptError(OrchestrationError):
+    """The persisted run document is unreadable or malformed (never reset)."""
+
+    code = "orchestration_state_corrupt"
