@@ -4,6 +4,62 @@ All notable changes to DevRelay are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## Unreleased - v0.3-D candidate (bounded orchestration)
+
+Durable, **bounded** orchestration state over the accepted v0.3-C role path: a
+Planner creates a run, explicitly runs each phase, and records its own decision -
+DevRelay remembers where the run is, enforces a hard cycle bound and fails closed
+on uncertainty.  **Candidate implementation complete, awaiting independent review
+and unreleased**: the package version stays `0.1.0`, the supported public release
+remains `v0.1.0`, nothing is pushed, merged, tagged or published, and this stage
+makes **0 real model calls**.
+
+### Added
+
+- **`src/devrelay/orchestration/`** (`models.py`, `store.py`, `state_machine.py`,
+  `service.py`): the explicit run states (`READY_IMPLEMENTER`, `READY_REVIEWER`,
+  `AWAITING_DECISION`, `COMPLETED`, `STOPPED`, `BLOCKED`, `LIMIT_REACHED`), hard
+  bounds (`max_cycles` 1..3 with `HARD_MAX_CYCLES = 3`, default 2, model-turn
+  budget `2 x max_cycles`, absolute ceiling six turns), a strict durable run
+  document with a Planner-complete summary, a single-writer atomic store under
+  `.devrelay/orchestration/runs/<run_id>.json`, a pure transition policy and the
+  service that binds them to the accepted role router and bridge.
+- **Five MCP tools** (the accepted twelve unchanged, total **17**):
+  `devrelay_start_run` (two existing role sessions + `max_cycles`; no model call),
+  `devrelay_get_run` (read-only, local), `devrelay_run_implementer` and
+  `devrelay_run_reviewer` (one explicit phase turn each) and
+  `devrelay_decide_run` (`complete` | `request_changes` | `stop`; no model call).
+  All five share the accepted execution boundary, so one MCP surface still
+  serializes all seventeen tools.
+- **Durable audit**: previous/next state, timestamp, action, external vs
+  model-bearing source, cycle, role, prompt digest and length, resolved
+  model/agent, call ids, submission status/flags, uncertainty/pending and
+  assistant message ids - never a raw prompt, provider reply, model reasoning or
+  credential.
+- **Fail-closed bounds**: an uncertain, pending or failed phase blocks the run
+  (no retry, no fallback, no role switch, no automatic interrupt); a changed role
+  route or an ownership loss fails the run closed with zero model POST; a
+  persisted in-flight turn is never replayed; a corrupt run document is reported
+  as `orchestration_state_corrupt` and never reset.
+- **154 offline tests** plus the v0.3-D spec and acceptance matrix.
+
+### Notes
+
+- **The external Planner stays authoritative.**  DevRelay never parses reviewer
+  prose (`APPROVE`/`REQUEST_CHANGES`/anything else) to choose a state: a
+  successful reviewer turn always stops at `AWAITING_DECISION`, and only an
+  explicit decision (recorded with `source = external_planner`) advances the run.
+- **Still no automatic sequencing**: no automatic implementer -> reviewer call, no
+  repair loop, no scheduler, no background runner, no semantic judgement of review
+  content, no automatic acceptance or merge, no session creation.
+- **Backward compatibility**: the accepted v0.3-A/B/C behaviour is unchanged; the
+  raw `opencode_send_prompt` and role `devrelay_send_role_prompt` paths are
+  untouched, and the only test-expectation updates are the intended tool
+  inventory (12 -> 17) and the advertised server version (`0.3.0-c` -> `0.3.0-d`).
+- `MCP_SERVER_VERSION` is `0.3.0-d`.  A bounded real orchestration smoke (at most
+  two cycles / four model turns) remains deferred until after independent review
+  and a separate authorization; v0.3-E recovery is explicitly out of scope.
+
 ## Unreleased - v0.3-C accepted (agent role routing)
 
 Explicit, deterministic **role -> route resolution** on top of the accepted

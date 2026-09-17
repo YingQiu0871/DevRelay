@@ -100,7 +100,18 @@ authorizes code changes; each item names its own scope and owner stage.
 * a fresh idle session may appear as `state: UNKNOWN` in list/get while
   `wait_idle` resolves idle through the `/session/status` absence semantics.
 
-## 5. Deferred follow-ups from v0.3-C agent role routing (recorded; **non-blocking for v0.3-C acceptance**)
+## 5. Deferred follow-ups from v0.3-D bounded orchestration (recorded; **non-blocking for v0.3-D review**)
+
+| Item | Note |
+| --- | --- |
+| Bounded real orchestration smoke (two cycles maximum / four model turns) | requires independent review first (`P0 = 0`, `P1 = 0`, no smoke-blocking P2) and a separate authorization; the v0.3-D implementation round makes **0 real model calls** |
+| v0.3-E recovery: reconciliation after a crash during a model submission, uncertain-call recovery, orphan-process recovery, automatic resume | explicitly out of scope for v0.3-D: a persisted in-flight turn fails the run closed (`blocked_reason=turn_interrupted`) and is never replayed, so an interrupted run must be resolved by a human or a later stage |
+| Multi-process orchestration locking | v0.3-D assumes one MCP server process (accepted global serialization) and a single-writer store; multi-process orchestration needs its own design |
+| Run listing / run-history API and run-document retention | not needed for the bounded workflow; run documents accumulate under `.devrelay/orchestration/runs/` |
+| `devrelay_get_run` does not materialize an interrupted turn (it reports `in_flight: true`) | deliberate: reads never mutate; the next mutating action fails the run closed |
+| Repeated transition/read duplication (the service re-resolves routes before every phase) | cheap and deterministic; a future stage could cache per-run resolutions |
+
+## 6. Deferred follow-ups from v0.3-C agent role routing (recorded; **non-blocking for v0.3-C acceptance**)
 
 | Item | Note |
 | --- | --- |
@@ -156,7 +167,7 @@ authorizes code changes; each item names its own scope and owner stage.
   hygiene note);
 * provider `created_at` is passed through as a text/object representation.
 
-## 6. Deferred follow-ups after v0.3-A acceptance (recorded; **do not block acceptance**)
+## 7. Deferred follow-ups after v0.3-A acceptance (recorded; **do not block acceptance**)
 
 v0.3-A was accepted on the strength of the final real A33 smoke (see
 `docs/v0.3/V03A_ACCEPTANCE.md`).  Every item below is explicitly **non-blocking**
@@ -179,7 +190,7 @@ referencing a provider disabled by the same configuration) is an
 **environment/user configuration issue** — recorded here for context only, not a
 DevRelay defect and not a backlog item.
 
-## 7. Deferred beyond the second v0.3-A remediation (recorded, not started)
+## 8. Deferred beyond the second v0.3-A remediation (recorded, not started)
 
 | Item | Why it is deferred |
 | --- | --- |
@@ -191,7 +202,7 @@ DevRelay defect and not a backlog item.
 | Post-abort verification polling (`interrupt_verified`) | accepted-but-unverified is the documented v0.3-A semantic |
 | Attachment/tool-argument modeling | deliberately dropped in v0.3-A |
 
-## 8. Pre-existing test-environment hygiene: shared `%TEMP%` residue
+## 9. Pre-existing test-environment hygiene: shared `%TEMP%` residue
 
 | Field | Value |
 | --- | --- |

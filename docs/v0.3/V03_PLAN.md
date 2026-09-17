@@ -7,7 +7,8 @@
 | **A** | OpenCode session bridge (explicit endpoint, session select/read, one prompt, bounded wait, interrupt, accounting) | **COMPLETE / ACCEPTED** — candidate `bcf9627e92ef839abb756810e3c615e6d01b6576`, real A33 smoke `PASS` against OpenCode `1.18.11` |
 | B | ChatGPT/MCP tool surface (local stdio MCP adapter over the accepted v0.3-A bridge) | **COMPLETE / ACCEPTED** — accepted candidate `d058d62341a173414bdba88fe357b08c236c8bb4`, real MCP smoke `PASS — V0.3-B LOCAL REAL MCP SMOKE` (accepted internally, **unreleased**) |
 | C | Agent role routing (semantic role -> workspace-configured model/agent; routing only, no orchestration) | **COMPLETE / ACCEPTED / UNRELEASED** — accepted candidate `eabb667d1bd9e379d3b7105d72b6a2751bc2a32b`; real routing verified by two bounded runs (implementer `opencode-go/deepseek-v4.1-flash`, reviewer `opencode-go/glm-5.3-flash`) |
-| D | Bounded orchestration (automatic implementer -> reviewer sequencing, repair loops) | **NEXT / NOT STARTED** (not designed yet) |
+| D | Bounded orchestration (durable run state, legal transitions, hard cycle bound, fail-closed; still no automatic sequencing) | **CANDIDATE IMPLEMENTATION COMPLETE — ready for independent review** (unreleased) |
+| E | Orchestration recovery (crash-during-submission reconciliation, uncertain-call recovery, resume) | **NOT STARTED** (not designed yet) |
 
 v0.3-A is accepted and its runtime implementation is frozen at the accepted
 candidate (`bcf9627…`); v0.3-A sources were not modified by v0.3-B.
@@ -35,10 +36,50 @@ three-way route agreement (`devrelay_get_role`, response metadata, OpenCode
 provider log).  The package version stays `0.1.0` and the public release remains
 `v0.1.0`.
 
-v0.3-D (bounded orchestration: automatic sequencing, repair loops, acceptance
-decisions) is **NEXT** and has **not** started; it must not begin without a
+v0.3-D (bounded orchestration) is implemented as an **unreleased candidate** on
+branch `v0.3-d-bounded-orchestration`, based on the v0.3-C acceptance closeout
+`e0a06fa…`: see `docs/v0.3/V03D_SPEC.md` and `docs/v0.3/V03D_ACCEPTANCE.md`.  It
+adds durable run state, legal transitions, a hard cycle bound (`max_cycles` 1..3,
+at most six model turns per run), durable audit and fail-closed behaviour over the
+accepted role path - and exactly five MCP tools (17 in total).  It still does
+**not** sequence roles automatically, never interprets reviewer text, never
+retries and makes **0 real model calls**; a bounded real orchestration smoke
+requires independent review and a separate authorization.
+
+v0.3-E (recovery: crash-during-submission reconciliation, uncertain-call
+recovery, automatic resume) has **not** started and must not begin without a
 separate authorization.  See `docs/BACKLOG.md` for deferred, non-blocking
 follow-ups.
+
+## v0.3-D scope (implemented, candidate)
+
+1. `src/devrelay/orchestration/models.py` — the explicit state enum, hard bounds
+   (`HARD_MAX_CYCLES = 3`, default 2, model-turn budget = 2 x max_cycles), the
+   strict run document (identifiers/digests/evidence only) and its
+   Planner-complete summary projection.
+2. `src/devrelay/orchestration/store.py` — durable single-writer store under
+   `.devrelay/orchestration/runs/`, generated `DR-<32 hex>` ids validated before
+   any filesystem access, atomic writes, and `orchestration_state_corrupt`
+   instead of any silent reset.
+3. `src/devrelay/orchestration/state_machine.py` — the pure transition policy
+   (phase legality, cycle accounting, fail-closed blocking, the three external
+   decisions and the cycle cap).
+4. `src/devrelay/orchestration/service.py` — `start_run`, `get_run`,
+   `run_implementer`, `run_reviewer`, `decide_run` over the accepted role router
+   and bridge: route-snapshot comparison, session ownership checks, one role turn
+   per explicit phase, a durable in-flight intent record that is never replayed,
+   and no reviewer-text interpretation.
+5. `src/devrelay/mcp/tools.py` + `server.py` — exactly five new tools (17 in
+   total) routed through the one accepted `_execute` boundary, run-state-visible
+   failure envelopes, a sanitized `devrelay_status.orchestration` block and the
+   advertised surface version `0.3.0-d`.
+6. `tests/test_v03d_models.py`, `tests/test_v03d_state_machine.py`,
+   `tests/test_v03d_store.py`, `tests/test_v03d_orchestration.py`,
+   `tests/test_v03d_mcp_tools.py`, `tests/test_v03d_concurrency.py`,
+   `tests/test_v03d_stdio.py` (+ `tests/v03d_helpers.py`) — 154 offline tests
+   covering bounds, the store, the state machine, the phase matrices, the
+   authority invariant, invalid transitions, persistence, concurrency and the
+   real stdio boundary.
 
 ## v0.3-C scope (implemented, accepted)
 

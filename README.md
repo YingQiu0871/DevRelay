@@ -20,6 +20,7 @@ Source: <https://github.com/YingQiu0871/DevRelay> -
 | v0.3-A OpenCode Session Bridge | **accepted / unreleased** — closed at candidate `bcf9627e92ef839abb756810e3c615e6d01b6576`; real OpenCode `1.18.11` smoke passed (one prompt → `DEVRELAY_A33_OK`) |
 | v0.3-B ChatGPT/MCP tool surface | **accepted / unreleased** — closed at accepted candidate `d058d62341a173414bdba88fe357b08c236c8bb4`; final real MCP smoke `PASS — V0.3-B LOCAL REAL MCP SMOKE` |
 | v0.3-C Agent Role Routing | **accepted / unreleased** — closed at accepted candidate `eabb667d1bd9e379d3b7105d72b6a2751bc2a32b`; real routing verified for both roles (implementer `opencode-go/deepseek-v4.1-flash`, reviewer `opencode-go/glm-5.3-flash`), routing only, no orchestration |
+| v0.3-D Bounded Orchestration | **candidate implementation complete / unreleased** — ready for independent review; durable run state, legal transitions and a hard cycle bound (max six model turns per run) over the accepted role path, **0 real model calls**, no automatic sequencing |
 
 Neither stage is part of the `v0.1.0` release, the package version stays `0.1.0`,
 and nothing is pushed, tagged or published.  Spec/acceptance for v0.3-B:
@@ -73,11 +74,32 @@ as `APPROVE`/`REQUEST_CHANGES` is provider text, never an automatic acceptance,
 rejection or repair.  Spec and matrix: `docs/v0.3/V03C_SPEC.md`,
 `docs/v0.3/V03C_ACCEPTANCE.md`.
 
+### Bounded orchestration (v0.3-D candidate, unreleased)
+
+v0.3-D adds durable **bounded** run state over the accepted role path: an MCP
+Planner creates a run with two existing, different role sessions
+(`devrelay_start_run`, `max_cycles` 1..3), explicitly runs the implementer phase
+and then the reviewer phase (each exactly one model turn), and the run stops at
+`AWAITING_DECISION`.  Only the Planner's own decision
+(`devrelay_decide_run`: `complete`, `request_changes`, `stop`) advances it;
+`request_changes` opens another bounded cycle only while budget remains, otherwise
+the run ends `LIMIT_REACHED`.  A hard code-level bound caps a run at
+`2 x max_cycles` model turns (at most six), every phase fails closed on
+uncertainty or failure (no retry, no fallback, no role switch), reviewer text is
+never interpreted, and run state/audit lives in
+`.devrelay/orchestration/runs/<run_id>.json` with no prompts, replies or
+credentials persisted.  The MCP surface grows from twelve to exactly seventeen
+tools.  Spec and matrix: `docs/v0.3/V03D_SPEC.md`,
+`docs/v0.3/V03D_ACCEPTANCE.md`.
+
 ### Next stage
 
-`v0.3-D Bounded Orchestration` — **NEXT / not started** (automatic implementer ->
-reviewer sequencing and repair loops remain unimplemented; DevRelay still never
-decides when to invoke a role, and no automatic DeepSeek/GLM routing exists).
+`v0.3-D Bounded Orchestration` — **candidate implementation complete, awaiting
+independent review** (unreleased; no real orchestration smoke yet).
+
+`v0.3-E Orchestration Recovery` — **not started** (crash-during-submission
+reconciliation, uncertain-call recovery, automatic resume).  DevRelay still never
+decides when to invoke a role, and no automatic DeepSeek/GLM routing exists.
 
 > **v0.2-A candidate (unreleased)**: the automatic review loop described under
 > [Automatic review loop (v0.2-A)](#automatic-review-loop-v02-a) is implemented
@@ -1067,8 +1089,14 @@ not downgrade the binary inside a workspace that v0.2-B has already written.
   surface (three new tools, 12 in total), where the workspace pins which
   model/agent plays `implementer`/`reviewer`.  Routing only - the planner still
   sequences the work
-- **v0.3-D** - Bounded Orchestration (automatic sequencing / repair loops) -
-  **NEXT, not started**
+- **v0.3-D** - Bounded Orchestration - **candidate implementation complete
+  (unreleased, ready for independent review)**: durable run state, legal
+  transitions, a hard cycle bound (at most six model turns per run), durable audit
+  and fail-closed behaviour over the accepted role path, with five new MCP tools
+  (17 in total).  The Planner still decides every phase and every decision, and no
+  real model call was made in this round
+- **v0.3-E** - Orchestration recovery (crash/uncertain-call reconciliation,
+  automatic resume) - **not started**
 - **later** - optional release automation with explicit approvals
 
 ## Development
