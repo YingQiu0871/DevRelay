@@ -7,11 +7,12 @@ Independent design-freeze review of candidate
 **CLOSED**, decision **APPROVE V0.3-E FAIL-CLOSED CORE DESIGN; PLATFORM PROOF GATE
 REQUIRED BEFORE IMPLEMENTATION**.  The design (`docs/v0.3/V03E_SPEC.md`) is frozen;
 implementation is **NOT authorized**, the platform proof gate is **NOT complete**
-(**G0.1 / P7 executed once: CANDIDATE PASS / AWAITING INDEPENDENT REVIEW** —
+(**G0.1 / P7 = PASS — authoritative, independently approved through
+*APPROVE V0.3-E G0.1 / P7 PLATFORM PROOF*, P0 = 0, P1 = 0, P2 = 0 —
 `V03E_G0_1_P7_PROOF.md`; steps G0.2-G0.5, G1, G2 not run), `adopt_completed_turn`
 remains **DISABLED**,
-and the mandatory-core gate stays **G0.1/P7 PASS first** with no
-degraded-implementation path.
+and the mandatory-core gate **G0.1/P7 PASS first** is now **satisfied** (the proof
+passed and was independently approved), with no degraded-implementation path.
 
 Only a design exists: **no recovery code, no new tool, no schema change and no test
 was written**, no platform proof was run, no OpenCode instance was started and no
@@ -25,27 +26,32 @@ Legend:
 * **FROZEN (design)** — decided and frozen by the independently approved v0.3-E
   design (candidate `9f4a01804b9affe8938a272553df345b5a60aeed`; design-freeze review
   **P0 = 0, P1 = 0, P2 = 0**).  This label records **design status only** and does
-  **not** authorize implementation: mandatory-core implementation still requires
-  **G0.1 / P7 PASS** under `V03E_SPEC.md` §25, and there is no
-  degraded-implementation path.
+  **not** authorize implementation: mandatory-core implementation required
+  **G0.1 / P7 PASS** under `V03E_SPEC.md` §25 - that gate has now **passed**
+  (authoritative, independently approved), so implementation may be authorized by a
+  separately issued authorization, and there is no degraded-implementation path.
 * **PROOF REQUIRED** — cannot be implemented or accepted until the named platform
   proof passes (proof gate in `V03E_SPEC.md` §25).
 * **DISABLED** — documented but refused at runtime until its gate passes.
 * **FUTURE / NOT RUN** — evidence the implementation round must produce; nothing
   here is claimed as passed.
 
-## A. Mandatory core (no remote platform proof required; G0.1/P7 still required)
+## A. Mandatory core (no remote platform proof required; G0.1/P7 gate satisfied)
 
-Design freeze does **not** authorize implementation.  The mandatory-core ordering
-remains **design frozen → G0.1 / P7 PASS → implementation may be authorized**; if
-G0.1/P7 fails, mandatory-core implementation remains **blocked** (no
+Design freeze does **not** authorize implementation.  The mandatory-core ordering was
+**design frozen → G0.1 / P7 PASS → implementation may be authorized**, and the second
+step is now **satisfied** (the proof passed and was independently approved), so
+implementation may be authorized by a separately issued authorization; had G0.1/P7
+failed, mandatory-core implementation would have remained **blocked** (no
 degraded-implementation path), and `evidence_gap` stays a future *runtime*
 fail-closed outcome rather than a substitute for G0.1/P7 PASS.  Optional adoption
 remains **DISABLED** until P1 + P2 + P3 + P8 (plus P9 only if timestamp/order
 correlation is used), gated by G1/G2.  **G0.1 / P7 was executed once and returned
-CANDIDATE PASS / AWAITING INDEPENDENT REVIEW** (`V03E_G0_1_P7_PROOF.md`); the other
-gate steps (G0.2-G0.5, G1, G2) have **NOT run**, and mandatory-core implementation
-remains **NOT AUTHORIZED** until an independent reviewer approves G0.1/P7.
+**PASS** (authoritative, independently approved — `V03E_G0_1_P7_PROOF.md`), so
+G0.1/P7 no longer blocks mandatory-core implementation *eligibility*; the other gate
+steps (G0.2-G0.5, G1, G2) have **NOT run**, the platform proof gate is **partially
+executed / not complete**, and mandatory-core implementation remains **NOT
+AUTHORIZED** until a separately issued implementation authorization.
 
 | # | Criterion | Design status | Reference |
 | --- | --- | --- | --- |
@@ -97,7 +103,7 @@ remains **NOT AUTHORIZED** until an independent reviewer approves G0.1/P7.
 
 | # | Criterion | Status | Reference |
 | --- | --- | --- | --- |
-| E34 | **P7 / G0.1** — hard-kill DevRelay around `ISSUED`/settle writes and verify the strict reader returns a complete valid record or `evidence_gap`/corruption, never silently skipping | **CANDIDATE PASS / AWAITING INDEPENDENT REVIEW** (executed once; cases A1, A2, B, C, D, E all met their predefined criteria; evidence: `docs/v0.3/V03E_G0_1_P7_PROOF.md`) | SPEC §9, §25 |
+| E34 | **P7 / G0.1** — hard-kill DevRelay around `ISSUED`/settle writes and verify the strict reader returns a complete valid record or `evidence_gap`/corruption, never silently skipping | **PASS** (authoritative / independently approved; executed once at `5bdc21d`–`fe304ab`, candidate result then approved by the final proof review — *APPROVE V0.3-E G0.1 / P7 PLATFORM PROOF*, P0 = 0, P1 = 0, P2 = 0; cases A1, A2, B, C, D, E all met their predefined criteria; evidence: `docs/v0.3/V03E_G0_1_P7_PROOF.md`) | SPEC §9, §25 |
 | E35 | **G0.2** — offline run↔call false-correlation cases (two runs, reused prompts, reused sessions, neighbouring call ids) | PROOF REQUIRED (local) | SPEC §25 |
 | E36 | **G0.3** — transport/non-delivery classification checks against the accepted taxonomy (P5) | PROOF REQUIRED (local) | SPEC §25 |
 | E37 | **G0.4** — OpenCode installed-API inspection for a per-operation pending handle (P4) | PROOF REQUIRED (read-only inspection) | SPEC §25 |

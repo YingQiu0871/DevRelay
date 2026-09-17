@@ -7,9 +7,10 @@ Independent design-freeze review of candidate
 **CLOSED**, decision **APPROVE V0.3-E FAIL-CLOSED CORE DESIGN; PLATFORM PROOF GATE
 REQUIRED BEFORE IMPLEMENTATION**.  The design is therefore **frozen**; the
 implementation is **NOT authorized**, the pre-implementation platform proof gate is
-**NOT complete** (**G0.1 / P7 was executed once and returned CANDIDATE PASS /
-AWAITING INDEPENDENT REVIEW** — `V03E_G0_1_P7_PROOF.md`; steps G0.2-G0.5, G1 and G2
-have **not** run), `adopt_completed_turn` remains **DISABLED**, and no provider/model call
+**NOT complete** (**G0.1 / P7 = PASS — AUTHORITATIVE PASS / INDEPENDENTLY APPROVED**
+by the final proof review *APPROVE V0.3-E G0.1 / P7 PLATFORM PROOF* (P0 = 0, P1 = 0,
+P2 = 0) — `V03E_G0_1_P7_PROOF.md`; steps G0.2-G0.5, G1 and G2 have **not** run),
+`adopt_completed_turn` remains **DISABLED**, and no provider/model call
 occurred during the review (the review was static/documentary).
 
 * Frozen contract: this document; acceptance target:
@@ -31,7 +32,9 @@ occurred during the review (the review was static/documentary).
 
 v0.3-E is split so that the fail-closed core needs **no remote platform proof**
 (only the local **G0.1 / P7** gate first, §25) and can therefore be implemented and
-accepted once that gate passes, and so that no optional capability can block it.
+accepted once that gate passes - that gate **has** passed (§25/§28, authoritative and
+independently approved), and implementation still requires a separately issued
+authorization - and so that no optional capability can block it.
 
 **MANDATORY v0.3-E CORE (implementable; no remote platform proof required):**
 
@@ -581,7 +584,7 @@ A wording rule for this design and its future implementation:
 
 | Capability | Remote platform proofs | Local requirements | Consequence if unavailable |
 | --- | --- | --- | --- |
-| **A — reconcile/report** | none (remote reads are optional and report-only) | strict recovery evidence reader (§9) implemented and correct; **G0.1 / P7 must PASS before core implementation is authorized** | **mandatory-core implementation remains blocked** (there is no degraded-implementation path).  `evidence_gap` is a *runtime* fail-closed outcome for an individual ambiguous/corrupt/unproven evidence case **after** implementation - it is never a waiver of the G0.1/P7 gate |
+| **A — reconcile/report** | none (remote reads are optional and report-only) | strict recovery evidence reader (§9) implemented and correct; **G0.1 / P7 must PASS before core implementation is authorized** | the local prerequisite is now **satisfied** (**G0.1 / P7 = PASS**, authoritative and independently approved, §25/§28); had it failed, mandatory-core implementation would have remained **blocked** (there is no degraded-implementation path).  `evidence_gap` is a *runtime* fail-closed outcome for an individual ambiguous/corrupt/unproven evidence case **after** implementation - it is never a waiver of the G0.1/P7 gate |
 | **B — `mark_unrecoverable` → `BLOCKED`** | **none** | legal recovery entry/document (§7), planner authority, local invariants, no corruption | none: this is the fail-closed safety exit and is always available |
 | **C — `adopt_completed_turn`** | **P1 + P2 + P3 + P8** (+ **P9** if timestamps/order are used) | the core's prerequisite (G0.1 / P7 PASS) plus the §11 checklist | capability stays disabled; resolve refuses it; reconcile reports candidates only |
 | **D — pending-result handling** | would require an operation-specific handle proof | — | **report-only in v0.3-E**; no mutation capability |
@@ -670,13 +673,17 @@ or replies · heuristic or probabilistic attribution.
 ## 25. Platform proof gate (partially executed — not complete)
 
 **Current gate status (updated after the G0.1/P7 execution):** platform proof gate =
-**PARTIALLY EXECUTED / NOT COMPLETE**.  **G0.1 / P7 = EXECUTED ONCE / CANDIDATE PASS /
-AWAITING INDEPENDENT REVIEW** (`V03E_G0_1_P7_PROOF.md`); **G0.2 = NOT RUN**,
-**G0.3 = NOT RUN**, **G0.4 = NOT RUN**, **G0.5 = NOT RUN**, **G1 = NOT RUN**,
-**G2 = NOT RUN**.  Mandatory-core implementation = **NOT AUTHORIZED**;
-`adopt_completed_turn` = **DISABLED**.  There is no authoritative "G0.1 PASS" and no
-"proof gate passed" until an independent reviewer approves the proof; the executing
-agent cannot self-approve it.
+**PARTIALLY EXECUTED / NOT COMPLETE**.  **G0.1 / P7 = PASS** (authoritative,
+independently approved: the final proof review issued *APPROVE V0.3-E G0.1 / P7
+PLATFORM PROOF* with P0 = 0, P1 = 0, P2 = 0 — this PASS comes from that independent
+review of the proof candidate, never from executor self-approval);
+**G0.2 = NOT RUN**, **G0.3 = NOT RUN**, **G0.4 = NOT RUN**, **G0.5 = NOT RUN**,
+**G1 = NOT RUN**, **G2 = NOT RUN**.  The design's local hard prerequisite is
+therefore **satisfied**: G0.1/P7 **no longer blocks mandatory-core implementation
+eligibility**, but implementation remains **NOT AUTHORIZED** until a separately
+issued implementation authorization.  `adopt_completed_turn` = **DISABLED**.  The
+platform proof gate is **not** passed and **not** complete (G0.2-G2 unrun), and no
+part of this status may be read as an implementation or smoke authorization.
 
 To be executed **before any implementation** that trusts remote/local recovery
 evidence.  Maximum real provider/model calls: **0** (a local fake
@@ -696,13 +703,18 @@ Rules: **no probe shopping** — one planned probe per case; a failed proof *rem
 the gated capability instead of triggering another probe; results are recorded in
 `V03E_ACCEPTANCE.md`, whose implementation rows stay FUTURE / NOT RUN until then.
 
-**G0.1 / P7 is a hard gate on the mandatory core, and the only such gate.**
+**G0.1 / P7 was the hard gate on the mandatory core, and the only such gate.**
 Implementation ordering is: **design frozen → G0.1 / P7 PASS → mandatory-core
-implementation may be authorized.**  If G0.1 / P7 fails, mandatory-core
-implementation remains **BLOCKED**; there is **no degraded-implementation path** in
-this design (a degraded scope would need its own design change and independent
-review).  G0.4-G0.5 remain relevant to the reporting language (what the recovery
-report may claim) and must not blur the G0.1 gate; **G1/G2 gate only the optional
+implementation may be authorized.**  The second step is now **satisfied**: the proof
+was executed once and the final independent proof review issued *APPROVE V0.3-E
+G0.1 / P7 PLATFORM PROOF* (**P0 = 0, P1 = 0, P2 = 0**), so **G0.1 / P7 = PASS**
+(authoritative, independently approved).  Had G0.1 / P7 failed, mandatory-core
+implementation would have remained **BLOCKED**; there is **no
+degraded-implementation path** in this design (a degraded scope would need its own
+design change and independent review).  The PASS satisfies the local prerequisite but
+authorizes nothing by itself: implementation still requires a separately issued
+authorization.  G0.4-G0.5 remain relevant to the reporting language (what the recovery
+report may claim) and must not blur that gate; **G1/G2 gate only the optional
 `adopt_completed_turn` capability.**  Maximum real provider/model inference for the
 whole gate: **0**.
 
@@ -752,7 +764,7 @@ proofs, **no real adoption smoke is required**: the reduced core (report +
 | P4 | does a durable per-operation pending handle exist? | pending capability (D) | answered for 1.18.11: **no** (session-level status only) — report-only |
 | P5 | do the accepted connect-phase classes prove non-delivery? | non-delivery authority (E) | PROOF REQUIRED (G0.3); report-only until then |
 | P6 | is session identity strong enough against missing/recreated/copied sessions? | adoption (C) | PROOF REQUIRED (G0.5); bounds adoption now |
-| P7 | is the ledger settle record complete-or-absent under a hard kill? | all ledger-trusting logic | PROOF REQUIRED (G0.1) — local, no provider |
+| P7 | is the ledger settle record complete-or-absent under a hard kill? | all ledger-trusting logic | **PASS** (authoritative, independently approved; executed once under G0.1 — `V03E_G0_1_P7_PROOF.md`; local, 0 provider calls) |
 | P8 | can session exclusivity (no other writer in the window) be established? | adoption (C) | PROOF REQUIRED (G2 + local cross-checks) |
 | P9 | is `created_at`/ordering fidelity sufficient if timestamps are used? | adoption (C) *only if* timestamps are used | PROOF REQUIRED (G2) |
 
@@ -766,14 +778,21 @@ proofs, **no real adoption smoke is required**: the reduced core (report +
   mandatory core).
 * **P3-4 / P3-5** — minor clarity observations recorded by the reviewer around
   summary wording; they are informational and require no design change for freeze.
+* **Proof-review P3 notes (G0.1/P7 round, non-blocking)** — the four recorded
+  observations from the proof round (`sequence.json` missing-vs-corrupt wording, the
+  A2 fault-injection disclosure, the uncommitted disposable harness, and the
+  enumeration-not-arithmetic interval statement) stay recorded in
+  `V03E_G0_1_P7_PROOF.md` §7.1/§8; they do not change the PASS or its scope.
 * These observations stay recorded; `P3` is **not** claimed to be zero.
 
-Until **G0.1 / P7 passes**, mandatory-core implementation is **not authorized**:
-no recovery runtime is implemented, the design remains frozen but
-pre-implementation, and `evidence_gap` stays part of the *future runtime*
-fail-closed semantics rather than a waiver of the proof gate.  If G0.1 / P7 fails,
-mandatory-core implementation remains **blocked** pending a new reviewed design
-decision (there is no degraded-implementation path).  Until P1-P3 and P8 pass,
+**G0.1 / P7 has passed** (authoritative, independently approved), so it no longer
+blocks mandatory-core implementation *eligibility*; implementation nonetheless
+remains **NOT AUTHORIZED** until a separately issued authorization: no recovery
+runtime is implemented, the design remains frozen but pre-implementation, and
+`evidence_gap` stays part of the *future runtime* fail-closed semantics rather than a
+waiver of the proof gate.  Had G0.1 / P7 failed, mandatory-core implementation would
+have remained **blocked** pending a new reviewed design decision (there is no
+degraded-implementation path).  Until P1-P3 and P8 pass,
 `adopt_completed_turn` stays **disabled** and the core provides report +
 `mark_unrecoverable` only.
 

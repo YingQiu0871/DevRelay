@@ -11,23 +11,30 @@ design-freeze review approved candidate
 `9f4a01804b9affe8938a272553df345b5a60aeed` with **P0 = 0, P1 = 0, P2 = 0** and
 F1-F12 **CLOSED**, decision *APPROVE V0.3-E FAIL-CLOSED CORE DESIGN; PLATFORM PROOF
 GATE REQUIRED BEFORE IMPLEMENTATION*.  Implementation is **not authorized**, the
-platform proof gate is **not complete** (**G0.1 / P7 executed once: CANDIDATE PASS /
-AWAITING INDEPENDENT REVIEW**; G0.2-G0.5, G1, G2 not run), `adopt_completed_turn`
+platform proof gate is **not complete** (**G0.1 / P7 = PASS** — authoritative,
+independently approved by *APPROVE V0.3-E G0.1 / P7 PLATFORM PROOF* with
+P0 = 0, P1 = 0, P2 = 0; G0.2-G0.5, G1, G2 not run), `adopt_completed_turn`
 remains **disabled**, and
 the recorded P3 observations (P3-1, P3-2, P3-4/P3-5) stay non-blocking.
 
 **G0.1 / P7 (local ledger persistence under hard kill) was executed once** after the
-freeze and produced a **CANDIDATE PASS / AWAITING INDEPENDENT REVIEW**: six planned
-case executions (before the durable ISSUED write, during that write, after ISSUED
-but before settlement, during settlement publication, after settlement publication,
-and a corrupted-record control) all met their predefined criteria against the real
-accepted ledger persistence path, with the corruption-strict scanner never treating
-malformed evidence as absence while the tolerant accounting reader demonstrably did.
-The remaining gate steps (G0.2-G0.5, G1, G2) have not run, so the platform proof
-gate is **partially executed / not complete** (no step is an authoritative PASS
-before independent approval); mandatory-core implementation remains **not
-authorized**, `adopt_completed_turn` remains disabled,
-and 0 real provider/model calls were made.  Evidence:
+freeze and produced a candidate result: six planned case executions (before the
+durable ISSUED write, during that write, after ISSUED but before settlement, during
+settlement publication, after settlement publication, and a corrupted-record
+control) all met their predefined criteria against the real accepted ledger
+persistence path, with the corruption-strict scanner never treating malformed
+evidence as absence while the tolerant accounting reader demonstrably did.  That
+candidate result was *CANDIDATE PASS / REQUIRES INDEPENDENT REVIEW*; the first
+independent proof review returned `REQUEST_CHANGES` for **bookkeeping/status wording
+only** (P0 = 0, P1 = 0, P2 = 1 - the evidence itself was found sufficient; fixed in
+`8997071`), and the final independent proof review then issued
+**APPROVE V0.3-E G0.1 / P7 PLATFORM PROOF** (P0 = 0, P1 = 0, P2 = 0), so
+**G0.1 / P7 = PASS** (authoritative, independently approved) and it no longer blocks
+mandatory-core implementation *eligibility*; implementation nonetheless remains
+**not authorized** until a separately issued implementation authorization.  The
+remaining gate steps (G0.2-G0.5, G1, G2) have not run, so the platform proof gate is
+**partially executed / not complete** (not passed, not complete); `adopt_completed_turn`
+remains disabled, and 0 real provider/model calls were made.  Evidence:
 `docs/v0.3/V03E_G0_1_P7_PROOF.md`.
 
 That approval followed three earlier review rounds: the first independent design
@@ -72,11 +79,15 @@ proof gate) is in `docs/v0.3/V03E_SPEC.md` with the design-phase matrix in
 `docs/v0.3/V03E_ACCEPTANCE.md`.  It contains no retry protocol, keeps
 `model_turns_used` as consumed slots that are never refunded, keeps terminal runs
 closed and keeps `devrelay_get_run` read-only.  Implementation is gated in two
-separate stages, and neither gate has been run: the **mandatory fail-closed core**
+separate stages, and both of its prerequisites are now satisfied (design frozen;
+**G0.1/P7 = PASS**, authoritative and independently approved): the **mandatory
+fail-closed core**
 (reconcile/report + `mark_unrecoverable`; no retry, no model submission, no
 auto-resume) requires the design freeze **and** the local strict-reader /
 ledger-integrity proof **G0.1/P7 to PASS first** (design frozen -> G0.1/P7 PASS ->
-implementation may be authorized; there is no degraded-implementation path), while
+implementation may be authorized; there is no degraded-implementation path) - both of
+those steps have happened, so implementation awaits only a separately issued
+authorization - while
 the **optional** `adopt_completed_turn` capability stays disabled and is separately
 gated on P1 + P2 + P3 + P8 (plus P9 if timestamp/order correlation is used) and the
 remaining platform proof gate.  Pending-result handling stays report-only and

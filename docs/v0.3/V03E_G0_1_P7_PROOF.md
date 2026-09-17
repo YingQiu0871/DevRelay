@@ -1,8 +1,19 @@
 # DevRelay v0.3-E — G0.1 / P7 platform proof (local ledger persistence under hard kill)
 
-Status: **G0.1 CANDIDATE PASS — REQUIRES INDEPENDENT REVIEW** (self-approval is
-forbidden; mandatory-core implementation remains **BLOCKED / NOT AUTHORIZED** until
-an independent reviewer approves this proof).
+Status: **G0.1 / P7 = PASS** — authoritative and **independently approved**.  The
+final proof review issued **APPROVE V0.3-E G0.1 / P7 PLATFORM PROOF** with
+**P0 = 0, P1 = 0, P2 = 0**.  This PASS comes from that independent review of the
+proof candidate, **never** from executor self-approval.
+
+* Platform proof gate: **PARTIALLY EXECUTED / NOT COMPLETE** — G0.2, G0.3, G0.4,
+  G0.5, G1 and G2 are **NOT RUN**; there is no "proof gate passed" and no
+  "proof gate complete" status.
+* Hard-gate consequence: the local G0.1/P7 prerequisite is satisfied, so G0.1/P7
+  **no longer blocks mandatory-core implementation eligibility**; implementation
+  nonetheless remains **NOT AUTHORIZED** until a separately issued implementation
+  authorization.
+* `adopt_completed_turn`: **DISABLED** (P1/P2/P3/P8, plus P9 if timestamp/order
+  correlation is used, remain unproven; G1/G2 unrun).
 
 This document records the execution of the single pre-implementation proof step
 **G0.1 / P7** from the frozen v0.3-E design (`V03E_SPEC.md` §9, §25, §28).  It is
@@ -233,12 +244,30 @@ full, and no additional cases were probed to search for a passing outcome.
 | D | after settle publication | `VALID_SETTLED` | 1 (`COMPLETED`) | MET |
 | E | corrupted-record control | `CORRUPTION` | 0 records (silently skipped) | MET |
 
-**Candidate result: G0.1 CANDIDATE PASS — REQUIRES INDEPENDENT REVIEW.**
-Platform proof gate after this execution: **PARTIALLY EXECUTED / NOT COMPLETE**
-(G0.1/P7 executed once; G0.2-G0.5, G1, G2 NOT RUN).  Mandatory-core implementation:
-**NOT AUTHORIZED**.  `adopt_completed_turn`: **DISABLED**.  No step is an
-authoritative PASS before independent approval, and the executing agent cannot
-self-approve the gate.
+**Historical candidate result (as recorded at execution time, preserved verbatim):
+G0.1 CANDIDATE PASS — REQUIRES INDEPENDENT REVIEW.**
+
+**Proof chronology (not flattened):** execution of the six planned case runs →
+candidate result *CANDIDATE PASS / REQUIRES INDEPENDENT REVIEW* → first independent
+review `REQUEST_CHANGES` for **bookkeeping/status wording only** (P0 = 0, P1 = 0,
+P2 = 1; the proof evidence itself was found sufficient) → docs-only correction
+`8997071` (status model + P3-1/P3-2 corrections) → **final independent proof review
+APPROVE** (*APPROVE V0.3-E G0.1 / P7 PLATFORM PROOF*, P0 = 0, P1 = 0, P2 = 0) →
+**authoritative `G0.1 / P7 = PASS`**.
+
+The approval preserved these substantive findings (recorded, not expanded): the
+production persistence inventory was verified; harness fidelity is acceptable; the
+hard-kill mechanism is acceptable; A1, A2 (with the disclosure nuance), B, C, D and
+E (scanner control) are MET; there was no probe shopping; the sequence-allocation
+window is not a missing safety-critical G0.1 probe; replace-success / pre-return is
+covered by the D-equivalent persistent state; the process-kill vs power-loss boundary
+is properly limited; and the tolerant `read_records()` **must not** be authoritative
+future recovery evidence.
+Platform proof gate after that approval: **PARTIALLY EXECUTED / NOT COMPLETE**
+(G0.1/P7 = PASS; G0.2-G0.5, G1, G2 NOT RUN).  Mandatory-core implementation:
+**NOT AUTHORIZED**.  `adopt_completed_turn`: **DISABLED**.  The authoritative PASS
+comes from that independent review, never from this document: the executing agent
+cannot self-approve the gate, and this PASS authorizes no implementation.
 
 * No relevant malformed/torn artifact was silently treated as absence by the strict
   scanner; the tolerant reader demonstrably does treat A2/E corruption as absence
@@ -252,12 +281,15 @@ self-approve the gate.
 
 ## 7.1 Independent proof review (recorded outcome)
 
-The independent review of this proof returned **REQUEST_CHANGES** with **P0 = 0,
-P1 = 0, P2 = 1** — the single P2 being a *status-bookkeeping wording* issue (an
-active README line still said the proof gate had not run while the same surface
-recorded the G0.1 execution), now corrected, plus the P3 notes handled below.  The
-proof evidence itself was found **sufficient**, and the following independently
-established conclusions are recorded here verbatim and are not weakened:
+The independent review of this proof first returned **REQUEST_CHANGES** with
+**P0 = 0, P1 = 0, P2 = 1** — the single P2 being a *status-bookkeeping wording* issue
+(an active README line still said the proof gate had not run while the same surface
+recorded the G0.1 execution), corrected in `8997071`, plus the P3 notes handled
+below; the proof evidence itself was found **sufficient**.  The **final** independent
+proof review then issued **APPROVE V0.3-E G0.1 / P7 PLATFORM PROOF** with
+**P0 = 0, P1 = 0, P2 = 0**, which is what makes `G0.1 / P7 = PASS` *authoritative*;
+the executor never self-approved it.  The following independently established
+conclusions are recorded here verbatim and are not weakened:
 
 * harness fidelity: **acceptable**; hard-kill mechanism: **acceptable**;
 * A1 **MET**; A2 **MET** (with the disclosure nuance recorded in §6); B **MET**;
@@ -290,6 +322,19 @@ Recorded P3 notes (non-blocking, no scope expansion):
 
 ## 8. Limitations and non-claims
 
+The G0.1/P7 PASS does **not** establish or authorize any of the following (the
+independent approval changed only the proof's status, not its scope):
+
+* future v0.3-E implementation correctness, or future strict-recovery-reader
+  correctness (neither exists yet);
+* `fsync` durability, machine power-loss durability, or any storage-hardware
+  guarantee;
+* remote submission identity, delivery/non-delivery truth;
+* P1, P2, P3, P8 or P9 (all remain unproven), and optional adoption correctness
+  (`adopt_completed_turn` stays DISABLED);
+* a real model smoke (not authorized by this proof or by its approval);
+* any G0.2-G2 step (none has run).
+
 Even though all planned cases passed, this proof does **not** claim:
 
 * that v0.3-E recovery is implemented (it is not; nothing was implemented);
@@ -300,11 +345,13 @@ Even though all planned cases passed, this proof does **not** claim:
 * remote submission identity, session exclusivity, prompt-text fidelity, or
   timestamp/order fidelity (P1/P2/P3/P8/P9 are untouched and remain PROOF REQUIRED);
 * that adoption is enabled (`adopt_completed_turn` remains DISABLED);
-* that mandatory-core implementation is authorized: **it is not**, and this
-  self-report cannot authorize it — an independent reviewer must approve G0.1/P7
-  first.  Until then the frozen hard gate stands: design frozen → G0.1/P7 PASS →
-  implementation may be authorized; if the proof is rejected, implementation stays
-  blocked (no degraded-implementation path);
+* that mandatory-core implementation is authorized: **it is not**.  The independent
+  approval changed only the proof's status: it satisfies the local hard gate, so
+  G0.1/P7 no longer blocks implementation *eligibility*, but implementation still
+  requires a **separately issued implementation authorization** (this approval is not
+  one).  This document never self-approved the gate; had the proof been rejected,
+  mandatory-core implementation would have stayed blocked (no degraded-implementation
+  path);
 * that any of G0.2, G0.3, G0.4, G0.5, G1 or G2 has been executed (they have not).
 
 This is a **process hard-kill persistence proof only**.

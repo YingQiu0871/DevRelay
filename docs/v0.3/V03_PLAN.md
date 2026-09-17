@@ -91,16 +91,19 @@ proof gate (P1, P2, P3, P8, plus P9 if timestamps are used).
 `8b70610a5cdda600ef57cf8378c4f69cd33d5be4` is untouched.  The design re-review
 **has passed** and the v0.3-E design is **frozen** (candidate `9f4a018`, P0 = 0,
 P1 = 0, P2 = 0); mandatory-core implementation nonetheless must not start until
-**G0.1/P7 passes**.  G0.1/P7 was executed once and returned **CANDIDATE PASS /
-AWAITING INDEPENDENT REVIEW** (`docs/v0.3/V03E_G0_1_P7_PROOF.md`: six hard-kill case
-executions, all meeting their predefined criteria, 0 real provider/model calls);
-implementation stays **NOT AUTHORIZED** until an independent reviewer approves it,
-and G0.2-G0.5/G1/G2 remain unrun, so the platform proof gate is **PARTIALLY EXECUTED /
-NOT COMPLETE** (G0.1/P7 executed once as a candidate; no step is an authoritative
-PASS).  The mandatory core's gate is: **G0.1/P7 must PASS
-first**, and the ordering is design frozen → G0.1/P7 PASS → mandatory-core
-implementation may be authorized; if G0.1/P7 fails, core implementation stays
-**blocked** (no degraded-implementation path; a degraded scope would need its own
+**G0.1/P7 passes** — and it now **does** pass: the proof was executed once
+(`docs/v0.3/V03E_G0_1_P7_PROOF.md`: six hard-kill case executions, all meeting their
+predefined criteria, 0 real provider/model calls) and the final independent proof
+review issued *APPROVE V0.3-E G0.1 / P7 PLATFORM PROOF* (**P0 = 0, P1 = 0, P2 = 0**),
+making **G0.1 / P7 = PASS** (authoritative, independently approved).  G0.1/P7
+therefore no longer blocks mandatory-core implementation *eligibility*;
+implementation nonetheless remains **NOT AUTHORIZED** until a separately issued
+implementation authorization, and G0.2-G0.5/G1/G2 remain unrun, so the platform
+proof gate is **PARTIALLY EXECUTED / NOT COMPLETE** (not passed, not complete).  The mandatory core's gate was **G0.1/P7 PASS
+first** — and it **has** passed, so the second step of the ordering design frozen →
+G0.1/P7 PASS → mandatory-core implementation may be authorized is now satisfied;
+had G0.1/P7 failed, core implementation would have stayed **blocked**
+(no degraded-implementation path; a degraded scope would need its own
 design change and review).  G0.4-G0.5 remain relevant to the
 reporting language.  `adopt_completed_turn` stays disabled until P1, P2, P3 and P8
 (and P9 if timestamps are used) pass the platform proof gate (SPEC §25, §28); if
