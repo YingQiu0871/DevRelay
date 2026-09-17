@@ -44,9 +44,10 @@ from devrelay.mcp.models import (
 from devrelay.mcp.tools import McpToolSurface
 
 #: DevRelay MCP server version advertised to clients (independent of the
-#: unreleased package version).  ``0.3.0-c`` advertises the v0.3-C surface: the
-#: nine v0.3-B tools unchanged plus exactly three role-aware tools.
-MCP_SERVER_VERSION = "0.3.0-c"
+#: unreleased package version).  ``0.3.0-d`` advertises the v0.3-D surface: the
+#: nine v0.3-B tools and the three v0.3-C role tools unchanged, plus exactly five
+#: bounded-orchestration tools (17 in total).
+MCP_SERVER_VERSION = "0.3.0-d"
 
 #: Marker key the dispatcher uses to carry a prepared envelope through the
 #: SDK's result conversion.
@@ -143,6 +144,53 @@ def build_surface(
 # ---------------------------------------------------------------------------
 # tool descriptions: part of the safety surface (the consumer is an LLM planner)
 # ---------------------------------------------------------------------------
+_START_RUN_DESCRIPTION = (
+    "Create bounded orchestration state for ONE run over the already configured "
+    "semantic roles. It performs NO model call, accepts no task prompt and "
+    "requires two existing, different OpenCode sessions (implementer and "
+    "reviewer) that already belong to this workspace - DevRelay never creates, "
+    "infers or reuses a session. It records max_cycles (1..3, default 2) and "
+    "returns the durable run state; nothing runs until you explicitly call "
+    "devrelay_run_implementer / devrelay_run_reviewer / devrelay_decide_run."
+)
+
+_GET_RUN_DESCRIPTION = (
+    "Read-only view of one orchestration run from durable local state (no "
+    "OpenCode request, no mutation): state, cycle, completed_cycles, max_cycles, "
+    "model turns used/budget, terminal flag, blocked reason, the role-route "
+    "snapshot captured at creation, per-turn sanitized evidence and the decision "
+    "history. Never returns raw prompts, provider replies or credentials."
+)
+
+_RUN_IMPLEMENTER_DESCRIPTION = (
+    "Run exactly ONE implementer role turn for an orchestration run, legal only "
+    "in READY_IMPLEMENTER (a second call fails locally with state unchanged and "
+    "zero model POST). The prompt is supplied by you; the model and agent come "
+    "from the workspace role configuration and cannot be overridden. On a "
+    "confirmed completion the run moves to READY_REVIEWER. On uncertainty, a "
+    "pending reply or any failure the run is BLOCKED: it is never retried, the "
+    "reviewer is never invoked automatically, and no further model turn is spent."
+)
+
+_RUN_REVIEWER_DESCRIPTION = (
+    "Run exactly ONE reviewer role turn for an orchestration run, legal only in "
+    "READY_REVIEWER. The reviewer uses its own session and the configured "
+    "reviewer route; you supply the prompt. DevRelay never interprets the "
+    "reviewer's text (APPROVE / REQUEST_CHANGES / any prose): a confirmed "
+    "completion always stops at AWAITING_DECISION and only your explicit "
+    "devrelay_decide_run may advance the run. Uncertainty or failure blocks the "
+    "run without retry."
+)
+
+_DECIDE_RUN_DESCRIPTION = (
+    "Record an EXPLICIT external decision for a run that is AWAITING_DECISION - "
+    "there is no model call. Decisions are exactly: complete (you close the run), "
+    "request_changes (allow one more bounded implementer/reviewer cycle if cycle "
+    "budget remains, otherwise LIMIT_REACHED - it never starts the cycle for you) "
+    "and stop (administrative terminal stop). The decision source is recorded as "
+    "external_planner; reviewer message text is never a decision input."
+)
+
 _LIST_ROLES_DESCRIPTION = (
     "Read-only view of the v0.3-C semantic role routing of the bound workspace: "
     "the supported roles (implementer, reviewer) and, for each, the configured "
@@ -281,7 +329,14 @@ def create_server(
             "role path (you supply only implementer or reviewer and cannot "
             "override the route). Both send exactly one model turn and never "
             "retry - inspect submission_uncertain / reply_pending / retry_safe "
-            "before deciding anything, and never resubmit automatically."
+            "before deciding anything, and never resubmit automatically. "
+            "devrelay_start_run / devrelay_run_implementer / devrelay_run_reviewer "
+            "/ devrelay_decide_run add bounded orchestration state: each phase is "
+            "one explicit call, a successful reviewer turn always stops at "
+            "AWAITING_DECISION, reviewer text is never interpreted, uncertainty "
+            "blocks the run instead of retrying, and only your explicit decision "
+            "(complete / request_changes / stop) advances it - all within a hard "
+            "cycle bound."
         ),
         version=MCP_SERVER_VERSION,
     )
@@ -430,6 +485,66 @@ def create_server(
         return _envelope_result(
             surface.devrelay_send_role_prompt(role, session_id, prompt)
         )
+
+    # ---- v0.3-D bounded orchestration tools (same surface, same boundary) ----
+    @server.tool(
+        name="devrelay_start_run",
+        title="Start a bounded orchestration run",
+        description=_START_RUN_DESCRIPTION,
+        annotations=side_effecting,
+    )
+    def devrelay_start_run(
+        implementer_session_id: str | None = None,
+        reviewer_session_id: str | None = None,
+        max_cycles: int | None = None,
+    ) -> McpEnvelope:
+        return _envelope_result(
+            surface.devrelay_start_run(
+                implementer_session_id, reviewer_session_id, max_cycles
+            )
+        )
+
+    @server.tool(
+        name="devrelay_get_run",
+        title="Read an orchestration run",
+        description=_GET_RUN_DESCRIPTION,
+        annotations=local_read_only,
+    )
+    def devrelay_get_run(run_id: str | None = None) -> McpEnvelope:
+        return _envelope_result(surface.devrelay_get_run(run_id))
+
+    @server.tool(
+        name="devrelay_run_implementer",
+        title="Run the implementer phase",
+        description=_RUN_IMPLEMENTER_DESCRIPTION,
+        annotations=side_effecting,
+    )
+    def devrelay_run_implementer(
+        run_id: str | None = None, prompt: str | None = None
+    ) -> McpEnvelope:
+        return _envelope_result(surface.devrelay_run_implementer(run_id, prompt))
+
+    @server.tool(
+        name="devrelay_run_reviewer",
+        title="Run the reviewer phase",
+        description=_RUN_REVIEWER_DESCRIPTION,
+        annotations=side_effecting,
+    )
+    def devrelay_run_reviewer(
+        run_id: str | None = None, prompt: str | None = None
+    ) -> McpEnvelope:
+        return _envelope_result(surface.devrelay_run_reviewer(run_id, prompt))
+
+    @server.tool(
+        name="devrelay_decide_run",
+        title="Record an external decision",
+        description=_DECIDE_RUN_DESCRIPTION,
+        annotations=side_effecting,
+    )
+    def devrelay_decide_run(
+        run_id: str | None = None, decision: str | None = None
+    ) -> McpEnvelope:
+        return _envelope_result(surface.devrelay_decide_run(run_id, decision))
 
     return server
 
