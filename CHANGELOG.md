@@ -114,6 +114,81 @@ model/store load boundary rather than by adding checks to `start_run`:
   `bool` at its own boundary and the 1..3 ceiling can never be raised (`false`
   normalizes to 0 and is refused).
 
+### Second remediation (independent gate: P0 = 0, three blocking P1s)
+
+The second gate proved that a persisted run only had to have *plausible fields*.
+Three exploits are closed by making the current state **provable from the
+persisted history** (turn history, decision history, counters, transition
+provenance, cycle structure and in-flight intent), still with **0 real model
+calls** and still **NOT ACCEPTED**:
+
+- **P1-A**: `READY_REVIEWER` - and a live reviewer in-flight intent - now requires
+  exactly one **completed** implementer turn in the current cycle.  A forged
+  reviewer phase used to reach `POST /session/<reviewer>/message` before the
+  post-call save noticed; it is now `orchestration_state_corrupt` at the load
+  boundary with zero requests and a byte-identical file.
+- **P1-B**: a historical `blocked` turn implies `BLOCKED` (a failed phase fails the
+  run closed and nothing reopens it), so a blocked turn can no longer sit inside an
+  active or completed run; a completed reviewer turn also requires exactly one
+  completed implementer turn in the same cycle.  All five honest `BLOCKED` variants
+  (implementer failure, reviewer failure, route change, interrupted implementer,
+  interrupted reviewer) stay valid.
+- **P1-C**: an exhausted `max_cycles=3` run rolled back toward cycle 1 can no
+  longer spend again.  The validator now requires the last transition to be a real
+  state-machine edge **ending at the current state** (with the action, previous
+  state, role and cycle that edge implies), the decision history to equal
+  `completed_cycles - (1 if AWAITING_DECISION else 0)`, every decision to be a legal
+  `AWAITING_DECISION` edge whose terminal decision is last, the opened cycles to
+  equal `current_cycle - 1`, no turn from a future cycle, and the persisted spend
+  to be possible for the cycle structure (`model_turns_used <= 2 x current_cycle`).
+  Ten rollback variants (counters/history/decisions reset in every combination,
+  stale or rewritten transition, missing `request_changes`, fabricated cycle 3,
+  future-cycle turn, terminal-to-active rollback, reviewer evidence without
+  implementer evidence, blocked turn injected into a completed history) are all
+  refused before any submission.
+- **Strict persisted types**: `schema_version` and `model_turn_budget` are required
+  (no default) and `schema_version`, `max_cycles`, `current_cycle`,
+  `completed_cycles`, `turn_attempts`, `model_turn_budget`, `model_turns_used` (plus
+  per-turn `cycle`/`prompt_chars` and the transition cycle) are strict integers, so
+  a persisted `"2"`, `2.0`, `true`, `false`, `null` or a missing `schema_version`
+  is a malformed document - never a coerced number, never a migration.
+- **Turn audit consistency**: finished turns need a valid `completed_at`, a
+  lowercase sha256 prompt digest, a positive prompt length, no `blocked_reason`
+  when completed and a non-empty one when blocked; an in-flight intent claims
+  neither completion nor a blocked reason; `resolved_model`, `resolved_agent` and
+  `route_source` must all agree with the captured snapshot.
+- **Honest corpus and differential proof**: a new production-generated corpus
+  (`tests/v03d_corpus.py`, 19 states including both in-flight roles in cycles 1-2
+  and all five `BLOCKED` shapes, with crash boundaries produced by a real
+  `SystemExit`) must load, re-save, restart and reload unchanged, and each member
+  must reject a 15-mutation battery one mutation at a time.  The hand-written
+  in-flight fixtures were replaced by the real crash path.
+- **Save-side invariants** are covered directly (state/history relation, identical
+  sessions, budget, decision history): an impossible in-memory run cannot be
+  written, and the previous document stays byte-identical.
+- **Truthfulness fixes**: failure messages are shaped from the recorded
+  `submission_attempted`/`submission_uncertain`/`reply_pending`/`submission_status`
+  evidence (a connect error is no longer described as uncertain); the
+  `devrelay_run_implementer` description explains that a persisted interrupted
+  phase is first materialized into `BLOCKED`; `devrelay_get_run` says an
+  unreachable document is refused as corrupt; the lock scope is stated per tool
+  surface with `lock_scope`/`surfaces`/`multiple_surfaces_or_processes` status keys;
+  the model-turn ceiling is described as six reserved/consumed **slots** (at most
+  six POST attempts); atomic file replacement no longer implies hard-kill cleanup
+  (an inert `.tmp` file is never listed or honoured, and no `fsync`/power-loss
+  durability is claimed).
+- **Recorded P3s**: the MCP SDK pre-parses JSON-looking *string* prompts
+  (`{"task": ...}`) into dict/list and refuses them at its own boundary with **no
+  submission** (a `str`-only annotation would break the documented
+  `mcp_invalid_argument` envelope, so it is recorded rather than changed); and the
+  honest bound of self-contained validation - a fully rewritten but internally
+  consistent history cannot be distinguished from an honest one without an external
+  integrity anchor (no journal or chain is added).
+- **Tests**: the v0.3-D suite grows from 255 to **357** (the new reachability suite
+  plus the corpus), the full offline suite from 1064 to **1166**, with mutations
+  A-K all detected (A 105, B 19, C 6, D 104, E 6, F 18, G 3, H 2, I 4, J 4, K 4;
+  control 357 v0.3-D tests green).
+
 - `MCP_SERVER_VERSION` is `0.3.0-d`.  A bounded real orchestration smoke (at most
   two cycles / four model turns) remains deferred until after independent review
   and a separate authorization; v0.3-E recovery is explicitly out of scope.

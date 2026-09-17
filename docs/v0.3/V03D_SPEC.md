@@ -73,12 +73,24 @@ terminal run accepts no model-bearing action (and no further decision).
 Bounds: `1 <= max_cycles <= HARD_MAX_CYCLES = 3` (default `2`); a caller can
 never raise the hard bound.  One cycle is at most one implementer turn plus one
 reviewer turn, so `model_turn_budget = 2 x max_cycles` and the absolute v0.3-D
-maximum is **6 model turns per run** - there is no path around it.
+maximum is **six reserved/consumed model-turn budget slots per run** - allowing at
+most six model POST attempts/submissions under the bounded workflow, and there is
+no path around it.  A consumed slot is not a confirmed request: see the accounting
+paragraph below.
 
 Cycle accounting: a cycle is complete when the reviewer turn reaches
 `AWAITING_DECISION` (that is when `completed_cycles` increments);
 `request_changes` opens the next cycle only while `completed_cycles < max_cycles`
 and otherwise produces `LIMIT_REACHED` with **zero** model POSTs.
+
+Persisted types are **strict** (no coercion, no migration): `schema_version` and
+`model_turn_budget` are required and have no default, and `schema_version`,
+`max_cycles`, `current_cycle`, `completed_cycles`, `turn_attempts`,
+`model_turn_budget` and `model_turns_used` are strict integers, so a persisted
+`"2"`, `2.0`, `true`, `false` or `null` is a malformed document rather than a
+number.  A missing `schema_version` is rejected outright: DevRelay never silently
+supplies a default when reading persisted state.  The same strictness applies to
+per-turn `cycle`/`prompt_chars` and to the transition cycle.
 
 Model-turn accounting (`model_turns_used`, authoritative): the counter records
 **consumed orchestration model-turn budget slots**, not confirmed provider/HTTP
@@ -141,9 +153,12 @@ uncertain runs is explicitly out of scope (v0.3-E).
   document never appears as a valid run; a missing run is
   `orchestration_run_not_found` and an unreadable/malformed one is
   `orchestration_state_corrupt` - it is **never** silently reset or recreated.
-  Honest scope: this is atomicity against a crash of *this* process (no partially
-  written document is ever visible, and no temp file is left behind).  Durability
-  against power loss is **not** claimed - no `fsync` is issued;
+  Honest scope: the final document is replaced atomically, so a reader sees either
+  the complete previous document or the complete new one.  A hard kill may leave an
+  **inert** `.*.tmp` file behind: it is never listed as a run and never honoured
+  (only `DR-<32 hex>.json` is read, and a run is only ever loaded by its valid id),
+  and normal saves leave no residue.  Durability against power loss is **not**
+  claimed - no `fsync` is issued;
 * **persisted state is untrusted input.**  A run document found on disk is
   re-validated before it is believed: the strict schema, then a semantic
   invariant pass that re-derives everything the state machine guarantees (fixed
@@ -180,6 +195,60 @@ uncertain runs is explicitly out of scope (v0.3-E).
   **unsupported** for v0.3-D: there is no cross-process lock, no writer lease and
   no recovery, and multi-process orchestration and crash reconciliation are out of
   scope.
+
+### Reachability: the state must be provable from the persisted history
+
+Valid fields are not enough.  Before a persisted run may drive anything, its
+**current state must be reachable** from its own turn history, decision history,
+counters, transition provenance, cycle structure and in-flight intent.  The rules
+below are all satisfied by every honestly generated document and are enforced on
+load *and* save:
+
+* the last recorded transition must be a real edge of the state machine that
+  **ends at the current state**, with the action, previous state, role and cycle
+  that edge implies (`start` only for a fresh cycle-1 `READY_IMPLEMENTER` and only
+  with an empty previous state; `decide` for a state entered by a decision, at the
+  cycle the decision was taken in; `run_implementer`/`run_reviewer` for
+  `READY_REVIEWER`/`AWAITING_DECISION`; `run_*` or `block` into `BLOCKED`);
+* `len(decision_history) == completed_cycles - (1 if state == AWAITING_DECISION
+  else 0)`: every completed cycle has exactly one external decision except the
+  cycle that is still awaiting one, and no phantom decision exists;
+* every decision record leaves `AWAITING_DECISION`, uses an allowed edge
+  (`complete`→`COMPLETED`, `stop`→`STOPPED`, `request_changes`→
+  `READY_IMPLEMENTER`|`LIMIT_REACHED`) and a decision that ends the run is the last
+  record;
+* the number of `request_changes` decisions that opened a new cycle equals
+  `current_cycle - 1`, so cycle 2 needs one such decision, cycle 3 needs two, and
+  `current_cycle = 3` with `completed_cycles = 2` cannot be fabricated from a
+  single decision;
+* no turn may come from a future cycle (`turn.cycle <= current_cycle`), there is
+  at most one turn per role per cycle, an implementer turn always precedes its
+  reviewer turn, and a completed reviewer turn requires exactly one completed
+  implementer turn in the same cycle;
+* `READY_REVIEWER` - and a live reviewer in-flight intent - requires exactly one
+  **completed** implementer turn in the current cycle: the reviewer phase is
+  unreachable from a cycle whose implementer phase never completed;
+* a historical `blocked` turn implies the run state is `BLOCKED` (a failed phase
+  fails the run closed and nothing reopens it), so a blocked turn can never sit
+  inside an active or completed run;
+* the persisted spend cannot exceed what the cycle structure could have produced
+  (`model_turns_used <= 2 x current_cycle`), on top of the hard budget bound;
+* each turn (and the in-flight intent) carries a well-formed audit record for its
+  outcome: lowercase sha256 prompt digest, positive prompt length, valid
+  `started_at`, valid `completed_at` once finished, no `blocked_reason` on a
+  completed turn, a non-empty `blocked_reason` on a blocked one, and an in-flight
+  intent that claims neither completion nor a blocked reason; `resolved_model`,
+  `resolved_agent` and `route_source` must agree with the captured snapshot.
+
+**Honest bound.**  A run document is self-contained mutable JSON with no external
+integrity anchor, so the guarantee is exactly: every structural and semantic
+reachability invariant holds, and every malformed, inconsistent or partially
+rolled-back document fails closed **before** any model call.  v0.3-D does **not**
+provide cryptographic or append-only tamper evidence: an attacker who rewrites
+*every* field into a different but internally consistent history (for example
+resetting an exhausted run to a fresh-looking cycle 1) cannot be detected from the
+document alone.  That limitation is recorded rather than papered over; an
+append-only journal or a signed chain would be later hardening, not this stage.
 
 A model-bearing phase writes a durable **in-flight** record *before* the call is
 submitted (the intent is on disk before the role call reaches submission; this is
@@ -269,7 +338,20 @@ is made for the model-bearing tools themselves).
   ceiling can never be raised, ``false`` normalizes to 0 and is refused - and the
   tool body itself rejects a real ``bool`` whenever it sees one.  No fix is
   attempted at the adapter layer because the normalization happens above it; the
-  DevRelay-side check is kept and asserted.
+  DevRelay-side check is kept and asserted.  Persisted documents are unaffected:
+  they are validated with strict types, not through the MCP argument model.
+* **Known boundary, recorded (P3):** the same SDK pre-parses a *string* argument
+  that happens to be JSON (``{"task": ...}``, ``[1, 2, 3]``) into a dict/list
+  because ``FuncMetadata.pre_parse_json`` acts whenever the declared annotation is
+  not plain ``str``; such a prompt is then refused by the SDK's own argument
+  validation before DevRelay's envelope exists, and **nothing is submitted**.  A
+  plain ``str`` annotation would suppress the coercion but would also replace the
+  documented ``mcp_invalid_argument`` envelope for a missing prompt with an
+  SDK-level error, so the trade-off is recorded instead of destabilizing the
+  adapter.  Non-JSON prompts (including malformed JSON text) work normally.
+* **Known bound of non-cryptographic state validation:** see §6 - a fully
+  rewritten but internally consistent history cannot be distinguished from an
+  honest one without an external integrity anchor.
 
 ## 11. Minimal local setup
 

@@ -40,17 +40,25 @@ v0.3-D (bounded orchestration) is implemented as an **unreleased, NOT ACCEPTED
 candidate** on branch `v0.3-d-bounded-orchestration`, based on the v0.3-C
 acceptance closeout `e0a06fa…`: see `docs/v0.3/V03D_SPEC.md` and
 `docs/v0.3/V03D_ACCEPTANCE.md`.  It adds durable run state, legal transitions, a
-hard cycle bound (`max_cycles` 1..3, at most six model turns per run), durable
+hard cycle bound (`max_cycles` 1..3, at most six reserved/consumed model-turn budget slots per run), durable
 audit and fail-closed behaviour over the accepted role path - and exactly five MCP
 tools (17 in total).  It still does **not** sequence roles automatically, never
 interprets reviewer text, never retries and makes **0 real model calls**; a
 bounded real orchestration smoke requires independent review and a separate
 authorization.
 
-An independent review of the first v0.3-D candidate returned
-`REQUEST_CHANGES` (P0 = 0, one blocking P1: persisted run state was trusted as
-input, plus P2/P3 findings).  The **remediation is complete and ready for
-independent re-review**: persisted state is now validated by a semantic invariant
+An independent review of the first v0.3-D candidate returned `REQUEST_CHANGES`
+(P0 = 0, one blocking P1: persisted run state was trusted as input, plus P2/P3
+findings), and a second review returned `REQUEST_CHANGES` with **three** blocking
+P1s: a persisted run needed only plausible fields, not a state provable from its
+history.  Both **remediations are complete and ready for independent re-review**:
+the first closed the trusted-input boundary, and the second adds reachability
+validation (`READY_REVIEWER` requires this cycle's completed implementer turn, a
+blocked turn implies `BLOCKED`, the last transition must end at the current state,
+the decision history must equal the completed cycles, no future-cycle evidence,
+and the persisted spend must be possible for the cycle structure), strict persisted
+types, turn-audit consistency, and a production-generated honest corpus with a
+per-mutation differential battery.  Details: persisted state is now validated by a semantic invariant
 pass on load *and* save (the four gate reproductions A-D are refused), an
 unresolvable role route fails closed like a changed one, an interrupted turn is
 materialized into the role history with its sanitized audit fields, the durable
@@ -127,9 +135,10 @@ follow-ups.
 3. `src/devrelay/mcp/tools.py` — one adapter per capability over the accepted
    `OpenCodeBridge` (health, list/get session, read messages, send_prompt,
    wait_idle, interrupt, calls) with v0.3-A validation, `retry_safe` derived from
-   documented evidence, and **one process-scoped re-entrant execution lock over
-   all nine tool bodies** (the accepted v0.3-A filesystem ledger is a
-   single-writer store, so reads are serialized too).
+   documented evidence, and **one re-entrant execution lock per tool surface over
+   all tool bodies** (the shipped stdio server builds exactly one surface; the
+   accepted v0.3-A filesystem ledger is a single-writer store, so reads are
+   serialized too, and several surfaces or writer processes are unsupported).
 4. `src/devrelay/mcp/server.py` — bound-workspace startup (fail closed), the
    exact nine-tool inventory with honest annotations and planner-oriented
    descriptions, envelope-for-every-failure, stderr-only diagnostics, stdio run.
