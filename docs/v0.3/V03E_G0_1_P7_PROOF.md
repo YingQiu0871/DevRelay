@@ -5,9 +5,16 @@ final proof review issued **APPROVE V0.3-E G0.1 / P7 PLATFORM PROOF** with
 **P0 = 0, P1 = 0, P2 = 0**.  This PASS comes from that independent review of the
 proof candidate, **never** from executor self-approval.
 
-* Platform proof gate: **PARTIALLY EXECUTED / NOT COMPLETE** — G0.2, G0.3, G0.4,
-  G0.5, G1 and G2 are **NOT RUN**; there is no "proof gate passed" and no
-  "proof gate complete" status.
+> **Status scope:** the status block below records the platform-gate state **at
+> completion/approval of the G0.1 round** (HEAD `4448f92` lineage).  It is a
+> historical, round-scoped record, not the current gate state; the current state is
+> maintained in `V03E_SPEC.md` §25 and in the later proof records
+> (`V03E_G0_2_FALSE_CORRELATION_PROOF.md`, `V03E_G0_2_CLEAN_RERUN_PROOF.md`).  The
+> G0.1 evidence, criteria and conclusion in this document are unchanged.
+
+* Platform proof gate **as at the G0.1 round**: **PARTIALLY EXECUTED / NOT COMPLETE**
+  — at that time G0.2, G0.3, G0.4, G0.5, G1 and G2 were **NOT RUN**; there is no
+  "proof gate passed" and no "proof gate complete" status.
 * Hard-gate consequence: the local G0.1/P7 prerequisite is satisfied, so G0.1/P7
   **no longer blocks mandatory-core implementation eligibility**; implementation
   nonetheless remains **NOT AUTHORIZED** until a separately issued implementation
@@ -263,8 +270,10 @@ window is not a missing safety-critical G0.1 probe; replace-success / pre-return
 covered by the D-equivalent persistent state; the process-kill vs power-loss boundary
 is properly limited; and the tolerant `read_records()` **must not** be authoritative
 future recovery evidence.
-Platform proof gate after that approval: **PARTIALLY EXECUTED / NOT COMPLETE**
-(G0.1/P7 = PASS; G0.2-G0.5, G1, G2 NOT RUN).  Mandatory-core implementation:
+Platform proof gate after that approval (**round-scoped, as at the G0.1 round**):
+**PARTIALLY EXECUTED / NOT COMPLETE** (G0.1/P7 = PASS; G0.2-G0.5, G1, G2 NOT RUN at
+that time; later rounds executed and recorded their own steps separately).
+Mandatory-core implementation:
 **NOT AUTHORIZED**.  `adopt_completed_turn`: **DISABLED**.  The authoritative PASS
 comes from that independent review, never from this document: the executing agent
 cannot self-approve the gate, and this PASS authorizes no implementation.
@@ -333,7 +342,8 @@ independent approval changed only the proof's status, not its scope):
 * P1, P2, P3, P8 or P9 (all remain unproven), and optional adoption correctness
   (`adopt_completed_turn` stays DISABLED);
 * a real model smoke (not authorized by this proof or by its approval);
-* any G0.2-G2 step (none has run).
+* any G0.2-G2 step **as at the G0.1 round** (none had run then; later rounds are
+  recorded separately and are not covered by this proof).
 
 Even though all planned cases passed, this proof does **not** claim:
 
@@ -352,7 +362,9 @@ Even though all planned cases passed, this proof does **not** claim:
   one).  This document never self-approved the gate; had the proof been rejected,
   mandatory-core implementation would have stayed blocked (no degraded-implementation
   path);
-* that any of G0.2, G0.3, G0.4, G0.5, G1 or G2 has been executed (they have not).
+* that any of G0.2, G0.3, G0.4, G0.5, G1 or G2 had been executed **at the time of
+  this G0.1 proof** (they had not; the current gate state is maintained in
+  `V03E_SPEC.md` §25 and the later proof records).
 
 This is a **process hard-kill persistence proof only**.
 
