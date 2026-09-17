@@ -44,9 +44,16 @@ restart matrices, minimum two-tool surface, capability dependency table, platfor
 proof gate) is in `docs/v0.3/V03E_SPEC.md` with the design-phase matrix in
 `docs/v0.3/V03E_ACCEPTANCE.md`.  It contains no retry protocol, keeps
 `model_turns_used` as consumed slots that are never refunded, keeps terminal runs
-closed and keeps `devrelay_get_run` read-only.  Implementation is gated on an
-independent design re-review and, for the gated capability, on the platform proof
-gate (which has not been run).  No runtime source, test, schema, dependency,
+closed and keeps `devrelay_get_run` read-only.  Implementation is gated in two
+separate stages, and neither gate has been run: the **mandatory fail-closed core**
+(reconcile/report + `mark_unrecoverable`; no retry, no model submission, no
+auto-resume) requires the design freeze **and** the local strict-reader /
+ledger-integrity proof **G0.1/P7 to PASS first** (design frozen -> G0.1/P7 PASS ->
+implementation may be authorized; there is no degraded-implementation path), while
+the **optional** `adopt_completed_turn` capability stays disabled and is separately
+gated on P1 + P2 + P3 + P8 (plus P9 if timestamp/order correlation is used) and the
+remaining platform proof gate.  Pending-result handling stays report-only and
+non-delivery classification stays informational.  No runtime source, test, schema, dependency,
 version or tag changed; no real provider/model call was made and no OpenCode
 instance was started.  Design branch: `v0.3-e-recovery-reconciliation` (parent
 `56e7842`).

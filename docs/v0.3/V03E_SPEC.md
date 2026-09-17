@@ -570,9 +570,9 @@ A wording rule for this design and its future implementation:
 
 | Capability | Remote platform proofs | Local requirements | Consequence if unavailable |
 | --- | --- | --- | --- |
-| **A — reconcile/report** | none (remote reads are optional and report-only) | strict recovery evidence reader (§9) implemented and correct | reporting degrades to `evidence_gap`; it never guesses |
+| **A — reconcile/report** | none (remote reads are optional and report-only) | strict recovery evidence reader (§9) implemented and correct; **G0.1 / P7 must PASS before core implementation is authorized** | **mandatory-core implementation remains blocked** (there is no degraded-implementation path).  `evidence_gap` is a *runtime* fail-closed outcome for an individual ambiguous/corrupt/unproven evidence case **after** implementation - it is never a waiver of the G0.1/P7 gate |
 | **B — `mark_unrecoverable` → `BLOCKED`** | **none** | legal recovery entry/document (§7), planner authority, local invariants, no corruption | none: this is the fail-closed safety exit and is always available |
-| **C — `adopt_completed_turn`** | **P1 + P2 + P3 + P8** (+ **P9** if timestamps/order are used) | strict reader, local ledger/session integrity (P7), the §11 checklist | capability stays disabled; resolve refuses it; reconcile reports candidates only |
+| **C — `adopt_completed_turn`** | **P1 + P2 + P3 + P8** (+ **P9** if timestamps/order are used) | the core's prerequisite (G0.1 / P7 PASS) plus the §11 checklist | capability stays disabled; resolve refuses it; reconcile reports candidates only |
 | **D — pending-result handling** | would require an operation-specific handle proof | — | **report-only in v0.3-E**; no mutation capability |
 | **E — non-delivery classification** | would require a P5-class proof for any authority | — | informational only; no orchestration authority |
 
@@ -675,8 +675,23 @@ OpenAI-compatible provider may be used in G2; nothing runs in this design round)
 Rules: **no probe shopping** — one planned probe per case; a failed proof *removes*
 the gated capability instead of triggering another probe; results are recorded in
 `V03E_ACCEPTANCE.md`, whose implementation rows stay FUTURE / NOT RUN until then.
-G0.1 (and G0.4-G0.5 for the reporting language) must pass before the mandatory core
-is implemented; G1/G2 gate only the optional adoption capability.
+
+**G0.1 / P7 is a hard gate on the mandatory core, and the only such gate.**
+Implementation ordering is: **design frozen → G0.1 / P7 PASS → mandatory-core
+implementation may be authorized.**  If G0.1 / P7 fails, mandatory-core
+implementation remains **BLOCKED**; there is **no degraded-implementation path** in
+this design (a degraded scope would need its own design change and independent
+review).  G0.4-G0.5 remain relevant to the reporting language (what the recovery
+report may claim) and must not blur the G0.1 gate; **G1/G2 gate only the optional
+`adopt_completed_turn` capability.**  Maximum real provider/model inference for the
+whole gate: **0**.
+
+G0.1 / P7 proves the *local persistence/ledger assumptions* the future
+implementation is allowed to rely on (hard kills around `ISSUED`/settle
+boundaries, valid records distinguishable from torn/corrupt/incomplete state,
+fail-closed `evidence_gap`/corruption processing, no silent skipping treated as
+authoritative).  It does **not** prove the future production implementation itself:
+that implementation still needs its own tests.
 
 ## 26. Future real acceptance smoke (not authorized)
 
@@ -721,10 +736,14 @@ proofs, **no real adoption smoke is required**: the reduced core (report +
 | P8 | can session exclusivity (no other writer in the window) be established? | adoption (C) | PROOF REQUIRED (G2 + local cross-checks) |
 | P9 | is `created_at`/ordering fidelity sufficient if timestamps are used? | adoption (C) *only if* timestamps are used | PROOF REQUIRED (G2) |
 
-Until P7 passes, the core may still be implemented but its ledger reporting must
-degrade to `evidence_gap` on any unreadable record (the design already requires
-that); the proof confirms it under real hard kills.  Until P1-P3 and P8 pass,
-adoption stays **disabled** and the core ships as report + `mark_unrecoverable`.
+Until **G0.1 / P7 passes**, mandatory-core implementation is **not authorized**:
+no recovery runtime is implemented, the design remains frozen but
+pre-implementation, and `evidence_gap` stays part of the *future runtime*
+fail-closed semantics rather than a waiver of the proof gate.  If G0.1 / P7 fails,
+mandatory-core implementation remains **blocked** pending a new reviewed design
+decision (there is no degraded-implementation path).  Until P1-P3 and P8 pass,
+`adopt_completed_turn` stays **disabled** and the core provides report +
+`mark_unrecoverable` only.
 
 ## 29. Minimal local setup (future)
 

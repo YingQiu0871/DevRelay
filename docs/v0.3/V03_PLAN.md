@@ -86,12 +86,16 @@ proof gate (P1, P2, P3, P8, plus P9 if timestamps are used).
 **No recovery code exists**, the accepted v0.3-D runtime candidate
 `8b70610a5cdda600ef57cf8378c4f69cd33d5be4` is untouched, and implementation must not
 start until an independent re-review of the remediated design passes and the
-required proofs are obtained: the mandatory core needs the local strict-reader
-proof (gate step G0.1, plus G0.4-G0.5 for the reporting language), while
-`adopt_completed_turn` stays disabled until P1, P2, P3 and P8 (and P9 if timestamps
-are used) pass the platform proof gate (SPEC §25, §28).  If those proofs fail, the
-core ships as report + `mark_unrecoverable` and no real adoption smoke is
-required.  v0.3-E keeps every accepted v0.3-D
+required proofs are obtained.  The mandatory core's gate is: **G0.1/P7 must PASS
+first**, and the ordering is design frozen → G0.1/P7 PASS → mandatory-core
+implementation may be authorized; if G0.1/P7 fails, core implementation stays
+**blocked** (no degraded-implementation path; a degraded scope would need its own
+design change and review).  G0.4-G0.5 remain relevant to the
+reporting language.  `adopt_completed_turn` stays disabled until P1, P2, P3 and P8
+(and P9 if timestamps are used) pass the platform proof gate (SPEC §25, §28); if
+those optional-adoption proofs fail, that capability is removed/disabled and no real
+adoption smoke is required, while the core is unaffected because it has already
+passed its own local gate.  v0.3-E keeps every accepted v0.3-D
 invariant: no implicit retry, no fallback, no automatic sequencing, no automatic
 resume, no budget refund, terminal runs never reopen.  See `docs/BACKLOG.md` for
 deferred, non-blocking follow-ups.
