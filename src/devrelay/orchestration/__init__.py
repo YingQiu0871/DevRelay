@@ -28,6 +28,7 @@ from devrelay.orchestration.models import (
     TransitionRecord,
     TurnRecord,
 )
+from devrelay.orchestration.service import OrchestrationOutcome, OrchestrationService
 from devrelay.orchestration.state_machine import TurnOutcome, after_decision, after_role_turn
 from devrelay.orchestration.store import (
     RUN_ID_PATTERN,
@@ -47,7 +48,9 @@ __all__ = [
     "Decision",
     "DecisionRecord",
     "OrchestrationAction",
+    "OrchestrationOutcome",
     "OrchestrationRun",
+    "OrchestrationService",
     "OrchestrationStore",
     "RoleRouteSnapshot",
     "RunState",
