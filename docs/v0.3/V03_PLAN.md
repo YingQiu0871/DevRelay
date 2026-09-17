@@ -7,7 +7,7 @@
 | **A** | OpenCode session bridge (explicit endpoint, session select/read, one prompt, bounded wait, interrupt, accounting) | **COMPLETE / ACCEPTED** — candidate `bcf9627e92ef839abb756810e3c615e6d01b6576`, real A33 smoke `PASS` against OpenCode `1.18.11` |
 | B | ChatGPT/MCP tool surface (local stdio MCP adapter over the accepted v0.3-A bridge) | **COMPLETE / ACCEPTED** — accepted candidate `d058d62341a173414bdba88fe357b08c236c8bb4`, real MCP smoke `PASS — V0.3-B LOCAL REAL MCP SMOKE` (accepted internally, **unreleased**) |
 | C | Agent role routing (semantic role -> workspace-configured model/agent; routing only, no orchestration) | **COMPLETE / ACCEPTED / UNRELEASED** — accepted candidate `eabb667d1bd9e379d3b7105d72b6a2751bc2a32b`; real routing verified by two bounded runs (implementer `opencode-go/deepseek-v4.1-flash`, reviewer `opencode-go/glm-5.3-flash`) |
-| D | Bounded orchestration (durable run state, legal transitions, hard cycle bound, fail-closed; still no automatic sequencing) | **CANDIDATE IMPLEMENTATION COMPLETE — ready for independent review** (unreleased) |
+| D | Bounded orchestration (durable run state, legal transitions, hard cycle bound, fail-closed; still no automatic sequencing) | **COMPLETE / ACCEPTED / CLOSED / UNRELEASED** — accepted candidate `8b70610a5cdda600ef57cf8378c4f69cd33d5be4` after two remediations and the real bounded smoke `PASS — V0.3-D REAL BOUNDED ORCHESTRATION SMOKE` (4 real model turns / 4 POSTs, 0 retries, 0 fallbacks) |
 | E | Orchestration recovery (crash-during-submission reconciliation, uncertain-call recovery, resume) | **NOT STARTED** (not designed yet) |
 
 v0.3-A is accepted and its runtime implementation is frozen at the accepted
@@ -36,23 +36,25 @@ three-way route agreement (`devrelay_get_role`, response metadata, OpenCode
 provider log).  The package version stays `0.1.0` and the public release remains
 `v0.1.0`.
 
-v0.3-D (bounded orchestration) is implemented as an **unreleased, NOT ACCEPTED
-candidate** on branch `v0.3-d-bounded-orchestration`, based on the v0.3-C
-acceptance closeout `e0a06fa…`: see `docs/v0.3/V03D_SPEC.md` and
+v0.3-D (bounded orchestration) is **accepted internally and closed, unreleased**
+at candidate `8b70610a5cdda600ef57cf8378c4f69cd33d5be4` on branch
+`v0.3-d-bounded-orchestration`, based on the v0.3-C acceptance closeout
+`e0a06fa…`: see `docs/v0.3/V03D_SPEC.md` and
 `docs/v0.3/V03D_ACCEPTANCE.md`.  It adds durable run state, legal transitions, a
-hard cycle bound (`max_cycles` 1..3, at most six reserved/consumed model-turn budget slots per run), durable
-audit and fail-closed behaviour over the accepted role path - and exactly five MCP
-tools (17 in total).  It still does **not** sequence roles automatically, never
-interprets reviewer text, never retries and makes **0 real model calls**; a
-bounded real orchestration smoke requires independent review and a separate
-authorization.
+hard cycle bound (`max_cycles` 1..3, at most six reserved/consumed model-turn
+budget slots per run), durable audit and fail-closed behaviour over the accepted
+role path - and exactly five MCP tools (17 in total).  It still does **not**
+sequence roles automatically, never interprets reviewer text and never retries.
+Its one authorized bounded real smoke was a **`PASS`** (4 real model turns / 4
+POSTs, 0 retries, 0 fallbacks, terminal guard proved twice; evidence in
+`docs/v0.3/V03D_ACCEPTANCE.md` §L); no second smoke was performed.
 
 An independent review of the first v0.3-D candidate returned `REQUEST_CHANGES`
 (P0 = 0, one blocking P1: persisted run state was trusted as input, plus P2/P3
 findings), and a second review returned `REQUEST_CHANGES` with **three** blocking
 P1s: a persisted run needed only plausible fields, not a state provable from its
 history.  Both **remediations are complete and ready for independent re-review**:
-the first closed the trusted-input boundary, and the second adds reachability
+the first closed the trusted-input boundary, the second added reachability
 validation (`READY_REVIEWER` requires this cycle's completed implementer turn, a
 blocked turn implies `BLOCKED`, the last transition must end at the current state,
 the decision history must equal the completed cycles, no future-cycle evidence,
@@ -64,14 +66,16 @@ unresolvable role route fails closed like a changed one, an interrupted turn is
 materialized into the role history with its sanitized audit fields, the durable
 in-flight intent is proven to precede submission (Mutation F is now detected), and
 the accounting/outcome/run-id/wording findings are fixed or recorded.  The stage
-remains **NOT ACCEPTED** until that re-review passes.
+remained **NOT ACCEPTED** until that re-review passed (historical: the re-review
+approved one bounded real smoke, the smoke passed, and v0.3-D was accepted - see
+`docs/v0.3/V03D_ACCEPTANCE.md` §L).
 
 v0.3-E (recovery: crash-during-submission reconciliation, uncertain-call
 recovery, automatic resume) has **not** started and must not begin without a
 separate authorization.  See `docs/BACKLOG.md` for deferred, non-blocking
 follow-ups.
 
-## v0.3-D scope (implemented + remediated, candidate, NOT ACCEPTED)
+## v0.3-D scope (implemented, remediated, accepted and closed — unreleased)
 
 1. `src/devrelay/orchestration/models.py` — the explicit state enum, hard bounds
    (`HARD_MAX_CYCLES = 3`, default 2, model-turn budget = 2 x max_cycles), the

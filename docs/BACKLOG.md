@@ -100,18 +100,24 @@ authorizes code changes; each item names its own scope and owner stage.
 * a fresh idle session may appear as `state: UNKNOWN` in list/get while
   `wait_idle` resolves idle through the `/session/status` absence semantics.
 
-## 5. Deferred follow-ups from v0.3-D bounded orchestration (recorded; **non-blocking for v0.3-D review**)
+## 5. Deferred follow-ups from v0.3-D bounded orchestration (recorded; **non-blocking for v0.3-D acceptance**)
 
 | Item | Note |
 | --- | --- |
-| Bounded real orchestration smoke (two cycles maximum / four model turns) | requires independent review first (`P0 = 0`, `P1 = 0`, no smoke-blocking P2) and a separate authorization; the v0.3-D implementation round makes **0 real model calls** |
+| Bounded real orchestration smoke (two cycles maximum / four model turns) | **DONE - `PASS`** (candidate `8b70610…`, run id `DR-dfb23a14e4654a5d9b75b296a27b1245`, 4 real model turns / 4 POSTs, 0 retries, 0 fallbacks, terminal guard proved twice); evidence in `docs/v0.3/V03D_ACCEPTANCE.md` §L.  **No second smoke is authorized** |
 | v0.3-E recovery: reconciliation after a crash during a model submission, uncertain-call recovery, orphan-process recovery, automatic resume | explicitly out of scope for v0.3-D: a persisted in-flight turn fails the run closed (`blocked_reason=turn_interrupted`) and is never replayed, so an interrupted run must be resolved by a human or a later stage |
 | Multi-process / multi-surface orchestration locking | the execution lock is **per tool surface** and the shipped stdio server builds exactly one surface, so several surfaces or several writer processes against one workspace are unsupported; the honest scope is now stated in `tools.py`, `store.py`, the spec §6/§7 and the `devrelay_status` block, and needs its own design if ever required |
 | Run listing / run-history API and run-document retention | not needed for the bounded workflow; run documents accumulate under `.devrelay/orchestration/runs/` |
 | `devrelay_get_run` does not materialize an interrupted turn (it reports `in_flight: true`) | deliberate: reads never mutate; the next mutating action fails the run closed |
 | Repeated transition/read duplication (the service re-resolves routes before every phase) | cheap and deterministic; a future stage could cache per-run resolutions |
 
-### Carried findings at the v0.3-D remediation (recorded; **non-blocking for re-review**)
+### Carried findings at v0.3-D acceptance (recorded; **non-blocking; P0 = P1 = P2 = 0**)
+
+v0.3-D was accepted internally and closed (unreleased) at candidate
+`8b70610a5cdda600ef57cf8378c4f69cd33d5be4` after the two remediations and the one
+authorized real bounded smoke (`PASS — V0.3-D REAL BOUNDED ORCHESTRATION SMOKE`);
+the items below were carried forward deliberately and none of them blocks
+acceptance.
 
 | Item | Note |
 | --- | --- |
@@ -121,6 +127,12 @@ authorizes code changes; each item names its own scope and owner stage.
 | MCP SDK pre-parses JSON-shaped *string* prompts (P3, measured) | `FuncMetadata.pre_parse_json` converts a string argument into dict/list whenever the declared annotation is not plain ``str``, so a prompt like ``{"task": ...}`` is refused by the SDK's own argument validation before DevRelay's envelope exists - **nothing is submitted**.  Non-JSON prompts (including malformed JSON text) work normally.  A plain ``str`` annotation would suppress the coercion but would also replace the documented ``mcp_invalid_argument`` envelope for a missing prompt with an SDK-level error, so the trade-off is recorded.  Evidence: `test_json_shaped_prompts_are_refused_at_the_sdk_boundary` |
 | A fully rewritten, internally consistent run history is undetectable (documented bound) | a run document is self-contained mutable JSON with no external integrity anchor, so an attacker who rewrites *every* field into a different but consistent history (for example resetting an exhausted run to a fresh-looking cycle 1) cannot be distinguished from an honest run.  v0.3-D claims only: all structural/semantic reachability invariants hold, and every malformed, inconsistent or partially rolled-back document fails closed before any model call.  An append-only journal or signed chain would be later hardening.  Evidence: `test_p1c_a_perfectly_rewritten_history_is_the_documented_bound` |
 | A hard kill may leave an inert `.*.tmp` file in the runs directory (P3, wording) | it is never listed as a run and never honoured (only `DR-<32 hex>.json` is read and runs are loaded by valid id); normal saves leave no residue, and no `fsync`/power-loss durability is claimed.  Evidence: `test_an_inert_temp_file_is_never_listed_or_honoured` |
+| Accepted v0.3-A / v0.3-C reasoning-part normalization (P3-1, carried, **not fixed**) | the accepted v0.3-A normalization maps a provider `reasoning` part to `kind="text"`; the real smoke's raw API proved that turns 2 and 4 carried a `reasoning` part next to the `text` part, so an "entire message character-for-character equal" criterion is fragile and must instead assert "the original answer *text* part is exactly the sentinel".  It does not affect v0.3-D, which persists no message text |
+| `legal_next_actions` display shape (P3-2, informational, retained) | in `AWAITING_DECISION` it returns the human-readable string `devrelay_decide_run(complete|request_changes|stop)` rather than a bare tool name; retained deliberately for planner guidance |
+| `terminal` is derived, not persisted (P3-3, informational, retained) | the durable document stores only `state`; `terminal` is computed from the terminal-state set, which is why the validator re-derives it rather than trusting a field |
+| Start-edge timestamp/default metadata (final-review observation, carried, unresolved) | recorded as a minor documentation/audit observation from the final review; it does not block acceptance, and a docs-only closeout may not change runtime code, so it is carried for a later stage |
+| Historical frozen v0.3-B wording says "process-scoped"/"process-wide" (final-review observation, carried) | those accepted v0.3-B documents and CHANGELOG entries remain **historical records and are not rewritten**; the current per-surface wording in `src/devrelay/mcp/tools.py`, the `devrelay_status` block, README and `V03_PLAN` supersedes them for the shipped server (one surface, all 17 tools serialized; several surfaces or writer processes unsupported).  Treat the older wording as superseded, not as the current contract |
+| README model-turn wording nit (final-review observation, carried) | README/`V03_PLAN`/spec already say "reserved/consumed model-turn budget slots (at most six model POST attempts)" after the second remediation; the note is retained in case the reviewer meant a different surface, and no runtime change is authorized here |
 | Corruption detection is structural + semantic, not cryptographic | nothing signs a run document, so an attacker who can rewrite the file can also rewrite a consistent lie within the invariants (for example a different route snapshot); the store's defences are the strict schema, the invariant pass, the workspace binding and single-writer access, not tamper-evidence |
 
 ## 6. Deferred follow-ups from v0.3-C agent role routing (recorded; **non-blocking for v0.3-C acceptance**)

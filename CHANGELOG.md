@@ -4,15 +4,17 @@ All notable changes to DevRelay are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## Unreleased - v0.3-D candidate (bounded orchestration)
+## Unreleased - v0.3-D accepted (bounded orchestration)
 
 Durable, **bounded** orchestration state over the accepted v0.3-C role path: a
 Planner creates a run, explicitly runs each phase, and records its own decision -
 DevRelay remembers where the run is, enforces a hard cycle bound and fails closed
-on uncertainty.  **Candidate implementation + remediation complete, awaiting
-independent RE-REVIEW and NOT ACCEPTED / unreleased**: the package version stays
-`0.1.0`, the supported public release remains `v0.1.0`, nothing is pushed, merged,
-tagged or published, and this stage makes **0 real model calls**.
+on uncertainty.  **Accepted internally, closed and unreleased** at candidate
+`8b70610a5cdda600ef57cf8378c4f69cd33d5be4` after two independent remediations and
+one authorized bounded real orchestration smoke (`PASS — V0.3-D REAL BOUNDED
+ORCHESTRATION SMOKE`): the package version stays `0.1.0`, the supported public
+release remains `v0.1.0`, there is no `v0.3-D` tag, nothing is pushed, merged,
+tagged or published, and v0.3-E has not started.
 
 ### Added
 
@@ -120,7 +122,9 @@ The second gate proved that a persisted run only had to have *plausible fields*.
 Three exploits are closed by making the current state **provable from the
 persisted history** (turn history, decision history, counters, transition
 provenance, cycle structure and in-flight intent), still with **0 real model
-calls** and still **NOT ACCEPTED**:
+calls** and still **NOT ACCEPTED at that point** (historical: v0.3-D was
+accepted later in this same Unreleased section, after the smoke in the next
+subsection):
 
 - **P1-A**: `READY_REVIEWER` - and a live reviewer in-flight intent - now requires
   exactly one **completed** implementer turn in the current cycle.  A forged
@@ -189,9 +193,53 @@ calls** and still **NOT ACCEPTED**:
   A-K all detected (A 105, B 19, C 6, D 104, E 6, F 18, G 3, H 2, I 4, J 4, K 4;
   control 357 v0.3-D tests green).
 
-- `MCP_SERVER_VERSION` is `0.3.0-d`.  A bounded real orchestration smoke (at most
-  two cycles / four model turns) remains deferred until after independent review
-  and a separate authorization; v0.3-E recovery is explicitly out of scope.
+### Accepted — one bounded real orchestration smoke (`PASS`)
+
+The single authorized real run was executed against real OpenCode and real provider
+inference and passed: **`PASS — V0.3-D REAL BOUNDED ORCHESTRATION SMOKE`**
+(candidate `8b70610a5cdda600ef57cf8378c4f69cd33d5be4`, run id
+`DR-dfb23a14e4654a5d9b75b296a27b1245`, 2026-09-17).
+
+* **Exactly four real model-bearing turns** and **exactly four**
+  `POST /session/{id}/message` submissions for `max_cycles = 2`: implementer c1
+  (`opencode-go/deepseek-v4.1-flash`), reviewer c1 (`opencode-go/glm-5.3-flash`),
+  implementer c2, reviewer c2 - four-way route agreement (configuration =
+  `devrelay_get_role` = durable `resolved_model` = provider runtime log);
+* **0 retries, 0 fallbacks, 0 automatic role calls, 0 interrupts/aborts, and no
+  fifth model turn**; `model_turns_used = 4` of `model_turn_budget = 4`; ledger
+  final state 30 records, all `COMPLETED`, 0 `ISSUED`;
+* **reviewer authority proved against real prose:** the cycle-1 provider answer
+  `REQUEST_CHANGES` left the run at `AWAITING_DECISION` with an empty decision
+  history (only an explicit `devrelay_decide_run(request_changes)` opened cycle 2),
+  and the cycle-2 provider answer `APPROVE` did **not** complete the run (only an
+  explicit `devrelay_decide_run(complete)` produced `COMPLETED`).  Both decisions
+  cost 0 model calls;
+* **terminal guard proved without spending a fifth turn:** a repeated
+  `devrelay_decide_run` on the terminal run returned
+  `orchestration_invalid_transition` ("never reopened") with the state visible,
+  unchanged, a byte-identical run file and 0 new POSTs, and the same document was
+  re-checked offline with a throw-on-touch stub bridge that was never touched;
+* **durability/privacy audit 45/45:** four completed durable turn records (two
+  implementer, two reviewer, correct cycles), no in-flight intent at completion,
+  unchanged route snapshot, prompt digests/lengths independently recomputed and
+  matching (150/150/177/169), and no prompt, provider answer, reasoning or
+  credential material anywhere under `.devrelay`;
+* containment: both disposable sessions deleted, the dedicated OpenCode instance
+  stopped, the user's own processes untouched, no MCP child process left, and the
+  repository HEAD/branch/tag/working tree unchanged.
+
+Carried findings stay recorded (they do not block acceptance): the accepted v0.3-A
+reasoning-part normalization limitation, the information-only
+`legal_next_actions` display shape, the derived (not persisted) `terminal` field,
+the MCP SDK argument-normalization and JSON-shaped-string prompt boundaries, the
+non-cryptographic bound of persisted-state validation, inert temp files after a
+hard kill, read-only `get_run`, no `fsync`/power-loss durability, and no
+multi-surface/multi-process coordination.  v0.3-E recovery remains explicitly out
+of scope and not started.
+
+- `MCP_SERVER_VERSION` is `0.3.0-d`.  v0.3-D is accepted/closed and unreleased; no
+  further real orchestration smoke is authorized, and v0.3-E recovery is explicitly
+  out of scope and not started.
 
 ## Unreleased - v0.3-C accepted (agent role routing)
 
