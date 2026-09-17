@@ -110,7 +110,9 @@ Nothing below was modified.
 **Documents**
 
 * `docs/v0.3/V03D_SPEC.md` §6/§10, `docs/v0.3/V03D_ACCEPTANCE.md` (E2),
-  `docs/BACKLOG.md` §5 (v0.3-E recovery; platform proofs P1-P7 recorded).
+  `docs/BACKLOG.md` §5 (v0.3-E recovery; platform proofs P1-P9 and the split
+  implementation gate recorded: local G0.1/P7 for the mandatory core, P1/P2/P3/P8
+  (+P9 if timestamps are used) for the optional adoption capability).
 
 **Not v0.3-E.**  `recover_pending_implementation` / `recover_pending_review`
 (`src/devrelay/pipeline/engine.py`) and `reconcile_observed_files`
