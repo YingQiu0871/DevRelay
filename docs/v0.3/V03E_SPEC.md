@@ -70,9 +70,12 @@ authorization - and so that no optional capability can block it.
 **OPTIONAL GATED CAPABILITY (not part of the mandatory implementation scope):**
 
 * `adopt_completed_turn` — materialize an already-completed remote turn *without*
-  a new submission.  Requires the operation-attribution proofs P1, P2, P3, P8
-  (+ P9 if timestamp correlation is used) plus the verified local ledger/session
-  integrity rules (§11, §12.6).  Until then it is documented and **refused**.
+  a new submission.  Requires **both** the independently satisfied **local P6
+  identity/ownership veto bound** (§12.4, §25.1; proved by G0.5) **and** the
+  independently satisfied remote/platform operation-attribution *enabling* proofs
+  P1, P2, P3, P8 (+ P9 if timestamp correlation is used, through G1/G2), plus the
+  verified local ledger/session integrity rules (§11, §12.6) and all other frozen
+  runtime/adoption invariants.  Until then it is documented and **refused**.
 
 **PENDING-RESULT capability:** report-only (§14) unless a future proof establishes
 an operation-specific handle.
@@ -145,8 +148,10 @@ Nothing below was modified.
 
 * `docs/v0.3/V03D_SPEC.md` §6/§10, `docs/v0.3/V03D_ACCEPTANCE.md` (E2),
   `docs/BACKLOG.md` §5 (v0.3-E recovery; platform proofs P1-P9 and the split
-  implementation gate recorded: local G0.1/P7 for the mandatory core, P1/P2/P3/P8
-  (+P9 if timestamps are used) for the optional adoption capability).
+  implementation gate recorded: local G0.1/P7 for the mandatory core; for the optional
+  adoption capability the **local P6/G0.5 identity/ownership veto-bound prerequisite**
+  **plus** the P1/P2/P3/P8 (+P9 if timestamps are used) **G1/G2 remote/platform
+  *enabling* proofs** — both classes are required).
 
 **Not v0.3-E.**  `recover_pending_implementation` / `recover_pending_review`
 (`src/devrelay/pipeline/engine.py`) and `reconcile_observed_files`
@@ -998,7 +1003,7 @@ proofs, **no real adoption smoke is required**: the reduced core (report +
 | Attempt representation | one `recovery.attempt` record, converted once into exactly one role turn at resolution | avoids a blocked turn inside a non-`BLOCKED` run and the append-vs-rewrite contradiction | never two role records for one role/cycle | none (decision closed) |
 | Corruption | never recovery: violations outside the enumerated deltas → corrupt | recovery must not become a repair path | no planner override; no repair | none (decision closed) |
 | Evidence absence | strict reader with interval proof; absence is never proof of non-delivery | silently skipped or unreadable records would fake certainty | no inference from missing evidence | none (decision closed) |
-| Adoption | optional, gated on P1+P2+P3+P8 (+P9); report-only until then | the earlier checklist did not prove attribution | resolve refuses adoption without the gate | will the proofs be attainable at all? (the gate decides) |
+| Adoption | optional; requires **BOTH** the independently satisfied P6/G0.5 **local identity/ownership veto bound** (§25.1) **AND** the P1+P2+P3+P8 (+P9 when applicable) **remote/platform *enabling* proofs via G1/G2**; report-only until then | the earlier checklist did not prove attribution, and identity/ownership neither enables adoption nor may be skipped | resolve refuses adoption without the gate | will the proofs be attainable at all? (the gate decides) |
 | Pending | report-only; no handle exists in 1.18.11 | no durable per-operation handle | no polling, no waiting, no advance | a future platform handle would need a new capability review |
 | Non-delivery | informational only | a transport class must never create a free retry | no orchestration authority | a retry design would need stronger proof |
 | Schema | version dispatch (v1 frozen / v2 v0.3-E / else corrupt); no migration | one equality check cannot implement the compatibility policy | no silent default, no migration, no rewrite | none (decision closed) |

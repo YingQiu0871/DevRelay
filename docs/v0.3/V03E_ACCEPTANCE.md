@@ -59,8 +59,10 @@ implementation may be authorized by a separately issued authorization; had G0.1/
 failed, mandatory-core implementation would have remained **blocked** (no
 degraded-implementation path), and `evidence_gap` stays a future *runtime*
 fail-closed outcome rather than a substitute for G0.1/P7 PASS.  Optional adoption
-remains **DISABLED** until P1 + P2 + P3 + P8 (plus P9 only if timestamp/order
-correlation is used), gated by G1/G2.  **G0.1 / P7 was executed once and returned
+remains **DISABLED** unless **both**: the local **P6 identity/ownership veto bound** is
+independently satisfied by G0.5 (§25.1), **and** the required remote/platform *enabling*
+proofs P1 + P2 + P3 + P8 (plus P9 only if timestamp/order correlation is used) are
+independently satisfied by G1/G2.  **No single proof enables adoption.**  **G0.1 / P7 was executed once and returned
 **PASS** (authoritative, independently approved — `V03E_G0_1_P7_PROOF.md`), so
 G0.1/P7 no longer blocks mandatory-core implementation *eligibility*; the other gate
 steps have **NOT run** (G0.4 was executed once and is an authoritative **FAIL / P4 UNPROVEN** — approved failed proof, TYPE 3; no configured endpoint, no target binding, 0 `GET /doc`; G0.5, G1, G2 unrun) — G0.2 = PASS (authoritative, independently approved), while G0.3 failed its original oracle, was independently reviewed as a TYPE-1 proof-plan failure, corrected and then independently approved — G0.3/P5 = PASS (authoritative) — the platform proof gate is **partially

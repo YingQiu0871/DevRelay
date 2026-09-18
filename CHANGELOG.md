@@ -205,9 +205,11 @@ ledger-integrity proof **G0.1/P7 to PASS first** (design frozen -> G0.1/P7 PASS 
 implementation may be authorized; there is no degraded-implementation path) - both of
 those steps have happened, so implementation awaits only a separately issued
 authorization - while
-the **optional** `adopt_completed_turn` capability stays disabled and is separately
-gated on P1 + P2 + P3 + P8 (plus P9 if timestamp/order correlation is used) and the
-remaining platform proof gate.  Pending-result handling stays report-only and
+the **optional** `adopt_completed_turn` capability stays disabled and requires **both**
+the independently satisfied local **P6/G0.5 identity/ownership veto bound** (SPEC §25.1)
+**and** the independently satisfied remote/platform *enabling* proofs
+P1 + P2 + P3 + P8 (plus P9 if timestamp/order correlation is used) through G1/G2,
+together with the remaining platform proof gate.  Pending-result handling stays report-only and
 non-delivery classification stays informational.  No runtime source, test, schema, dependency,
 version or tag changed; no real provider/model call was made and no OpenCode
 instance was started.  Design branch: `v0.3-e-recovery-reconciliation` (parent

@@ -129,15 +129,18 @@ first** — and it **has** passed, so the second step of the ordering design fro
 G0.1/P7 PASS → mandatory-core implementation may be authorized is now satisfied;
 had G0.1/P7 failed, core implementation would have stayed **blocked**
 (no degraded-implementation path; a degraded scope would need its own
-design change and review).  G0.4-G0.5 remain relevant to the
-reporting language; G0.4/P4 has been executed once and is `AUTHORITATIVE FAIL / P4 UNPROVEN`
+design change and review).  **G0.4/P4 remains relevant to the pending/reporting language;**
+G0.4/P4 has been executed once and is `AUTHORITATIVE FAIL / P4 UNPROVEN`
 (independently approved failed proof under the immutable revision-3 oracle `docs/v0.3/V03E_G0_4_API_INSPECTION_ORACLE.md`:
 Case A `TARGET_IDENTITY_UNRESOLVED` — no configured endpoint, 0 read-only loopback `GET /doc`,
 cases B–H not executed, no API/schema property established, rerun not authorized —
-`docs/v0.3/V03E_G0_4_API_INSPECTION_PROOF.md`), while G0.5 remains
-unrun.  `adopt_completed_turn` stays disabled until P1, P2, P3 and P8
-(and P9 if timestamps are used) pass the platform proof gate (SPEC §25, §28); if
-those optional-adoption proofs fail, that capability is removed/disabled and no real
+`docs/v0.3/V03E_G0_4_API_INSPECTION_PROOF.md`).  **G0.5/P6 separately proves the local
+identity/ownership veto bound for adoption** (definition remediated in SPEC §25.1; G0.5
+remains **NOT RUN / awaiting independent definition review**), and **G1/G2 provide the
+remote/platform *enabling* proofs P1+P2+P3+P8 (+P9 when applicable)**.  `adopt_completed_turn`
+stays **disabled** until **both** the independently satisfied P6 veto-bound prerequisite
+**and** all required G1/G2 enabling proofs are independently satisfied (SPEC §25, §25.1, §28); if
+those proofs fail, that capability is removed/disabled and no real
 adoption smoke is required, while the core is unaffected because it has already
 passed its own local gate.  v0.3-E keeps every accepted v0.3-D
 invariant: no implicit retry, no fallback, no automatic sequencing, no automatic

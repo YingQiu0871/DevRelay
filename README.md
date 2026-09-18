@@ -132,8 +132,10 @@ the original record preserved in `docs/v0.3/V03E_G0_2_FALSE_CORRELATION_PROOF.md
 G0.3 was executed, failed its original oracle on case J, was independently reviewed as a TYPE-1 proof-plan failure and then cleanly re-run under a corrected precommitted oracle, and the corrected proof was independently approved (all accepted safe buckets class-wide pre-send; proxy_error unreachable in the current configuration; every uncertain class fail-closed; corrected case J surfaced `remote_protocol_error` exactly as precommitted), while G0.4 was executed once under its approved immutable revision-3 oracle and has since been independently approved as a **FAILED PROOF** (*APPROVE V0.3-E G0.4 FAILED PROOF*, P0 = 0, P1 = 0, P2 = 0; **TYPE 3 — SEMANTIC ENVIRONMENT / CONFIGURATION RESULT**): **G0.4/P4 = AUTHORITATIVE FAIL / P4 UNPROVEN** (no OpenCode base endpoint was configured, so no target instance could be bound and 0 `GET /doc` were issued - `docs/v0.3/V03E_G0_4_API_INSPECTION_PROOF.md`), and G0.5/G1/G2 have not run, so the platform proof gate stays partially executed / not complete): the core required **G0.1/P7 PASS first**, and that gate is now
 **satisfied** (authoritative, independently approved; no degraded-implementation
 path) although implementation itself still requires a separately issued
-authorization; adoption requires
-P1/P2/P3/P8 (plus P9 if timestamp/order correlation is used); a design that cannot
+authorization; adoption requires **both** the independently satisfied local **P6
+identity/ownership veto bound** (G0.5, SPEC §25.1) **and** the independently satisfied
+remote/platform *enabling* proofs P1/P2/P3/P8 (plus P9 if timestamp/order correlation is
+used); a design that cannot
 prove an already-completed turn ships as "reconcile and report, never adopt, always
 fail closed".  DevRelay still never decides when to invoke a role, keeps no implicit
 retry, fallback or automatic resume, and no automatic DeepSeek/GLM routing exists.
@@ -1150,8 +1152,10 @@ not downgrade the binary inside a workspace that v0.2-B has already written.
   **G0.1/P7 PASS first**, and that gate is now **satisfied** (authoritative,
   independently approved) although implementation itself still requires a separately
   issued authorization (no degraded-implementation path); `adopt_completed_turn`
-  stays disabled until P1/P2/P3/P8 (plus P9 if timestamp/order correlation is used)
-  pass the platform proof gate; pending results are report-only.  No recovery code
+  stays disabled until **both** the independently satisfied local **P6 identity/ownership
+  veto bound** (G0.5, SPEC §25.1) **and** the independently satisfied remote/platform
+  *enabling* proofs P1/P2/P3/P8 (plus P9 if timestamp/order correlation is used) hold;
+  pending results are report-only.  No recovery code
   exists, **G0.1/P7 = PASS** and **G0.2 = PASS** (both authoritative and independently
   approved; G0.2 through the clean re-run under the precommitted oracle, cases A-J
   fail-closed); **G0.3/P5 = PASS/CLOSED**; **G0.4/P4 was executed once and is AUTHORITATIVE
