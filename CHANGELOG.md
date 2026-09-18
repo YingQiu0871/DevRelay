@@ -150,9 +150,30 @@ alone insufficient**), a **bounding PASS**, FAIL and insufficient-evidence seman
 **local/offline method** (0 HTTP, 0 `/doc`, 0 OpenCode start/restart, 0 session mutations, 0
 provider/fake-provider calls; the missing G0.4 `base_url` is therefore **not** a G0.5
 prerequisite), the identity-dimension matrix, the adoption dependency equation, evidence
-fields, privacy rules, the status model and the no-probe-shopping discipline.  G0.5 remains
-**NOT RUN / DEFINITION REMEDIATED / AWAITING INDEPENDENT DEFINITION REVIEW**; no G0.5 oracle
-exists and G1/G2 remain unrun.
+fields, privacy rules, the status model and the no-probe-shopping discipline.  At that point
+G0.5 remained **NOT RUN / DEFINITION REMEDIATED / AWAITING INDEPENDENT DEFINITION REVIEW**
+(superseded by the accepted status recorded below); no G0.5 oracle existed and G1/G2 remained
+unrun.
+
+**G0.5/P6 oracle construction was attempted and stopped by a LOCAL REACHABILITY GAP.**  The
+definition baseline was accepted by independent review (*APPROVE V0.3-E G0.5
+ADOPTION-DEPENDENCY CLEANUP*, P0 = 0, P1 = 0, P2 = 0; commit `ad86a79`; the substantive §25.1
+block was preserved byte-for-byte, SHA-256 `d3244ee0…`).  A pre-run oracle construction round
+then performed a purely static, per-case source-reachability check against existing local
+enforcement: **Case A (missing)** binds to the blank/missing session-reference validation,
+**Case B (foreign)** to the pure session↔workspace ownership primitive, and **Case D (copied)**
+to the run↔workspace binding check — but **Case C (recreated / originality-unprovable) has no
+existing local original-session/provenance enforcement path**, so a complete four-case oracle
+cannot be frozen; constructing one would require proof-only policy code or a new runtime
+primitive, both prohibited.  The independent review approved that outcome (*APPROVE V0.3-E
+G0.5 ORACLE FREEZABILITY FAILURE*, P0 = 0, P1 = 0, P2 = 0), classifying it as **C —
+NOT-YET-IMPLEMENTED V0.3-E ENFORCEMENT PREREQUISITE** (not a definition defect, not a proof
+failure, not a harness failure, not an installed-platform limitation).  **No G0.5 oracle was
+created, no semantic case was executed, and therefore there is no G0.5 PASS and no G0.5
+FAIL**: `G0.5/P6 = NOT RUN / DEFINITION ACCEPTED / ORACLE NOT FREEZABLE / LOCAL REACHABILITY
+GAP`, with **P6 = UNPROVEN / UNSATISFIED**.  Adoption stays DISABLED, the mandatory core is
+unaffected (G0.1/P7 remains the only hard gate and stays PASS/CLOSED), and G1/G2 remain unrun;
+the attempt caused 0 runtime/test/config changes and 0 provider/HTTP/OpenCode activity.
 
 That approval followed three earlier review rounds: the first independent design
 review returned `REQUEST_CHANGES` (P0 = 1, P1 = 6, P2 = 5) and the

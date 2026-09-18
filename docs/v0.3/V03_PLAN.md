@@ -135,8 +135,12 @@ G0.4/P4 has been executed once and is `AUTHORITATIVE FAIL / P4 UNPROVEN`
 Case A `TARGET_IDENTITY_UNRESOLVED` — no configured endpoint, 0 read-only loopback `GET /doc`,
 cases B–H not executed, no API/schema property established, rerun not authorized —
 `docs/v0.3/V03E_G0_4_API_INSPECTION_PROOF.md`).  **G0.5/P6 separately proves the local
-identity/ownership veto bound for adoption** (definition remediated in SPEC §25.1; G0.5
-remains **NOT RUN / awaiting independent definition review**), and **G1/G2 provide the
+identity/ownership veto bound for adoption** (definition accepted in SPEC §25.1, baseline `ad86a79`;
+G0.5 = **NOT RUN / DEFINITION ACCEPTED / ORACLE NOT FREEZABLE / LOCAL REACHABILITY GAP**
+(under the accepted definition cases A/B/D bind to existing local enforcement while case C
+(recreated/originality-unprovable) has no existing local original-session/provenance
+enforcement path, so no complete four-case oracle can be frozen; 0 semantic cases executed,
+**P6 = UNPROVEN / UNSATISFIED**), and **G1/G2 provide the
 remote/platform *enabling* proofs P1+P2+P3+P8 (+P9 when applicable)**.  `adopt_completed_turn`
 stays **disabled** until **both** the independently satisfied P6 veto-bound prerequisite
 **and** all required G1/G2 enabling proofs are independently satisfied (SPEC §25, §25.1, §28); if

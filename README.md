@@ -1160,7 +1160,12 @@ not downgrade the binary inside a workspace that v0.2-B has already written.
   approved; G0.2 through the clean re-run under the precommitted oracle, cases A-J
   fail-closed); **G0.3/P5 = PASS/CLOSED**; **G0.4/P4 was executed once and is AUTHORITATIVE
   FAIL / P4 UNPROVEN** (the accepted workspace had no configured OpenCode base endpoint and
-  0 `GET /doc` were issued); **G0.5, G1 and G2 have not run**, so the platform proof gate
+  0 `GET /doc` were issued); **G0.5 = NOT RUN / DEFINITION ACCEPTED / ORACLE NOT FREEZABLE /
+  LOCAL REACHABILITY GAP** (under the accepted definition the missing, foreign and copied
+  cases bind to existing local enforcement, but the recreated/originality-unprovable case has
+  no existing local original-session/provenance enforcement path, so no complete four-case
+  oracle can be frozen; **0 semantic cases executed — no G0.5 PASS/FAIL, P6 unproven**), and
+  **G1 and G2 have not run**, so the platform proof gate
   stays partially executed / not complete; implementation is not authorized,
   and no automatic resume is designed in
 - **later** - optional release automation with explicit approvals
