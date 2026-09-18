@@ -13,7 +13,7 @@ F1-F12 **CLOSED**, decision *APPROVE V0.3-E FAIL-CLOSED CORE DESIGN; PLATFORM PR
 GATE REQUIRED BEFORE IMPLEMENTATION*.  Implementation is **not authorized**, the
 platform proof gate is **not complete** (**G0.1 / P7 = PASS** — authoritative,
 independently approved by *APPROVE V0.3-E G0.1 / P7 PLATFORM PROOF* with
-P0 = 0, P1 = 0, P2 = 0; G0.3 failed its original oracle, was independently reviewed as a TYPE-1 proof-plan failure and then independently approved after the corrected clean rerun - **G0.3 / P5 = PASS** - (see below); G0.4-G0.5, G1, G2 not run at freeze time (G0.4 has since been executed once: `CANDIDATE FAIL / P4 UNPROVEN` - see below); G0.2 ran and, after one `REQUEST_CHANGES` review, was cleanly re-run under a precommitted oracle and then independently approved - `G0.2 = PASS` - see below), `adopt_completed_turn`
+P0 = 0, P1 = 0, P2 = 0; G0.3 failed its original oracle, was independently reviewed as a TYPE-1 proof-plan failure and then independently approved after the corrected clean rerun - **G0.3 / P5 = PASS** - (see below); G0.4-G0.5, G1, G2 not run at freeze time (G0.4 has since been executed once and is an authoritative `FAIL / P4 UNPROVEN` - see below); G0.2 ran and, after one `REQUEST_CHANGES` review, was cleanly re-run under a precommitted oracle and then independently approved - `G0.2 = PASS` - see below), `adopt_completed_turn`
 remains **disabled**, and
 the recorded P3 observations (P3-1, P3-2, P3-4/P3-5) stay non-blocking.
 
@@ -101,9 +101,9 @@ unmapped mid-send h11 escape path is recorded as a fail-closed observability lim
 Evidence: `docs/v0.3/V03E_G0_3_CLEAN_RERUN_PROOF.md`.  G0.1/P7 and G0.2 are authoritative PASS and mandatory-core
 implementation remains **not authorized** pending a separate authorization; the
 platform proof gate stays **partially executed / not complete** (G0.3/P5 = PASS,
-authoritative; G0.4/G0.5/G1/G2 not run at that point; G0.4 has since been executed once and
-returned **CANDIDATE FAIL / P4 UNPROVEN** - no OpenCode endpoint configured, so no target
-instance could be bound and 0 `GET /doc` were issued: `docs/v0.3/V03E_G0_4_API_INSPECTION_PROOF.md`)
+authoritative; G0.4/G0.5/G1/G2 not run at that point; G0.4 has since been executed once and is an
+authoritative **FAIL / P4 UNPROVEN** - the accepted workspace had no OpenCode base endpoint, so no
+target instance could be bound and 0 `GET /doc` were issued: `docs/v0.3/V03E_G0_4_API_INSPECTION_PROOF.md`)
 and
 `adopt_completed_turn` stays **disabled**.  Clean-rerun evidence:
 `docs/v0.3/V03E_G0_2_CLEAN_RERUN_PROOF.md`; original record (preserved):
@@ -119,8 +119,16 @@ ports or processes - so no target instance, listener or responder could be bound
 binding reason is `TARGET_IDENTITY_UNRESOLVED`.  The precommitted failure path applied:
 **0 loopback HTTP requests, 0 `GET /doc`**, cases B-H not executed, no substitute or
 historical evidence, no rerun.  Final semantic outcome for the round:
-`EVIDENCE_INSUFFICIENT` -> **CANDIDATE FAIL / P4 UNPROVEN** (executor-recorded, awaiting
-independent review); the installed target's static identity was recorded
+`EVIDENCE_INSUFFICIENT` -> executor-stage **CANDIDATE FAIL / P4 UNPROVEN**.
+
+The independent failed-proof review then issued **APPROVE V0.3-E G0.4 FAILED PROOF** with
+**P0 = 0, P1 = 0, P2 = 0** and failure classification **TYPE 3 - SEMANTIC ENVIRONMENT /
+CONFIGURATION RESULT** (the accepted workspace supplied no OpenCode base endpoint), which
+makes the result authoritative: **G0.4 / P4 = FAIL / P4 UNPROVEN**.  No API/schema property
+was established, so nothing follows about whether a durable per-operation handle exists;
+P4 remains formally unproven, a rerun of this execution is **not authorized**, and repairing
+the configuration would be a **new** execution requiring new external authorization under the
+same immutable oracle.  The installed target's static identity was recorded
 (`opencode-ai` 1.18.11, declared bin `./bin/opencode.exe`, executable SHA-256
 `578d7eb3fff2c807fc0dedaab5e5d9177713a9560fa4304db6a0161111e9cc35`).  0 provider/model
 calls, 0 network requests, 0 OpenCode starts/restarts.  Evidence:

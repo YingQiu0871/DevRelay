@@ -1,8 +1,36 @@
 # DevRelay v0.3-E — G0.4 / P4 installed-API inspection proof
 
-**Status: CANDIDATE FAIL / P4 UNPROVEN — recorded by the executing agent; NOT an
-authoritative result.**  Only an independent reviewer may produce a final G0.4 status; the
-executing agent never self-approves.
+**Status at execution: CANDIDATE FAIL / P4 UNPROVEN — recorded by the executing agent, never
+self-approved.  Current authoritative status: `G0.4 / P4 = AUTHORITATIVE FAIL / P4 UNPROVEN`**
+(the independent failed-proof review issued *APPROVE V0.3-E G0.4 FAILED PROOF*, P0 = 0,
+P1 = 0, P2 = 0, failure type **TYPE 3 — SEMANTIC ENVIRONMENT / CONFIGURATION RESULT** — see
+the review-record block below).
+
+> **Independent review outcome (recorded afterwards; this document's observed execution
+> facts are unchanged):** the independent failed-proof review issued **APPROVE V0.3-E G0.4
+> FAILED PROOF** with **P0 = 0, P1 = 0, P2 = 0** and failure classification **TYPE 3 —
+> SEMANTIC ENVIRONMENT / CONFIGURATION RESULT**, which makes this round an authoritative
+> **G0.4 / P4 = FAIL / P4 UNPROVEN**.  The execution-result artifact as first committed at
+> `9a22528` had committed-blob SHA-256
+> `62d033f98108d05c32d885af27e9ce6d90f454137c8caa71b7d03ec4b059060d`; only this
+> review-record block and the status wording above were added afterwards, and none of the
+> observed execution facts, counters or outcomes below was altered.
+>
+> A rerun of this execution is **NOT AUTHORIZED**: setting an endpoint and calling it the
+> same proof run, repairing the configuration and rerunning under the old authorization,
+> starting a server and continuing, or replacing the failed evidence are all prohibited.
+> The failed run is final.  A future G0.4 execution after a deliberately changed
+> configuration would be a **NEW execution** requiring **new external authorization** under
+> the same immutable oracle (unless changed circumstances require a separately reviewed new
+> oracle), and it must not rewrite or supersede this failed run.
+>
+> Non-blocking independent P3 limitations: (1) the zero-HTTP / zero-process-enumeration
+> absence is not independently reconstructable from committed evidence beyond the coherent
+> failure path and the absence of captured schema material; (2) the absolute
+> environment-specific paths in this evidence are legitimate derived evidence and remain
+> labelled environment-specific; (3) the residual TOCTOU note stays historical/non-operative
+> here because no pre/post responder snapshot pair existed in this failed run.  None of these
+> is a proof blocker.
 
 This document is the execution evidence for the separately authorized G0.4 round.  It
 records the single semantic execution of the fixed A–H plan against the immutable

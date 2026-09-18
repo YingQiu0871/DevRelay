@@ -25,9 +25,11 @@ under the new precommitted oracle `e328ec5`/`V03E_G0_3_RERUN_ORACLE.md` produced
 are class-wide pre-send, `proxy_error` is `UNREACHABLE_CURRENT_CONFIGURATION`, every
 uncertain class stayed `submission_uncertain` with `retry_safe` false, and corrected case J
 surfaced `remote_protocol_error` exactly as precommitted — `V03E_G0_3_CLEAN_RERUN_PROOF.md`;
-**G0.4 has since been executed once and returned `CANDIDATE FAIL / P4 UNPROVEN`** (no
-configured OpenCode endpoint, so no target instance could be bound and 0 `GET /doc` were
-issued — `V03E_G0_4_API_INSPECTION_PROOF.md`), while steps G0.5, G1 and G2 have **not** run),
+**G0.4 has since been executed once and is an authoritative `FAIL / P4 UNPROVEN`**
+(independently approved failed proof: *APPROVE V0.3-E G0.4 FAILED PROOF*, P0 = 0, P1 = 0,
+P2 = 0, failure type **TYPE 3 — SEMANTIC ENVIRONMENT / CONFIGURATION RESULT**; the accepted
+workspace had no OpenCode base endpoint, so no target instance could be bound and 0 `GET /doc`
+were issued — `V03E_G0_4_API_INSPECTION_PROOF.md`), while steps G0.5, G1 and G2 have **not** run),
 `adopt_completed_turn` remains **DISABLED**, and no provider/model call occurred during
 the reviews (the reviews were static/documentary).
 
@@ -528,9 +530,11 @@ Recorded independent-review conclusion (historical knowledge, **not** a formal p
 result): **OpenCode 1.18.11 exposes session-level status only; there is no durable
 per-operation pending handle.**  The formal proof status of that question is the G0.4
 step (§25/§28), which was **executed once** under its approved immutable revision-3 oracle
-and returned **`CANDIDATE FAIL / P4 UNPROVEN`** (Case A could not bind a target instance:
-no OpenCode endpoint is configured, so 0 `GET /doc` were issued —
-`V03E_G0_4_API_INSPECTION_PROOF.md`); the report-only
+and was then independently approved as a **FAILED PROOF** (*APPROVE V0.3-E G0.4 FAILED
+PROOF*; P0 = 0, P1 = 0, P2 = 0; **TYPE 3 — SEMANTIC ENVIRONMENT / CONFIGURATION RESULT**),
+so **G0.4/P4 = FAIL / P4 UNPROVEN** (Case A could not bind a target instance: the accepted
+workspace had no OpenCode base endpoint, so 0 `GET /doc` were issued —
+`V03E_G0_4_API_INSPECTION_PROOF.md`; no API/schema property was established); the report-only
 policy below applies regardless of whether G0.4 passes, fails or is never run.
 Therefore, in the current v0.3-E scope:
 
@@ -726,7 +730,7 @@ defensive, unexercised mapping); HTTP rejection and success were never non-deliv
 evidence remains informational only — `V03E_G0_3_CLEAN_RERUN_PROOF.md`; the original failed
 round is preserved as **CANDIDATE FAIL** with its independent TYPE-1 review outcome —
 `V03E_G0_3_TRANSPORT_PROOF.md`),
-**G0.4 = CANDIDATE FAIL / P4 UNPROVEN** (executed once under the approved immutable revision-3 oracle; Case A could not bind a target instance — no OpenCode endpoint configured, so 0 loopback HTTP requests / 0 `GET /doc` and cases B–H were not executed — `V03E_G0_4_API_INSPECTION_PROOF.md`), **G0.5 = NOT RUN**,
+**G0.4/P4 = AUTHORITATIVE FAIL / P4 UNPROVEN** (executed once under the approved immutable revision-3 oracle; independently approved failed proof — *APPROVE V0.3-E G0.4 FAILED PROOF*, P0 = 0, P1 = 0, P2 = 0, TYPE 3 — SEMANTIC ENVIRONMENT / CONFIGURATION RESULT; Case A could not bind a target instance — no OpenCode base endpoint configured, so 0 loopback HTTP requests / 0 `GET /doc` and cases B–H were not executed — `V03E_G0_4_API_INSPECTION_PROOF.md`), **G0.5 = NOT RUN**,
 **G1 = NOT RUN**, **G2 = NOT RUN**.  The design's local hard prerequisite is
 therefore **satisfied**: G0.1/P7 **no longer blocks mandatory-core implementation
 eligibility**, but implementation remains **NOT AUTHORIZED** until a separately
@@ -746,7 +750,7 @@ OpenAI-compatible provider may be used in G2; nothing runs in this design round)
 | **G0.1** | local DevRelay hard-kill around `ISSUED`/settle writes; the strict reader must return a complete valid record or `evidence_gap`/corruption, never silently skip (**P7/F5**) | 0 | local |
 | **G0.2** | offline run↔call false-correlation cases (two runs, reused prompts, reused sessions, neighbouring call ids) | 0 | local |
 | **G0.3** | transport/non-delivery classification checks against the accepted taxonomy (**P5**) — original round candidate FAIL (case G0.3-J surfaced `remote_protocol_error`), independently reviewed as a TYPE-1 proof-plan failure, then corrected and cleanly re-run, and the corrected proof was independently approved: **G0.3 / P5 = PASS** (authoritative; accepted safe buckets class-wide pre-send; `proxy_error` `UNREACHABLE_CURRENT_CONFIGURATION`; every uncertain class fail-closed) | 0 | local/fake transport |
-| **G0.4** | OpenCode installed-API inspection for a per-operation pending handle (**P4**) — **EXECUTED ONCE: `CANDIDATE FAIL / P4 UNPROVEN`** under the approved immutable revision-3 oracle (`V03E_G0_4_API_INSPECTION_ORACLE.md`, committed-blob SHA-256 `b0c34fa1…`): Case A did not reach `TARGET_BOUND` (`TARGET_IDENTITY_UNRESOLVED` — no OpenCode endpoint configured), so 0 loopback HTTP requests / 0 `GET /doc` were issued and cases B–H were not executed (`V03E_G0_4_API_INSPECTION_PROOF.md`) | 0 | read-only inspection |
+| **G0.4** | OpenCode installed-API inspection for a per-operation pending handle (**P4**) — **AUTHORITATIVE FAIL / P4 UNPROVEN**: the single authorized execution under the approved immutable revision-3 oracle (`V03E_G0_4_API_INSPECTION_ORACLE.md`, committed-blob SHA-256 `b0c34fa1…`) was independently approved as a **FAILED PROOF** (*APPROVE V0.3-E G0.4 FAILED PROOF*, P0 = 0, P1 = 0, P2 = 0, **TYPE 3 — SEMANTIC ENVIRONMENT / CONFIGURATION RESULT**).  Case A did not reach `TARGET_BOUND` (`TARGET_IDENTITY_UNRESOLVED` — the accepted workspace had no OpenCode base endpoint), so 0 loopback HTTP requests / 0 `GET /doc` were issued and cases B–H were not executed; no API/schema property was established and a rerun is not authorized (`V03E_G0_4_API_INSPECTION_PROOF.md`) | 0 | read-only inspection |
 | **G0.5** | session identity/bound checks: missing, foreign, recreated, copied sessions (**P6**) | 0 | local |
 | **G1** | real **LOCAL** OpenCode `1.18.11` session-history restart proof (**P1**: durability of ids/text across a server restart) | 0 | local OpenCode, no inference |
 | **G2** | real **LOCAL** OpenCode + **local fake OpenAI-compatible provider**: submitted-text fidelity (**P2**), duplicate-identical-prompt uniqueness (**P3**), session-exclusivity assumptions as far as observable (**P8**), timestamp/order fidelity if used (**P9**) | 0 | local fake provider |
@@ -816,7 +820,7 @@ proofs, **no real adoption smoke is required**: the reduced core (report +
 | P1 | does session history survive an OpenCode server restart with the same ids/text? | adoption (C); reporting quality | PROOF REQUIRED (G1) |
 | P2 | is the submitted user text preserved verbatim so the digest match is sound? | adoption (C) | PROOF REQUIRED (G2) |
 | P3 | can identical prompts in one session be disambiguated deterministically? | adoption (C) | PROOF REQUIRED (G2) |
-| P4 | does a durable per-operation pending handle exist? | pending capability (D) | **historical review answer** for 1.18.11: no (session-level status only) — report-only; **formal proof status: G0.4 executed once = `CANDIDATE FAIL / P4 UNPROVEN`** (no configured endpoint → no target instance bound → 0 `GET /doc`; `V03E_G0_4_API_INSPECTION_PROOF.md`), awaiting independent review |
+| P4 | does a durable per-operation pending handle exist? | pending capability (D) | **historical review answer** for 1.18.11: no (session-level status only) — report-only, and **not** a formal G0.4 result; **formal proof status: G0.4/P4 = AUTHORITATIVE FAIL / P4 UNPROVEN** (independently approved failed proof — *APPROVE V0.3-E G0.4 FAILED PROOF*, P0 = 0, P1 = 0, P2 = 0, TYPE 3; no configured endpoint → no target instance bound → 0 `GET /doc`, no API/schema property established; `V03E_G0_4_API_INSPECTION_PROOF.md`) |
 | P5 | do the accepted connect-phase classes prove non-delivery? | non-delivery authority (E) | **executed under G0.3: **PASS** (authoritative, independently approved through *APPROVE V0.3-E G0.3 / P5 TRANSPORT PROOF*, P0 = 0, P1 = 0, P2 = 0) in the corrected clean rerun under the oracle precommitted in `e328ec5`: the accepted safe buckets are class-wide pre-send (`connect_timeout`, `pool_timeout`, `connect_error`, `unsupported_protocol`) plus the pre-send-only `local_protocol_error` mapping boundary, `proxy_error` is `UNREACHABLE_CURRENT_CONFIGURATION`, and every uncertain class stayed fail-closed; the original round's candidate FAIL (case G0.3-J surfaced `remote_protocol_error`; the request-send `WriteError` mapping is defensive/unexercised) and its independent TYPE-1 review remain historical; P5 stays informational/report-only (`V03E_G0_3_CLEAN_RERUN_PROOF.md`) |
 | P6 | is session identity strong enough against missing/recreated/copied sessions? | adoption (C) | PROOF REQUIRED (G0.5); bounds adoption now |
 | P7 | is the ledger settle record complete-or-absent under a hard kill? | all ledger-trusting logic | **PASS** (authoritative, independently approved; executed once under G0.1 — `V03E_G0_1_P7_PROOF.md`; local, 0 provider calls) |

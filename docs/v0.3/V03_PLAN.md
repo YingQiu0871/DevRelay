@@ -119,7 +119,7 @@ buckets are class-wide pre-send, `proxy_error` is unreachable in the current con
 every uncertain class stayed fail-closed, and the corrected case J surfaced
 `remote_protocol_error` exactly as precommitted
 (`docs/v0.3/V03E_G0_3_CLEAN_RERUN_PROOF.md`; the original failed round is preserved in
-`docs/v0.3/V03E_G0_3_TRANSPORT_PROOF.md`), while G0.5/G1/G2 remain unrun and G0.4 was executed once and returned **CANDIDATE FAIL / P4 UNPROVEN** (no OpenCode endpoint configured, so no target instance could be bound and 0 `GET /doc` were issued —
+`docs/v0.3/V03E_G0_3_TRANSPORT_PROOF.md`), while G0.5/G1/G2 remain unrun and G0.4 was executed once and is an authoritative **FAIL / P4 UNPROVEN** (independently approved failed proof, TYPE 3: the accepted workspace had no OpenCode base endpoint, so no target instance could be bound and 0 `GET /doc` were issued —
 `docs/v0.3/V03E_G0_4_API_INSPECTION_PROOF.md`)
 (G0.2 = PASS, authoritative, independently approved), so the platform
 proof gate is **PARTIALLY EXECUTED / NOT COMPLETE** (not passed, not complete).  The mandatory core's gate was **G0.1/P7 PASS
@@ -128,10 +128,11 @@ G0.1/P7 PASS → mandatory-core implementation may be authorized is now satisfie
 had G0.1/P7 failed, core implementation would have stayed **blocked**
 (no degraded-implementation path; a degraded scope would need its own
 design change and review).  G0.4-G0.5 remain relevant to the
-reporting language; G0.4 has been executed once and is `CANDIDATE FAIL / P4 UNPROVEN`
-(under the approved immutable revision-3 oracle `docs/v0.3/V03E_G0_4_API_INSPECTION_ORACLE.md`:
+reporting language; G0.4/P4 has been executed once and is `AUTHORITATIVE FAIL / P4 UNPROVEN`
+(independently approved failed proof under the immutable revision-3 oracle `docs/v0.3/V03E_G0_4_API_INSPECTION_ORACLE.md`:
 Case A `TARGET_IDENTITY_UNRESOLVED` — no configured endpoint, 0 read-only loopback `GET /doc`,
-cases B–H not executed — `docs/v0.3/V03E_G0_4_API_INSPECTION_PROOF.md`), while G0.5 remains
+cases B–H not executed, no API/schema property established, rerun not authorized —
+`docs/v0.3/V03E_G0_4_API_INSPECTION_PROOF.md`), while G0.5 remains
 unrun.  `adopt_completed_turn` stays disabled until P1, P2, P3 and P8
 (and P9 if timestamps are used) pass the platform proof gate (SPEC §25, §28); if
 those optional-adoption proofs fail, that capability is removed/disabled and no real
