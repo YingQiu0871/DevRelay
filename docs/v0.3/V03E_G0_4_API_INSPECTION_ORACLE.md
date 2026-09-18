@@ -1,10 +1,19 @@
 # DevRelay v0.3-E — G0.4 / P4 proof definition candidate: installed-API inspection oracle
 
-**Status: PRE-RUN DEFINITION CANDIDATE — G0.4 remains NOT RUN and this file contains NO
-G0.4 result.**  If an independent reviewer approves it without modification, this file
-becomes the immutable oracle for the future G0.4 execution.  Until then, G0.4 is
-`NOT RUN / DEFINITION CANDIDATE AWAITING INDEPENDENT REVIEW`, P4 is **not** proven, and
-no claim in this file may be read as a proof outcome.
+**Status: PRE-RUN DEFINITION CANDIDATE (REVISION 2) — G0.4 remains NOT RUN and this file
+contains NO G0.4 result.**  Revision 2 responds to the independent review of revision 1
+(commit `abd677a`), whose decision was **`REQUEST_CHANGES — V0.3-E G0.4 PROOF DEFINITION`**
+with **P0 = 0, P1 = 1, P2 = 0, P3 = 3**: the blocking P1 was that the definition did not
+require, in a fail-closed way, that the `/doc` responder is the accepted OpenCode 1.18.11
+target.  Revision 2 closes that gap (section 8.1, case G0.4-A, sections 10–13, 18, 23) and
+folds in the review's three P3 notes; everything else is unchanged.
+
+If an independent reviewer approves **this revision** without modification, it becomes the
+immutable oracle for the future G0.4 execution.  Until then, G0.4 is
+`NOT RUN / DEFINITION CANDIDATE (REVISION 2) AWAITING INDEPENDENT REVIEW`, P4 is **not**
+proven, and no claim in this file may be read as a proof outcome.  Revision 2 is a
+definition-level change only: it alters no runtime semantics, grants no capability and
+performs no inspection.
 
 ## 1. Identity
 
@@ -19,7 +28,9 @@ no claim in this file may be read as a proof outcome.
 | mandatory-core implementation | **NOT AUTHORIZED** |
 | `adopt_completed_turn` | **DISABLED** |
 | v0.3-E | DESIGN FROZEN / NOT IMPLEMENTED / NOT ACCEPTED / UNRELEASED |
-| Installed target | OpenCode **1.18.11** (`opencode-ai` npm package, `bin/opencode.exe`; a desktop build is also installed) |
+| Installed target (accepted) | **OpenCode 1.18.11 as shipped by the npm package `opencode-ai`** (`%APPDATA%\npm\node_modules\opencode-ai`, entry point `./bin/opencode.exe`) |
+| Other installations on the host | a **desktop build** (`@opencode-aidesktop`) is also installed on this machine and is **not** the accepted target; a responder from any other installation is a different target and cannot be characterized by this definition |
+| Definition revision | **revision 2** (remediation of revision 1 per the review's `REQUEST_CHANGES`, P1 = 1; see §25) |
 | Budget for the future G0.4 execution | 0 provider/model inference calls; 0 model turns; 0 external network requests; 0 OpenCode starts/restarts; **at most 1** local loopback read-only HTTP GET (`/doc`) |
 
 ## 2. Frozen design references this definition must stay inside
@@ -144,19 +155,59 @@ The future G0.4 proof must combine **both**:
   result is `EVIDENCE_INSUFFICIENT` / **FAIL**, unless an independently reviewed
   replacement evidence method is authorized **before** execution.
 
+### 8.1 Target-instance binding (MANDATORY; read-only; zero extra HTTP)
+
+The semantic conclusion is only valid for the **bound** target instance, so the binding is
+a required, fail-closed precondition of both PASS-A and PASS-B.  It uses **no HTTP of its
+own** (the `GET /doc` of part B remains the only permitted HTTP operation) and is
+precommitted as:
+
+1. take the **configured loopback endpoint** from the accepted DevRelay configuration
+   (explicit by design — DevRelay never scans ports or processes,
+   `src/devrelay/config.py`);
+2. from **local, read-only OS metadata only**, map that listening endpoint to its
+   **listening PID** and then to that process's **executable path** (e.g. a listening-socket
+   listing plus a process query);
+3. resolve that executable path to its **installation root and package metadata** and read
+   its **name/version** (e.g. the `package.json` of the npm installation that owns the
+   executable);
+4. accept the instance only if the resolved installation is the **named accepted target**
+   — the npm `opencode-ai` **1.18.11** package installation identified in §1 (or an
+   installation explicitly named as equivalent in the future execution's authorization);
+5. **corroborate**, never substitute, with authoritative version/build metadata if the
+   captured `/doc` document exposes it.
+
+Rules:
+
+* if the binding cannot be established within this authorized method — no listening
+  endpoint, no resolvable PID/executable, unreadable package metadata, or a version that
+  does not match — the outcome is **`EVIDENCE_INSUFFICIENT`** and therefore **CANDIDATE
+  FAIL / P4 UNPROVEN**.  It is **never** PASS-A or PASS-B;
+* a **non-matching** installation (for example the desktop build, or another version) is
+  reported as `TARGET_MISMATCH` *within* that `EVIDENCE_INSUFFICIENT` outcome: the run is
+  **INCONCLUSIVE for the accepted target**, no characterization of the accepted target is
+  made, and characterizing the other installation would require a **separately authorized
+  definition that names that target**;
+* local port/process metadata is used as **proof evidence only**.  It is **not** a runtime
+  endpoint-resolution mechanism, it does not change DevRelay's "never scans ports or
+  processes" posture, and it must not be used to select, adopt or reconfigure an endpoint;
+* the binding evidence (endpoint, listening PID, executable path, installation root,
+  package name/version, any `/doc` version metadata, and the match verdict) is mandatory
+  evidence (§18), not "if available".
+
 **Why `/doc` is required:** the installed npm package ships a compiled binary and string
 evidence but no readable route table / OpenAPI source sufficient to establish field
 semantics or route linkage; the historical v0.3-A `/doc` observation is context, not
 current G0.4 proof.  Therefore the future proof must inspect the **current installed
-server's** read-only schema exactly once, and no historical `/doc` result alone may
-establish G0.4 PASS.
+server's** read-only schema exactly once — **for the bound target instance** — and no
+historical `/doc` result alone may establish G0.4 PASS.
 
 ## 9. Fixed future case matrix (exactly A–H; one live probe total)
 
 | Case | Content | Precommitted expectation / outcome |
 | --- | --- | --- |
-| **G0.4-A — INSTALLED IDENTITY** | verify the installed server/package target is OpenCode 1.18.11 | `IDENTITY_MATCH`; mismatch → **FAIL** |
-| **G0.4-B — COMPLETE CURRENT `/doc` CAPTURE** | the single authorized read-only loopback `GET /doc`; verify a parseable OpenAPI/schema document for the running accepted 1.18.11 instance | `SCHEMA_AVAILABLE`; unavailable/malformed/version-inconsistent → **FAIL** |
+| **G0.4-A — INSTALLED IDENTITY AND RUNNING-SERVER BINDING** | verify the installed accepted artifact is OpenCode 1.18.11 **and** bind the answering instance to it by the §8.1 read-only procedure (configured loopback endpoint → listening PID → executable path → installation root/package name+version, corroborated by `/doc` version metadata where exposed) | `IDENTITY_MATCH_AND_BOUND`; artifact mismatch, no resolvable endpoint/PID/executable, unreadable metadata, or a version that does not match → **FAIL** (`EVIDENCE_INSUFFICIENT`, `TARGET_MISMATCH` recorded when the responder is another installation/version) |
+| **G0.4-B — COMPLETE CURRENT `/doc` CAPTURE (BOUND INSTANCE)** | the single authorized read-only loopback `GET /doc` against the instance **bound in case A**; verify a parseable OpenAPI/schema document | `SCHEMA_AVAILABLE`; unavailable/malformed → **FAIL**; a `/doc` document whose identity contradicts the case-A binding → **FAIL** |
 | **G0.4-C — SESSION STATUS CONTROL** | inspect `/session/status` and the `SessionStatus` schema | characterize `SESSION_LEVEL_ONLY` or an operation-specific resource; historical expectation `SESSION_LEVEL_ONLY`, but the conclusion must rest on current schema evidence |
 | **G0.4-D — SYNCHRONOUS MESSAGE ROUTE** | inspect `POST /session/{id}/message` request/response schemas from `/doc` only (no POST executed) | determine whether the schema returns any candidate operation handle distinct from ordinary session/message ids |
 | **G0.4-E — `PROMPT_ASYNC` ROUTE** | inspect `POST /session/{id}/prompt_async` schema from `/doc` only (never invoked) | characterize request schema, response schema, returned identifiers, whether any returned identifier is operation-specific, and whether a read-only durable lookup route exists for it; route existence alone is not a qualifying handle |
@@ -171,9 +222,18 @@ establish G0.4 PASS.
 * `EVIDENCE_INSUFFICIENT`
 * `SCHEMA_CONTRADICTION`
 
-No fuzzy partial-success verdict is permitted.
+No fuzzy partial-success verdict is permitted, and **no fifth verdict is invented** for the
+binding: an unbound responder, an unresolvable instance, or a responder that is not the
+named accepted target maps to `EVIDENCE_INSUFFICIENT` (with `TARGET_MISMATCH` recorded
+when the responder belongs to a different installation/version), i.e. **CANDIDATE FAIL /
+P4 UNPROVEN** — never PASS-A and never PASS-B.  The two characterization verdicts are
+reachable **only** for a successfully bound target instance.
 
 ## 11. PASS semantics (both conclusions are fully-evidenced characterizations)
+
+Precondition for **both** PASS outcomes: the target instance was successfully **bound**
+under §8.1 (case G0.4-A).  Without that binding the only possible outcome is
+`EVIDENCE_INSUFFICIENT`.
 
 * **PASS-A — `CHARACTERIZED_NO_DURABLE_PER_OPERATION_HANDLE`:** the complete authorized
   installed-API inspection finds no API object/field/resource satisfying the
@@ -190,7 +250,8 @@ adoption capability enabled".
 
 ## 12. Handle-present rule
 
-If a candidate handle is found, the proof must not stop at its name.  To conclude
+This rule applies only to a **successfully bound** target instance (§8.1).  If a candidate
+handle is found, the proof must not stop at its name.  To conclude
 `CHARACTERIZED_HANDLE_PRESENT_BUT_OUT_OF_SCOPE_FOR_V03E` it must establish **all**
 qualifying dimensions (operation-specific, OpenCode-owned, post-call observable,
 read-only-queryable/durably resolvable, no timestamp/order heuristic required).  If any
@@ -199,7 +260,8 @@ durability/specificity/queryability dimension is unresolved, the result is
 
 ## 13. Handle-absent rule
 
-To conclude `CHARACTERIZED_NO_DURABLE_PER_OPERATION_HANDLE` the proof must: successfully
+This rule applies only to a **successfully bound** target instance (§8.1).  To conclude
+`CHARACTERIZED_NO_DURABLE_PER_OPERATION_HANDLE` the proof must: successfully
 inspect the **current** `/doc`; cover the complete path/schema set; inspect the known
 candidate routes; trace every candidate identifier; and establish that none satisfies
 all qualifying dimensions.  Absence may **never** be inferred from missing expected
@@ -259,14 +321,19 @@ expected field is absent; candidate identifier semantics remain unresolved.
 
 ## 18. Evidence requirements (future proof)
 
-Repository identity; installed package version/path; running-server version identity if
-available from `/doc`/schema metadata; `/doc` HTTP status; `/doc` media type; full schema
-hash; path count; schema/component count; candidate route list; candidate identifier
-list; per-identifier qualifying-dimension matrix; complete path/schema search method;
-session-status finding; sync-message schema finding; `prompt_async` schema finding;
-event/global-event schema finding; `wait_idle` control finding; DevRelay-local-id control
-finding; final characterization verdict; capability consequence; provider/model count;
-external-network count; loopback GET count; OpenCode start/restart count.
+Repository identity; **installed accepted target identification** (package name/version,
+installation root, entry point); **target-instance binding evidence (§8.1, mandatory)**:
+configured loopback endpoint, listening PID, executable path, resolved installation root,
+resolved package name/version, any authoritative version/build metadata exposed by the
+captured `/doc` document, and the **binding verdict** (`BOUND` / `TARGET_MISMATCH` /
+`UNBOUND`) — the decisive evidence is **mandatory**, never "if available"; `/doc` HTTP
+status; `/doc` media type; full schema hash; path count; schema/component count; candidate
+route list; candidate identifier list; per-identifier qualifying-dimension matrix;
+complete path/schema search method; session-status finding; sync-message schema finding;
+`prompt_async` schema finding; event/global-event schema finding; `wait_idle` control
+finding; DevRelay-local-id control finding; final characterization verdict; capability
+consequence; provider/model count; external-network count; loopback GET count; OpenCode
+start/restart count.
 
 **Must not persist:** credentials, raw prompts, responses containing user content,
 reasoning, provider secrets.  The OpenAPI document may be hashed and summarized; no
@@ -309,6 +376,11 @@ agent may never self-approve.
 
 ## 23. Approved claim boundaries
 
+Both boundaries below apply **only to the instance bound in case G0.4-A** (the named
+accepted target of §1).  They never extend to another installation on the host (for
+example the desktop build), to an unbound responder, or to any instance characterized
+without the §8.1 binding.
+
 **If a future PASS-A is approved, the maximum claim is:** for the inspected installed
 OpenCode 1.18.11 API/schema, no exposed read-only API object satisfies the precommitted
 definition of a durable per-operation pending handle.  It must **not** be claimed that no
@@ -325,7 +397,31 @@ enables pending adoption, or that it changes current recovery semantics.
 
 This file defines a proof; it proves nothing.  It contains **no** G0.4 observed result,
 it does not execute the inspection, it issues no HTTP request and does not read `/doc`,
-it starts no OpenCode server, and it changes no runtime behaviour.  It does not make P4
-proven, does not make G0.4 pass, and does not authorize implementation, adoption, retry
-or any capability change.  `G0.4` remains `NOT RUN` until a separately executed proof is
-independently approved.
+it starts no OpenCode server, and it changes no runtime behaviour.  It defines a binding
+procedure but performs no binding, resolves no endpoint, queries no process and reads no
+package metadata in this round.  It does not make P4 proven, does not make G0.4 pass, and
+does not authorize implementation, adoption, retry or any capability change.  `G0.4`
+remains `NOT RUN` until a separately executed proof is independently approved.
+
+## 25. Revision history
+
+* **Revision 1** — `abd677a` (`docs(v03e): define G0.4 API-inspection proof`, parent
+  `f41b7a1`): the initial pre-run definition candidate; SHA-256
+  `7895ab1fa3ef918cd67cd1be3a25fde8b5c8907a353a35d6496488ca29532319`.
+  Independent review decision: **`REQUEST_CHANGES — V0.3-E G0.4 PROOF DEFINITION`** with
+  **P0 = 0, P1 = 1, P2 = 0, P3 = 3**.  Five of the six readiness gaps were accepted as
+  closed; the blocking P1 was the missing fail-closed binding between the `/doc` responder
+  and the accepted OpenCode 1.18.11 target (the review verified with read-only local
+  metadata that this host runs a *different* installation — the desktop build — while the
+  named target is the npm `opencode-ai` 1.18.11 package).  P3 notes: name the binding step
+  as its own case; state that local port/process metadata is proof evidence only; and
+  state that a non-matching/unbound instance is INCONCLUSIVE/FAIL and that characterizing
+  another instance needs its own authorized definition.
+* **Revision 2** — this revision: adds the mandatory §8.1 binding, extends case G0.4-A to
+  `INSTALLED IDENTITY AND RUNNING-SERVER BINDING`, maps unbound/`TARGET_MISMATCH` to
+  `EVIDENCE_INSUFFICIENT` (never PASS), makes the binding evidence mandatory in §18, scopes
+  the claim boundaries to the bound instance (§23), records the non-claims (§24) and folds
+  in the three P3 notes.  No runtime semantics, budgets, probe discipline or frozen policy
+  changed; the review's other verdicts stand untouched.  Revision 2 must itself be
+  independently reviewed before any execution, and execution still requires a separate
+  authorization.
