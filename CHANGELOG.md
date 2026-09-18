@@ -73,7 +73,13 @@ its precommitted class because the installed httpcore suppresses a request-send
 violated and no capability depends on P5 (informational only), but per the precommitted
 standard the candidate result is **FAIL** and the affected case/class is named.  0 real
 provider/model calls, 0 real network requests.  Evidence:
-`docs/v0.3/V03E_G0_3_TRANSPORT_PROOF.md`.  G0.1/P7 and G0.2 are authoritative PASS and mandatory-core
+`docs/v0.3/V03E_G0_3_TRANSPORT_PROOF.md`.  That failure was then independently reviewed
+as **FAIL - V0.3-E G0.3 / P5 PROOF - TYPE 1 PROOF-PLAN FAILURE** (P0 = 0, P1 = 0, P2 = 0):
+the candidate correctly failed its immutable oracle, case J's exact classification
+expectation was wrong for the installed HTTP/1.1 request-send path, **no accepted
+safe/non-delivery classifier bucket was shown to be unsafe**, and **no runtime
+remediation is required**; a corrected clean rerun was separately authorized under a new
+precommitted oracle (`docs/v0.3/V03E_G0_3_RERUN_ORACLE.md`).  G0.1/P7 and G0.2 are authoritative PASS and mandatory-core
 implementation remains **not authorized** pending a separate authorization; the
 platform proof gate stays **partially executed / not complete** (G0.3 candidate FAIL;
 G0.4/G0.5/G1/G2 not

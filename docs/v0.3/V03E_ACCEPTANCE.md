@@ -17,8 +17,12 @@ fail-closed, oracle unchanged during execution, 0 provider/model calls —
 `V03E_G0_2_FALSE_CORRELATION_PROOF.md`); **G0.3 = CANDIDATE FAIL** — executed once
 offline under the oracle precommitted in `b9c4704`; the six accepted non-delivery classes
 were all proven pre-send, but precommitted case G0.3-J surfaced `remote_protocol_error`
-instead of its `write_error` class — `V03E_G0_3_TRANSPORT_PROOF.md`; steps G0.4, G0.5,
-G1, G2 not run),
+instead of its `write_error` class — `V03E_G0_3_TRANSPORT_PROOF.md`; an independent review
+of that failure returned **FAIL - V0.3-E G0.3 / P5 PROOF - TYPE 1 PROOF-PLAN FAILURE**
+(P0 = 0, P1 = 0, P2 = 0: case J's expectation was wrong for the installed HTTP/1.1
+request-send path, no classifier-safety failure, no runtime remediation required) and a
+corrected clean rerun was separately authorized under the new precommitted oracle
+`V03E_G0_3_RERUN_ORACLE.md`; steps G0.4, G0.5, G1, G2 not run),
 `adopt_completed_turn` remains **DISABLED**,
 and the mandatory-core gate **G0.1/P7 PASS first** is now **satisfied** (the proof
 passed and was independently approved), with no degraded-implementation path.
@@ -115,7 +119,7 @@ AUTHORIZED** until a separately issued implementation authorization.
 | --- | --- | --- | --- |
 | E34 | **P7 / G0.1** — hard-kill DevRelay around `ISSUED`/settle writes and verify the strict reader returns a complete valid record or `evidence_gap`/corruption, never silently skipping | **PASS** (authoritative / independently approved; executed once at `5bdc21d`–`fe304ab`, candidate result then approved by the final proof review — *APPROVE V0.3-E G0.1 / P7 PLATFORM PROOF*, P0 = 0, P1 = 0, P2 = 0; cases A1, A2, B, C, D, E all met their predefined criteria; evidence: `docs/v0.3/V03E_G0_1_P7_PROOF.md`) | SPEC §9, §25 |
 | E35 | **G0.2** — offline run↔call false-correlation cases (two runs, reused prompts, reused sessions, neighbouring call ids) | **PASS** (authoritative / independently approved through *APPROVE V0.3-E G0.2 FALSE-CORRELATION PROOF*, P0 = 0, P1 = 0, P2 = 0; clean re-run under the oracle precommitted in commit `12ea1b7`; ten fixed cases A-J executed once each and fail-closed — a unique `MATCH` only on the complete identity tuple, otherwise `NO_MATCH`/`evidence_conflict`/`evidence_gap`/`corruption`, no timestamp tie-break, oracle module hash unchanged during execution, 0 provider/model calls; evidence: `docs/v0.3/V03E_G0_2_CLEAN_RERUN_PROOF.md`; original round preserved: `docs/v0.3/V03E_G0_2_FALSE_CORRELATION_PROOF.md`) | SPEC §25 |
-| E36 | **G0.3** — transport/non-delivery classification checks against the accepted taxonomy (P5) | **CANDIDATE FAIL** (executed once offline under the oracle precommitted in `b9c4704`; `connect_timeout`/`pool_timeout`/`connect_error`/`proxy_error`/`unsupported_protocol`/`local_protocol_error` each proven pre-send with no request header or body byte on the wire, and every uncertain class stayed uncertain with `retry_safe == false`; the FAIL is triggered by case G0.3-J, where the precommitted `write_error` trigger surfaced as `remote_protocol_error` because the installed httpcore suppresses a request-send `WriteError`; P5 remains informational only; evidence: `docs/v0.3/V03E_G0_3_TRANSPORT_PROOF.md`) | SPEC §25 |
+| E36 | **G0.3** — transport/non-delivery classification checks against the accepted taxonomy (P5) | **CANDIDATE FAIL** (executed once offline under the oracle precommitted in `b9c4704`; `connect_timeout`/`pool_timeout`/`connect_error`/`proxy_error`/`unsupported_protocol`/`local_protocol_error` each proven pre-send with no request header or body byte on the wire, and every uncertain class stayed uncertain with `retry_safe == false`; the FAIL is triggered by case G0.3-J, where the precommitted `write_error` trigger surfaced as `remote_protocol_error` because the installed httpcore suppresses a request-send `WriteError`; P5 remains informational only; evidence: `docs/v0.3/V03E_G0_3_TRANSPORT_PROOF.md`; the failure was independently reviewed as a TYPE-1 proof-plan / installed-stack reachability mismatch with no classifier-safety failure and no runtime remediation requirement, and a corrected clean rerun was separately authorized under `docs/v0.3/V03E_G0_3_RERUN_ORACLE.md`) | SPEC §25 |
 | E37 | **G0.4** — OpenCode installed-API inspection for a per-operation pending handle (P4) | PROOF REQUIRED (read-only inspection) | SPEC §25 |
 | E38 | **G0.5** — session identity/bound checks (P6: missing, foreign, recreated, copied) | PROOF REQUIRED (local) | SPEC §25 |
 

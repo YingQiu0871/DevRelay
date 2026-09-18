@@ -20,8 +20,13 @@ once offline at `efa2ca3` under the oracle precommitted in `b9c4704`: the six ac
 non-delivery classes were all proven pre-send on the installed stack, but precommitted
 case G0.3-J did not produce its `write_error` class (the installed httpcore suppresses a
 request-send `WriteError`, so it surfaced as `remote_protocol_error`, still
-submission-uncertain) — `V03E_G0_3_TRANSPORT_PROOF.md`; steps G0.4, G0.5, G1 and G2 have
-**not** run),
+submission-uncertain) — `V03E_G0_3_TRANSPORT_PROOF.md`; an independent review of that
+failure returned **FAIL - V0.3-E G0.3 / P5 PROOF - TYPE 1 PROOF-PLAN FAILURE**
+(P0 = 0, P1 = 0, P2 = 0: case J's exact classification expectation was wrong for the
+installed HTTP/1.1 request-send path, no accepted safe/non-delivery bucket was shown to be
+unsafe, and no runtime remediation is required), so a corrected clean rerun was separately
+authorized under the new precommitted oracle `V03E_G0_3_RERUN_ORACLE.md`; steps G0.4,
+G0.5, G1 and G2 have **not** run),
 `adopt_completed_turn` remains **DISABLED**, and no provider/model call occurred during
 the reviews (the reviews were static/documentary).
 
@@ -708,7 +713,11 @@ false`, and every uncertain class stayed `submission_uncertain == true` with
 `retry_safe == false`; the candidate FAIL is triggered by case **G0.3-J**, where the
 precommitted `write_error` trigger surfaced as `remote_protocol_error` because the
 installed httpcore suppresses a request-send `WriteError` — the affected class is named
-and P5 evidence remains informational only; `V03E_G0_3_TRANSPORT_PROOF.md`),
+and P5 evidence remains informational only; `V03E_G0_3_TRANSPORT_PROOF.md`; the failure was
+independently reviewed as a **TYPE 1 proof-plan / installed-stack reachability mismatch**
+with no classifier-safety failure and no runtime remediation requirement, and a corrected
+clean rerun was separately authorized under the new precommitted oracle
+`V03E_G0_3_RERUN_ORACLE.md`),
 **G0.4 = NOT RUN**, **G0.5 = NOT RUN**,
 **G1 = NOT RUN**, **G2 = NOT RUN**.  The design's local hard prerequisite is
 therefore **satisfied**: G0.1/P7 **no longer blocks mandatory-core implementation
@@ -800,7 +809,7 @@ proofs, **no real adoption smoke is required**: the reduced core (report +
 | P2 | is the submitted user text preserved verbatim so the digest match is sound? | adoption (C) | PROOF REQUIRED (G2) |
 | P3 | can identical prompts in one session be disambiguated deterministically? | adoption (C) | PROOF REQUIRED (G2) |
 | P4 | does a durable per-operation pending handle exist? | pending capability (D) | answered for 1.18.11: **no** (session-level status only) — report-only |
-| P5 | do the accepted connect-phase classes prove non-delivery? | non-delivery authority (E) | **executed once under G0.3: candidate FAIL** — the six accepted non-delivery classes were proven pre-send, but case G0.3-J surfaced as `remote_protocol_error`, so `write_error` is not reachable at the accepted transport boundary on the installed HTTP/1.1 stack; P5 stays informational/report-only (`V03E_G0_3_TRANSPORT_PROOF.md`) |
+| P5 | do the accepted connect-phase classes prove non-delivery? | non-delivery authority (E) | **executed once under G0.3: candidate FAIL** — the six accepted non-delivery classes were proven pre-send, but case G0.3-J surfaced as `remote_protocol_error`, so `write_error` is not reachable at the accepted transport boundary on the installed HTTP/1.1 stack; the failure was independently reviewed as a TYPE-1 proof-plan/reachability mismatch (no classifier-safety failure, no runtime remediation required) and a corrected clean rerun was separately authorized; P5 stays informational/report-only (`V03E_G0_3_TRANSPORT_PROOF.md`) |
 | P6 | is session identity strong enough against missing/recreated/copied sessions? | adoption (C) | PROOF REQUIRED (G0.5); bounds adoption now |
 | P7 | is the ledger settle record complete-or-absent under a hard kill? | all ledger-trusting logic | **PASS** (authoritative, independently approved; executed once under G0.1 — `V03E_G0_1_P7_PROOF.md`; local, 0 provider calls) |
 | P8 | can session exclusivity (no other writer in the window) be established? | adoption (C) | PROOF REQUIRED (G2 + local cross-checks) |

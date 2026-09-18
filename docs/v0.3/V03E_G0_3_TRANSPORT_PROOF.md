@@ -2,6 +2,19 @@
 
 Status: **G0.3 = CANDIDATE FAIL — TRANSPORT NON-DELIVERY SAFETY NOT ESTABLISHED**
 (by the precommitted standard: case **G0.3-J** did not produce its precommitted result).
+This result **remains FAILED** and is not rewritten.
+
+> **Independent review outcome and corrected rerun (recorded afterwards; this record's
+> evidence is unchanged):** the independent review of this failed round issued **FAIL —
+> V0.3-E G0.3 / P5 PROOF — TYPE 1 PROOF-PLAN FAILURE** with **P0 = 0, P1 = 0, P2 = 0**.
+> It determined that this candidate correctly failed its immutable oracle, that case J's
+> exact classification expectation was wrong for the installed HTTP/1.1 request-send path
+> (a proof-plan / installed-stack reachability mismatch), that the surfaced outcome
+> remains submission-uncertain and fail-closed, that **no accepted safe/non-delivery
+> classifier bucket was shown to be unsafe**, and that **no runtime remediation is
+> required**.  A separately authorized corrected clean rerun under the new precommitted
+> oracle `docs/v0.3/V03E_G0_3_RERUN_ORACLE.md` follows this record; its outcome is
+> recorded in `docs/v0.3/V03E_G0_3_CLEAN_RERUN_PROOF.md`.
 
 The six accepted "definitely not submitted" classes were all **proven pre-send** on the
 installed stack, and no uncertain class was ever promoted to non-delivery — but one
