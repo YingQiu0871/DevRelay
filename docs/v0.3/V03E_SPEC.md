@@ -15,18 +15,17 @@ FALSE-CORRELATION PROOF* (P0 = 0, P1 = 0, P2 = 0) — the original round was fol
 one `REQUEST_CHANGES` review and a separately authorized clean re-run under the oracle
 precommitted in commit `12ea1b7`; the ten fixed cases A-J ran once each, all
 fail-closed, 0 provider/model calls — `V03E_G0_2_CLEAN_RERUN_PROOF.md` (original record
-preserved: `V03E_G0_2_FALSE_CORRELATION_PROOF.md`); **G0.3 = CANDIDATE FAIL** — executed
-once offline at `efa2ca3` under the oracle precommitted in `b9c4704`: the six accepted
-non-delivery classes were all proven pre-send on the installed stack, but precommitted
-case G0.3-J did not produce its `write_error` class (the installed httpcore suppresses a
-request-send `WriteError`, so it surfaced as `remote_protocol_error`, still
-submission-uncertain) — `V03E_G0_3_TRANSPORT_PROOF.md`; an independent review of that
-failure returned **FAIL - V0.3-E G0.3 / P5 PROOF - TYPE 1 PROOF-PLAN FAILURE**
-(P0 = 0, P1 = 0, P2 = 0: case J's exact classification expectation was wrong for the
-installed HTTP/1.1 request-send path, no accepted safe/non-delivery bucket was shown to be
-unsafe, and no runtime remediation is required), so a corrected clean rerun was separately
-authorized under the new precommitted oracle `V03E_G0_3_RERUN_ORACLE.md`; steps G0.4,
-G0.5, G1 and G2 have **not** run),
+preserved: `V03E_G0_2_FALSE_CORRELATION_PROOF.md`); the original G0.3 round failed as
+**CANDIDATE FAIL** at `c889636` (case G0.3-J surfaced `remote_protocol_error` instead of the
+precommitted `write_error` class; independently reviewed as a **TYPE-1 proof-plan failure**
+with no classifier-safety failure and no runtime remediation requirement —
+`V03E_G0_3_TRANSPORT_PROOF.md`), and the separately authorized **corrected clean rerun**
+under the new precommitted oracle `e328ec5`/`V03E_G0_3_RERUN_ORACLE.md` produced
+**G0.3 = CLEAN CANDIDATE PASS / AWAITING INDEPENDENT REVIEW**: the accepted safe buckets
+are class-wide pre-send, `proxy_error` is `UNREACHABLE_CURRENT_CONFIGURATION`, every
+uncertain class stayed `submission_uncertain` with `retry_safe` false, and corrected case J
+surfaced `remote_protocol_error` exactly as precommitted — `V03E_G0_3_CLEAN_RERUN_PROOF.md`;
+steps G0.4, G0.5, G1 and G2 have **not** run),
 `adopt_completed_turn` remains **DISABLED**, and no provider/model call occurred during
 the reviews (the reviews were static/documentary).
 
@@ -704,20 +703,21 @@ record in the run's role session, otherwise `NO_MATCH` / `evidence_conflict` /
 `evidence_gap` / `corruption`; no timestamp tie-break; the oracle was unchanged during
 execution; 0 provider/model calls — `V03E_G0_2_CLEAN_RERUN_PROOF.md`; original round:
 `V03E_G0_2_FALSE_CORRELATION_PROOF.md`);
-**G0.3 = CANDIDATE FAIL** (executed once offline at `efa2ca3` under the oracle
-precommitted in `b9c4704`; the six accepted non-delivery classes — `connect_timeout`,
-`pool_timeout`, `connect_error`, `proxy_error`, `unsupported_protocol`,
-`local_protocol_error` — were each shown **pre-send** on the installed stack with no
-request header or body byte reaching the network stream and `submission_uncertain ==
-false`, and every uncertain class stayed `submission_uncertain == true` with
-`retry_safe == false`; the candidate FAIL is triggered by case **G0.3-J**, where the
-precommitted `write_error` trigger surfaced as `remote_protocol_error` because the
-installed httpcore suppresses a request-send `WriteError` — the affected class is named
-and P5 evidence remains informational only; `V03E_G0_3_TRANSPORT_PROOF.md`; the failure was
-independently reviewed as a **TYPE 1 proof-plan / installed-stack reachability mismatch**
-with no classifier-safety failure and no runtime remediation requirement, and a corrected
-clean rerun was separately authorized under the new precommitted oracle
-`V03E_G0_3_RERUN_ORACLE.md`),
+**G0.3 = CLEAN CANDIDATE PASS / AWAITING INDEPENDENT REVIEW** (corrected clean rerun
+executed once under the oracle precommitted in `e328ec5`, one semantic execution per case:
+the accepted safe buckets — `connect_timeout`, `pool_timeout`, `connect_error`,
+`unsupported_protocol`, and the pre-send-only `local_protocol_error` mapping boundary —
+are **class-wide pre-send** on the installed stack with no request header or body byte on
+the wire; `proxy_error` is **UNREACHABLE_CURRENT_CONFIGURATION** (`trust_env=False`, no
+reviewed proxy configuration; the synthetic demonstration carries no current-production
+evidence); every uncertain class (`read_timeout`, `write_timeout`, `read_error`,
+`remote_protocol_error`, `close_error`) stayed `submission_uncertain == true` with
+`retry_safe == false`; corrected case **G0.3-J** surfaced `remote_protocol_error` exactly
+as precommitted (httpcore suppresses the request-send `WriteError`, which remains a
+defensive, unexercised mapping); HTTP rejection and success were never non-delivery; P5
+evidence remains informational only — `V03E_G0_3_CLEAN_RERUN_PROOF.md`; the original failed
+round is preserved as **CANDIDATE FAIL** with its independent TYPE-1 review outcome —
+`V03E_G0_3_TRANSPORT_PROOF.md`),
 **G0.4 = NOT RUN**, **G0.5 = NOT RUN**,
 **G1 = NOT RUN**, **G2 = NOT RUN**.  The design's local hard prerequisite is
 therefore **satisfied**: G0.1/P7 **no longer blocks mandatory-core implementation
@@ -737,7 +737,7 @@ OpenAI-compatible provider may be used in G2; nothing runs in this design round)
 | --- | --- | --- | --- |
 | **G0.1** | local DevRelay hard-kill around `ISSUED`/settle writes; the strict reader must return a complete valid record or `evidence_gap`/corruption, never silently skip (**P7/F5**) | 0 | local |
 | **G0.2** | offline run↔call false-correlation cases (two runs, reused prompts, reused sessions, neighbouring call ids) | 0 | local |
-| **G0.3** | transport/non-delivery classification checks against the accepted taxonomy (**P5**) — executed once: candidate FAIL (six non-delivery classes proven pre-send; case G0.3-J did not produce its `write_error` class) | 0 | local/fake transport |
+| **G0.3** | transport/non-delivery classification checks against the accepted taxonomy (**P5**) — original round candidate FAIL (case G0.3-J surfaced `remote_protocol_error`), independently reviewed as a TYPE-1 proof-plan failure, then corrected and cleanly re-run: **CLEAN CANDIDATE PASS / AWAITING INDEPENDENT REVIEW** (accepted safe buckets class-wide pre-send; `proxy_error` `UNREACHABLE_CURRENT_CONFIGURATION`; every uncertain class fail-closed) | 0 | local/fake transport |
 | **G0.4** | OpenCode installed-API inspection for a per-operation pending handle (**P4**) | 0 | read-only inspection |
 | **G0.5** | session identity/bound checks: missing, foreign, recreated, copied sessions (**P6**) | 0 | local |
 | **G1** | real **LOCAL** OpenCode `1.18.11` session-history restart proof (**P1**: durability of ids/text across a server restart) | 0 | local OpenCode, no inference |
@@ -809,7 +809,7 @@ proofs, **no real adoption smoke is required**: the reduced core (report +
 | P2 | is the submitted user text preserved verbatim so the digest match is sound? | adoption (C) | PROOF REQUIRED (G2) |
 | P3 | can identical prompts in one session be disambiguated deterministically? | adoption (C) | PROOF REQUIRED (G2) |
 | P4 | does a durable per-operation pending handle exist? | pending capability (D) | answered for 1.18.11: **no** (session-level status only) — report-only |
-| P5 | do the accepted connect-phase classes prove non-delivery? | non-delivery authority (E) | **executed once under G0.3: candidate FAIL** — the six accepted non-delivery classes were proven pre-send, but case G0.3-J surfaced as `remote_protocol_error`, so `write_error` is not reachable at the accepted transport boundary on the installed HTTP/1.1 stack; the failure was independently reviewed as a TYPE-1 proof-plan/reachability mismatch (no classifier-safety failure, no runtime remediation required) and a corrected clean rerun was separately authorized; P5 stays informational/report-only (`V03E_G0_3_TRANSPORT_PROOF.md`) |
+| P5 | do the accepted connect-phase classes prove non-delivery? | non-delivery authority (E) | **executed once under G0.3: **CLEAN CANDIDATE PASS / AWAITING INDEPENDENT REVIEW** in the corrected clean rerun under the oracle precommitted in `e328ec5`: the accepted safe buckets are class-wide pre-send (`connect_timeout`, `pool_timeout`, `connect_error`, `unsupported_protocol`) plus the pre-send-only `local_protocol_error` mapping boundary, `proxy_error` is `UNREACHABLE_CURRENT_CONFIGURATION`, and every uncertain class stayed fail-closed; the original round's candidate FAIL (case G0.3-J surfaced `remote_protocol_error`; the request-send `WriteError` mapping is defensive/unexercised) and its independent TYPE-1 review remain historical; P5 stays informational/report-only (`V03E_G0_3_CLEAN_RERUN_PROOF.md`) |
 | P6 | is session identity strong enough against missing/recreated/copied sessions? | adoption (C) | PROOF REQUIRED (G0.5); bounds adoption now |
 | P7 | is the ledger settle record complete-or-absent under a hard kill? | all ledger-trusting logic | **PASS** (authoritative, independently approved; executed once under G0.1 — `V03E_G0_1_P7_PROOF.md`; local, 0 provider calls) |
 | P8 | can session exclusivity (no other writer in the window) be established? | adoption (C) | PROOF REQUIRED (G2 + local cross-checks) |

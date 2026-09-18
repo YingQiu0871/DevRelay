@@ -13,7 +13,7 @@ F1-F12 **CLOSED**, decision *APPROVE V0.3-E FAIL-CLOSED CORE DESIGN; PLATFORM PR
 GATE REQUIRED BEFORE IMPLEMENTATION*.  Implementation is **not authorized**, the
 platform proof gate is **not complete** (**G0.1 / P7 = PASS** — authoritative,
 independently approved by *APPROVE V0.3-E G0.1 / P7 PLATFORM PROOF* with
-P0 = 0, P1 = 0, P2 = 0; G0.3 executed once with a **candidate FAIL** (see below); G0.4-G0.5, G1, G2 not run; G0.2 ran and, after one `REQUEST_CHANGES` review, was cleanly re-run under a precommitted oracle and then independently approved - `G0.2 = PASS` - see below), `adopt_completed_turn`
+P0 = 0, P1 = 0, P2 = 0; G0.3 failed its original oracle, was independently reviewed as a TYPE-1 proof-plan failure and returned a **clean candidate pass** in the corrected clean rerun (see below); G0.4-G0.5, G1, G2 not run; G0.2 ran and, after one `REQUEST_CHANGES` review, was cleanly re-run under a precommitted oracle and then independently approved - `G0.2 = PASS` - see below), `adopt_completed_turn`
 remains **disabled**, and
 the recorded P3 observations (P3-1, P3-2, P3-4/P3-5) stay non-blocking.
 
@@ -79,11 +79,28 @@ the candidate correctly failed its immutable oracle, case J's exact classificati
 expectation was wrong for the installed HTTP/1.1 request-send path, **no accepted
 safe/non-delivery classifier bucket was shown to be unsafe**, and **no runtime
 remediation is required**; a corrected clean rerun was separately authorized under a new
-precommitted oracle (`docs/v0.3/V03E_G0_3_RERUN_ORACLE.md`).  G0.1/P7 and G0.2 are authoritative PASS and mandatory-core
+precommitted oracle (`docs/v0.3/V03E_G0_3_RERUN_ORACLE.md`).
+
+**Corrected clean G0.3 / P5 rerun (executed once, one semantic execution per case):**
+**G0.3 = CLEAN CANDIDATE PASS / AWAITING INDEPENDENT REVIEW.**  Under the corrected oracle
+(`e328ec5`, manifest SHA-256 `9e4c7de6…`) the accepted safe buckets are class-wide
+pre-send on the installed stack — `connect_timeout`, `pool_timeout`, `connect_error`,
+`unsupported_protocol`, and the pre-send-only `local_protocol_error` mapping boundary (the
+h11 request-construction mapping) — with no request header or body byte on the wire;
+`proxy_error` is recorded as **UNREACHABLE_CURRENT_CONFIGURATION** (no proxy in the
+accepted configuration, `trust_env=False`); every uncertain class (`read_timeout`,
+`write_timeout`, `read_error`, `remote_protocol_error`, `close_error`) stayed
+`submission_uncertain=True` with `retry_safe=False`; the corrected case J surfaced
+`remote_protocol_error` with uncertainty exactly as precommitted (httpcore suppresses the
+request-send `WriteError`), while `write_error` stays a defensive, unexercised mapping;
+HTTP rejection (500) and the success control were never treated as non-delivery; and the
+unmapped mid-send h11 escape path is recorded as a fail-closed observability limitation
+(no runtime change).  0 provider/model calls, 0 network requests, 0 OpenCode processes.
+Evidence: `docs/v0.3/V03E_G0_3_CLEAN_RERUN_PROOF.md`.  G0.1/P7 and G0.2 are authoritative PASS and mandatory-core
 implementation remains **not authorized** pending a separate authorization; the
-platform proof gate stays **partially executed / not complete** (G0.3 candidate FAIL;
-G0.4/G0.5/G1/G2 not
-run) and `adopt_completed_turn` stays **disabled**.  Clean-rerun evidence:
+platform proof gate stays **partially executed / not complete** (G0.3 clean candidate
+pass, awaiting independent review; G0.4/G0.5/G1/G2 not run) and `adopt_completed_turn`
+stays **disabled**.  Clean-rerun evidence:
 `docs/v0.3/V03E_G0_2_CLEAN_RERUN_PROOF.md`; original record (preserved):
 `docs/v0.3/V03E_G0_2_FALSE_CORRELATION_PROOF.md`.
 
