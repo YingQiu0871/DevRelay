@@ -195,6 +195,44 @@ started, no HTTP or `/doc`/`/session` access occurred and no provider/model call
 G0.5 stays `NOT RUN / DEFINITION ACCEPTED / ORACLE NOT FREEZABLE / LOCAL REACHABILITY GAP`,
 G1/G2 stay NOT RUN, adoption stays DISABLED and implementation remains NOT AUTHORIZED.
 
+**The SIC definition received `REQUEST_CHANGES` (`REQUEST_CHANGES — V0.3-E G0.5-PRE / SIC
+DEFINITION`; P0 = 0, P1 = 1, P2 = 3) and only its blocking findings were remediated**
+(`docs/v0.3/V03E_G0_5_PRE_SESSION_INCARNATION_FINDING.md`; status **SIC = NOT RUN /
+DEFINITION CANDIDATE / AWAITING INDEPENDENT RE-REVIEW**).  **P1 — positive semantic
+authority:** "observable contract evidence" is now defined normatively as an explicitly
+declared/documented contract semantic from an authoritative surface associated with the exact
+installed target, whose declared behaviour may be checked for runtime consistency; runtime
+observations/response examples may support only field existence, runtime exposure,
+target/version consistency, response shape/type consistency and consistency with an
+already-declared contract, and may **never** establish immutability, incarnation sensitivity,
+session-incarnation scope, non-reuse, uniqueness, stability or provenance — one sample,
+multiple samples, repeated stable observations and cross-session differences are **all**
+insufficient without an authoritative declared semantic.  `SIC_PRESENT_AND_SEMANTICS_ESTABLISHED`
+now requires **both** actual exposure through the authorized surface **and** authoritative
+declared semantics for **all** qualifying properties; declaration-free metadata exposure yields
+`SIC_METADATA_PRESENT_BUT_SEMANTICS_UNPROVEN` with no empirical promotion.  **P2-A —
+`SIC_NOT_EXPOSED_IN_INSPECTED_CONTRACT`** is legal only on complete, successful coverage of the
+precommitted surface (partial/unreachable/truncated/ambiguous/incompletely-parsed coverage →
+`SIC_EVIDENCE_INSUFFICIENT`), and it is a surface-and-version-scoped non-claim that must never
+generalize to "OpenCode has no session-incarnation metadata"; incomplete inspection may not be
+hidden behind `HARNESS_INVALID`.  **P2-B — mode precommit:** the oracle must freeze exactly one
+of Mode A (offline/static), Mode B (live local read-only) or Mode C (precommitted bounded
+static→live two-stage, with the transition condition defined before execution); mid-run mode
+switching and endpoint shopping invalidate the attempt, and the mandatory precommit set now
+covers mode, surfaces, discovery/extraction rule, endpoint, request set/count, transition rule,
+evaluation criteria, target binding, stop conditions and outcome mapping.  **P2-C — actual
+destination/responder binding:** the actual HTTP client destination must be the exact frozen
+concrete endpoint (numeric loopback address, port, address family, scheme, client destination
+URI/base) bound to one deterministic listener (PID, canonical executable path, executable hash,
+creation identity, exact version) with pre/post-request identity snapshots; any address-family,
+listener, port-sharing, PID, proxy or responder ambiguity is **TARGET BINDING INVALID** and
+stops before semantic inspection; a pre/post unchanged process elsewhere on the host is
+insufficient; continuity mismatch makes the evidence invalid and may not be reported as a SIC
+result; this reuses the accepted G0.4 revision-3 binding lessons without reopening G0.4.  The
+non-blocking P3 items were deliberately not addressed, no status other than the SIC definition
+candidate changed, and 0 runtime/test/config, provider/model, HTTP, `/doc`/`/session` or
+OpenCode activity occurred.
+
 That approval followed three earlier review rounds: the first independent design
 review returned `REQUEST_CHANGES` (P0 = 1, P1 = 6, P2 = 5) and the
 recovery/reconciliation contract was repaired in `f67bf9e`; two narrow re-reviews

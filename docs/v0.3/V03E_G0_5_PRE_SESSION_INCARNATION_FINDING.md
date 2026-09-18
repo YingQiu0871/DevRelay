@@ -1,9 +1,6 @@
 # DevRelay v0.3-E — G0.5-PRE / SIC session-incarnation capability finding (definition candidate)
 
-**Status: DEFINITION CANDIDATE — SIC = `NOT RUN / DEFINITION CANDIDATE`.**  This document is
-**not** accepted, **not** frozen, and it **executes nothing**.  It becomes the accepted
-definition only after a separate independent definition review.  No oracle exists and no
-inspection has been performed.
+**Status: DEFINITION CANDIDATE — SIC = `NOT RUN / DEFINITION CANDIDATE / AWAITING INDEPENDENT RE-REVIEW`.**  This document is **not** accepted and **not** frozen, and it **executes nothing**.  The first independent definition review returned **`REQUEST_CHANGES — V0.3-E G0.5-PRE / SIC DEFINITION`** (P0 = 0, P1 = 1, P2 = 3); the framing, status model, outcome model, §25.1 preservation, G0.4 separation, G1/G2 separation and zero-budget rules were **accepted**, and this revision remediates **only** the blocking findings — **P1** positive semantic authority, **P2-A** `NOT_EXPOSED` coverage, **P2-B** mode precommit and **P2-C** actual destination/responder binding (with the associated no-alternate-endpoint and continuity rules).  The non-blocking P3 items are deliberately **not** addressed.  No oracle exists and no inspection has been performed.
 
 **What SIC is.**  A **new prerequisite information finding** outside the existing P1–P9
 ladder, introduced because the independently approved Case-C design block
@@ -53,11 +50,33 @@ A field or tuple may qualify only if the future evidence can establish **all** o
 * **D. READ-ONLY OBSERVABLE** — DevRelay can obtain it without mutating the session.
 * **E. LOCALLY PERSISTABLE** — DevRelay can store the anchor at binding time and compare it
   at recovery time.
-* **F. SEMANTICALLY ESTABLISHED** — its meaning is supported by actual
-  API/schema/documentation/observable contract evidence, **not** by its name, a binary string
-  occurrence, or a single sample.
+* **F. SEMANTICALLY ESTABLISHED** — its meaning is supported by **observable contract
+  evidence** as defined in §3.1 (an explicitly declared/documented contract semantic from an
+  authoritative surface associated with the exact installed target, whose declared behaviour
+  may be checked for runtime consistency against that target) — **not** by its name, a binary
+  string occurrence, a single sample, repeated samples, or any purely empirical observation.
 * **G. NOT DEPENDENT ON UNPROVED P2/P3/P8/P9 SEMANTICS** — unless this finding explicitly
   concludes that such a dependency exists, in which case the anchor is **NOT AVAILABLE NOW**.
+
+### 3.1 Observable contract evidence, and the limits of runtime observation (P1)
+
+**OBSERVABLE CONTRACT EVIDENCE** means an **explicitly declared or documented contract
+semantic** from an **authoritative surface associated with the exact installed target**, whose
+declared behaviour **may be checked for runtime consistency** against that target.  It must
+**not** mean empirical observation alone.
+
+**Runtime observations / response examples may support only:** field existence at runtime;
+runtime exposure; target/version consistency; response shape/type consistency; and consistency
+with an already-declared contract.
+
+**Runtime observations alone may never establish:** immutability; incarnation sensitivity;
+session-incarnation scope; non-reuse; uniqueness; stability guarantees; provenance guarantees;
+or any other platform semantic required for `SIC_PRESENT_AND_SEMANTICS_ESTABLISHED`.
+
+**Sufficiency rules (frozen):** one sample is insufficient; **multiple samples are also
+insufficient**; **repeated stable observations are insufficient**; and **different values
+across multiple sessions are insufficient** — unless an **authoritative declared semantic
+independently establishes what those observations mean**.
 
 ## 4. Non-qualifying evidence (frozen as insufficient by itself)
 
@@ -70,18 +89,42 @@ semantics are established — never by re-labelling them.
 
 ## 5. Semantic outcomes (exactly four)
 
-* **`SIC_PRESENT_AND_SEMANTICS_ESTABLISHED`** — a concrete read-only field/tuple is exposed
-  **and** evidence establishes the required session-incarnation semantics strongly enough to
-  support a future Case-C product design.
-* **`SIC_METADATA_PRESENT_BUT_SEMANTICS_UNPROVEN`** — candidate metadata exists/is exposed,
-  but its immutability/scope/incarnation semantics are not sufficiently established.
-* **`SIC_NOT_EXPOSED_IN_INSPECTED_CONTRACT`** — the exact authorized inspection surfaces
-  expose no candidate metadata that could satisfy the criteria.
+* **`SIC_PRESENT_AND_SEMANTICS_ESTABLISHED`** — requires **both**:
+  **A.** the candidate field/tuple is **actually exposed** through the authorized
+  target/contract surface; **and**
+  **B.** **authoritative declared semantics** establish **all** required qualifying-anchor
+  properties (§3).
+  Runtime observations may verify **consistency with B**, but they **cannot supply B**.  If a
+  field exists but the required declared semantics are absent, the result **must** be
+  `SIC_METADATA_PRESENT_BUT_SEMANTICS_UNPROVEN`; **no empirical promotion to a positive result
+  is permitted**.
+* **`SIC_METADATA_PRESENT_BUT_SEMANTICS_UNPROVEN`** — candidate metadata exists/is exposed
+  (including when runtime exposure is demonstrated), but its immutability/scope/incarnation
+  semantics are not sufficiently established by authoritative declared semantics.
+* **`SIC_NOT_EXPOSED_IN_INSPECTED_CONTRACT`** — the exact **successfully inspected,
+  precommitted** authorized contract surface exposes no candidate metadata satisfying the
+  discovery rule; **complete coverage is required and no global generalization is permitted
+  (§5.1)**.
 * **`SIC_EVIDENCE_INSUFFICIENT`** — the authorized method cannot reach enough authoritative
-  evidence to answer the question.
+  evidence to answer the question, **including** any inspection whose authorized surface is
+  partial, unreachable, truncated, ambiguous or incompletely parsed (§5.1, §6).
 
 **"Not found" and "not proven" must never be collapsed.**  A field that exists without
 established semantics is the second outcome, never the first.
+
+### 5.1 Coverage rules for `SIC_NOT_EXPOSED_IN_INSPECTED_CONTRACT` (P2-A)
+
+* **RULE 1 — COMPLETE COVERAGE REQUIRED.**  This outcome is legal **only** if the precommitted
+  authorized inspection surface was **completely and successfully inspected** according to the
+  frozen oracle, with **no unresolved ambiguity about coverage**.  If the required surface is
+  partial, unreachable, truncated, ambiguous, incompletely parsed, or otherwise **not
+  authoritatively covered**, the result **must** be `SIC_EVIDENCE_INSUFFICIENT` — **not**
+  `SIC_NOT_EXPOSED_IN_INSPECTED_CONTRACT`.
+* **RULE 2 — GLOBAL NEGATIVE NON-CLAIM.**  `SIC_NOT_EXPOSED_IN_INSPECTED_CONTRACT` means
+  **only** that the exact successfully inspected, precommitted contract surface exposes no
+  candidate metadata satisfying the discovery rule.  It **must not** mean that OpenCode
+  globally has no session-incarnation metadata, and it **must not** be generalized beyond the
+  inspected surface and version.
 
 ## 6. Harness-invalid boundary
 
@@ -90,7 +133,11 @@ fails **before reaching its precommitted evidence surfaces** for a harness/envir
 reason (for example, the inspection runner cannot execute, or a declared static artifact
 cannot be read for an environment reason).  No semantic outcome may be retried to obtain a
 better result, and harness-invalid attempts must be recorded separately and excluded from the
-semantic count.
+semantic count.  **Once the semantic inspection has begun**, incomplete or ambiguous
+authoritative coverage that prevents a sound global result maps to
+`SIC_EVIDENCE_INSUFFICIENT` (§5.1), unless the attempt qualifies under the already-frozen
+harness-invalid boundary **before** the semantic assertion point.  `HARNESS_INVALID` must
+**never** be used to hide an incomplete semantic inspection.
 
 ## 7. Positive-result consequence (no shortcut)
 
@@ -151,8 +198,8 @@ must stop the run rather than silently retarget.
 * **C.** the exact read-only session representation/schema from the installed target (this is
   the class that may require a live local endpoint — see §15);
 * **D.** official field semantics available from local/bundled documentation;
-* **E.** read-only response examples **as supporting evidence only**, never as semantic proof
-  by themselves.
+* **E.** read-only response examples **as supporting evidence only** — limited exactly as
+  §3.1 freezes (existence/exposure/consistency, never semantics by themselves).
 
 Broad web research is **not** authorized as semantic proof unless separately justified.  The
 future pre-run oracle must freeze the exact subset it will use.  Nothing is executed in this
@@ -165,55 +212,126 @@ Binary/string/token occurrences may be used **only to locate possible surfaces**
 incarnation semantics or reuse behaviour.  String counts alone can **never** yield
 `SIC_PRESENT_AND_SEMANTICS_ESTABLISHED`.
 
-## 15. Live-endpoint requirement analysis (definition level)
+## 15. Static vs live evidence (corrected — P1)
 
-Class A/B/D evidence can establish *whether a field is declared* and *what bundled
-documentation says*, but for the installed build it generally **cannot** establish runtime
-exposure, per-session scope, stability across the recovery interval or incarnation
-sensitivity — precisely the properties B, C and F of §3.  Therefore answering SIC **may
-ultimately require a live local read-only endpoint inspection** (class C).  No endpoint was
-started, contacted or assumed in this round.
+Authoritative **static/bundled contract evidence MAY be sufficient for SIC** if it establishes
+**all** required semantic criteria (§3) **and** the applicability of that contract to the exact
+installed target.
 
-If a live path is used, static evidence alone was insufficient **because** the decisive
-properties are runtime/contract properties of the running target, not declarations in
-shipped artifacts.  Any live use requires a **separate execution authorization** and a frozen
-target-binding method (§17); the old G0.4 authorization must **not** be reused, and the
-historical missing `base_url` must **not** be treated as a repairable precondition under
-prior authority.
+A **live local read-only inspection MAY be needed only** to establish or verify: runtime
+exposure; installed-target applicability; response/schema consistency; and target
+identity/continuity.
+
+**A live inspection MUST NOT manufacture semantic authority that is absent from the declared
+contract.**  Therefore, if metadata is exposed live but **no authoritative semantic contract
+establishes the required incarnation properties**, the result is
+**`SIC_METADATA_PRESENT_BUT_SEMANTICS_UNPROVEN`** — never a positive result, because runtime
+observation is limited exactly as frozen in §3.1 (one sample, multiple samples, repeated
+stable observations and cross-session differences are **all** insufficient without an
+authoritative declared semantic).
+
+It must **not** be stated or implied that "runtime properties are decisive, therefore live
+observation can prove incarnation semantics".  No endpoint was started, contacted or assumed
+in this round.  Any live use requires a **separate execution authorization** and the
+target-binding contract of §17; the old G0.4 authorization must **not** be reused, and the
+historical missing `base_url` must **not** be treated as a repairable precondition under prior
+authority.
 
 ## 16. `base_url` consequence
 
 The previous G0.4 execution found `opencode.base_url = ""`; that failure remains historical
 and closed.  For SIC, this fact is **not** automatically `SIC_NOT_EXPOSED` and **not**
-automatically `SIC_EVIDENCE_INSUFFICIENT`.  The future execution definition must declare one
-of two modes:
+automatically `SIC_EVIDENCE_INSUFFICIENT`.  The future oracle must precommit **exactly one**
+inspection mode (§18):
 
-* **Mode A — entirely offline/static**: authorized class A/B/D (and E as supporting only),
-  zero HTTP, zero OpenCode activity; or
-* **Mode B — live local read-only inspection**: requires a **new** separately authorized
-  exact-target local endpoint setup/target-binding precondition, a frozen endpoint, a
-  precommitted request count and the §17 binding standard.
+* **Mode A — offline / static only**: authorized class A/B/D (and E as supporting only), zero
+  HTTP and zero OpenCode activity.  This mode **may** suffice on its own if the declared
+  contract evidence establishes all §3 criteria **and** applicability to the exact installed
+  target; and
+* **Mode B — live local read-only**: requires a **new** separately authorized exact-target
+  endpoint setup, a frozen endpoint, a precommitted request set/count and the §17
+  target-binding contract.  It may **only** establish or verify runtime exposure,
+  installed-target applicability, response/schema consistency and target identity/continuity —
+  never semantics absent from the declared contract.
 
-The mode is a property of the future oracle, not of this definition; nothing is configured
-now, and Mode B must not be assumed to be granted.
+Nothing is configured now, and Mode B must not be assumed to be granted.
 
-## 17. Target-binding standard (if a live mode is ever authorized)
+## 17. Target-binding contract (P2-C; only if a live mode is authorized)
 
-Before any request, the future execution must bind and record: exact OpenCode version;
-declared executable identity; binary hash; concrete loopback endpoint; listener/process
-binding (PID, canonical executable path, executable hash, creation identity); a **pre-request
-identity snapshot**; and — after the last request — a **post-request continuity snapshot**
-with equality required on the same fields (any difference = continuity failure, evidence
-invalid).  This reuses the G0.4 lessons without reopening G0.4.  No port/endpoint is frozen
+### 17.1 Actual destination and responder binding
+
+The future execution must establish that **the actual HTTP client destination is the exact
+frozen concrete endpoint bound to the exact pre-verified listener/process**.  It must freeze
+and record at least: concrete **numeric loopback address**; **exact port**; **exact address
+family**; **exact scheme**; **exact client destination URI/base**; **one deterministic
+listener** bound to that endpoint; **listener PID**; **canonical executable path**;
+**executable hash**; **process creation identity** where available; **exact OpenCode version**;
+a **pre-request identity snapshot**; and a **post-request continuity snapshot** (§17.3).
+
+The required evidence chain must be exactly one unambiguous chain:
+
+`client destination → frozen endpoint → deterministic listener → verified target process`
+
+A pre/post unchanged process **elsewhere on the host** is insufficient.  If that chain cannot
+be established, the evidence is **invalid**.
+
+### 17.2 Listener / address ambiguity — fail closed
+
+If any ambiguity exists in IPv4-vs-IPv6 resolution, `localhost` expansion, wildcard listeners,
+multiple listeners, port sharing, multiple candidate PIDs, proxy/forwarder indirection,
+responder identity or endpoint resolution, the result is **TARGET BINDING INVALID** and the
+future execution must **STOP before any semantic inspection**.  It must not guess which process
+answered and must not select one opportunistically.
+
+### 17.3 Post-request continuity
+
+After the final live request, continuity of the **same bound target** must be verified by
+comparing at least: endpoint; listener PID; canonical executable path; executable hash;
+process creation identity; and version — against the pre-request snapshot.  Any mismatch is a
+**target continuity failure → evidence invalid**.  A continuity failure must **not** be
+converted into a semantic SIC result.
+
+### 17.4 No alternate endpoint
+
+Exactly the precommitted endpoint may be used.  If it fails, it is forbidden to try another
+port, another `localhost` resolution, another address family, another OpenCode instance, the
+desktop build, another listener or another `base_url`.  **No endpoint shopping.**  A different
+endpoint requires a **new separately authorized execution/oracle**, not continuation of the
+current run.
+
+### 17.5 G0.4 lessons reused (without reopening G0.4)
+
+This binding contract explicitly reuses the accepted G0.4 revision-3 lessons: exact endpoint
+only; no alternate endpoint; deterministic one-listener binding; address-family/listener
+ambiguity fails closed; executable identity chain (canonical path **and** hash); and
+pre/post-request continuity.  This does **not** reopen G0.4: `G0.4/P4 = AUTHORITATIVE FAIL /
+P4 UNPROVEN / CLOSED` and both G0.4 artifacts remain untouched.  No port/endpoint is frozen
 here because none is known before execution.
 
-## 18. No probe shopping
+## 18. No probe shopping and mode precommit (P2-B)
 
-The future inspection is bounded.  It is forbidden to try one endpoint, then another, then
-another schema, then another metadata guess until a positive result appears.  The future
-oracle must precommit: the evidence surfaces; the request count (if any); the endpoint (if
-any); the candidate-field evaluation rule; the stop conditions; and the semantic outcome
-mapping.
+The future inspection is bounded and its **mode is fixed before execution**.  The oracle must
+precommit **exactly one** of:
+
+* **MODE A — OFFLINE / STATIC ONLY**;
+* **MODE B — LIVE LOCAL READ-ONLY**; or
+* **MODE C — PRECOMMITTED BOUNDED STATIC→LIVE TWO-STAGE METHOD**, legal only if deliberately
+  designed before execution as follows: exact static surfaces; exact static completion
+  criteria; an exact **transition condition defined before execution** (never "static did not
+  give the answer we wanted"); exact live endpoint; exact live request set/count; the §17
+  target-binding contract; no alternative path after either phase; and the semantic outcome
+  mapping.
+
+**MID-RUN MODE SWITCHING IS FORBIDDEN.**  For example, starting Mode A, observing insufficient
+evidence and *then* deciding to start OpenCode is invalid; and starting one live strategy,
+failing, and then switching to another live strategy is invalid.  Such switching invalidates
+the attempt unless the exact staged transition was already frozen in the oracle.
+
+The oracle's mandatory precommit set is: **inspection mode**; authorized evidence surfaces;
+candidate-discovery/extraction rule; endpoint (if live); exact request count/set (if live);
+transition rule (if staged); candidate evaluation criteria (against the fixed §3 criteria);
+target-binding requirements (§17); stop conditions; and semantic outcome mapping.  No
+opportunistic switching of mode, endpoint, schema or candidates is permitted.
 
 ## 19. Field discovery vs semantic validation
 
@@ -237,7 +355,7 @@ properties.  New candidates must not be added after observing failures.
 ## 21. Required future evidence fields
 
 Repository HEAD; branch/worktree; OpenCode version; package/binary identity; binary/artifact
-hash; oracle identity; authorized evidence surfaces; target-binding evidence (if live);
+hash; oracle identity; **inspection mode (A / B / C as precommitted)**; authorized evidence surfaces; target-binding evidence (if live);
 request count (if any); candidate field/tuple names; where each field is exposed; field type;
 session-scope evidence; stability evidence; incarnation-sensitivity evidence; read-only
 observability evidence; local-persistability assessment; semantic-authority source;
