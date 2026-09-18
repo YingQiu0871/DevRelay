@@ -175,6 +175,26 @@ GAP`, with **P6 = UNPROVEN / UNSATISFIED**.  Adoption stays DISABLED, the mandat
 unaffected (G0.1/P7 remains the only hard gate and stays PASS/CLOSED), and G1/G2 remain unrun;
 the attempt caused 0 runtime/test/config changes and 0 provider/HTTP/OpenCode activity.
 
+**A new prerequisite information finding — G0.5-PRE / SIC (session-incarnation capability
+finding) — was defined** (definition candidate only; nothing executed).  The independently
+approved Case-C prerequisite design block (*APPROVE V0.3-E CASE-C PREREQUISITE DESIGN BLOCK*)
+confirmed the stronger thesis **`BLOCKED — NO SOUND ORIGINAL-SESSION PROVENANCE ANCHOR
+AVAILABLE`**: no currently accepted evidence source can soundly support ORIGINAL OWNERSHIP
+PROVEN, purely local nonce/fingerprint approaches are not provenance, a fail-always guard
+would permanently remove capability C and is therefore a product-scope change, G1/P1 does not
+prove session incarnation, G2/P2/P3/P8/P9 do not themselves prove it, and G0.4/P4 is
+unrelated and stays CLOSED.  SIC asks whether OpenCode 1.18.11 exposes, through a read-only
+session representation, a per-session-incarnation property (or tuple) whose semantics are
+strong enough to serve as a provenance anchor, with four precommitted outcomes
+(`SIC_PRESENT_AND_SEMANTICS_ESTABLISHED`, `SIC_METADATA_PRESENT_BUT_SEMANTICS_UNPROVEN`,
+`SIC_NOT_EXPOSED_IN_INSPECTED_CONTRACT`, `SIC_EVIDENCE_INSUFFICIENT`), a strictly read-only
+method, a zero provider/model budget, static-string limits and no-probe-shopping discipline —
+definition: `docs/v0.3/V03E_G0_5_PRE_SESSION_INCARNATION_FINDING.md`, status **SIC = NOT RUN /
+DEFINITION CANDIDATE**, awaiting independent definition review.  No OpenCode instance was
+started, no HTTP or `/doc`/`/session` access occurred and no provider/model call was made;
+G0.5 stays `NOT RUN / DEFINITION ACCEPTED / ORACLE NOT FREEZABLE / LOCAL REACHABILITY GAP`,
+G1/G2 stay NOT RUN, adoption stays DISABLED and implementation remains NOT AUTHORIZED.
+
 That approval followed three earlier review rounds: the first independent design
 review returned `REQUEST_CHANGES` (P0 = 1, P1 = 6, P2 = 5) and the
 recovery/reconciliation contract was repaired in `f67bf9e`; two narrow re-reviews

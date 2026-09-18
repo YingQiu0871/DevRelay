@@ -813,6 +813,22 @@ fail-closed `evidence_gap`/corruption processing, no silent skipping treated as
 authoritative).  It does **not** prove the future production implementation itself:
 that implementation still needs its own tests.
 
+**G0.5-PRE / SIC — session-incarnation capability finding (new prerequisite information
+finding, outside the P1–P9 ladder).**  The independently approved Case-C prerequisite design
+block (*APPROVE V0.3-E CASE-C PREREQUISITE DESIGN BLOCK*) confirmed the stronger thesis
+**`BLOCKED — NO SOUND ORIGINAL-SESSION PROVENANCE ANCHOR AVAILABLE`**: no currently accepted
+evidence source can soundly support **ORIGINAL OWNERSHIP PROVEN** (local nonce/fingerprint
+approaches are not provenance; a fail-always guard would permanently remove capability C and
+is therefore a product-scope change; G1/P1 and G2/P2/P3/P8/P9 do not themselves prove session
+incarnation).  SIC asks whether OpenCode **1.18.11** exposes, through a read-only session
+representation, a **per-session-incarnation property (or tuple)** whose semantics are strong
+enough to serve as a provenance anchor for a future Case-C design; its definition candidate is
+`V03E_G0_5_PRE_SESSION_INCARNATION_FINDING.md` and its status is
+**`SIC = NOT RUN / DEFINITION CANDIDATE`**.  SIC is **not** G0.5, G1, G2 or G0.4, is **not** a
+new P-number, is **not** a proof of P6, is **not** an adoption-enabling proof and is **not**
+an implementation authorization; a positive SIC finding alone would **not** make the G0.5
+oracle freezable, and implementation remains **NOT AUTHORIZED**.
+
 ### 25.1 G0.5 / P6 — frozen local identity/ownership veto-bound definition (definition only; not executed)
 
 **Role (normative).**  P6 is a **local identity/ownership veto bound for adoption** — **not**

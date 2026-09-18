@@ -140,7 +140,11 @@ G0.5 = **NOT RUN / DEFINITION ACCEPTED / ORACLE NOT FREEZABLE / LOCAL REACHABILI
 (under the accepted definition cases A/B/D bind to existing local enforcement while case C
 (recreated/originality-unprovable) has no existing local original-session/provenance
 enforcement path, so no complete four-case oracle can be frozen; 0 semantic cases executed,
-**P6 = UNPROVEN / UNSATISFIED**), and **G1/G2 provide the
+**P6 = UNPROVEN / UNSATISFIED**); the independently approved Case-C prerequisite design block confirmed
+**`BLOCKED — NO SOUND ORIGINAL-SESSION PROVENANCE ANCHOR AVAILABLE`**, and the new read-only
+prerequisite information finding **G0.5-PRE / SIC** (session-incarnation capability finding) is a
+**definition candidate** (`docs/v0.3/V03E_G0_5_PRE_SESSION_INCARNATION_FINDING.md`;
+**SIC = NOT RUN / DEFINITION CANDIDATE**)), and **G1/G2 provide the
 remote/platform *enabling* proofs P1+P2+P3+P8 (+P9 when applicable)**.  `adopt_completed_turn`
 stays **disabled** until **both** the independently satisfied P6 veto-bound prerequisite
 **and** all required G1/G2 enabling proofs are independently satisfied (SPEC §25, §25.1, §28); if

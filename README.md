@@ -1164,7 +1164,11 @@ not downgrade the binary inside a workspace that v0.2-B has already written.
   LOCAL REACHABILITY GAP** (under the accepted definition the missing, foreign and copied
   cases bind to existing local enforcement, but the recreated/originality-unprovable case has
   no existing local original-session/provenance enforcement path, so no complete four-case
-  oracle can be frozen; **0 semantic cases executed — no G0.5 PASS/FAIL, P6 unproven**), and
+  oracle can be frozen; **0 semantic cases executed — no G0.5 PASS/FAIL, P6 unproven**; the approved Case-C prerequisite design block confirmed **no sound
+  original-session provenance anchor** exists today, so a new read-only prerequisite information
+  finding — **G0.5-PRE / SIC (session-incarnation capability finding)**,
+  `docs/v0.3/V03E_G0_5_PRE_SESSION_INCARNATION_FINDING.md`, **NOT RUN / DEFINITION CANDIDATE** — is
+  defined; implementation remains NOT AUTHORIZED), and
   **G1 and G2 have not run**, so the platform proof gate
   stays partially executed / not complete; implementation is not authorized,
   and no automatic resume is designed in
