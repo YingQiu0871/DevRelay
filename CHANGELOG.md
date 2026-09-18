@@ -101,7 +101,11 @@ unmapped mid-send h11 escape path is recorded as a fail-closed observability lim
 Evidence: `docs/v0.3/V03E_G0_3_CLEAN_RERUN_PROOF.md`.  G0.1/P7 and G0.2 are authoritative PASS and mandatory-core
 implementation remains **not authorized** pending a separate authorization; the
 platform proof gate stays **partially executed / not complete** (G0.3/P5 = PASS,
-authoritative; G0.4/G0.5/G1/G2 not run) and `adopt_completed_turn` stays **disabled**.  Clean-rerun evidence:
+authoritative; G0.4/G0.5/G1/G2 not run; G0.4's pre-run proof-definition candidate —
+fixed cases G0.4-A–H, exactly one bounded read-only loopback `GET /doc` against an
+already-running accepted 1.18.11 server, 0 provider/model calls, 0 OpenCode starts —
+awaits independent review: `docs/v0.3/V03E_G0_4_API_INSPECTION_ORACLE.md`) and
+`adopt_completed_turn` stays **disabled**.  Clean-rerun evidence:
 `docs/v0.3/V03E_G0_2_CLEAN_RERUN_PROOF.md`; original record (preserved):
 `docs/v0.3/V03E_G0_2_FALSE_CORRELATION_PROOF.md`.
 

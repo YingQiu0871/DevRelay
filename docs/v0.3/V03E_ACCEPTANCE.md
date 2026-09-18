@@ -28,8 +28,9 @@ and the mandatory-core gate **G0.1/P7 PASS first** is now **satisfied** (the pro
 passed and was independently approved), with no degraded-implementation path.
 
 Only a design exists: **no recovery code, no new tool, no schema change and no test
-was written**.  Of the proof-gate rows below, **G0.1/P7 (E34)** and **G0.2 (E35)** are
-authoritative PASS (independently approved); no other proof step has run.  No OpenCode instance was started and no
+was written**.  Of the proof-gate rows below, **G0.1/P7 (E34)**, **G0.2 (E35)** and
+**G0.3/P5 (E36)** are authoritative PASS (independently approved); **G0.4**, **G0.5**,
+**G1** and **G2** have **NOT run**.  G0.4 remains **NOT RUN**; its pre-run **proof-definition candidate** (`docs/v0.3/V03E_G0_4_API_INSPECTION_ORACLE.md`, one bounded read-only loopback `GET /doc`, 0 provider/model calls) awaits independent review.  No OpenCode instance was started and no
 provider/model call was made.  The accepted v0.3-D runtime candidate
 `8b70610a5cdda600ef57cf8378c4f69cd33d5be4` is untouched.  Every *implementation* row
 below remains FUTURE / NOT RUN, and the recorded P3 observations (P3-1, P3-2,
@@ -109,7 +110,7 @@ AUTHORIZED** until a separately issued implementation authorization.
 
 | # | Criterion | Design status | Reference |
 | --- | --- | --- | --- |
-| E31 | **P4 pending**: OpenCode 1.18.11 exposes session-level status only (no durable per-operation handle) → `reply_pending` is report-only: no adoption, no polling loop, no automatic wait, no pending-driven state advance; a future handle needs a new reviewed capability extension | FROZEN (report-only) | SPEC §14 |
+| E31 | **P4 pending**: OpenCode 1.18.11 exposes session-level status only (no durable per-operation handle) → `reply_pending` is report-only: no adoption, no polling loop, no automatic wait, no pending-driven state advance; a future handle needs a new reviewed capability extension.  *The session-level-only statement is **historical review knowledge** and the report-only policy applies regardless; the **formal G0.4 proof status** is row E37 (NOT RUN)* | FROZEN (report-only) | SPEC §14 |
 | E32 | **P5 non-delivery**: the accepted transport classification is reported as evidence only — no orchestration authority, no retry licence, no refund; `mark_unrecoverable` remains the only mandatory-core resolution | FROZEN (informational) | SPEC §15 |
 | E33 | **P6 identity bound**: missing/foreign/recreated/copied session ⇒ adoption unavailable; report/`mark_unrecoverable` still work without claiming remote completion | FROZEN (bound) | SPEC §12.4 |
 
@@ -120,7 +121,7 @@ AUTHORIZED** until a separately issued implementation authorization.
 | E34 | **P7 / G0.1** — hard-kill DevRelay around `ISSUED`/settle writes and verify the strict reader returns a complete valid record or `evidence_gap`/corruption, never silently skipping | **PASS** (authoritative / independently approved; executed once at `5bdc21d`–`fe304ab`, candidate result then approved by the final proof review — *APPROVE V0.3-E G0.1 / P7 PLATFORM PROOF*, P0 = 0, P1 = 0, P2 = 0; cases A1, A2, B, C, D, E all met their predefined criteria; evidence: `docs/v0.3/V03E_G0_1_P7_PROOF.md`) | SPEC §9, §25 |
 | E35 | **G0.2** — offline run↔call false-correlation cases (two runs, reused prompts, reused sessions, neighbouring call ids) | **PASS** (authoritative / independently approved through *APPROVE V0.3-E G0.2 FALSE-CORRELATION PROOF*, P0 = 0, P1 = 0, P2 = 0; clean re-run under the oracle precommitted in commit `12ea1b7`; ten fixed cases A-J executed once each and fail-closed — a unique `MATCH` only on the complete identity tuple, otherwise `NO_MATCH`/`evidence_conflict`/`evidence_gap`/`corruption`, no timestamp tie-break, oracle module hash unchanged during execution, 0 provider/model calls; evidence: `docs/v0.3/V03E_G0_2_CLEAN_RERUN_PROOF.md`; original round preserved: `docs/v0.3/V03E_G0_2_FALSE_CORRELATION_PROOF.md`) | SPEC §25 |
 | E36 | **G0.3** — transport/non-delivery classification checks against the accepted taxonomy (P5) | **PASS** (authoritative / independently approved through *APPROVE V0.3-E G0.3 / P5 TRANSPORT PROOF*, P0 = 0, P1 = 0, P2 = 0; corrected clean rerun executed once under the oracle precommitted in `e328ec5`, one semantic execution per case: `connect_timeout`/`pool_timeout`/`connect_error`/`unsupported_protocol` and the pre-send-only `local_protocol_error` mapping boundary are class-wide pre-send with no request header or body byte on the wire, `proxy_error` is `UNREACHABLE_CURRENT_CONFIGURATION`, every uncertain class stayed `submission_uncertain == true` with `retry_safe == false`, corrected case G0.3-J surfaced `remote_protocol_error` exactly as precommitted, and HTTP rejection/success were never non-delivery; P5 remains informational only; evidence: `docs/v0.3/V03E_G0_3_CLEAN_RERUN_PROOF.md`; the original round's candidate FAIL and its independent TYPE-1 review outcome remain historical in `docs/v0.3/V03E_G0_3_TRANSPORT_PROOF.md`) | SPEC §25 |
-| E37 | **G0.4** — OpenCode installed-API inspection for a per-operation pending handle (P4) | PROOF REQUIRED (read-only inspection) | SPEC §25 |
+| E37 | **G0.4** — OpenCode installed-API inspection for a per-operation pending handle (P4) | PROOF REQUIRED (read-only inspection) — G0.4 remains **NOT RUN**; pre-run **proof-definition candidate awaiting independent review**: `docs/v0.3/V03E_G0_4_API_INSPECTION_ORACLE.md` (fixed cases G0.4-A–H, exactly one bounded read-only loopback `GET /doc` against an already-running accepted 1.18.11 server, 0 provider/model calls, 0 OpenCode starts) | SPEC §25 |
 | E38 | **G0.5** — session identity/bound checks (P6: missing, foreign, recreated, copied) | PROOF REQUIRED (local) | SPEC §25 |
 
 ## E. Remote platform proofs (gated capabilities only)

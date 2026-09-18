@@ -522,9 +522,13 @@ by a resolution; it is deterministic and contains no prompt/response/reasoning t
 
 ## 14. Pending results (P4) — report-only
 
-Recorded independent-review conclusion: **OpenCode 1.18.11 exposes session-level
-status only; there is no durable per-operation pending handle.**  Therefore, in the
-current v0.3-E scope:
+Recorded independent-review conclusion (historical knowledge, **not** a formal proof
+result): **OpenCode 1.18.11 exposes session-level status only; there is no durable
+per-operation pending handle.**  The formal proof status of that question is the G0.4
+step (§25/§28), which remains **NOT RUN**; its pre-run proof-definition candidate
+(`V03E_G0_4_API_INSPECTION_ORACLE.md`) awaits independent review, and the report-only
+policy below applies regardless of whether G0.4 passes, fails or is never run.
+Therefore, in the current v0.3-E scope:
 
 * `reply_pending` is **report-only**: `reconcile` may report it as evidence;
 * there is **no** pending-result adoption, **no** polling loop, **no** automatic
@@ -738,7 +742,7 @@ OpenAI-compatible provider may be used in G2; nothing runs in this design round)
 | **G0.1** | local DevRelay hard-kill around `ISSUED`/settle writes; the strict reader must return a complete valid record or `evidence_gap`/corruption, never silently skip (**P7/F5**) | 0 | local |
 | **G0.2** | offline run↔call false-correlation cases (two runs, reused prompts, reused sessions, neighbouring call ids) | 0 | local |
 | **G0.3** | transport/non-delivery classification checks against the accepted taxonomy (**P5**) — original round candidate FAIL (case G0.3-J surfaced `remote_protocol_error`), independently reviewed as a TYPE-1 proof-plan failure, then corrected and cleanly re-run, and the corrected proof was independently approved: **G0.3 / P5 = PASS** (authoritative; accepted safe buckets class-wide pre-send; `proxy_error` `UNREACHABLE_CURRENT_CONFIGURATION`; every uncertain class fail-closed) | 0 | local/fake transport |
-| **G0.4** | OpenCode installed-API inspection for a per-operation pending handle (**P4**) | 0 | read-only inspection |
+| **G0.4** | OpenCode installed-API inspection for a per-operation pending handle (**P4**) — **NOT RUN**; pre-run proof-definition candidate awaiting independent review (`V03E_G0_4_API_INSPECTION_ORACLE.md`: cases G0.4-A–H, exactly one bounded read-only loopback `GET /doc`, 0 provider/model calls) | 0 | read-only inspection |
 | **G0.5** | session identity/bound checks: missing, foreign, recreated, copied sessions (**P6**) | 0 | local |
 | **G1** | real **LOCAL** OpenCode `1.18.11` session-history restart proof (**P1**: durability of ids/text across a server restart) | 0 | local OpenCode, no inference |
 | **G2** | real **LOCAL** OpenCode + **local fake OpenAI-compatible provider**: submitted-text fidelity (**P2**), duplicate-identical-prompt uniqueness (**P3**), session-exclusivity assumptions as far as observable (**P8**), timestamp/order fidelity if used (**P9**) | 0 | local fake provider |
@@ -808,7 +812,7 @@ proofs, **no real adoption smoke is required**: the reduced core (report +
 | P1 | does session history survive an OpenCode server restart with the same ids/text? | adoption (C); reporting quality | PROOF REQUIRED (G1) |
 | P2 | is the submitted user text preserved verbatim so the digest match is sound? | adoption (C) | PROOF REQUIRED (G2) |
 | P3 | can identical prompts in one session be disambiguated deterministically? | adoption (C) | PROOF REQUIRED (G2) |
-| P4 | does a durable per-operation pending handle exist? | pending capability (D) | answered for 1.18.11: **no** (session-level status only) — report-only |
+| P4 | does a durable per-operation pending handle exist? | pending capability (D) | **historical review answer** for 1.18.11: no (session-level status only) — report-only; **formal proof status: G0.4 = NOT RUN** (pre-run proof-definition candidate awaiting independent review: `V03E_G0_4_API_INSPECTION_ORACLE.md`) |
 | P5 | do the accepted connect-phase classes prove non-delivery? | non-delivery authority (E) | **executed under G0.3: **PASS** (authoritative, independently approved through *APPROVE V0.3-E G0.3 / P5 TRANSPORT PROOF*, P0 = 0, P1 = 0, P2 = 0) in the corrected clean rerun under the oracle precommitted in `e328ec5`: the accepted safe buckets are class-wide pre-send (`connect_timeout`, `pool_timeout`, `connect_error`, `unsupported_protocol`) plus the pre-send-only `local_protocol_error` mapping boundary, `proxy_error` is `UNREACHABLE_CURRENT_CONFIGURATION`, and every uncertain class stayed fail-closed; the original round's candidate FAIL (case G0.3-J surfaced `remote_protocol_error`; the request-send `WriteError` mapping is defensive/unexercised) and its independent TYPE-1 review remain historical; P5 stays informational/report-only (`V03E_G0_3_CLEAN_RERUN_PROOF.md`) |
 | P6 | is session identity strong enough against missing/recreated/copied sessions? | adoption (C) | PROOF REQUIRED (G0.5); bounds adoption now |
 | P7 | is the ledger settle record complete-or-absent under a hard kill? | all ledger-trusting logic | **PASS** (authoritative, independently approved; executed once under G0.1 — `V03E_G0_1_P7_PROOF.md`; local, 0 provider calls) |

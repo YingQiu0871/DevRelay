@@ -127,7 +127,9 @@ G0.1/P7 PASS → mandatory-core implementation may be authorized is now satisfie
 had G0.1/P7 failed, core implementation would have stayed **blocked**
 (no degraded-implementation path; a degraded scope would need its own
 design change and review).  G0.4-G0.5 remain relevant to the
-reporting language.  `adopt_completed_turn` stays disabled until P1, P2, P3 and P8
+reporting language; G0.4 remains **NOT RUN** and its pre-run proof-definition candidate
+(`docs/v0.3/V03E_G0_4_API_INSPECTION_ORACLE.md`: cases G0.4-A–H, exactly one bounded
+read-only loopback `GET /doc`, 0 provider/model calls) awaits independent review.  `adopt_completed_turn` stays disabled until P1, P2, P3 and P8
 (and P9 if timestamps are used) pass the platform proof gate (SPEC §25, §28); if
 those optional-adoption proofs fail, that capability is removed/disabled and no real
 adoption smoke is required, while the core is unaffected because it has already
