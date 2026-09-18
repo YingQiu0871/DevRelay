@@ -2,17 +2,23 @@
 
 Status: **G0.2 CANDIDATE PASS — REQUIRES INDEPENDENT REVIEW** (self-approval is
 forbidden; the mandatory-core implementation stays **NOT AUTHORIZED** until a
-separately issued implementation authorization).  This file is the **original**
-G0.2 proof record and is preserved as history.
+separately issued implementation authorization).  **Historical record:** this file is
+the **original** G0.2 proof record; its candidate status was superseded by the
+**authoritative `G0.2 = PASS`** (independent clean-rerun approval, recorded in
+`V03E_G0_2_CLEAN_RERUN_PROOF.md`).  Its own evidence and conclusions are preserved.
 
 > **Historical pointer (added later; this document's evidence and conclusions are
 > unchanged):** after the first independent review returned `REQUEST_CHANGES`
 > (P0 = 0, P1 = 0, P2 = 2), a separately authorized **clean G0.2 re-run** was
 > performed under an oracle precommitted in commit `12ea1b7`
 > (`docs/v0.3/V03E_G0_2_RERUN_ORACLE.md`) and is recorded in
-> `docs/v0.3/V03E_G0_2_CLEAN_RERUN_PROOF.md`.  This original record — including the
-> first complete-pass oracle bug, the invalid harness attempts and the first review —
-> is neither erased nor rewritten.
+> `docs/v0.3/V03E_G0_2_CLEAN_RERUN_PROOF.md`; that clean re-run was then independently
+> reviewed and approved (**APPROVE V0.3-E G0.2 FALSE-CORRELATION PROOF**, P0 = 0,
+> P1 = 0, P2 = 0), which is what makes the current **`G0.2 = PASS`** authoritative.
+> This original record — including the first complete-pass oracle bug, the invalid
+> harness attempts and the first review — is neither erased nor rewritten: its
+> citations were corrected and this pointer was added, while its evidence and results
+> are preserved.
 
 * Platform proof gate: **PARTIALLY EXECUTED / NOT COMPLETE** — **G0.1 / P7 = PASS**
   (authoritative, independently approved); **G0.2 = CANDIDATE PASS / AWAITING
@@ -445,7 +451,12 @@ Case-level numbers quoted above are the values recorded by the single evidence r
 restarted; **0** network requests (all HTTP is the accepted offline stub transport
 against `http://opencode.invalid`); the ledger and run documents are workspace-local.
 
-## 16. Candidate conclusion
+## 16. Candidate conclusion (historical — as recorded in this original round)
+
+> **Historical marker:** this section is the *original round's* candidate conclusion.
+> It was superseded by the authoritative `G0.2 = PASS` recorded in
+> `V03E_G0_2_CLEAN_RERUN_PROOF.md` §0 after the independent clean-rerun approval.  It is
+> preserved verbatim and is not the current status.
 
 **G0.2 CANDIDATE PASS — REQUIRES INDEPENDENT REVIEW.**  All ten planned cases A–J
 behaved fail-closed:

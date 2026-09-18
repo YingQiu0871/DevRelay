@@ -20,7 +20,7 @@ Source: <https://github.com/YingQiu0871/DevRelay> -
 | v0.3-A OpenCode Session Bridge | **accepted / unreleased** — closed at candidate `bcf9627e92ef839abb756810e3c615e6d01b6576`; real OpenCode `1.18.11` smoke passed (one prompt → `DEVRELAY_A33_OK`) |
 | v0.3-B ChatGPT/MCP tool surface | **accepted / unreleased** — closed at accepted candidate `d058d62341a173414bdba88fe357b08c236c8bb4`; final real MCP smoke `PASS — V0.3-B LOCAL REAL MCP SMOKE` |
 | v0.3-C Agent Role Routing | **accepted / unreleased** — closed at accepted candidate `eabb667d1bd9e379d3b7105d72b6a2751bc2a32b`; real routing verified for both roles (implementer `opencode-go/deepseek-v4.1-flash`, reviewer `opencode-go/glm-5.3-flash`), routing only, no orchestration |
-| v0.3-E Recovery & Reconciliation | **design frozen / not implemented / not accepted / unreleased** — independent design-freeze review of candidate `9f4a01804b9affe8938a272553df345b5a60aeed` returned **P0 = 0, P1 = 0, P2 = 0** with F1–F12 **CLOSED** and decision *APPROVE V0.3-E FAIL-CLOSED CORE DESIGN; PLATFORM PROOF GATE REQUIRED BEFORE IMPLEMENTATION* (`docs/v0.3/V03E_SPEC.md` + `V03E_ACCEPTANCE.md`); implementation NOT authorized (G0.1/P7 = **PASS**, independently approved, so it no longer blocks implementation *eligibility*; a separate implementation authorization is still required), platform proof gate **partially executed / NOT complete** (G0.1/P7 = PASS; **G0.2 = CLEAN CANDIDATE PASS / AWAITING INDEPENDENT REVIEW** - clean re-run under the oracle precommitted in commit `12ea1b7`, ten fixed cases A-J fail-closed, 0 provider/model calls - `docs/v0.3/V03E_G0_2_CLEAN_RERUN_PROOF.md`; the original round's candidate pass is history in `docs/v0.3/V03E_G0_2_FALSE_CORRELATION_PROOF.md`; G0.3-G0.5, G1, G2 NOT RUN), `adopt_completed_turn` DISABLED; the mandatory-core gate **G0.1/P7 PASS first** is **satisfied** (authoritative, independently approved - `docs/v0.3/V03E_G0_1_P7_PROOF.md`), adoption needs P1/P2/P3/P8 (+P9 if timestamps) |
+| v0.3-E Recovery & Reconciliation | **design frozen / not implemented / not accepted / unreleased** — independent design-freeze review of candidate `9f4a01804b9affe8938a272553df345b5a60aeed` returned **P0 = 0, P1 = 0, P2 = 0** with F1–F12 **CLOSED** and decision *APPROVE V0.3-E FAIL-CLOSED CORE DESIGN; PLATFORM PROOF GATE REQUIRED BEFORE IMPLEMENTATION* (`docs/v0.3/V03E_SPEC.md` + `V03E_ACCEPTANCE.md`); implementation NOT authorized (G0.1/P7 = **PASS**, independently approved, so it no longer blocks implementation *eligibility*; a separate implementation authorization is still required), platform proof gate **partially executed / NOT complete** (G0.1/P7 = PASS; **G0.2 = PASS** — authoritative and independently approved (*APPROVE V0.3-E G0.2 FALSE-CORRELATION PROOF*, P0 = 0, P1 = 0, P2 = 0) via the clean re-run under the oracle precommitted in commit `12ea1b7`: ten fixed cases A-J fail-closed, 0 provider/model calls - `docs/v0.3/V03E_G0_2_CLEAN_RERUN_PROOF.md`; the original round's candidate pass is history in `docs/v0.3/V03E_G0_2_FALSE_CORRELATION_PROOF.md`; G0.3-G0.5, G1, G2 NOT RUN), `adopt_completed_turn` DISABLED; the mandatory-core gate **G0.1/P7 PASS first** is **satisfied** (authoritative, independently approved - `docs/v0.3/V03E_G0_1_P7_PROOF.md`), adoption needs P1/P2/P3/P8 (+P9 if timestamps) |
 | v0.3-D Bounded Orchestration | **accepted / closed / unreleased** — closed at candidate `8b70610a5cdda600ef57cf8378c4f69cd33d5be4` after two remediations and one authorized bounded real orchestration smoke `PASS — V0.3-D REAL BOUNDED ORCHESTRATION SMOKE` (4 real model turns / 4 POSTs, 0 retries, 0 fallbacks); durable run state, legal transitions and a hard cycle bound (at most six reserved/consumed model-turn budget slots per run) over the accepted role path, untrusted persisted state validated for **reachability**, no automatic sequencing |
 
 No `v0.3` stage is part of the `v0.1.0` release, the package version stays
@@ -124,8 +124,11 @@ approved it — *APPROVE V0.3-E G0.1 / P7 PLATFORM PROOF*, P0 = 0, P1 = 0, P2 = 
 **G0.2** (offline run<->call false-correlation) was then executed, and after the first
 independent review returned `REQUEST_CHANGES` (P0 = 0, P1 = 0, P2 = 2) a separately
 authorized **clean re-run** was performed under an oracle precommitted in commit
-`12ea1b7`, returning a **clean candidate pass** awaiting independent review (ten fixed
-cases A-J fail-closed, no false correlation, no timestamp tie-break - `docs/v0.3/V03E_G0_2_CLEAN_RERUN_PROOF.md`, with the original record preserved in `docs/v0.3/V03E_G0_2_FALSE_CORRELATION_PROOF.md` );
+`12ea1b7`, which the independent clean-rerun review then approved (*APPROVE V0.3-E
+G0.2 FALSE-CORRELATION PROOF*, P0 = 0, P1 = 0, P2 = 0), so **G0.2 = PASS**
+(authoritative, independently approved; ten fixed cases A-J fail-closed, no false
+correlation, no timestamp tie-break - `docs/v0.3/V03E_G0_2_CLEAN_RERUN_PROOF.md`, with
+the original record preserved in `docs/v0.3/V03E_G0_2_FALSE_CORRELATION_PROOF.md` );
 G0.3-G0.5/G1/G2 have not run, so the platform proof gate stays partially executed /
 not complete): the core required **G0.1/P7 PASS first**, and that gate is now
 **satisfied** (authoritative, independently approved; no degraded-implementation
@@ -1150,10 +1153,10 @@ not downgrade the binary inside a workspace that v0.2-B has already written.
   issued authorization (no degraded-implementation path); `adopt_completed_turn`
   stays disabled until P1/P2/P3/P8 (plus P9 if timestamp/order correlation is used)
   pass the platform proof gate; pending results are report-only.  No recovery code
-  exists, **G0.1/P7 = PASS** (authoritative, independently approved) and **G0.2 =
-  CLEAN CANDIDATE PASS / AWAITING INDEPENDENT REVIEW** (clean re-run under the
-  precommitted oracle, cases A-J fail-closed); the remaining gate steps have not run,
-  implementation is not authorized, and no automatic resume is designed in
+  exists, **G0.1/P7 = PASS** and **G0.2 = PASS** (both authoritative and independently
+  approved; G0.2 through the clean re-run under the precommitted oracle, cases A-J
+  fail-closed); the remaining gate steps have not run, implementation is not authorized,
+  and no automatic resume is designed in
 - **later** - optional release automation with explicit approvals
 
 ## Development

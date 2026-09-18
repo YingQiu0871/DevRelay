@@ -103,13 +103,13 @@ under an oracle precommitted in commit `12ea1b7`: the ten fixed cases A-J ran on
 all behaved fail-closed against production-generated corpora, a unique correlation is
 possible only when the complete frozen identity tuple matches exactly one record in the
 run's role session, the oracle was unchanged during execution, and 0 real
-provider/model calls were made.  Current result: **G0.2 = CLEAN CANDIDATE PASS /
-AWAITING INDEPENDENT REVIEW** (`docs/v0.3/V03E_G0_2_CLEAN_RERUN_PROOF.md`; the original
-round is preserved in `docs/v0.3/V03E_G0_2_FALSE_CORRELATION_PROOF.md`).  G0.1/P7 therefore no longer blocks
+provider/model calls were made.  Current result: the independent clean-rerun review issued **APPROVE V0.3-E G0.2
+FALSE-CORRELATION PROOF** (P0 = 0, P1 = 0, P2 = 0), so **G0.2 = PASS** (authoritative,
+independently approved) — `docs/v0.3/V03E_G0_2_CLEAN_RERUN_PROOF.md`; the original
+round is preserved in `docs/v0.3/V03E_G0_2_FALSE_CORRELATION_PROOF.md`.  G0.1/P7 therefore no longer blocks
 mandatory-core implementation *eligibility*; implementation nonetheless remains
 **NOT AUTHORIZED** until a separately issued implementation authorization, and
-G0.3-G0.5/G1/G2 remain unrun (G0.2 returned a clean candidate pass in its authorized
-re-run), so the platform
+G0.3-G0.5/G1/G2 remain unrun (G0.2 = PASS, authoritative, independently approved), so the platform
 proof gate is **PARTIALLY EXECUTED / NOT COMPLETE** (not passed, not complete).  The mandatory core's gate was **G0.1/P7 PASS
 first** — and it **has** passed, so the second step of the ordering design frozen →
 G0.1/P7 PASS → mandatory-core implementation may be authorized is now satisfied;

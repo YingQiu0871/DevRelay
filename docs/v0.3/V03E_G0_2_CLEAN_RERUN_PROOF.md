@@ -1,14 +1,64 @@
 # DevRelay v0.3-E — G0.2 clean re-run proof (precommitted oracle)
 
-Status: **G0.2 = CLEAN CANDIDATE PASS / AWAITING INDEPENDENT REVIEW** (self-approval
-forbidden; **NOT** an authoritative PASS).
+Status: **G0.2 = PASS — AUTHORITATIVE PASS / INDEPENDENTLY APPROVED**.  The
+independent clean-rerun review issued **APPROVE V0.3-E G0.2 FALSE-CORRELATION PROOF**
+with **P0 = 0, P1 = 0, P2 = 0**.  This PASS comes from that independent review of the
+clean re-run, **never** from executor self-approval.
+
+* Platform proof gate: **PARTIALLY EXECUTED / NOT COMPLETE** — `G0.1 / P7 = PASS` and
+  `G0.2 = PASS` (both authoritative and independently approved); `G0.3`, `G0.4`,
+  `G0.5`, `G1`, `G2` are **NOT RUN**; there is no "proof gate passed" and no
+  "proof gate complete" status.
+* Implementation: **NOT AUTHORIZED** — G0.1/P7 satisfied the frozen mandatory-core
+  hard prerequisite and G0.2 has now independently passed its offline false-correlation
+  proof; neither fact, alone or together, constitutes implementation authorization.
+* `adopt_completed_turn`: **DISABLED** (G0.2 does not prove P8, P9, remote session
+  ownership, provider completion, delivery truth or adoption eligibility; G1/G2 unrun).
 
 This document is the evidence record of the **separately authorized clean G0.2
 re-run**.  The oracle was frozen in the repository **before any case was executed**
 (`V03E_G0_2_RERUN_ORACLE.md`, pre-run commit `12ea1b7`), and all ten fixed cases A–J
 were executed **once each** under it.  The earlier G0.2 record
-(`V03E_G0_2_FALSE_CORRELATION_PROOF.md`) is preserved unchanged as history; this
-re-run neither rewrites it nor pretends to be it.
+(`V03E_G0_2_FALSE_CORRELATION_PROOF.md`) is **substantively unchanged** as history:
+its historical evidence and results are preserved, and only its citation references
+were corrected and a narrow historical pointer added.  This re-run neither rewrites it
+nor pretends to be it.
+
+## 0. Authoritative status, independent approval and chronology
+
+**Independent approval (recorded by the later bookkeeping round, from the
+already-issued review):** `APPROVE V0.3-E G0.2 FALSE-CORRELATION PROOF`, final
+severities **P0 = 0, P1 = 0, P2 = 0**.
+
+The independent clean-rerun review confirmed:
+
+* the pre-run oracle commit genuinely preceded execution;
+* the oracle SHA-256 was independently recomputed;
+* the oracle was immutable between the pre-run commit and the evidence commit;
+* the oracle was normatively faithful to the frozen design;
+* the identity-absent treatment was accepted;
+* A-J were each executed once;
+* all observed results were inside the precommitted allowed sets;
+* no semantic rule changed after execution began;
+* the manifest-binding warning was only a mechanical casing mismatch;
+* **P2-1 closed** and **P2-2 closed**;
+* the clean re-run stands on its own and does **not** rely on the original `8a37166`
+  execution for PASS.
+
+**Chronology (not flattened):** original G0.2 execution (commit `8a37166`) → original
+candidate result → first independent `REQUEST_CHANGES` → P2-1 / P2-2 identified →
+separately authorized clean re-run → `12ea1b7` pre-run oracle → clean A-J execution →
+`7908ace` clean candidate pass → independent clean-rerun review **APPROVE** →
+**authoritative `G0.2 = PASS`** → the bookkeeping commit that records it.
+
+**Claim boundary (unchanged by the approval):** the authoritative G0.2 claim is only
+that, given the durable local fields actually available and the frozen correlation
+rules, offline correlation fails closed — one bounded `MATCH` only on the complete
+durable identity tuple; ambiguous, duplicate or foreign evidence never yields a
+guessed winner; identity-insufficient evidence never causes false attribution; corrupt
+relevant evidence fails closed; timestamp/order never resolves ambiguity.  G0.2 does
+**not** prove remote session ownership, P8, P9, provider completion, delivery truth,
+adoption eligibility, future recovery correctness, or any G0.3-G2 step.
 
 ## 1. Identity of this proof
 
@@ -123,17 +173,20 @@ the interval from durable sequence evidence.
 ## 6. Cases A–J: expected vs observed (one execution each)
 
 `Semantic PASS` means the observed verdict lies in the precommitted allowed set **and**
-every case-level assertion held.
+every case-level assertion held.  The **Precommitted allowed** column reproduces the
+**immutable pre-run manifest** (`V03E_G0_2_RERUN_ORACLE.md` §11), which is
+authoritative; §12 records the P3-A/P3-B clarification about the post-run reproduction
+and the manifest's global precedence.
 
 | Case | Precommitted allowed | Observed | Candidates surfaced | Semantic result |
 | --- | --- | --- | --- | --- |
 | A — unique exact control | `MATCH` | `MATCH` | `OC-0017` | **PASS** |
 | B — same session, distinct attempt | `MATCH` (look-alike excluded) | `MATCH` | `OC-0017`; `OC-0007` rejected on prompt identity | **PASS** |
-| C — same full tuple on multiple calls | `MULTIPLE_MATCHES` / `EVIDENCE_GAP` / `CORRUPTION` | `MULTIPLE_MATCHES` | `OC-0007`, `OC-0017` | **PASS** |
+| C — same full tuple on multiple calls | `MULTIPLE_MATCHES` (→ `evidence_conflict`) | `MULTIPLE_MATCHES` | `OC-0007`, `OC-0017` | **PASS** |
 | D — same agent/model/session, insufficient identity | `MATCH` | `MATCH` | `OC-0017`; `OC-0901`/`OC-0902` out of scope; probes `IDENTITY_ABSENT` | **PASS** |
-| E — stale-looking full-tuple duplicate | `MULTIPLE_MATCHES` / `EVIDENCE_GAP` / `CORRUPTION` | `MULTIPLE_MATCHES` | `OC-0017`, `OC-0903`; `OC-0007` rejected | **PASS** |
+| E — stale-looking full-tuple duplicate | `MULTIPLE_MATCHES` (→ `evidence_conflict`); never a freshness-based winner | `MULTIPLE_MATCHES` | `OC-0017`, `OC-0903`; `OC-0007` rejected | **PASS** |
 | F — wrong role / wrong operation | `MATCH` (look-alikes `NO_MATCH`) | `MATCH` | `OC-0017`; `OC-0904` out of scope (session), `OC-0905` out of scope (operation) | **PASS** |
-| G — foreign run / same workspace | `MULTIPLE_MATCHES` / `EVIDENCE_GAP` / `CORRUPTION` | `MULTIPLE_MATCHES` | `OC-0017`, `OC-0906`; foreign `OC-0021`/`OC-0024` out of scope | **PASS** |
+| G — foreign run / same workspace | foreign different-session records excluded; the colliding full-tuple record → `MULTIPLE_MATCHES` (→ `evidence_conflict`) | `MULTIPLE_MATCHES` | `OC-0017`, `OC-0906`; foreign `OC-0021`/`OC-0024` out of scope | **PASS** |
 | H — duplicate full matches | `MULTIPLE_MATCHES` | `MULTIPLE_MATCHES` | `OC-0017`, `OC-0907` | **PASS** |
 | I — prompt identity removed from the only candidate | `NO_MATCH` / `EVIDENCE_GAP` | `NO_MATCH` | none; `OC-0017` reported `IDENTITY_ABSENT` | **PASS** |
 | J — corrupt relevant look-alike | `CORRUPTION` / `EVIDENCE_GAP` | `CORRUPTION` | `OC-0017` (clean, not used) | **PASS** |
@@ -252,8 +305,32 @@ read and is **not** proven offline; P8 remains unproven.
   later proof records; the G0.1 evidence, criteria and conclusion are unchanged.
 * Case result presentation in this document is split per case (expected / observed /
   candidates / semantic result) for readability.
-* **`P3` is not claimed to be zero**: the earlier P3 observations and the new
-  observations in §13 remain recorded.
+* **P3-A (corrected here):** the post-run reproduction of the per-case allowed sets
+  listed `MULTIPLE_MATCHES / EVIDENCE_GAP / CORRUPTION` for cases C, E and G, which is
+  **broader** than the immutable pre-run manifest (those three cases allow only
+  `MULTIPLE_MATCHES` → `evidence_conflict`).  The §6 table now reproduces the manifest
+  exactly; the observed verdicts (`MULTIPLE_MATCHES`) are unchanged and lie inside both
+  readings, so no executed result depended on the difference.
+* **P3-B (clarified here):** the immutable manifest is preserved verbatim and is
+  authoritative; its **global fail-closed precedence** (`CORRUPTION` first, then
+  `EVIDENCE_GAP`) governs malformed or insufficient evidence, while each case-specific
+  allowed set describes the semantic case **once its declared preconditions hold**.  No
+  executed A-J result depended on resolving this tension.
+* **P3-C (worded correctly here):** the original G0.2 record is **substantively
+  unchanged** — its historical evidence and results are preserved; only its citation
+  references were corrected and a narrow historical pointer was added.  It is not
+  claimed to be byte-for-byte unchanged.
+* **P3-D (retained limitations, non-blocking):** (i) the executed harness/oracle and the
+  raw per-case evidence were not committed; (ii) the case-I sensitivity belongs in
+  future implementation tests (P8/P6 territory; no P8 claim); (iii) the §11 item 6
+  interaction with the bridge's own probe/read operations needs future interpretation
+  before optional adoption implementation; (iv) the `model`/`agent` sanitize/clip
+  asymmetry may remove candidates; (v) the scanner interval remains
+  enumeration-at-scan-time, not a stronger sequence-arithmetic interval proof;
+  (vi) the manifest-binding case-sensitive phrase check was a mechanical check defect
+  (casing only; no verdict affected).
+* **`P3` is not claimed to be zero**: the earlier P3 observations, the P3-A-P3-D items
+  above and the carried-forward notes in §13 remain recorded.
 
 ## 13. Carried forward (recorded, not proven here)
 
@@ -292,22 +369,28 @@ committed; the committed record is this document plus the precommitted manifest.
 0 real provider/model inference calls; 0 real network requests; 0 OpenCode processes
 started or restarted; no runtime/test/dependency/version change.
 
-## 16. Candidate conclusion
+## 16. Result: clean candidate pass -> authoritative PASS
 
-**G0.2 = CLEAN CANDIDATE PASS / AWAITING INDEPENDENT REVIEW.**  All ten fixed cases
-A–J executed once each under the oracle precommitted in commit `12ea1b7` (manifest
-SHA-256 `e900f7a3…`, unchanged), every semantic verdict lay inside its precommitted
-allowed set, no weak metadata ever produced a positive attribution, no ambiguous
-winner or timestamp tie-break exists, and corrupt relevant evidence failed closed even
-when a clean unique candidate was present.  The result is a **candidate** only: it is
-not an authoritative PASS and the executing agent cannot self-approve it.
+**Candidate stage (as recorded in `7908ace`):** `G0.2 = CLEAN CANDIDATE PASS /
+AWAITING INDEPENDENT REVIEW` — all ten fixed cases A-J executed once each under the
+oracle precommitted in commit `12ea1b7` (manifest SHA-256 `e900f7a3…`, unchanged),
+every semantic verdict inside its precommitted allowed set, no weak metadata producing
+a positive attribution, no ambiguous winner or timestamp tie-break, and corrupt
+relevant evidence failing closed even when a clean unique candidate was present.
 
-Unchanged alongside it: `G0.1 / P7 = PASS`; `G0.3`, `G0.4`, `G0.5`, `G1`, `G2` =
-**NOT RUN**; overall platform proof gate = **PARTIALLY EXECUTED / NOT COMPLETE**;
-mandatory-core implementation = **NOT AUTHORIZED**; `adopt_completed_turn` =
-**DISABLED**.
+**Authoritative stage (recorded by the later bookkeeping round):** the independent
+clean-rerun review issued **APPROVE V0.3-E G0.2 FALSE-CORRELATION PROOF** with
+**P0 = 0, P1 = 0, P2 = 0**, so **`G0.2 = PASS` — authoritative and independently
+approved**.  The executing agent did not self-approve it, and the candidate stage above
+stays recorded as the pre-approval history.
+
+Unchanged alongside it: `G0.1 / P7 = PASS` (authoritative, independently approved) —
+G0.1/P7 and G0.2 are authoritative PASS and mandatory-core implementation remains
+**NOT AUTHORIZED** pending a separate authorization; `G0.3`, `G0.4`, `G0.5`, `G1`,
+`G2` = **NOT RUN**; overall platform proof gate = **PARTIALLY EXECUTED / NOT COMPLETE**
+(not passed, not complete); `adopt_completed_turn` = **DISABLED**.
 
 History is preserved: `V03E_G0_2_FALSE_CORRELATION_PROOF.md` remains the original
 proof record (including its first complete-pass oracle bug, its invalid attempts, the
-first independent `REQUEST_CHANGES` and P2-1/P2-2); this document records only that a
-separately authorized clean re-run was later performed under a precommitted oracle.
+first independent `REQUEST_CHANGES` and P2-1/P2-2) and
+`V03E_G0_2_RERUN_ORACLE.md` remains the immutable pre-run oracle artifact.
