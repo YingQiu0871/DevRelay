@@ -424,7 +424,10 @@ When (and only when) the platform proofs pass, adoption requires **all** of:
 7. captured workspace/session/role/model identity all match;
 8. **P1** history durability, **P2** submitted-text fidelity, **P3**
    identical-prompt uniqueness and **P8** session exclusivity all PASS — plus
-   **P9** if any timestamp or relative-order correlation is used;
+   **P9** if any timestamp or relative-order correlation is used — and, separately, the
+   **local P6 identity/ownership veto bound** (§12.4, §25.1) is independently satisfied:
+   the remote/platform *enabling* proofs and the local *veto bound* are two distinct
+   classes, and **both** must hold before adoption may ever be authorized;
 9. the run's cycle/role/phase expectation still matches the attempt.
 
 Any missing or ambiguous item → refuse; the run stays `RECOVERY_REQUIRED` and the
@@ -483,6 +486,17 @@ copied into another workspace is **not** recoverable.  If a session is missing,
 foreign, recreated, copied or otherwise cannot be proven to be the original owned
 session, **adoption is unavailable** — the mandatory report/`mark_unrecoverable`
 still works and never claims remote completion.
+
+**Identity vs ownership (normative, P6 sense).**  *Session identity* is the remote OpenCode
+session reference, principally `session_id`, treated strictly as an **opaque remote
+identifier**; *session ownership* is the **local recovery claim** that the referenced
+session is sufficiently bound to the original DevRelay recovery context.  **`session_id`
+equality alone must never clear the P6 veto**, and no single field alone proves ownership.
+If originality cannot be proven with the permitted local evidence, the result is
+**IDENTITY / OWNERSHIP NOT PROVEN** and adoption remains unavailable — never "probably the
+same session".  The frozen G0.5/P6 proof definition (exact question, four case classes A–D,
+PASS/FAIL/insufficient-evidence semantics, local-offline method, budget, dimension matrix and
+evidence fields) is **§25.1**.
 
 ### 12.5 Terminal states
 
@@ -614,7 +628,7 @@ A wording rule for this design and its future implementation:
 | --- | --- | --- | --- |
 | **A — reconcile/report** | none (remote reads are optional and report-only) | strict recovery evidence reader (§9) implemented and correct; **G0.1 / P7 must PASS before core implementation is authorized** | the local prerequisite is now **satisfied** (**G0.1 / P7 = PASS**, authoritative and independently approved, §25/§28); had it failed, mandatory-core implementation would have remained **blocked** (there is no degraded-implementation path).  `evidence_gap` is a *runtime* fail-closed outcome for an individual ambiguous/corrupt/unproven evidence case **after** implementation - it is never a waiver of the G0.1/P7 gate |
 | **B — `mark_unrecoverable` → `BLOCKED`** | **none** | legal recovery entry/document (§7), planner authority, local invariants, no corruption | none: this is the fail-closed safety exit and is always available |
-| **C — `adopt_completed_turn`** | **P1 + P2 + P3 + P8** (+ **P9** if timestamps/order are used) | the core's prerequisite (G0.1 / P7 PASS) plus the §11 checklist | capability stays disabled; resolve refuses it; reconcile reports candidates only |
+| **C — `adopt_completed_turn`** | remote/platform ***enabling* proofs: P1 + P2 + P3 + P8** (+ **P9** if timestamps/order are used), through G1/G2 — a **distinct class** from the local veto bound below | the core's prerequisite (G0.1 / P7 PASS) plus the §11 checklist, **plus the local identity/ownership *veto bound* P6 / G0.5 (§12.4, §25.1)** | capability stays disabled; resolve refuses it; reconcile reports candidates only.  **Both classes must be satisfied: an unsatisfied or failed P6 veto keeps adoption disabled even if G1/G2 later pass, and P6 PASS alone enables nothing** |
 | **D — pending-result handling** | would require an operation-specific handle proof | — | **report-only in v0.3-E**; no mutation capability |
 | **E — non-delivery classification** | would require a P5-class proof for any authority | — | informational only; no orchestration authority |
 
@@ -753,7 +767,7 @@ OpenAI-compatible provider may be used in G2; nothing runs in this design round)
 | **G0.2** | offline run↔call false-correlation cases (two runs, reused prompts, reused sessions, neighbouring call ids) | 0 | local |
 | **G0.3** | transport/non-delivery classification checks against the accepted taxonomy (**P5**) — original round candidate FAIL (case G0.3-J surfaced `remote_protocol_error`), independently reviewed as a TYPE-1 proof-plan failure, then corrected and cleanly re-run, and the corrected proof was independently approved: **G0.3 / P5 = PASS** (authoritative; accepted safe buckets class-wide pre-send; `proxy_error` `UNREACHABLE_CURRENT_CONFIGURATION`; every uncertain class fail-closed) | 0 | local/fake transport |
 | **G0.4** | OpenCode installed-API inspection for a per-operation pending handle (**P4**) — **AUTHORITATIVE FAIL / P4 UNPROVEN**: the single authorized execution under the approved immutable revision-3 oracle (`V03E_G0_4_API_INSPECTION_ORACLE.md`, committed-blob SHA-256 `b0c34fa1…`) was independently approved as a **FAILED PROOF** (*APPROVE V0.3-E G0.4 FAILED PROOF*, P0 = 0, P1 = 0, P2 = 0, **TYPE 3 — SEMANTIC ENVIRONMENT / CONFIGURATION RESULT**).  Case A did not reach `TARGET_BOUND` (`TARGET_IDENTITY_UNRESOLVED` — the accepted workspace had no OpenCode base endpoint), so 0 loopback HTTP requests / 0 `GET /doc` were issued and cases B–H were not executed; no API/schema property was established and a rerun is not authorized (`V03E_G0_4_API_INSPECTION_PROOF.md`) | 0 | read-only inspection |
-| **G0.5** | session identity/bound checks: missing, foreign, recreated, copied sessions (**P6**) | 0 | local |
+| **G0.5** | P6 **local identity/ownership veto bound** on adoption — four case classes A–D (missing, foreign, recreated/originality-unprovable, copied); frozen definition in **§25.1**; **NOT RUN** (definition remediated, awaiting independent definition review) | 0 | local (offline) |
 | **G1** | real **LOCAL** OpenCode `1.18.11` session-history restart proof (**P1**: durability of ids/text across a server restart) | 0 | local OpenCode, no inference |
 | **G2** | real **LOCAL** OpenCode + **local fake OpenAI-compatible provider**: submitted-text fidelity (**P2**), duplicate-identical-prompt uniqueness (**P3**), session-exclusivity assumptions as far as observable (**P8**), timestamp/order fidelity if used (**P9**) | 0 | local fake provider |
 
@@ -774,9 +788,13 @@ implementation would have remained **BLOCKED**; there is **no
 degraded-implementation path** in this design (a degraded scope would need its own
 design change and independent review).  The PASS satisfies the local prerequisite but
 authorizes nothing by itself: implementation still requires a separately issued
-authorization.  G0.4-G0.5 remain relevant to the reporting language (what the recovery
-report may claim) and must not blur that gate; **G1/G2 gate only the optional
-`adopt_completed_turn` capability.**  Maximum real provider/model inference for the
+authorization.  G0.4 remains relevant to the reporting language (what the recovery
+report may claim), and G0.5/P6 defines the local identity/ownership **veto bound** on
+adoption (§25.1); neither may blur that gate.  **G1/G2 provide the optional adoption
+capability's remote/platform *enabling* proofs, while G0.5/P6 separately proves the local
+identity/ownership *veto bound*; both classes must be satisfied before adoption may ever be
+authorized (§11 item 8, §19 row C, §25.1), and neither enables adoption by itself.**
+Maximum real provider/model inference for the
 whole gate: **0**.
 
 G0.1 / P7 proves the *local persistence/ledger assumptions* the future
@@ -785,6 +803,182 @@ boundaries, valid records distinguishable from torn/corrupt/incomplete state,
 fail-closed `evidence_gap`/corruption processing, no silent skipping treated as
 authoritative).  It does **not** prove the future production implementation itself:
 that implementation still needs its own tests.
+
+### 25.1 G0.5 / P6 — frozen local identity/ownership veto-bound definition (definition only; not executed)
+
+**Role (normative).**  P6 is a **local identity/ownership veto bound for adoption** — **not**
+an adoption-enabling proof.  **G0.5 PASS clears only the local P6 veto prerequisite** and
+enables nothing by itself; **G0.5 FAIL leaves the P6 veto active** and adoption stays
+**DISABLED**.  Neither outcome affects: reconcile/report (A), `mark_unrecoverable` (B),
+G0.1/P7, the pending/report-only policy, G1's ability to characterize P1, or G2's ability to
+characterize P2/P3/P8/P9.  The remote/platform adoption **enabling** proofs remain
+**P1 + P2 + P3 + P8** (+ **P9** only when timestamp/order correlation is used) through
+**G1/G2**.
+
+**Exact P6 question.**  *Can DevRelay's locally available session identity/ownership
+evidence safely establish the original owned-session bound for recovery, such that missing,
+foreign, recreated, copied, or otherwise unprovable session references can never clear the
+adoption identity veto?*  The question is about **safe local bounding**, not about
+**positive remote session identity**, and P6 does **not** require proving global uniqueness
+of OpenCode session ids.
+
+**Definitions.**
+* **Session identity (P6 sense)** — the remote OpenCode session reference, principally
+  `session_id`, treated strictly as an **opaque remote identifier**.  It identifies a
+  referenced remote session record and is necessary as a reference, but it is **not by
+  itself** proof that the referenced session is the original DevRelay-owned session, **not**
+  proof of workspace ownership, **not** proof against recreation/reuse, and **not** proof of
+  one submitted turn.  No OpenCode uniqueness property may be claimed that has not been
+  formally proved.
+* **Session ownership (P6 sense)** — the **local recovery claim** that the referenced remote
+  session is sufficiently bound to the original DevRelay recovery context for the identity
+  veto to clear.  Ownership evidence uses only the frozen locally available checks:
+  configured/stored `session_id` reference; workspace binding / `workspace_match` and the
+  configured workspace root; role/session distinctness; the persisted route/session
+  snapshot; applicable stored DevRelay recovery/ledger identity.  **No single field alone
+  proves ownership**; in particular **`session_id` equality alone MUST NOT clear the P6
+  veto**.
+* **Original-owned-session rule (fail closed)** — if DevRelay cannot prove, using the
+  permitted local evidence model, that the current reference is consistent with the original
+  owned recovery session, the P6 result for that recovery context is **IDENTITY / OWNERSHIP
+  NOT PROVEN** and **adoption remains unavailable**.  This may never be converted into
+  "probably the same session" or "same id, therefore owned".
+
+**Scope and exclusions.**  G0.5 scope is **local**.  Explicitly **excluded** (each owned by
+another proof): OpenCode restart persistence and history/text survival across restart →
+**G1/P1**; verbatim completion-text fidelity → **G2/P2**; identical-prompt/completion
+uniqueness → **G2/P3**; session exclusivity / concurrent-writer proof → **G2/P8**;
+timestamp/order fidelity → **G2/P9**; per-operation pending handle → **G0.4/P4**; local
+durable state correctness → **G0.1/P7**.  G0.5 must not absorb any of them.
+
+**Restart boundary.**  G0.5 performs **no** OpenCode restart and makes **no** conclusion
+about session identity surviving an OpenCode restart; any cross-OpenCode-restart
+identity/history claim belongs to **G1/P1**.  DevRelay's own persisted local session
+reference may exist across a local process restart, but that fact alone is **not** a P6 proof
+of the remote session's originality.
+
+**Four precommitted case classes (exactly four; normative).**
+
+| Case | Definition | Expected bound |
+| --- | --- | --- |
+| **G0.5-A — MISSING** | the persisted recovery context refers to a session that cannot be resolved as the required original session (missing session reference; session-not-found; required local session identity field absent) | original ownership **NOT PROVEN** → veto active; report/reconcile remains available; `mark_unrecoverable` remains available; no remote-completion claim |
+| **G0.5-B — FOREIGN** | the referenced session resolves to evidence inconsistent with the recovery workspace/ownership context (workspace mismatch; foreign workspace; workspace identity unavailable where strict ownership requires it; other locally provable ownership mismatch) | ownership **NOT PROVEN / FOREIGN** → veto active; no adoption; no remote-completion claim |
+| **G0.5-C — RECREATED / ORIGINALITY-UNPROVABLE** | the current remote reference presents the same or otherwise plausible identifier/context, but the permitted evidence cannot establish that it is the original owned session rather than a recreated/replaced/reused one | **`session_id` equality alone is insufficient**; same id + same apparent workspace alone must not be promoted to proof of original-session identity unless another separately accepted proof supplies that authority; if originality cannot be established → **IDENTITY / OWNERSHIP NOT PROVEN** → veto active.  G0.5 does **not** need to prove that OpenCode actually reuses ids, and no id-reuse claim may be invented: the case proves the bound against the **possibility** that the available local evidence cannot distinguish original from recreated |
+| **G0.5-D — COPIED** | DevRelay recovery/run/ledger identity material is copied or replayed into a different workspace or incompatible route/recovery context | workspace/route/ownership consistency fails → veto active; a copied run document/reference must not become recoverable merely because the same remote `session_id` appears |
+
+No fifth semantic case may be added at definition level; the later oracle may instantiate
+exact fixtures for these four classes.
+
+**PASS semantics (bounding PASS).**  PASS means: the permitted local identity/ownership
+evidence model and its fail-closed rules are sufficient to establish that **all four case
+classes cannot clear the P6 adoption veto** when original ownership is missing,
+contradictory or unprovable.  PASS does **not** mean: OpenCode session ids are globally
+unique; ids cannot be recreated; ids survive restart; an id proves ownership; OpenCode
+guarantees workspace binding; identity proves one submitted turn; or adoption is enabled.
+A PASS clears **only** the P6 local identity-veto prerequisite; G1/G2 remain separately
+required before adoption may ever be authorized.
+
+**FAIL semantics.**  FAIL occurs if the proof shows that any of the four case classes can
+clear — or cannot be shown to remain behind — the P6 adoption veto under the frozen local
+evidence model (examples: `session_id` equality treated as sufficient ownership; a
+foreign/copy mismatch accepted; a recreated/originality-unprovable state treated as
+original; a required ownership contradiction ignored; an evidence model insufficient to
+establish the fail-closed bound).  Consequence: **P6 remains UNSATISFIED**,
+`adopt_completed_turn` remains **DISABLED**, no degraded adoption mode, no automatic retry
+and no alternative identity heuristic; the mandatory core and `mark_unrecoverable` are
+unaffected; G1/G2 may still be characterized, but even a future G1/G2 PASS cannot enable
+adoption while P6 remains unsatisfied.
+
+**Insufficient-evidence semantics.**  If the future proof cannot determine whether the local
+P6 bound holds, uncertainty is **not** PASS: the result must **preserve the veto**
+(P6 not satisfied → adoption remains DISABLED), with no optimistic inference.  The later
+oracle may fix the exact final-result vocabulary.
+
+**Method — local offline only.**  The proof method class is **local offline deterministic
+identity-bound characterization**.  Allowed: repository/source inspection; deterministic
+local invocation of already-existing DevRelay identity/ownership primitives; deterministic
+local fixtures/stubs representing session metadata and recovery/workspace context; existing
+local unit-level harnesses that require no network or external service; local file/state
+inspection; local hashing and evidence recording.  Not allowed: live OpenCode HTTP; `/doc`;
+`/session` API calls; prompt submission; session creation; session deletion; OpenCode
+process discovery; port scanning; OpenCode start/restart; provider/model calls; fake
+provider; external network; changing `opencode.base_url`.  Consequently the missing
+configured `base_url` observed in G0.4 is **not** a prerequisite or blocker for G0.5.
+
+**Live-OpenCode non-claim.**  Because G0.5 is offline/local, it proves **DevRelay's local P6
+identity/ownership bound** and **not** actual OpenCode platform guarantees about id
+uniqueness, id reuse, server lifetime, restart persistence or session-database semantics;
+those require their separately owned proofs or a future capability extension.  Installed
+binary string counts are **contextual only** and may not drive PASS.
+
+**Budget (frozen).**  real provider calls **0**; fake provider calls **0**; model inference
+calls **0**; model turns **0**; prompt submissions **0**; HTTP requests **0**; loopback HTTP
+requests **0**; external network requests **0**; OpenCode starts **0**; OpenCode restarts
+**0**; OpenCode session mutations **0**.  The proof is entirely local/offline.
+
+**Identity-dimension matrix (normative).**
+
+| Dimension | Classification |
+| --- | --- |
+| session_id as opaque reference | **REQUIRED** |
+| workspace binding | **REQUIRED** |
+| original-ownership bound | **REQUIRED** |
+| role/session distinctness | **REQUIRED where applicable to the recovery route** |
+| persisted route/session snapshot consistency | **REQUIRED** |
+| foreign-session detection | **REQUIRED** |
+| copied-workspace/context detection | **REQUIRED** |
+| session_id global uniqueness | **NOT CLAIMED / OUT OF SCOPE** |
+| session_id uniqueness across OpenCode instances | **NOT CLAIMED / OUT OF SCOPE** |
+| session_id reuse impossibility | **NOT CLAIMED / OUT OF SCOPE** |
+| OpenCode restart persistence | **OWNED BY G1/P1** |
+| verbatim text fidelity | **OWNED BY G2/P2** |
+| prompt/completion uniqueness | **OWNED BY G2/P3** |
+| session exclusivity | **OWNED BY G2/P8** |
+| timestamp/order fidelity | **OWNED BY G2/P9** |
+| per-operation pending handle | **OWNED BY G0.4/P4** |
+| turn correlation | **not supplied by P6 alone** |
+
+**Discipline (no probe shopping).**  Exactly **one** planned semantic execution per case
+A–D.  The later oracle must precommit, per case: the exact local fixture/input; the exact
+DevRelay primitive/path inspected or invoked; the expected fail-closed identity result; the
+expected adoption-veto consequence; the assertion point; and the harness-invalid boundary.
+A semantic failure must not be retried with a different fixture to obtain PASS; fixtures may
+not be modified after observing a semantic result; harness-invalid attempts (failure before
+the precommitted assertion point) may be retried, must be recorded separately and are
+excluded from the semantic case count.
+
+**Minimum evidence fields (future oracle/proof).**  Repository HEAD/branch/worktree; frozen
+definition/oracle identity; case identifier A–D; local fixture identity; stored
+`session_id`/reference; stored/configured workspace identity; returned/synthetic session
+workspace identity as applicable; `workspace_match`/ownership verdict; route/session
+snapshot consistency as applicable; role/session distinctness verdict as applicable;
+original-ownership-provable verdict; expected P6 veto result; observed local result;
+adoption-veto consequence; mandatory-core-unaffected confirmation; activity counters;
+privacy/non-claims; harness-invalid vs semantic outcome.  Live remote-session data is **not**
+required.
+
+**Privacy.**  Future G0.5 evidence must not persist credentials, tokens, raw prompts, model
+responses or reasoning; synthetic/non-secret local identifiers should be used in fixtures
+where possible; environment-specific paths may be recorded only when materially needed and
+must be labelled environment-derived.
+
+**Status model.**  `G0.5 = NOT RUN` → after a separately authorized execution **CANDIDATE
+PASS** or **CANDIDATE FAIL / P6 UNSATISFIED** → independent review → authoritative PASS or
+authoritative FAIL.  The executing agent never self-approves, and a PASS/FAIL does not by
+itself authorize adoption or implementation.
+
+**Mandatory-core consequence.**  G0.5/P6 is **not** the mandatory-core hard gate; the hard
+prerequisite remains **G0.1/P7 = PASS / CLOSED**.  Any G0.5 outcome does not revoke G0.1,
+does not block reconcile/report, does not block `mark_unrecoverable`, does not authorize
+mandatory-core implementation and does not create a degraded mode.
+
+**Adoption dependency equation.**  Adoption may be **considered** only if: the P6 local
+identity/ownership veto bound is **SATISFIED** by an independently approved G0.5; **and** the
+required remote/platform adoption **enabling** proofs P1 + P2 + P3 + P8 (+ P9 if applicable)
+are independently satisfied through G1/G2; **and** all other frozen runtime/adoption
+invariants hold; **and** a separate external implementation/feature authorization is issued.
+No single proof enables adoption: **P6 PASS alone enables nothing**, and **G1/G2 PASS alone
+cannot bypass P6**.
 
 ## 26. Future real acceptance smoke (not authorized)
 
@@ -811,7 +1005,7 @@ proofs, **no real adoption smoke is required**: the reduced core (report +
 | `evidence_sha256` | canonical metadata-only field list with a version marker; repeat resolve → stable `already_resolved` error | determinism, and no false success from a mutating tool | no raw text hashed; no second write | none (decision closed) |
 | Budget | the §8.3 equations; a slot is never refunded | preserves accepted accounting | the recovery attempt is counted exactly once | none (decision closed) |
 | Terminal | never enters recovery, never reopens | preserves v0.3-D terminal semantics | terminal immunity | none (decision closed) |
-| Identity | workspace/session/role/snapshot re-verified; P6 bounds adoption | a copied or recreated session must not be adopted | explicit ownership; distinct sessions | P6 strength (proof) |
+| Identity | workspace/session/role/snapshot re-verified; P6 is a **local fail-closed identity/ownership veto bound** on adoption — "gate" here means **veto bound, never positive capability enablement** | a copied or recreated session must not be adopted | explicit ownership; distinct sessions | P6 strength (proof) — definition frozen in §12.4/§25.1; G0.5 NOT RUN |
 | Concurrency | per-surface lock; multi-surface/multi-process unsupported | no new locking model, no false claims | one lock per surface | none (decision closed) |
 | Privacy | digests/ids/metadata only | preserves the v0.3-D privacy contract | no prompt/response/reasoning/credential persistence | P2 fidelity is a platform question |
 
@@ -824,7 +1018,7 @@ proofs, **no real adoption smoke is required**: the reduced core (report +
 | P3 | can identical prompts in one session be disambiguated deterministically? | adoption (C) | PROOF REQUIRED (G2) |
 | P4 | does a durable per-operation pending handle exist? | pending capability (D) | **historical review answer** for 1.18.11: no (session-level status only) — report-only, and **not** a formal G0.4 result; **formal proof status: G0.4/P4 = AUTHORITATIVE FAIL / P4 UNPROVEN** (independently approved failed proof — *APPROVE V0.3-E G0.4 FAILED PROOF*, P0 = 0, P1 = 0, P2 = 0, TYPE 3; no configured endpoint → no target instance bound → 0 `GET /doc`, no API/schema property established; `V03E_G0_4_API_INSPECTION_PROOF.md`) |
 | P5 | do the accepted connect-phase classes prove non-delivery? | non-delivery authority (E) | **executed under G0.3: **PASS** (authoritative, independently approved through *APPROVE V0.3-E G0.3 / P5 TRANSPORT PROOF*, P0 = 0, P1 = 0, P2 = 0) in the corrected clean rerun under the oracle precommitted in `e328ec5`: the accepted safe buckets are class-wide pre-send (`connect_timeout`, `pool_timeout`, `connect_error`, `unsupported_protocol`) plus the pre-send-only `local_protocol_error` mapping boundary, `proxy_error` is `UNREACHABLE_CURRENT_CONFIGURATION`, and every uncertain class stayed fail-closed; the original round's candidate FAIL (case G0.3-J surfaced `remote_protocol_error`; the request-send `WriteError` mapping is defensive/unexercised) and its independent TYPE-1 review remain historical; P5 stays informational/report-only (`V03E_G0_3_CLEAN_RERUN_PROOF.md`) |
-| P6 | is session identity strong enough against missing/recreated/copied sessions? | adoption (C) | PROOF REQUIRED (G0.5); bounds adoption now |
+| P6 | can DevRelay's **locally available** session identity/ownership evidence safely establish the original owned-session bound for recovery, such that missing, foreign, recreated, copied, or otherwise unprovable session references can never clear the adoption identity veto? (**not** a global session-id uniqueness question — §25.1) | adoption (C) — as a **fail-closed veto bound only**, not an enabling proof (enabling proofs are P1+P2+P3+P8 (+P9) through G1/G2) | PROOF REQUIRED (G0.5); **definition remediated (§25.1), awaiting independent definition review**; bounds adoption now |
 | P7 | is the ledger settle record complete-or-absent under a hard kill? | all ledger-trusting logic | **PASS** (authoritative, independently approved; executed once under G0.1 — `V03E_G0_1_P7_PROOF.md`; local, 0 provider calls) |
 | P8 | can session exclusivity (no other writer in the window) be established? | adoption (C) | PROOF REQUIRED (G2 + local cross-checks) |
 | P9 | is `created_at`/ordering fidelity sufficient if timestamps are used? | adoption (C) *only if* timestamps are used | PROOF REQUIRED (G2) |

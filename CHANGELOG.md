@@ -134,6 +134,26 @@ same immutable oracle.  The installed target's static identity was recorded
 calls, 0 network requests, 0 OpenCode starts/restarts.  Evidence:
 `docs/v0.3/V03E_G0_4_API_INSPECTION_PROOF.md`.
 
+**G0.5 / P6 definition was remediated** (documentation/definition only; no oracle, no
+proof, no execution).  A prior read-only inventory returned *NOT READY — G0.5 DEFINITION
+AMBIGUITY* (no frozen PASS/FAIL semantics, no method, no identity-dimension set, identity vs
+ownership undefined, and an adoption-role contradiction between §19, §25, §27, §28 and E33).
+The remediation freezes **P6 as a local identity/ownership VETO BOUND on adoption — not an
+adoption-enabling proof**: G0.5 PASS clears only the local veto prerequisite and enables
+nothing by itself, while G0.5 FAIL leaves the veto active and adoption DISABLED.  The
+remote/platform *enabling* proofs remain **P1+P2+P3+P8 (+P9 if applicable)** through G1/G2,
+and **both classes must be satisfied before adoption may ever be authorized**.  The frozen
+definition (`V03E_SPEC.md` §25.1) fixes the exact question, the identity/ownership
+definitions, the fail-closed original-owned-session rule, exactly **four case classes A–D**
+(missing; foreign; recreated/originality-unprovable; copied — with **`session_id` equality
+alone insufficient**), a **bounding PASS**, FAIL and insufficient-evidence semantics, a
+**local/offline method** (0 HTTP, 0 `/doc`, 0 OpenCode start/restart, 0 session mutations, 0
+provider/fake-provider calls; the missing G0.4 `base_url` is therefore **not** a G0.5
+prerequisite), the identity-dimension matrix, the adoption dependency equation, evidence
+fields, privacy rules, the status model and the no-probe-shopping discipline.  G0.5 remains
+**NOT RUN / DEFINITION REMEDIATED / AWAITING INDEPENDENT DEFINITION REVIEW**; no G0.5 oracle
+exists and G1/G2 remain unrun.
+
 That approval followed three earlier review rounds: the first independent design
 review returned `REQUEST_CHANGES` (P0 = 1, P1 = 6, P2 = 5) and the
 recovery/reconciliation contract was repaired in `f67bf9e`; two narrow re-reviews

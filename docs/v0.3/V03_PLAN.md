@@ -85,8 +85,10 @@ CLOSED) - see `docs/v0.3/V03E_SPEC.md`, with the design-phase matrix
 The remediated contract splits a **mandatory fail-closed core** (reconcile/report +
 `mark_unrecoverable`; no submission, no retry, no auto-resume, no adoption) from an
 **optional gated** `adopt_completed_turn` capability and a **report-only** pending
-capability; the core needs no remote platform proof, while adoption requires the
-proof gate (P1, P2, P3, P8, plus P9 if timestamps are used).
+capability; the core needs no remote platform proof, while adoption requires **both** the
+local P6 identity/ownership **veto bound** (G0.5, SPEC §25.1) **and** the remote/platform
+*enabling* proofs of the proof gate (P1, P2, P3, P8, plus P9 if timestamps are used);
+neither class enables adoption alone.
 **No recovery code exists** and the accepted v0.3-D runtime candidate
 `8b70610a5cdda600ef57cf8378c4f69cd33d5be4` is untouched.  The design re-review
 **has passed** and the v0.3-E design is **frozen** (candidate `9f4a018`, P0 = 0,
@@ -274,7 +276,10 @@ deferred, non-blocking follow-ups.
    design-decisions table, the capability dependency table and the open platform
    proofs P1–P9 with the pre-implementation proof gate (the **local** G0.1/P7
    strict-reader proof gates the mandatory core; **P1/P2/P3/P8** - and **P9** only
-   if timestamps are used - gate the optional adoption capability).
+   if timestamps are used - are the remote/platform *enabling* proofs for the optional
+   adoption capability, while the **local P6 identity/ownership veto bound** proved by
+   **G0.5** (SPEC §25.1) gates it as a fail-closed *veto*; **both** must hold before
+   adoption may ever be authorized).
 2. `docs/v0.3/V03E_ACCEPTANCE.md` — the design-phase acceptance matrix:
    mandatory-core criteria (E1–E25), the gated adoption capability (E26–E30),
    report-only pending/non-delivery/identity bounds (E31–E33), local proofs
