@@ -15,7 +15,12 @@ FALSE-CORRELATION PROOF* (P0 = 0, P1 = 0, P2 = 0) — the original round was fol
 one `REQUEST_CHANGES` review and a separately authorized clean re-run under the oracle
 precommitted in commit `12ea1b7`; the ten fixed cases A-J ran once each, all
 fail-closed, 0 provider/model calls — `V03E_G0_2_CLEAN_RERUN_PROOF.md` (original record
-preserved: `V03E_G0_2_FALSE_CORRELATION_PROOF.md`); steps G0.3-G0.5, G1 and G2 have
+preserved: `V03E_G0_2_FALSE_CORRELATION_PROOF.md`); **G0.3 = CANDIDATE FAIL** — executed
+once offline at `efa2ca3` under the oracle precommitted in `b9c4704`: the six accepted
+non-delivery classes were all proven pre-send on the installed stack, but precommitted
+case G0.3-J did not produce its `write_error` class (the installed httpcore suppresses a
+request-send `WriteError`, so it surfaced as `remote_protocol_error`, still
+submission-uncertain) — `V03E_G0_3_TRANSPORT_PROOF.md`; steps G0.4, G0.5, G1 and G2 have
 **not** run),
 `adopt_completed_turn` remains **DISABLED**, and no provider/model call occurred during
 the reviews (the reviews were static/documentary).
@@ -694,7 +699,17 @@ record in the run's role session, otherwise `NO_MATCH` / `evidence_conflict` /
 `evidence_gap` / `corruption`; no timestamp tie-break; the oracle was unchanged during
 execution; 0 provider/model calls — `V03E_G0_2_CLEAN_RERUN_PROOF.md`; original round:
 `V03E_G0_2_FALSE_CORRELATION_PROOF.md`);
-**G0.3 = NOT RUN**, **G0.4 = NOT RUN**, **G0.5 = NOT RUN**,
+**G0.3 = CANDIDATE FAIL** (executed once offline at `efa2ca3` under the oracle
+precommitted in `b9c4704`; the six accepted non-delivery classes — `connect_timeout`,
+`pool_timeout`, `connect_error`, `proxy_error`, `unsupported_protocol`,
+`local_protocol_error` — were each shown **pre-send** on the installed stack with no
+request header or body byte reaching the network stream and `submission_uncertain ==
+false`, and every uncertain class stayed `submission_uncertain == true` with
+`retry_safe == false`; the candidate FAIL is triggered by case **G0.3-J**, where the
+precommitted `write_error` trigger surfaced as `remote_protocol_error` because the
+installed httpcore suppresses a request-send `WriteError` — the affected class is named
+and P5 evidence remains informational only; `V03E_G0_3_TRANSPORT_PROOF.md`),
+**G0.4 = NOT RUN**, **G0.5 = NOT RUN**,
 **G1 = NOT RUN**, **G2 = NOT RUN**.  The design's local hard prerequisite is
 therefore **satisfied**: G0.1/P7 **no longer blocks mandatory-core implementation
 eligibility**, but implementation remains **NOT AUTHORIZED** until a separately
@@ -713,7 +728,7 @@ OpenAI-compatible provider may be used in G2; nothing runs in this design round)
 | --- | --- | --- | --- |
 | **G0.1** | local DevRelay hard-kill around `ISSUED`/settle writes; the strict reader must return a complete valid record or `evidence_gap`/corruption, never silently skip (**P7/F5**) | 0 | local |
 | **G0.2** | offline run↔call false-correlation cases (two runs, reused prompts, reused sessions, neighbouring call ids) | 0 | local |
-| **G0.3** | transport/non-delivery classification checks against the accepted taxonomy (**P5**) | 0 | local/fake transport |
+| **G0.3** | transport/non-delivery classification checks against the accepted taxonomy (**P5**) — executed once: candidate FAIL (six non-delivery classes proven pre-send; case G0.3-J did not produce its `write_error` class) | 0 | local/fake transport |
 | **G0.4** | OpenCode installed-API inspection for a per-operation pending handle (**P4**) | 0 | read-only inspection |
 | **G0.5** | session identity/bound checks: missing, foreign, recreated, copied sessions (**P6**) | 0 | local |
 | **G1** | real **LOCAL** OpenCode `1.18.11` session-history restart proof (**P1**: durability of ids/text across a server restart) | 0 | local OpenCode, no inference |
@@ -785,7 +800,7 @@ proofs, **no real adoption smoke is required**: the reduced core (report +
 | P2 | is the submitted user text preserved verbatim so the digest match is sound? | adoption (C) | PROOF REQUIRED (G2) |
 | P3 | can identical prompts in one session be disambiguated deterministically? | adoption (C) | PROOF REQUIRED (G2) |
 | P4 | does a durable per-operation pending handle exist? | pending capability (D) | answered for 1.18.11: **no** (session-level status only) — report-only |
-| P5 | do the accepted connect-phase classes prove non-delivery? | non-delivery authority (E) | PROOF REQUIRED (G0.3); report-only until then |
+| P5 | do the accepted connect-phase classes prove non-delivery? | non-delivery authority (E) | **executed once under G0.3: candidate FAIL** — the six accepted non-delivery classes were proven pre-send, but case G0.3-J surfaced as `remote_protocol_error`, so `write_error` is not reachable at the accepted transport boundary on the installed HTTP/1.1 stack; P5 stays informational/report-only (`V03E_G0_3_TRANSPORT_PROOF.md`) |
 | P6 | is session identity strong enough against missing/recreated/copied sessions? | adoption (C) | PROOF REQUIRED (G0.5); bounds adoption now |
 | P7 | is the ledger settle record complete-or-absent under a hard kill? | all ledger-trusting logic | **PASS** (authoritative, independently approved; executed once under G0.1 — `V03E_G0_1_P7_PROOF.md`; local, 0 provider calls) |
 | P8 | can session exclusivity (no other writer in the window) be established? | adoption (C) | PROOF REQUIRED (G2 + local cross-checks) |

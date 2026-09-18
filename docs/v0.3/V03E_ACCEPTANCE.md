@@ -14,7 +14,11 @@ through *APPROVE V0.3-E G0.2 FALSE-CORRELATION PROOF* (P0 = 0, P1 = 0, P2 = 0) v
 clean re-run under the oracle precommitted in commit `12ea1b7`: ten fixed cases A-J
 fail-closed, oracle unchanged during execution, 0 provider/model calls —
 `V03E_G0_2_CLEAN_RERUN_PROOF.md` (original round preserved:
-`V03E_G0_2_FALSE_CORRELATION_PROOF.md`); steps G0.3-G0.5, G1, G2 not run),
+`V03E_G0_2_FALSE_CORRELATION_PROOF.md`); **G0.3 = CANDIDATE FAIL** — executed once
+offline under the oracle precommitted in `b9c4704`; the six accepted non-delivery classes
+were all proven pre-send, but precommitted case G0.3-J surfaced `remote_protocol_error`
+instead of its `write_error` class — `V03E_G0_3_TRANSPORT_PROOF.md`; steps G0.4, G0.5,
+G1, G2 not run),
 `adopt_completed_turn` remains **DISABLED**,
 and the mandatory-core gate **G0.1/P7 PASS first** is now **satisfied** (the proof
 passed and was independently approved), with no degraded-implementation path.
@@ -55,7 +59,7 @@ remains **DISABLED** until P1 + P2 + P3 + P8 (plus P9 only if timestamp/order
 correlation is used), gated by G1/G2.  **G0.1 / P7 was executed once and returned
 **PASS** (authoritative, independently approved — `V03E_G0_1_P7_PROOF.md`), so
 G0.1/P7 no longer blocks mandatory-core implementation *eligibility*; the other gate
-steps (G0.3-G0.5, G1, G2) have **NOT run** — G0.2 = PASS (authoritative, independently approved) — the platform proof gate is **partially
+steps (G0.4, G0.5, G1, G2) have **NOT run** — G0.2 = PASS (authoritative, independently approved), while G0.3 was executed once and returned a **candidate FAIL** (six non-delivery classes proven pre-send; case G0.3-J did not produce its `write_error` class) — the platform proof gate is **partially
 executed / not complete**, and mandatory-core implementation remains **NOT
 AUTHORIZED** until a separately issued implementation authorization.
 
@@ -111,7 +115,7 @@ AUTHORIZED** until a separately issued implementation authorization.
 | --- | --- | --- | --- |
 | E34 | **P7 / G0.1** — hard-kill DevRelay around `ISSUED`/settle writes and verify the strict reader returns a complete valid record or `evidence_gap`/corruption, never silently skipping | **PASS** (authoritative / independently approved; executed once at `5bdc21d`–`fe304ab`, candidate result then approved by the final proof review — *APPROVE V0.3-E G0.1 / P7 PLATFORM PROOF*, P0 = 0, P1 = 0, P2 = 0; cases A1, A2, B, C, D, E all met their predefined criteria; evidence: `docs/v0.3/V03E_G0_1_P7_PROOF.md`) | SPEC §9, §25 |
 | E35 | **G0.2** — offline run↔call false-correlation cases (two runs, reused prompts, reused sessions, neighbouring call ids) | **PASS** (authoritative / independently approved through *APPROVE V0.3-E G0.2 FALSE-CORRELATION PROOF*, P0 = 0, P1 = 0, P2 = 0; clean re-run under the oracle precommitted in commit `12ea1b7`; ten fixed cases A-J executed once each and fail-closed — a unique `MATCH` only on the complete identity tuple, otherwise `NO_MATCH`/`evidence_conflict`/`evidence_gap`/`corruption`, no timestamp tie-break, oracle module hash unchanged during execution, 0 provider/model calls; evidence: `docs/v0.3/V03E_G0_2_CLEAN_RERUN_PROOF.md`; original round preserved: `docs/v0.3/V03E_G0_2_FALSE_CORRELATION_PROOF.md`) | SPEC §25 |
-| E36 | **G0.3** — transport/non-delivery classification checks against the accepted taxonomy (P5) | PROOF REQUIRED (local) | SPEC §25 |
+| E36 | **G0.3** — transport/non-delivery classification checks against the accepted taxonomy (P5) | **CANDIDATE FAIL** (executed once offline under the oracle precommitted in `b9c4704`; `connect_timeout`/`pool_timeout`/`connect_error`/`proxy_error`/`unsupported_protocol`/`local_protocol_error` each proven pre-send with no request header or body byte on the wire, and every uncertain class stayed uncertain with `retry_safe == false`; the FAIL is triggered by case G0.3-J, where the precommitted `write_error` trigger surfaced as `remote_protocol_error` because the installed httpcore suppresses a request-send `WriteError`; P5 remains informational only; evidence: `docs/v0.3/V03E_G0_3_TRANSPORT_PROOF.md`) | SPEC §25 |
 | E37 | **G0.4** — OpenCode installed-API inspection for a per-operation pending handle (P4) | PROOF REQUIRED (read-only inspection) | SPEC §25 |
 | E38 | **G0.5** — session identity/bound checks (P6: missing, foreign, recreated, copied) | PROOF REQUIRED (local) | SPEC §25 |
 

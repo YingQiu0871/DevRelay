@@ -109,7 +109,10 @@ independently approved) — `docs/v0.3/V03E_G0_2_CLEAN_RERUN_PROOF.md`; the orig
 round is preserved in `docs/v0.3/V03E_G0_2_FALSE_CORRELATION_PROOF.md`.  G0.1/P7 therefore no longer blocks
 mandatory-core implementation *eligibility*; implementation nonetheless remains
 **NOT AUTHORIZED** until a separately issued implementation authorization, and
-G0.3-G0.5/G1/G2 remain unrun (G0.2 = PASS, authoritative, independently approved), so the platform
+G0.3 was executed once offline and returned a **candidate FAIL** (the six accepted non-delivery
+classes were all proven pre-send; precommitted case G0.3-J surfaced `remote_protocol_error`
+instead of its `write_error` class), while G0.4/G0.5/G1/G2 remain unrun (G0.2 = PASS,
+authoritative, independently approved), so the platform
 proof gate is **PARTIALLY EXECUTED / NOT COMPLETE** (not passed, not complete).  The mandatory core's gate was **G0.1/P7 PASS
 first** — and it **has** passed, so the second step of the ordering design frozen →
 G0.1/P7 PASS → mandatory-core implementation may be authorized is now satisfied;

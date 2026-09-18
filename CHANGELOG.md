@@ -13,7 +13,7 @@ F1-F12 **CLOSED**, decision *APPROVE V0.3-E FAIL-CLOSED CORE DESIGN; PLATFORM PR
 GATE REQUIRED BEFORE IMPLEMENTATION*.  Implementation is **not authorized**, the
 platform proof gate is **not complete** (**G0.1 / P7 = PASS** — authoritative,
 independently approved by *APPROVE V0.3-E G0.1 / P7 PLATFORM PROOF* with
-P0 = 0, P1 = 0, P2 = 0; G0.3-G0.5, G1, G2 not run; G0.2 ran and, after one `REQUEST_CHANGES` review, was cleanly re-run under a precommitted oracle and then independently approved - `G0.2 = PASS` - see below), `adopt_completed_turn`
+P0 = 0, P1 = 0, P2 = 0; G0.3 executed once with a **candidate FAIL** (see below); G0.4-G0.5, G1, G2 not run; G0.2 ran and, after one `REQUEST_CHANGES` review, was cleanly re-run under a precommitted oracle and then independently approved - `G0.2 = PASS` - see below), `adopt_completed_turn`
 remains **disabled**, and
 the recorded P3 observations (P3-1, P3-2, P3-4/P3-5) stay non-blocking.
 
@@ -32,10 +32,10 @@ only** (P0 = 0, P1 = 0, P2 = 1 - the evidence itself was found sufficient; fixed
 **G0.1 / P7 = PASS** (authoritative, independently approved) and it no longer blocks
 mandatory-core implementation *eligibility*; implementation nonetheless remains
 **not authorized** until a separately issued implementation authorization.  The
-remaining gate steps (G0.3-G0.5, G1, G2) have not run, so the platform proof gate is
-**partially executed / not complete** (not passed, not complete); `adopt_completed_turn`
-remains disabled, and 0 real provider/model calls were made.  Evidence:
-`docs/v0.3/V03E_G0_1_P7_PROOF.md`.
+remaining gate steps (G0.3-G0.5, G1, G2) had **not** run at that point, so the platform
+proof gate was recorded as **partially executed / not complete** (not passed, not
+complete); `adopt_completed_turn` remains disabled, and 0 real provider/model calls were
+made.  Evidence: `docs/v0.3/V03E_G0_1_P7_PROOF.md` (later rounds are recorded below).
 
 **G0.2 (offline run<->call false-correlation proof) was executed once** at `4448f92`
 with no runtime change and returned a **candidate pass**: all ten planned cases (A-J)
@@ -58,9 +58,25 @@ cases A-J ran once each, every verdict stayed inside its precommitted allowed se
 oracle was unchanged during execution and no weak metadata produced an attribution.
 That clean re-run was then independently reviewed and approved (**APPROVE V0.3-E G0.2
 FALSE-CORRELATION PROOF**, P0 = 0, P1 = 0, P2 = 0), so **G0.2 = PASS** (authoritative,
-independently approved).  G0.1/P7 and G0.2 are authoritative PASS and mandatory-core
+independently approved).
+
+**G0.3 (transport / non-delivery classification, P5) was executed once** offline at
+`efa2ca3` under the oracle precommitted in `b9c4704`
+(`docs/v0.3/V03E_G0_3_TRANSPORT_ORACLE.md`) and returned a **candidate FAIL**: all six
+accepted non-delivery classes (`connect_timeout`, `pool_timeout`, `connect_error`,
+`proxy_error`, `unsupported_protocol`, `local_protocol_error`) were independently shown
+pre-send on the installed stack (no request header or body byte reached the network
+stream), and every uncertain class stayed uncertain with `retry_safe` false; but
+precommitted case G0.3-J (`write_error`) surfaced as `remote_protocol_error` instead of
+its precommitted class because the installed httpcore suppresses a request-send
+`WriteError` and continues to the read phase.  No non-delivery safety property was
+violated and no capability depends on P5 (informational only), but per the precommitted
+standard the candidate result is **FAIL** and the affected case/class is named.  0 real
+provider/model calls, 0 real network requests.  Evidence:
+`docs/v0.3/V03E_G0_3_TRANSPORT_PROOF.md`.  G0.1/P7 and G0.2 are authoritative PASS and mandatory-core
 implementation remains **not authorized** pending a separate authorization; the
-platform proof gate stays **partially executed / not complete** (G0.3-G0.5/G1/G2 not
+platform proof gate stays **partially executed / not complete** (G0.3 candidate FAIL;
+G0.4/G0.5/G1/G2 not
 run) and `adopt_completed_turn` stays **disabled**.  Clean-rerun evidence:
 `docs/v0.3/V03E_G0_2_CLEAN_RERUN_PROOF.md`; original record (preserved):
 `docs/v0.3/V03E_G0_2_FALSE_CORRELATION_PROOF.md`.
