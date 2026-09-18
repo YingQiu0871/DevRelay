@@ -738,7 +738,9 @@ issued implementation authorization.  `adopt_completed_turn` = **DISABLED**.  G0
 and G0.2 are authoritative PASS and mandatory-core implementation remains **NOT
 AUTHORIZED** pending a separate authorization; neither PASS, alone or together,
 authorizes implementation, and the executing agent did not self-approve either.  The
-platform proof gate is **not** passed and **not** complete (G0.3-G2 unrun), and no part
+platform proof gate is **PARTIALLY EXECUTED** — **not** passed and **not** complete
+(G0.3/P5 = PASS/CLOSED; G0.4/P4 was executed once and is **AUTHORITATIVE FAIL / P4
+UNPROVEN**; G0.5/G1/G2 remain unrun), and no part
 of this status may be read as an implementation or smoke authorization.
 
 To be executed **before any implementation** that trusts remote/local recovery

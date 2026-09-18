@@ -1154,7 +1154,10 @@ not downgrade the binary inside a workspace that v0.2-B has already written.
   pass the platform proof gate; pending results are report-only.  No recovery code
   exists, **G0.1/P7 = PASS** and **G0.2 = PASS** (both authoritative and independently
   approved; G0.2 through the clean re-run under the precommitted oracle, cases A-J
-  fail-closed); the remaining gate steps have not run, implementation is not authorized,
+  fail-closed); **G0.3/P5 = PASS/CLOSED**; **G0.4/P4 was executed once and is AUTHORITATIVE
+  FAIL / P4 UNPROVEN** (the accepted workspace had no configured OpenCode base endpoint and
+  0 `GET /doc` were issued); **G0.5, G1 and G2 have not run**, so the platform proof gate
+  stays partially executed / not complete; implementation is not authorized,
   and no automatic resume is designed in
 - **later** - optional release automation with explicit approvals
 
