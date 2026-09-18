@@ -14,7 +14,10 @@ This result **remains FAILED** and is not rewritten.
 > classifier bucket was shown to be unsafe**, and that **no runtime remediation is
 > required**.  A separately authorized corrected clean rerun under the new precommitted
 > oracle `docs/v0.3/V03E_G0_3_RERUN_ORACLE.md` follows this record; its outcome is
-> recorded in `docs/v0.3/V03E_G0_3_CLEAN_RERUN_PROOF.md`.
+> recorded in `docs/v0.3/V03E_G0_3_CLEAN_RERUN_PROOF.md`.  That corrected rerun was
+> then independently reviewed and **approved** (`APPROVE V0.3-E G0.3 / P5 TRANSPORT
+> PROOF`, P0 = 0, P1 = 0, P2 = 0), which is what makes the current `G0.3 / P5 = PASS`
+> authoritative.  This file's own result stays **FAILED** and is not rewritten.
 
 The six accepted "definitely not submitted" classes were all **proven pre-send** on the
 installed stack, and no uncertain class was ever promoted to non-delivery — but one

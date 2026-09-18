@@ -111,12 +111,16 @@ mandatory-core implementation *eligibility*; implementation nonetheless remains
 **NOT AUTHORIZED** until a separately issued implementation authorization, and
 G0.3 failed its original oracle (case J surfaced `remote_protocol_error` instead of the
 precommitted `write_error` class), was independently reviewed as a **TYPE-1 proof-plan
-failure** (no classifier-safety failure, no runtime remediation required) and then cleanly
-re-run under the corrected precommitted oracle `e328ec5`, returning a **clean candidate
-pass**: the accepted safe buckets are class-wide pre-send, `proxy_error` is unreachable in
-the current configuration, every uncertain class stayed fail-closed, and the corrected case
-J surfaced `remote_protocol_error` exactly as precommitted (`docs/v0.3/V03E_G0_3_CLEAN_RERUN_PROOF.md`), while G0.4/G0.5/G1/G2 remain unrun (G0.2 = PASS,
-authoritative, independently approved), so the platform
+failure** (no classifier-safety failure, no runtime remediation required), was corrected and
+cleanly re-run under the precommitted oracle `e328ec5`, and the corrected proof was then
+independently approved (**APPROVE V0.3-E G0.3 / P5 TRANSPORT PROOF**, P0 = 0, P1 = 0,
+P2 = 0), so **G0.3 / P5 = PASS** (authoritative, independently approved): the accepted safe
+buckets are class-wide pre-send, `proxy_error` is unreachable in the current configuration,
+every uncertain class stayed fail-closed, and the corrected case J surfaced
+`remote_protocol_error` exactly as precommitted
+(`docs/v0.3/V03E_G0_3_CLEAN_RERUN_PROOF.md`; the original failed round is preserved in
+`docs/v0.3/V03E_G0_3_TRANSPORT_PROOF.md`), while G0.4/G0.5/G1/G2 remain unrun
+(G0.2 = PASS, authoritative, independently approved), so the platform
 proof gate is **PARTIALLY EXECUTED / NOT COMPLETE** (not passed, not complete).  The mandatory core's gate was **G0.1/P7 PASS
 first** — and it **has** passed, so the second step of the ordering design frozen →
 G0.1/P7 PASS → mandatory-core implementation may be authorized is now satisfied;

@@ -1,7 +1,62 @@
 # DevRelay v0.3-E — corrected clean G0.3 / P5 re-run proof (precommitted corrected oracle)
 
-Status: **G0.3 = CLEAN CANDIDATE PASS / AWAITING INDEPENDENT REVIEW** (self-approval
-forbidden; not authoritative).
+Status: **G0.3 / P5 = PASS** — authoritative and independently approved (**APPROVE V0.3-E G0.3 / P5 TRANSPORT PROOF** with **P0 = 0, P1 = 0, P2 = 0**; this PASS comes from the independent review of the corrected clean proof, never from executor self-approval).
+
+* Platform proof gate: **PARTIALLY EXECUTED / NOT COMPLETE** — `G0.1 / P7 = PASS`,
+  `G0.2 = PASS`, `G0.3 / P5 = PASS`; `G0.4`, `G0.5`, `G1`, `G2` are **NOT RUN**; there is no
+  "platform proof gate passed" and no "platform proof gate complete" status.
+* Implementation: `G0.1/P7`, `G0.2` and `G0.3/P5` are authoritative PASS and
+  **mandatory-core implementation remains NOT AUTHORIZED** pending a separate
+  authorization; this proof approves no implementation.
+* `adopt_completed_turn`: **DISABLED** (G0.3/P5 does not prove P1, P2, P3, P4, P6, P8, P9,
+  remote completion, delivery truth for uncertain submissions or adoption eligibility;
+  G1/G2 unrun).
+
+## 0. Authoritative status, independent approval and chronology
+
+**Independent approval (recorded by the later bookkeeping round, from the already-issued
+review):** `APPROVE V0.3-E G0.3 / P5 TRANSPORT PROOF`, final severities **P0 = 0, P1 = 0,
+P2 = 0**.
+
+The independent reviewer verified:
+
+* the corrected oracle genuinely predates the corrected execution;
+* the corrected oracle SHA was independently recomputed;
+* the corrected oracle was immutable after execution;
+* the old failed oracle remained immutable;
+* the original `c889636` round remains **FAILED** and historical;
+* the installed stack remained httpx 0.28.1 / httpcore 1.0.9 / h11 0.16.0;
+* the accepted classifier inventory was unchanged;
+* the class-wide source inspection independently supported the P5 result;
+* A/B/C/E/F are class-wide pre-submission for the accepted current configuration;
+* `proxy_error` is **UNREACHABLE / NON-AUTHORITATIVE** for the current accepted production
+  configuration;
+* the mid-send h11 escape does **not** enter the safe `local_protocol_error` bucket;
+* the corrected case-J precommitment exactly matched the corrected observation;
+* uncertain / post-send classes remain fail-closed;
+* no unsafe `retry_safe` result exists;
+* P5 remains informational evidence only;
+* the original TYPE-1 failure history was preserved;
+* P0/P1/P2 are all zero.
+
+**Chronology (not flattened):** original G0.3 oracle `b9c4704` → original execution
+`c889636` → original case-J mismatch → original CANDIDATE FAIL → independent TYPE-1
+proof-plan failure review → corrected clean rerun separately authorized → corrected pre-run
+oracle `e328ec5` → corrected A–N execution → `3143742` CLEAN CANDIDATE PASS → independent
+corrected-proof **APPROVE** → **authoritative `G0.3 / P5 = PASS`** → the bookkeeping commit
+that records it.
+
+**Authoritative claim boundary (bounded to the independently approved claim):** for the
+accepted installed stack and current accepted production configuration — reachable
+safe-labelled P5 buckets A/B/C/E/F are class-wide pre-submission; `proxy_error` is
+unreachable / non-authoritative; uncertain/post-send transport classes remain fail-closed;
+the installed HTTP/1.1 request-send `WriteError` path surfaces as `remote_protocol_error`
+and remains submission-uncertain; no false-safe non-delivery classification was
+established; and `retry_safe` carries **no** v0.3-E recovery execution authority.  G0.3/P5
+does **not** prove remote provider receipt/non-receipt beyond the proven pre-send
+boundaries, safe retry, retry-protocol correctness, refund safety, automatic recovery,
+adoption, P1/P2/P3/P4/P6/P8/P9, G0.4–G2, future httpx/httpcore/h11 versions, future proxy
+configurations, or future v0.3-E implementation correctness.
 
 This document records the separately authorized **corrected clean G0.3 / P5 re-run**
 (TYPE-1 proof-plan remediation only) executed under the new immutable oracle
@@ -234,22 +289,76 @@ carries no current-production evidence value; the mid-send h11 observability wea
 remains unremediated (runtime changes are out of scope); the harness and raw per-case
 evidence live only in the OS temp area and are not committed.
 
+**P3 — static-assertion auditability (retained limitation):** the thirteen static
+assertions and the harness/raw per-case evidence were **not** fully committed; the
+documentary record lists the source anchors (the A/C connect+TLS mappings, the B pool-wait
+ordering, the E scheme rejection, the F request-construction mapping boundary, the D
+`trust_env=False`/no-proxy configuration, the h11 class hierarchy and the service defensive
+boundary) and the recorded source SHA-256 values (`httpcore/_backends/sync.py`
+`6e113877…`, `httpcore/_sync/connection.py` `f5ec4639…`, `httpcore/_sync/connection_pool.py`
+`6be4fc2d…`, `httpcore/_sync/http11.py` `205a1b0f…`, `httpcore/_synchronization.py`
+`cd28b5de…`, `httpx/_transports/default.py` `03379a45…`,
+`src/devrelay/opencode/transport.py` `cb476363…`,
+`src/devrelay/orchestration/service.py` `08b436c0…`).  The independent reviewer
+re-inspected the installed source and matched the recorded hashes; no raw-evidence
+reproduction is claimed and the harness is neither reconstructed nor re-run.
+
+**P3 — mid-send h11 observability gap (preserved, no runtime change in this task):** a
+mid-send `h11.LocalProtocolError` outside the accepted normalization mapping may escape to
+the `internal_error` boundary; it does **not** yield `retry_safe=true`, does **not** yield
+P5 proven-non-delivery authority and does **not** create a classifier safety failure — but
+turn-record defaults may still show `submission_uncertain=False` and
+`submission_attempted=False` although delivery state is not proven.  Those defaults must
+**not** be read as proof of non-delivery; the recommended future behaviour remains to
+default previously unclassified transport-layer escape paths to uncertainty.
+
+**P3 — future proxy configuration (preserved):** the current accepted production
+configuration has no reviewed proxy configuration and uses `trust_env=False`, so
+`proxy_error` is currently non-authoritative; if a proxy configuration is added later, its
+P5 classification requires a new review/proof and is not covered by this proof.
+
 ## 13. Budget
 
 0 real provider/model inference calls; 0 real external network requests; 0 OpenCode
 processes started or restarted; no runtime/test/dependency/version change.
 
-## 14. Candidate conclusion
+## 14. Result: clean candidate pass -> authoritative PASS
 
-**G0.3 = CLEAN CANDIDATE PASS / AWAITING INDEPENDENT REVIEW.**
+**Candidate stage (as recorded in `3143742`):** `G0.3 = CLEAN CANDIDATE PASS / AWAITING
+INDEPENDENT REVIEW` — all fourteen corrected cases executed once each under the oracle
+precommitted in `e328ec5`, every verdict inside its corrected precommitted allowed set, no
+invalid attempts, one semantic execution per case.
+
+**Authoritative stage (recorded by the later bookkeeping round):** the independent review
+issued ****APPROVE V0.3-E G0.3 / P5 TRANSPORT PROOF** with **P0 = 0, P1 = 0, P2 = 0****, so **`G0.3 / P5 = PASS` — authoritative and independently
+approved**.  The executing agent did not self-approve it; the candidate stage above stays
+recorded as the pre-approval history.
+
+Current-production `retry_safe` matrix (as independently reviewed): A `connect_timeout` =
+True; B `pool_timeout` = True; C `connect_error` = True; D `proxy_error` = synthetic
+fixture may show True, but current-production authority = **N/A / unreachable**;
+E `unsupported_protocol` = True; F `local_protocol_error` = True; G `read_timeout` = False;
+H `write_timeout` = False; I `read_error` = False; J corrected `remote_protocol_error` =
+False; K `remote_protocol_error` = False; L `close_error` / safe-set miss = False;
+M HTTP rejection = False; N success = False.  `retry_safe` is **not** P5 authority: frozen
+v0.3-E gives it no retry, resubmission, budget-refund, slot-restoration, state-transition,
+automatic-resume or adoption authority, and P5 remains informational only with
+`mark_unrecoverable` as the mandatory fail-closed resolution.
+
+History is preserved: the original failed round (`c889636`, and its immutable oracle
+`b9c4704`) stays **FAILED** with its TYPE-1 review outcome visible in
+`docs/v0.3/V03E_G0_3_TRANSPORT_PROOF.md`, and this document keeps the corrected
+candidate stage above.
 
 * A/B/C/E/F: the accepted safe-labelled buckets are **class-wide pre-send** on the
   installed stack, with the class-wide source mapping recorded and the deterministic probe
   showing no request header or body byte on the wire (F stated precisely as the accepted
   bucket's pre-send-only mapping boundary).
-* D: explicitly **UNREACHABLE_CURRENT_CONFIGURATION** — its phase is understood and the
-  synthetic demonstration is recorded separately, but it carries no positive evidence for
-  the current production configuration.
+* D: explicitly **UNREACHABLE_CURRENT_CONFIGURATION / NOT CURRENT-PRODUCTION EVIDENCE**
+  — its phase is understood and the synthetic injected-proxy demonstration is recorded
+  separately (that fixture alone may show `retry_safe = true`), but it carries **no**
+  current-production P5 authority and must never be read as `PROVEN_NON_DELIVERY` for
+  current production.
 * G/H/I/K/L: every uncertain class stayed uncertain and fail-closed.
 * J: exactly the corrected end-to-end expectation — body-write `httpcore.WriteError` is
   suppressed by httpcore, the operation surfaces `remote_protocol_error` with

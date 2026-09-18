@@ -13,7 +13,7 @@ F1-F12 **CLOSED**, decision *APPROVE V0.3-E FAIL-CLOSED CORE DESIGN; PLATFORM PR
 GATE REQUIRED BEFORE IMPLEMENTATION*.  Implementation is **not authorized**, the
 platform proof gate is **not complete** (**G0.1 / P7 = PASS** — authoritative,
 independently approved by *APPROVE V0.3-E G0.1 / P7 PLATFORM PROOF* with
-P0 = 0, P1 = 0, P2 = 0; G0.3 failed its original oracle, was independently reviewed as a TYPE-1 proof-plan failure and returned a **clean candidate pass** in the corrected clean rerun (see below); G0.4-G0.5, G1, G2 not run; G0.2 ran and, after one `REQUEST_CHANGES` review, was cleanly re-run under a precommitted oracle and then independently approved - `G0.2 = PASS` - see below), `adopt_completed_turn`
+P0 = 0, P1 = 0, P2 = 0; G0.3 failed its original oracle, was independently reviewed as a TYPE-1 proof-plan failure and then independently approved after the corrected clean rerun - **G0.3 / P5 = PASS** - (see below); G0.4-G0.5, G1, G2 not run; G0.2 ran and, after one `REQUEST_CHANGES` review, was cleanly re-run under a precommitted oracle and then independently approved - `G0.2 = PASS` - see below), `adopt_completed_turn`
 remains **disabled**, and
 the recorded P3 observations (P3-1, P3-2, P3-4/P3-5) stay non-blocking.
 
@@ -82,7 +82,9 @@ remediation is required**; a corrected clean rerun was separately authorized und
 precommitted oracle (`docs/v0.3/V03E_G0_3_RERUN_ORACLE.md`).
 
 **Corrected clean G0.3 / P5 rerun (executed once, one semantic execution per case):**
-**G0.3 = CLEAN CANDIDATE PASS / AWAITING INDEPENDENT REVIEW.**  Under the corrected oracle
+The corrected clean rerun was then independently reviewed and approved (**APPROVE
+V0.3-E G0.3 / P5 TRANSPORT PROOF**, P0 = 0, P1 = 0, P2 = 0), so **G0.3 / P5 = PASS**
+(authoritative, independently approved).  Under the corrected oracle
 (`e328ec5`, manifest SHA-256 `9e4c7de6…`) the accepted safe buckets are class-wide
 pre-send on the installed stack — `connect_timeout`, `pool_timeout`, `connect_error`,
 `unsupported_protocol`, and the pre-send-only `local_protocol_error` mapping boundary (the
@@ -98,9 +100,8 @@ unmapped mid-send h11 escape path is recorded as a fail-closed observability lim
 (no runtime change).  0 provider/model calls, 0 network requests, 0 OpenCode processes.
 Evidence: `docs/v0.3/V03E_G0_3_CLEAN_RERUN_PROOF.md`.  G0.1/P7 and G0.2 are authoritative PASS and mandatory-core
 implementation remains **not authorized** pending a separate authorization; the
-platform proof gate stays **partially executed / not complete** (G0.3 clean candidate
-pass, awaiting independent review; G0.4/G0.5/G1/G2 not run) and `adopt_completed_turn`
-stays **disabled**.  Clean-rerun evidence:
+platform proof gate stays **partially executed / not complete** (G0.3/P5 = PASS,
+authoritative; G0.4/G0.5/G1/G2 not run) and `adopt_completed_turn` stays **disabled**.  Clean-rerun evidence:
 `docs/v0.3/V03E_G0_2_CLEAN_RERUN_PROOF.md`; original record (preserved):
 `docs/v0.3/V03E_G0_2_FALSE_CORRELATION_PROOF.md`.
 
