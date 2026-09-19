@@ -1,6 +1,6 @@
 # DevRelay v0.3-E — G0.5-PRE / SIC session-incarnation capability finding (definition candidate)
 
-**Status: DEFINITION CANDIDATE — SIC = `NOT RUN / DEFINITION CANDIDATE / AWAITING INDEPENDENT RE-REVIEW`.**  This document is **not** accepted and **not** frozen, and it **executes nothing**.  The first independent definition review returned **`REQUEST_CHANGES — V0.3-E G0.5-PRE / SIC DEFINITION`** (P0 = 0, P1 = 1, P2 = 3); the framing, status model, outcome model, §25.1 preservation, G0.4 separation, G1/G2 separation and zero-budget rules were **accepted**, and this revision remediates **only** the blocking findings — **P1** positive semantic authority, **P2-A** `NOT_EXPOSED` coverage, **P2-B** mode precommit and **P2-C** actual destination/responder binding (with the associated no-alternate-endpoint and continuity rules).  The non-blocking P3 items are deliberately **not** addressed.  No oracle exists and no inspection has been performed.
+**Status: DEFINITION AMENDMENT CANDIDATE — SIC = `NOT RUN / DEFINITION ACCEPTED / DEFINITION AMENDMENT CANDIDATE / ORACLE NOT YET CREATED / ORACLE NOT FREEZABLE — OUTCOME MAPPING GAP`.**  The definition baseline is the independently accepted revision at commit `6e9fb01` (independent decision: *APPROVE V0.3-E G0.5-PRE / SIC DEFINITION REMEDIATION*).  An attempt to construct the first (Mode-A) pre-run oracle was then independently approved as a **freezability failure**: *APPROVE V0.3-E SIC ORACLE FREEZABILITY FAILURE* (P0 = 0, P1 = 0, P2 = 0), classification **NARROW SIC DEFINITION VOCABULARY / OUTCOME-MAPPING DEFECT** — **no SIC semantic attempt occurred** and **no SIC oracle exists** (§28).  This revision applies the narrow **Option-A amendment** to outcome #2 and its mapping (§4, §5) so that the retained four-outcome vocabulary truthfully covers all reachable states; it does **not** add a fifth outcome and does **not** rename any token.  **This amendment is itself a candidate and requires independent review**; until that review, SIC remains unexecuted, the surface-scoped static fact of §29 stays a non-result, and no oracle may be frozen.
 
 **What SIC is.**  A **new prerequisite information finding** outside the existing P1–P9
 ladder, introduced because the independently approved Case-C design block
@@ -98,9 +98,20 @@ semantics are established — never by re-labelling them.
   field exists but the required declared semantics are absent, the result **must** be
   `SIC_METADATA_PRESENT_BUT_SEMANTICS_UNPROVEN`; **no empirical promotion to a positive result
   is permitted**.
-* **`SIC_METADATA_PRESENT_BUT_SEMANTICS_UNPROVEN`** — candidate metadata exists/is exposed
-  (including when runtime exposure is demonstrated), but its immutability/scope/incarnation
-  semantics are not sufficiently established by authoritative declared semantics.
+* **`SIC_METADATA_PRESENT_BUT_SEMANTICS_UNPROVEN`** — **amended normative global meaning
+  (Option A):** candidate metadata exists/is exposed (including when runtime exposure is
+  demonstrated), but **no discovered candidate establishes the required QUALIFYING SIC
+  semantics**.  This outcome covers **exactly two sub-classes**:
+  * **A. QUALIFYING SEMANTICS UNESTABLISHED** — candidate metadata exists, but one or more
+    semantics required to establish a qualifying anchor are **absent, insufficient,
+    incomplete, ambiguous or otherwise unproven**;
+  * **B. AUTHORITATIVELY NON-QUALIFYING** — candidate metadata exists and authoritative
+    declared semantics are **sufficient**, but those semantics **affirmatively establish** that
+    the candidate fails one or more required SIC criteria (wrong scope; mutable across the
+    required interval; not incarnation-sensitive; not session-scoped; not stable; not suitable
+    for read-only comparison; or dependent on an unproved required semantic).
+  In **both** sub-classes, **no candidate establishes a qualifying SIC anchor**, and the
+  outcome remains strictly **non-positive**.
 * **`SIC_NOT_EXPOSED_IN_INSPECTED_CONTRACT`** — the exact **successfully inspected,
   precommitted** authorized contract surface exposes no candidate metadata satisfying the
   discovery rule; **complete coverage is required and no global generalization is permitted
@@ -111,6 +122,15 @@ semantics are established — never by re-labelling them.
 
 **"Not found" and "not proven" must never be collapsed.**  A field that exists without
 established semantics is the second outcome, never the first.
+
+**Token interpretation (frozen).**  The retained token
+`SIC_METADATA_PRESENT_BUT_SEMANTICS_UNPROVEN` refers to **QUALIFYING SIC SEMANTICS NOT
+ESTABLISHED FOR ANY CANDIDATE**.  It does **not** require that all candidate metadata semantics
+are themselves unknown: authoritative semantics may be **fully established** and still yield
+this global outcome when they establish **non-qualification** (sub-class B).  The outcome is
+strictly **non-positive** — partial semantic establishment never counts as a positive result,
+and `SIC_PRESENT_AND_SEMANTICS_ESTABLISHED` still requires at least one candidate satisfying
+**all** criteria A–G of §3.
 
 ### 5.1 Coverage rules for `SIC_NOT_EXPOSED_IN_INSPECTED_CONTRACT` (P2-A)
 
@@ -125,6 +145,55 @@ established semantics is the second outcome, never the first.
   candidate metadata satisfying the discovery rule.  It **must not** mean that OpenCode
   globally has no session-incarnation metadata, and it **must not** be generalized beyond the
   inspected surface and version.
+
+### 5.2 Per-candidate verdict vocabulary (per-candidate only)
+
+* **`QUALIFIES`** — all SIC criteria (§3 A–G) are established for this candidate.
+* **`SEMANTICS_UNPROVEN`** — the candidate exists but a qualifying verdict cannot be
+  authoritatively resolved (sub-class A).
+* **`NON_QUALIFYING_METADATA`** — authoritative declared semantics establish the failure of at
+  least one required SIC criterion (sub-class B).
+
+These are **per-candidate classifications only**.  They are **not** global SIC outcome tokens
+and must never be reported as such; creating a global token from them is forbidden.
+
+### 5.3 Global mapping (frozen)
+
+| # | Reachable state | Global outcome |
+| --- | --- | --- |
+| **A** | at least one candidate = `QUALIFIES` | `SIC_PRESENT_AND_SEMANTICS_ESTABLISHED` |
+| **B** | no candidate qualifies **and** one or more candidates exist — including *all* candidates `SEMANTICS_UNPROVEN`, *all* candidates `NON_QUALIFYING_METADATA`, or a mixture | `SIC_METADATA_PRESENT_BUT_SEMANTICS_UNPROVEN` |
+| **C** | complete authorized-surface coverage **and** zero candidates | `SIC_NOT_EXPOSED_IN_INSPECTED_CONTRACT` |
+| **D** | coverage/evidence insufficient to authoritatively perform the required classification | `SIC_EVIDENCE_INSUFFICIENT` |
+
+`HARNESS_INVALID` remains **outside** the semantic vocabulary; and it must not absorb
+authoritatively established non-qualification — **no harness defect exists merely because the
+semantic answer is negative**.  Conversely, complete coverage plus sufficient authoritative
+semantics plus affirmative non-qualification is **sufficient negative evidence** and must
+**never** be mapped to `SIC_EVIDENCE_INSUFFICIENT`.
+
+### 5.4 Full compatibility matrix (normative)
+
+| # | State | Global outcome |
+| --- | --- | --- |
+| 1 | complete coverage + zero candidates | `SIC_NOT_EXPOSED_IN_INSPECTED_CONTRACT` |
+| 2 | candidate + no semantic authority | `SIC_METADATA_PRESENT_BUT_SEMANTICS_UNPROVEN` |
+| 3 | candidate + partial semantic authority | `SIC_METADATA_PRESENT_BUT_SEMANTICS_UNPROVEN` |
+| 4 | candidate + authoritative semantics affirmatively proving non-qualification | `SIC_METADATA_PRESENT_BUT_SEMANTICS_UNPROVEN` |
+| 5 | one qualifying candidate | `SIC_PRESENT_AND_SEMANTICS_ESTABLISHED` |
+| 6 | qualifying + non-qualifying candidates | `SIC_PRESENT_AND_SEMANTICS_ESTABLISHED` |
+| 7 | unproven + affirmatively non-qualifying candidates | `SIC_METADATA_PRESENT_BUT_SEMANTICS_UNPROVEN` |
+| 8 | all candidates affirmatively non-qualifying | `SIC_METADATA_PRESENT_BUT_SEMANTICS_UNPROVEN` |
+| 9 | incomplete authoritative coverage | `SIC_EVIDENCE_INSUFFICIENT` |
+| 10 | read/parse failure after the semantic inspection begins | `SIC_EVIDENCE_INSUFFICIENT`, subject to the already-frozen `HARNESS_INVALID` pre-assertion boundary |
+| 11 | pre-assertion harness/environment failure | `HARNESS_INVALID` (outside the semantic outcomes) |
+
+**Discovery is never retroactively erased.**  A field that matched the frozen discovery rule
+remains a candidate even when Phase B proves it wrong-scoped, mutable, non-incarnation or
+otherwise non-qualifying; semantic non-qualification must **never** be used to turn "candidate
+exists" into "zero candidates" (which would illegitimately reach outcome C).  The
+target/artifact-drift rules already frozen elsewhere in this document are not altered by this
+matrix.
 
 ## 6. Harness-invalid boundary
 
@@ -152,7 +221,8 @@ G0.5 pre-run oracle freeze → G0.5 execution/review.
 
 ## 8. Non-positive-result consequence
 
-If the outcome is `SIC_METADATA_PRESENT_BUT_SEMANTICS_UNPROVEN`,
+If the outcome is `SIC_METADATA_PRESENT_BUT_SEMANTICS_UNPROVEN` (**either sub-class** —
+qualifying semantics unestablished **or** authoritatively non-qualifying metadata),
 `SIC_NOT_EXPOSED_IN_INSPECTED_CONTRACT` or `SIC_EVIDENCE_INSUFFICIENT`, then **no Case-C
 implementation may be designed by inventing provenance**; G0.5 remains blocked.  The owner
 must later choose among separately reviewed options such as: another justified platform
@@ -378,9 +448,11 @@ read-only API/schema inspection only.
 ## 24. Status model
 
 `SIC = NOT RUN / DEFINITION CANDIDATE` → independent definition review → `DEFINITION
-ACCEPTED` → separate pre-run oracle candidate → independent oracle review → separately
-authorized execution → `CANDIDATE SIC RESULT` → independent result review → authoritative SIC
-finding.  The executor never self-approves.
+ACCEPTED` → **definition-amendment candidate (independent review required)** → separate
+pre-run oracle candidate → independent oracle review → separately authorized execution →
+`CANDIDATE SIC RESULT` → independent result review → authoritative SIC finding.  A freezability
+failure during oracle construction (recorded in §28) is a **pre-proof** blocker and **not** a
+SIC semantic result.  The executor never self-approves.
 
 ## 25. Relation to G0.5 status
 
@@ -399,7 +471,33 @@ fact and itself pass independent design review.
 
 This document defines a future finding; it performs none of it.  It starts no OpenCode
 instance, issues no HTTP request, reads no `/doc` or `/session` surface, inspects no live
-endpoint, configures nothing, implements no Case-C logic, proves nothing about P6, and
-changes no status other than recording that SIC exists as a definition candidate.  G0.5, G1
-and G2 are unchanged; adoption remains **DISABLED**; implementation remains **NOT
-AUTHORIZED**; the accepted §25.1 definition and the G0.4 artifacts are untouched.
+endpoint, configures nothing, implements no Case-C logic, proves nothing about P6, and changes
+no status other than recording SIC's definition state, its outcome-mapping amendment candidate
+and its recorded freezability failure.  It adds **no** fifth outcome, renames **no** token, and
+does **not** turn the scoped static-surface fact of §29 into a SIC result.  G0.5, G1 and G2 are
+unchanged; adoption remains **DISABLED**; implementation remains **NOT AUTHORIZED**; the
+accepted §25.1 definition and the G0.4 artifacts are untouched.
+
+## 28. Recorded independent decision (SIC oracle freezability)
+
+The independent review of the first (Mode-A) oracle-construction attempt issued **`APPROVE
+V0.3-E SIC ORACLE FREEZABILITY FAILURE`** with **P0 = 0, P1 = 0, P2 = 0**, classifying the
+blocker as a **NARROW SIC DEFINITION VOCABULARY / OUTCOME-MAPPING DEFECT**: the accepted
+four-outcome vocabulary could not truthfully map the state "candidate metadata present with
+authoritative declared semantics that affirmatively establish non-qualification".  **No SIC
+semantic attempt occurred** and **no SIC oracle exists**.  This is a **pre-proof** freezability
+blocker and is explicitly **not** `SIC FAIL`, `SIC semantic FAIL`, `G0.5 FAIL` or a `P6` proof
+failure.  The Option-A amendment in §5 closes the defect; the amendment itself requires
+independent review before any oracle may be frozen.
+
+## 29. Recorded scoped static-surface fact (not a SIC semantic result)
+
+For the exact installed target (OpenCode **1.18.11**, npm package `opencode-ai`), the Mode-A
+static package surface is **finitely boundable**: 8 files / 6 directories, extension census
+`.exe ×3`, `.json ×3`, `.mjs ×1`, `LICENSE` ×1 — three opaque compiled executables plus three
+install-metadata `package.json` files, each enumerable and hashable under a deterministic
+traversal order.  The accepted **surface-scoped** fact is only this: *the inspected installed
+static package surface contains no readable session schema, OpenAPI artifact, generated client,
+bundled session documentation or declared session-metadata semantics.*  This is **not** a SIC
+semantic result, it is **not** a substitute for the finding, and it must **never** be recorded
+as "OpenCode has no incarnation metadata".

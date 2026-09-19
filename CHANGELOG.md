@@ -233,6 +233,42 @@ non-blocking P3 items were deliberately not addressed, no status other than the 
 candidate changed, and 0 runtime/test/config, provider/model, HTTP, `/doc`/`/session` or
 OpenCode activity occurred.
 
+**The first (Mode-A) SIC oracle-construction attempt was independently approved as a
+freezability failure, and a narrow outcome-mapping amendment was applied.**  The independent
+review issued *APPROVE V0.3-E SIC ORACLE FREEZABILITY FAILURE* (**P0 = 0, P1 = 0, P2 = 0**)
+with classification **NARROW SIC DEFINITION VOCABULARY / OUTCOME-MAPPING DEFECT**: the accepted
+four-outcome vocabulary could not truthfully map the state "candidate metadata present with
+authoritative declared semantics that affirmatively establish non-qualification", because
+outcome #2 was worded as semantics being *not sufficiently established* while the remaining
+outcomes require zero candidates (NOT_EXPOSED) or insufficient coverage (EVIDENCE_INSUFFICIENT);
+folding the two together or inventing a fifth outcome was forbidden.  **No SIC semantic attempt
+occurred and no SIC oracle exists.**  The amendment (Option A) keeps exactly the four tokens and
+clarifies `SIC_METADATA_PRESENT_BUT_SEMANTICS_UNPROVEN` normatively as *"candidate metadata
+exists/is exposed, but no discovered candidate establishes the required qualifying SIC
+semantics"*, covering exactly two sub-classes — **A. qualifying semantics unestablished**
+(absent/insufficient/incomplete/ambiguous/unproven) and **B. authoritatively non-qualifying**
+(established semantics affirmatively failing at least one required criterion) — with an explicit
+token-interpretation note that the token does not require all candidate semantics to be unknown,
+that the outcome stays strictly non-positive, that a positive result still requires one candidate
+satisfying all of criteria A–G, that `NOT_EXPOSED` remains available only for complete coverage
+plus zero candidates (discovery is never retroactively erased), that sufficient negative evidence
+is never `EVIDENCE_INSUFFICIENT`, that `HARNESS_INVALID` stays outside the semantics, and that
+per-candidate verdicts (`QUALIFIES` / `SEMANTICS_UNPROVEN` / `NON_QUALIFYING_METADATA`) are never
+global tokens.  A frozen global mapping and an 11-row compatibility matrix now cover every
+reachable state.  Mode A/B/C rules, the mode-precommit/no-mode-shopping rules, the
+static-vs-live semantic-authority boundary, target binding, actual-responder, no-alternate-endpoint
+and pre/post-continuity rules are all preserved unchanged, as is the positive-evidence threshold
+(runtime observations still cannot establish semantics).  Status: `SIC = NOT RUN / DEFINITION
+ACCEPTED / DEFINITION AMENDMENT CANDIDATE / ORACLE NOT YET CREATED / ORACLE NOT FREEZABLE —
+OUTCOME MAPPING GAP`; the amendment requires independent review before any oracle is frozen.
+The recorded scoped static-surface fact is only that the inspected installed static package
+surface (OpenCode 1.18.11 npm distribution) contains no readable session schema, OpenAPI
+artifact, generated client, bundled session documentation or declared session-metadata
+semantics — it is **not** a SIC result and must never be read as "OpenCode has no incarnation
+metadata".  G0.5/P6, G1/G2, adoption and implementation statuses are unchanged; 0
+runtime/test/config, provider/model, HTTP, `/doc`/`/session` or OpenCode activity occurred, and
+no oracle or result artifact was created.
+
 That approval followed three earlier review rounds: the first independent design
 review returned `REQUEST_CHANGES` (P0 = 1, P1 = 6, P2 = 5) and the
 recovery/reconciliation contract was repaired in `f67bf9e`; two narrow re-reviews
