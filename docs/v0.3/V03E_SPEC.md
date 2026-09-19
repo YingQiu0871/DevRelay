@@ -822,12 +822,23 @@ approaches are not provenance; a fail-always guard would permanently remove capa
 is therefore a product-scope change; G1/P1 and G2/P2/P3/P8/P9 do not themselves prove session
 incarnation).  SIC asks whether OpenCode **1.18.11** exposes, through a read-only session
 representation, a **per-session-incarnation property (or tuple)** whose semantics are strong
-enough to serve as a provenance anchor for a future Case-C design; its definition candidate is
-`V03E_G0_5_PRE_SESSION_INCARNATION_FINDING.md` and its status is
-**`SIC = NOT RUN / DEFINITION CANDIDATE`**.  SIC is **not** G0.5, G1, G2 or G0.4, is **not** a
-new P-number, is **not** a proof of P6, is **not** an adoption-enabling proof and is **not**
-an implementation authorization; a positive SIC finding alone would **not** make the G0.5
-oracle freezable, and implementation remains **NOT AUTHORIZED**.
+enough to serve as a provenance anchor for a future Case-C design; its accepted definition is
+`V03E_G0_5_PRE_SESSION_INCARNATION_FINDING.md` (commit `829d3c0`, blob `5463ac19…`), its
+accepted/frozen Mode-A oracle is `V03E_G0_5_PRE_SIC_ORACLE.md` (commit `e1fb6ac`, blob
+`31d7ac50…`), and — after exactly **one** authorized offline/static attempt (attempt consumed,
+no rerun, no Mode B/C, no live activity) — its independently approved **authoritative Mode-A
+finding** is **`SIC_NOT_EXPOSED_IN_INSPECTED_CONTRACT`** (`V03E_G0_5_PRE_SIC_RESULT.md`, blob
+`ce6c503d…`; *APPROVE V0.3-E SIC MODE-A RESULT*, P0 = 0, P1 = 0, P2 = 0, classification VALID
+SEMANTIC RESULT).  Strict scope: **the exact successfully inspected OpenCode 1.18.11 installed
+static package surface and frozen target/package artifacts**.  The finding does **not**
+establish that OpenCode globally has no session-incarnation metadata, does **not** establish
+that a live/local API exposes no additional contract surface, does **not** establish P6
+(neither PASS nor FAIL), is **not** `G0.5 PASS` or `G0.5 FAIL`, and does **not** enable
+`adopt_completed_turn`; the broader session-incarnation capability therefore remains **NOT
+ESTABLISHED BY MODE-A STATIC SURFACE**, and any Mode B/C investigation is a separate owner
+sequencing decision that is **not authorized**.  SIC is **not** G0.5, G1, G2 or G0.4, is
+**not** a new P-number, is **not** a proof of P6, is **not** an adoption-enabling proof and is
+**not** an implementation authorization; implementation remains **NOT AUTHORIZED**.
 
 ### 25.1 G0.5 / P6 — frozen local identity/ownership veto-bound definition (definition only; not executed)
 

@@ -142,9 +142,15 @@ G0.5 = **NOT RUN / DEFINITION ACCEPTED / ORACLE NOT FREEZABLE / LOCAL REACHABILI
 enforcement path, so no complete four-case oracle can be frozen; 0 semantic cases executed,
 **P6 = UNPROVEN / UNSATISFIED**); the independently approved Case-C prerequisite design block confirmed
 **`BLOCKED — NO SOUND ORIGINAL-SESSION PROVENANCE ANCHOR AVAILABLE`**, and the new read-only
-prerequisite information finding **G0.5-PRE / SIC** (session-incarnation capability finding) is a
-**definition candidate** (`docs/v0.3/V03E_G0_5_PRE_SESSION_INCARNATION_FINDING.md`;
-**SIC = NOT RUN / DEFINITION CANDIDATE**)), and **G1/G2 provide the
+prerequisite information finding **G0.5-PRE / SIC** (session-incarnation capability finding) has an
+**accepted definition** (`docs/v0.3/V03E_G0_5_PRE_SESSION_INCARNATION_FINDING.md`, baseline `829d3c0`)
+and an **accepted/frozen Mode-A oracle** (`docs/v0.3/V03E_G0_5_PRE_SIC_ORACLE.md`, baseline `e1fb6ac`),
+and its single authorized offline/static attempt (consumed; no rerun; no Mode B/C; no live activity)
+produced the **authoritative Mode-A finding `SIC_NOT_EXPOSED_IN_INSPECTED_CONTRACT`**, strictly scoped
+to the inspected installed static package surface and frozen artifacts — the broader
+session-incarnation capability remains **NOT ESTABLISHED BY MODE-A STATIC SURFACE**, P6 is not
+established (neither PASS nor FAIL), and no adoption, implementation or Mode B/C authorization
+follows), and **G1/G2 provide the
 remote/platform *enabling* proofs P1+P2+P3+P8 (+P9 when applicable)**.  `adopt_completed_turn`
 stays **disabled** until **both** the independently satisfied P6 veto-bound prerequisite
 **and** all required G1/G2 enabling proofs are independently satisfied (SPEC §25, §25.1, §28); if

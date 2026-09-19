@@ -342,6 +342,34 @@ FREEZABLE / LOCAL REACHABILITY GAP` with P6 `UNPROVEN / UNSATISFIED`; `G1`/`G2` 
 Case-C and v0.3-E implementation remain **NOT AUTHORIZED**; `adopt_completed_turn` remains
 **DISABLED**; 0 runtime/test/config changes occurred.
 
+**The Mode-A SIC result was independently approved and is now the authoritative Mode-A finding.**
+The independent result review issued *APPROVE V0.3-E SIC MODE-A RESULT* (**P0 = 0, P1 = 0, P2 = 0**;
+classification **VALID SEMANTIC RESULT**), binding the reviewed, immutable result artifact
+`docs/v0.3/V03E_G0_5_PRE_SIC_RESULT.md` (blob `ce6c503d3bd62fa09c34d52bbd570e1a98dab403d1164b2e740fe6c476ecadc6`)
+to the decision: the **authoritative Mode-A SIC finding is `SIC_NOT_EXPOSED_IN_INSPECTED_CONTRACT`**,
+established by the single authorized offline/static attempt under the accepted/frozen oracle
+(`docs/v0.3/V03E_G0_5_PRE_SIC_ORACLE.md`, blob `31d7ac50…`, baseline `e1fb6ac`) — attempt consumed,
+no rerun, no Mode B/C and no live activity.  Active status is converged to `SIC MODE-A = EXECUTED
+ONCE / DEFINITION ACCEPTED / ORACLE ACCEPTED AND FROZEN / AUTHORITATIVE FINDING =
+SIC_NOT_EXPOSED_IN_INSPECTED_CONTRACT / ATTEMPT CONSUMED / NO RERUN AUTHORIZED`, and separately
+**broader session-incarnation capability = NOT ESTABLISHED BY MODE-A STATIC SURFACE**.  The strict
+scope and non-claims are preserved everywhere: the finding applies **only** to the exact
+successfully inspected OpenCode 1.18.11 installed static package surface and frozen target/package
+artifacts; it does **not** establish that OpenCode globally has no session-incarnation metadata, does
+**not** establish that a live/local API exposes no additional contract surface, does **not**
+establish P6 (neither `P6 PASS` nor `P6 FAIL`), is **not** `G0.5 PASS` or `G0.5 FAIL`, and does
+**not** enable `adopt_completed_turn`.  Stale status wording in `docs/v0.3/V03E_SPEC.md`, `README.md`,
+`docs/v0.3/V03_PLAN.md` and `docs/BACKLOG.md` (which still described SIC as `NOT RUN / DEFINITION
+CANDIDATE`) was converged in the same round; the accepted SIC definition (`5463ac19…`), the frozen
+oracle (`31d7ac50…`), the reviewed result artifact (`ce6c503d…`), the substantive §25.1 block
+(`d3244ee0…`) and the G0.4 artifacts were **not** modified.  `G0.5 / P6` remains `NOT RUN /
+DEFINITION ACCEPTED / ORACLE NOT FREEZABLE / LOCAL REACHABILITY GAP` with `P6 = UNPROVEN /
+UNSATISFIED` and is **NOT CLOSED**; `G1`/`G2` remain `NOT RUN`; Case-C and v0.3-E implementation
+remain **NOT AUTHORIZED**; `adopt_completed_turn` remains **DISABLED**; no Mode B/C oracle was
+created and no sequencing decision about them was made; 0 new SIC attempts, 0 new HTTP/`/doc`/
+`/session`, 0 OpenCode activity, 0 provider/model/fake-provider calls and 0 network activity
+occurred, and 0 runtime/test/config changes were made.
+
 That approval followed three earlier review rounds: the first independent design
 review returned `REQUEST_CHANGES` (P0 = 1, P1 = 6, P2 = 5) and the
 recovery/reconciliation contract was repaired in `f67bf9e`; two narrow re-reviews
