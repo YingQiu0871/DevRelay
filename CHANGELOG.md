@@ -405,11 +405,13 @@ available; the independent review classified the executor's stronger "DevRelay i
 launch OpenCode" claim as **TOO STRONG / MECHANISM NOT YET DETERMINED**, so a future design may
 choose controlled launch **or** another sound deterministic read-only binding mechanism,
 subject to later independent review — **no choice was made in this round**.  The next dependency
-is recorded only as **MODE-B ENDPOINT / TARGET-BINDING PREREQUISITE = NOT YET DEFINED / NOT
-AUTHORIZED** (its future definition must settle endpoint-selection ownership, authoritative
-endpoint source, numeric loopback address, address family, deterministic port policy,
-pre-existing-vs-explicitly-launched target policy, deterministic target-binding mechanism and
-the no-endpoint-shopping rule; none of that was designed).  Hygiene record (independent
+was recorded at that point only as **MODE-B ENDPOINT / TARGET-BINDING PREREQUISITE = NOT YET
+DEFINED / NOT AUTHORIZED** (its future definition had to settle endpoint-selection ownership,
+authoritative endpoint source, numeric loopback address, address family, deterministic port
+policy, pre-existing-vs-explicitly-launched target policy, deterministic target-binding mechanism
+and the no-endpoint-shopping rule; none of that was designed in that round — a **definition
+candidate** for the prerequisite was subsequently created in the next round, recorded below).
+Hygiene record (independent
 finding, **P3 only**): the prior construction report's "NO FILES MODIFIED" wording was
 overbroad, because a round record was appended to the git-ignored/untracked `PROJECT_MEMORY.md`;
 that file is outside tracked repository content, is ignored/untracked, does not participate in
@@ -425,6 +427,78 @@ and no listener was probed; 0 new SIC semantic attempts, 0 Mode-B executions,
 0 HTTP/`/doc`/`/session`, 0 OpenCode starts/restarts, 0 endpoint selection, 0
 provider/model/fake-provider calls, 0 external network, 0 G0.5 and 0 G1/G2 activity occurred,
 and 0 runtime/test/dependency/version/config changes were made.
+
+**A definition candidate now exists for the Mode-B endpoint / target-binding prerequisite (ETB).**
+`docs/v0.3/V03E_G0_5_PRE_MODE_B_ENDPOINT_BINDING.md` defines the narrow **pre-oracle**
+prerequisite that must be satisfied before a Mode-B (live local read-only) SIC oracle can be
+constructed, with status **`ETB = DEFINITION CANDIDATE / NOT ACCEPTED / NOT EXECUTED / NOT
+AUTHORIZED`**.  It establishes **no endpoint**, authorizes **no configuration change** and
+authorizes **no OpenCode launch**.  ETB sits **outside P1–P9** as a pre-oracle prerequisite only:
+it proves nothing — not P6, not G0.5, not SIC semantics, not session incarnation, not turn or
+message provenance, not pending-handle semantics — and success enables exactly one thing, the
+resumption of Mode-B SIC oracle **construction** (never Mode-B execution, G0.5, Case-C
+implementation or adoption).  It freezes the endpoint authority as exactly
+`<root>/.devrelay/config.yaml` → `opencode.base_url` (current value still `""`), with environment,
+profile, CLI, state-snapshot, log, database, port/listener/process scan, provider upstream
+`baseURL`, documentation example, implicit `localhost` and implicit default port all **forbidden**
+as endpoint authority; endpoint-selection ownership is **external / owner-authorized** and the
+executor must not invent the tuple (`127.0.0.1:4096` is **not** automatically selected); the
+required form is `http` + a numeric loopback address + an **explicit** address family + an
+**explicit** integer port (no actual value selected in this round).  The deterministic port policy
+is frozen as a requirement with two admissible classes — **A: owner-supplied fixed port**
+(available today) and **B: an independently accepted deterministic allocation policy** (admissible
+only once such a policy exists and is accepted; not invented here) — while trying `4096` then
+another port, first-free-port, range scanning, random ports, OS-assigned ephemeral ports without a
+precommitted durable freeze, failure-driven choice and port retries are **forbidden**; an
+unbindable precommitted port ends the attempt.  Exactly **two mutually exclusive modes** are
+allowed — **MODE L (controlled launch)** and **MODE P (pre-existing target)** — with **no
+selection made in this round**, a mandatory mode precommit **before any operational action**, **no
+`L → P` / `P → L` fallback**, no mode shopping, and a mode change requiring new external
+authorization.  **MODE L** requires the frozen 1.18.11 identity, the accepted executable hash, an
+already externally authorized address/port, launch arguments that explicitly bind that exact
+address/port, a PID obtained from the launch act itself, no scanning to choose the target, and
+attempt termination on bind failure — but its **launch capability is UNESTABLISHED**: accepted
+evidence records only a dedicated loopback `opencode serve` (v0.3-A artifacts) and freezes no
+flags, so **Mode L is conditional on a later separately reviewed launch-capability determination**
+and no CLI flags are guessed.  **MODE P** requires the endpoint tuple to be already explicit in the
+authoritative configuration and permits only **endpoint-scoped owner verification** (endpoint
+**discovery** is forbidden); a read-only OS mechanism is admissible only if it queries only the
+already-frozen exact endpoint and deterministically returns its owning PID, with ambiguity failing
+closed — and **no concrete primitive is asserted as authoritative**, that remaining a future
+ETB-oracle requirement.  The definition freezes the target-binding chain (endpoint tuple → exact
+listener → unique owning PID → canonical executable path → executable SHA-256 → exact OpenCode
+version → process creation identity where available, no single element sufficient), the
+pre/post-request continuity requirements (ETB itself performs **no** Mode-B HTTP), the
+process-creation-identity property (PID alone never proves continuity; unavailability must be
+classified explicitly as fail-closed rather than silently dropped), the version binding to
+OpenCode 1.18.11 / `578d7eb3…`, the configuration boundary (setting `base_url` only after the
+tuple is externally authorized and the mode precommitted — and configuration **never** equals
+binding), the no-endpoint-shopping prohibitions, the fail-closed conditions (**never** to be
+reinterpreted as SIC results), `ETB SATISFIED` (an unambiguous evidence package; **not** SIC/P6/G0.5
+PASS) and `ETB UNSATISFIED` (a prerequisite/control result only: Mode-B oracle construction stays
+blocked; it does **not** mean SIC, P6 or G0.5 failed), the status model, and the frozen sequencing
+(**definition accepted → separate ETB oracle design → separate authorization → execution →
+independent result review → only if ETB SATISFIED may Mode-B SIC oracle construction resume**; no
+direct jump to Mode-B execution).  The definition aligns with the accepted G0.4 oracle's existing
+endpoint-scoped binding definition (§8.1–§8.8) and reuses its semantics, while recording explicitly
+that that prior art was **never executed** (G0.4 Case A `TARGET_IDENTITY_UNRESOLVED`, no configured
+endpoint, 0 HTTP), so it is a reviewed definition rather than validated capability evidence; three
+platform facts are carried forward as future requirements (exact launch syntax/address-port binding
+capability; the concrete endpoint→PID primitive and its semantics; availability and semantics of
+process creation identity) and none is invented.  Mode A remains completed and authoritative
+(`SIC_NOT_EXPOSED_IN_INSPECTED_CONTRACT`, strictly scoped to its frozen static surface); Mode-B
+status is unchanged (`NOT RUN / NO ORACLE / ORACLE NOT FREEZABLE / CONCRETE ENDPOINT NOT
+ESTABLISHED / PRE-ORACLE CONFIGURATION / TARGET-BINDING PREREQUISITE BLOCKER`) and the Mode-B SIC
+oracle remains **not freezable**; `G0.5 / P6` remains `NOT RUN / DEFINITION ACCEPTED / ORACLE NOT
+FREEZABLE / LOCAL REACHABILITY GAP` with `P6 = UNPROVEN / UNSATISFIED` and **NOT CLOSED**;
+`G1`/`G2` remain `NOT RUN`; Case-C and v0.3-E implementation remain **NOT AUTHORIZED**;
+`adopt_completed_turn` remains **DISABLED**; ETB is **not** accepted and **not** executed, and no
+operational authorization exists.  This round established no endpoint, selected no port or
+address, changed no configuration (`.devrelay/config.yaml` untouched, `opencode.base_url` still
+`""`), started no OpenCode, created no listener, performed no port/listener/process scan, issued
+**0** HTTP, touched neither `/doc` nor `/session`, created no ETB execution oracle and no Mode-B
+oracle, executed no SIC attempt, ran no G0.5/G1/G2, and made 0 runtime/test/dependency/version
+changes.
 
 That approval followed three earlier review rounds: the first independent design
 review returned `REQUEST_CHANGES` (P0 = 1, P1 = 6, P2 = 5) and the
