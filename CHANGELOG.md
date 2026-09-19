@@ -581,6 +581,53 @@ execution oracle, executed no ETB, created no Mode-B oracle, issued **0** HTTP, 
 `/doc` nor `/session`, executed no SIC attempt, ran no G0.5/G1/G2, and made 0
 runtime/test/dependency/version changes.
 
+**A capability-resolution candidate for the ETB design-support questions U1 / U2 / U3 was produced
+(design support only).**  `docs/v0.3/V03E_G0_5_PRE_ETB_CAPABILITY_RESOLUTION.md` records a bounded,
+read-only resolution attempt for the three platform facts carried by the accepted ETB definition —
+**U1** exact OpenCode launch syntax / explicit bind capability, **U2** exact Windows
+frozen-endpoint → owning-PID verification primitive and semantics, and **U3** process-instance /
+creation-identity primitive and semantics — under a **closed probe set** of exactly eleven
+authorized probes (the exact target executable's `--help` and `serve --help`, plus `Get-Command` /
+`Get-Help` / `Get-CimClass` metadata for `Get-NetTCPConnection`, `Get-CimInstance`, `Get-Process`
+and `Get-FileHash`), with no addition, substitution or variant after observing output.  It is
+**design support for a future ETB execution oracle** — **not** an ETB execution oracle, **not** ETB
+execution, **not** a proof-ladder gate — and it establishes no endpoint, selects no mode and
+authorizes nothing.  Results: **U1 = `U1_NOT_ESTABLISHED`** (facts A–D established from the exact
+1.18.11 binary's own help — the `opencode serve` subcommand "starts a headless opencode server", and
+explicit `--hostname <string>` "hostname to listen on" / `--port <number>` "port to listen on"
+options with defaults `"127.0.0.1"` and `0` — while fact E, exact-bind/implicit-substitution and
+bind-failure semantics, and fact F, deterministic launcher-visible process identity, are
+`SEMANTICS_UNPROVEN`, so Mode-L launch/bind semantics cannot yet be frozen without invention);
+**U2 = `U2_NOT_ESTABLISHED`** (the `Get-NetTCPConnection` interface shape is documented —
+`-LocalAddress` position 0/alias `IPAddress`, `-LocalPort <uint16[]>`, `-State` admitting the
+documented value `Listen`, `-OwningProcess` as an input parameter, output type
+`MSFT_NetTCPConnection` — but the captured help is explicitly **partial** because the module's help
+files are not installed, so exact-match filtering semantics, result-set semantics and an owning-PID
+output property are not documented: `SEMANTICS_UNPROVEN` for the three filter facts and
+`EVIDENCE_INSUFFICIENT` for owning-PID output exposure); **U3 = `U3_NOT_ESTABLISHED`** (a PID-scoped
+process query is **ESTABLISHED** — `Get-Process -Id <int[]>` alias `PID` is a documented parameter
+set — and SHA-256 exact-path hashing is **ESTABLISHED** from `Get-FileHash`'s documented
+`-Path`/`-LiteralPath` plus the algorithm enum containing `SHA256`, but executable-path exposure,
+canonical-path semantics and the process-instance/PID-reuse discriminator are all
+`EVIDENCE_INSUFFICIENT` because no property enumeration or property semantics were captured and the
+authorized `Get-CimClass` rendering truncated the `Win32_Process` property list, the gap being
+recorded rather than worked around).  Consequences: **`MODE_L_MECHANISM_NOT_YET_FREEZABLE`** and
+**`MODE_P_MECHANISM_NOT_YET_FREEZABLE`** (neither is a mode selection), while **U4** and **U5**
+remain **UNRESOLVED BY DESIGN / OWNER-ORACLE DECISION REMAINS**.  These are **evidence-surface
+limitations, not platform-absence findings** and **not** ETB outcomes: no `ETB PASS`/`ETB FAIL`/
+`ETB SATISFIED`/`ETB UNSATISFIED`/SIC/P6 result is created.  Recorded side effect: invoking the
+exact target binary for the two help probes appended **+246 bytes** to
+`C:\Users\1\.local\share\opencode\log\opencode.log` (15 650 374 → 15 650 620 bytes) inside the probe
+window, with the caveat that the OpenCode state directory is shared with the user's own active
+OpenCode usage so the growth is consistent with, but not exclusively attributable to, this round;
+the log contents were not read.  No other side effect occurred: `.devrelay` untouched
+(`opencode.base_url` still `""`), no repository runtime/test/config modification, no OpenCode server
+started, no listener created, no port scan or listener/process enumeration, **0** HTTP, neither
+`/doc` nor `/session` touched, no provider/model call and no external network access.  The current
+authoritative ETB status is **unchanged** by this design-support round — `ETB = DEFINITION ACCEPTED
+/ NOT EXECUTED` and `ETB EXECUTION / ORACLE = NOT YET DEFINED / NOT AUTHORIZED` — and Mode-B oracle
+construction has still **not** resumed.
+
 That approval followed three earlier review rounds: the first independent design
 review returned `REQUEST_CHANGES` (P0 = 1, P1 = 6, P2 = 5) and the
 recovery/reconciliation contract was repaired in `f67bf9e`; two narrow re-reviews
