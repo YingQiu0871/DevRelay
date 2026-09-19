@@ -310,6 +310,38 @@ ORACLE NOT FREEZABLE / LOCAL REACHABILITY GAP` with P6 `UNPROVEN / UNSATISFIED`,
 `NOT RUN`, adoption stays **DISABLED** and implementation remains **NOT AUTHORIZED**; 0
 runtime/test/config, provider/model, HTTP, `/doc`/`/session` or OpenCode activity occurred.
 
+**The Mode-A SIC oracle was independently accepted and frozen, and its single authorized
+execution produced a candidate result.**  The independent decision *APPROVE V0.3-E SIC MODE-A
+PRE-RUN ORACLE* froze `docs/v0.3/V03E_G0_5_PRE_SIC_ORACLE.md` (baseline `e1fb6ac`, blob
+`31d7ac50…`), and the separate one-shot external authorization permitted **exactly one** offline
+/static semantic attempt.  Executed evidence (`docs/v0.3/V03E_G0_5_PRE_SIC_RESULT.md`, a
+**CANDIDATE SIC RESULT** pending independent review): target identity verified (`opencode-ai`
+1.18.11, package root unchanged, declared bin `./bin/opencode.exe`, declared-bin SHA-256
+`578d7eb3…`); the frozen manifest was re-enumerated and matched **exactly** — 8 files / 6
+directories, no missing artifact, no extra artifact inside the package root, no size/hash drift;
+all 8 artifacts were classified exactly once (`PACKAGE_METADATA` ×3, `INSTALLER_LOGIC` ×1,
+`LICENSE_TEXT` ×1, `OPAQUE_COMPILED_BINARY` ×3, the binaries hashed and identified only — never
+executed, never scanned for semantic strings); the deterministic Phase-A extraction enumerated 32
+declared `package.json` key paths (22 + 5 + 5) and found **zero** session-anchor key paths, and the
+`postinstall.mjs` declaration scan found no explicitly declared schema/type/field-table contract
+structure and no session-anchor declaration; complete authoritative coverage therefore held and
+the frozen candidate set was **empty (0 candidates)**, so Phase B was not applicable and the frozen
+mapping row C yielded the candidate outcome **`SIC_NOT_EXPOSED_IN_INSPECTED_CONTRACT`**.  The
+mandatory surface-scoped non-claim is recorded prominently: the result applies only to the exact
+successfully inspected installed static package surface and frozen artifacts, does **not**
+establish that OpenCode globally has no session-incarnation metadata, does **not** establish that a
+live/local API exposes no additional contract surface, does **not** establish P6 and does **not**
+enable `adopt_completed_turn`.  Zero-live budget held throughout (0 OpenCode starts, 0 HTTP, 0
+`/doc`, 0 `/session`, 0 runtime response reads, 0 provider/model/fake-provider calls, 0 prompt
+submissions, 0 session mutations, 0 network, 0 process discovery, 0 port scanning, 0 endpoint
+configuration); only local static reads and hashing were performed.  The attempt is consumed (1 of
+1), **no rerun is authorized**, no Mode B/C was created or executed, the accepted SIC definition
+and the frozen oracle were not modified, and the candidate result must not be treated as
+authoritative or as P6 proof.  `G0.5 / P6` remains `NOT RUN / DEFINITION ACCEPTED / ORACLE NOT
+FREEZABLE / LOCAL REACHABILITY GAP` with P6 `UNPROVEN / UNSATISFIED`; `G1`/`G2` remain `NOT RUN`;
+Case-C and v0.3-E implementation remain **NOT AUTHORIZED**; `adopt_completed_turn` remains
+**DISABLED**; 0 runtime/test/config changes occurred.
+
 That approval followed three earlier review rounds: the first independent design
 review returned `REQUEST_CHANGES` (P0 = 1, P1 = 6, P2 = 5) and the
 recovery/reconciliation contract was repaired in `f67bf9e`; two narrow re-reviews
