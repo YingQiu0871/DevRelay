@@ -269,6 +269,47 @@ metadata".  G0.5/P6, G1/G2, adoption and implementation statuses are unchanged; 
 runtime/test/config, provider/model, HTTP, `/doc`/`/session` or OpenCode activity occurred, and
 no oracle or result artifact was created.
 
+**The SIC outcome-mapping amendment was independently approved, and a Mode-A pre-run oracle
+candidate was constructed.**  The independent review issued *APPROVE V0.3-E SIC
+OUTCOME-MAPPING DEFINITION AMENDMENT*, which makes commit `829d3c0` (SIC definition artifact
+blob `5463ac19…`) the accepted SIC definition baseline and **resolves the prior `ORACLE NOT
+FREEZABLE — OUTCOME MAPPING GAP` at definition level** — that blocker was a pre-oracle
+definition defect (the four-outcome vocabulary could not truthfully map authoritatively
+non-qualifying metadata), never an SIC semantic result.  With the amended definition in force, a
+**MODE-A (offline/static only) pre-run oracle candidate** was written to
+`docs/v0.3/V03E_G0_5_PRE_SIC_ORACLE.md`: **PRE-RUN ORACLE CANDIDATE — NOT ACCEPTED, NOT FROZEN,
+NOT EXECUTED**, `SIC = NOT RUN / DEFINITION ACCEPTED / ORACLE CANDIDATE`.  The oracle freezes the
+exact Mode-A authorized surface — the whole installed `opencode-ai` 1.18.11 package tree,
+re-enumerated at construction: **8 files / 6 directories** in lexicographic order with sizes and
+SHA-256 (`LICENSE`; `bin/opencode.exe` `578d7eb3…`; the two `node_modules/opencode-windows-x64*`
+platform trees — `opencode-windows-x64/bin/opencode.exe` byte-identical to the declared bin, and
+`opencode-windows-x64-baseline/bin/opencode.exe` `0e80c444…` — plus their `package.json`
+manifests; and `postinstall.mjs`) — each artifact classified exactly once
+(`PACKAGE_METADATA` / `INSTALLER_LOGIC` / `LICENSE_TEXT` / `OPAQUE_COMPILED_BINARY`, with compiled
+binaries hashed and recorded but never supplying candidate fields or semantic authority).  It
+also freezes: the complete-coverage rule (any missing, extra, drifted, unreadable, unparseable,
+unclassified or ambiguous artifact prevents `NOT_EXPOSED` and maps to `EVIDENCE_INSUFFICIENT`
+unless strictly inside the pre-assertion `HARNESS_INVALID` boundary); a deterministic,
+enumerable candidate-extraction rule with a session-anchored discovery grammar, frozen alias
+normalization and explicit forbidden sources (no arbitrary binary strings, no UUID-shaped bytes,
+no frequencies, no name guesses detached from a session contract); discovery-before-validation
+with a frozen candidate set (a `NON_QUALIFYING_METADATA` candidate is never retroactively
+erased); the accepted per-candidate vocabulary (`QUALIFIES` / `SEMANTICS_UNPROVEN` /
+`NON_QUALIFYING_METADATA`) with a complete per-candidate record schema; criteria A–G with the
+strict incarnation-sensitivity, stability and session-scope thresholds; the Mode-A
+semantic-authority rules; the amended four-outcome mapping; the mandatory surface-scoped
+`NOT_EXPOSED` non-claim; **no live fallback** (the mode is fixed before execution and
+`EVIDENCE_INSUFFICIENT` ends the run); exactly one semantic attempt with no rerun, no alternate
+package, no second static surface and no manifest update after results; the artifact-drift stop
+rule; and the future result-artifact schema with zero-activity budgets and privacy prohibitions.
+A surface-scoped construction fact is recorded for transparency — the frozen manifest contains
+zero `DECLARATIVE_CONTRACT_CANDIDATE` artifacts — explicitly **not** a SIC result and never to be
+read as "OpenCode has no incarnation metadata".  No SIC semantic attempt occurred, no result
+artifact exists and no execution is authorized; G0.5/P6 remains `NOT RUN / DEFINITION ACCEPTED /
+ORACLE NOT FREEZABLE / LOCAL REACHABILITY GAP` with P6 `UNPROVEN / UNSATISFIED`, G1/G2 remain
+`NOT RUN`, adoption stays **DISABLED** and implementation remains **NOT AUTHORIZED**; 0
+runtime/test/config, provider/model, HTTP, `/doc`/`/session` or OpenCode activity occurred.
+
 That approval followed three earlier review rounds: the first independent design
 review returned `REQUEST_CHANGES` (P0 = 1, P1 = 6, P2 = 5) and the
 recovery/reconciliation contract was repaired in `f67bf9e`; two narrow re-reviews
