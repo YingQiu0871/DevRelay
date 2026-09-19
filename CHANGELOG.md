@@ -500,6 +500,87 @@ address, changed no configuration (`.devrelay/config.yaml` untouched, `opencode.
 oracle, executed no SIC attempt, ran no G0.5/G1/G2, and made 0 runtime/test/dependency/version
 changes.
 
+**The ETB definition candidate was independently approved, so the Mode-B endpoint / target-binding
+prerequisite is now an accepted prerequisite (this supersedes the candidate status recorded in the
+preceding entry).**  The independent definition review issued *APPROVE V0.3-E MODE-B ETB
+PREREQUISITE DEFINITION* (**P0 = 0, P1 = 0, P2 = 0**; three non-blocking P3s), binding the
+immutable definition artifact `docs/v0.3/V03E_G0_5_PRE_MODE_B_ENDPOINT_BINDING.md` (blob
+`99cc6dcee4ab1a3f0589c3e7d11308d089601ba07d16cc2d37a9fc32c777b3a0`, commit `f3f625f`) to that
+decision — an independent review decision, not executor self-approval.  The authoritative ETB
+status is therefore **`ETB = DEFINITION ACCEPTED / NOT EXECUTED`**, recorded separately from
+**`ETB EXECUTION / ORACLE = NOT YET DEFINED / NOT AUTHORIZED`**; the two are deliberately **not**
+merged into a new semantic outcome, and no `ETB SATISFIED`, `ETB UNSATISFIED` or `ETB EXECUTED`
+result exists or is claimed.  The accepted definition remains a **pre-oracle prerequisite outside
+P1–P9**: it proves none of P6, G0.5, SIC semantics, session incarnation, turn provenance, message
+provenance or pending-handle semantics, and definition acceptance authorizes **nothing
+operational**.  The accepted endpoint-authority model is unchanged — the future authoritative
+endpoint source is exactly `<root>/.devrelay/config.yaml` → `opencode.base_url`, with no
+alternative authority, and the current value is still `base_url: ""` — so **no endpoint is
+established**, and definition acceptance must not be confused with endpoint establishment.
+Endpoint selection remains **EXTERNAL / OWNER-AUTHORIZED** (or derived under a separately
+independently accepted deterministic allocation policy); no address, address family, port or base
+URI has been selected and `127.0.0.1:4096` remains example text only; the accepted port-policy
+classes remain **A (owner-supplied fixed port)** and **B (independently accepted deterministic
+allocation policy)**, and class B currently has **no concrete accepted policy** (none invented).
+The accepted mode model defines exactly **two mutually exclusive** future modes — **MODE L
+(controlled launch)** and **MODE P (pre-existing target)** — with **no mode selected**, no
+third/hybrid mode, no `L → P` / `P → L` fallback, and definition acceptance authorizing **neither**
+mode operationally.  The **Mode-L gap** is recorded as **UNESTABLISHED** (exact OpenCode server
+command, exact address-binding flag semantics, exact port-binding flag semantics — no flag is
+inferred or invented), so Mode L remains conditional and cannot be operationally precommitted
+until separately established.  The **Mode-P gap** is recorded as **UNESTABLISHED** (the
+endpoint-scoped owner-verification mechanism), with the accepted semantic boundary unchanged:
+endpoint **discovery is FORBIDDEN**, while endpoint-scoped verification against an already-frozen
+endpoint is **POTENTIALLY ADMISSIBLE** only if a future reviewed ETB oracle freezes a
+deterministic concrete mechanism — and **no Windows command/API has been accepted**.  The accepted
+target-binding chain is unchanged (authoritative endpoint tuple → exact listener → unique owning
+PID → canonical executable path → executable SHA-256 → exact OpenCode version → process creation
+identity where available), with **no single element proving binding**, `base_url` alone
+insufficient and listener existence alone insufficient; the accepted process-instance rule is also
+unchanged — PID alone is insufficient, a platform-supported process-instance discriminator
+protecting against PID reuse is required, inability to obtain the required process-instance
+evidence on the currently accepted Windows proof environment **fails closed**, and the concrete
+primitive/semantics remain unresolved for the ETB execution oracle.  Definition semantics are
+recorded **without being executed**: a future ETB execution under a separately frozen execution
+oracle may yield `ETB SATISFIED` — which will mean only that the endpoint/target-binding
+prerequisite is established sufficiently for Mode-B SIC oracle construction to resume, **not**
+`SIC PASS`, `P6 PASS` or `G0.5 PASS` — or `ETB UNSATISFIED`, which means only that Mode-B SIC
+oracle construction **remains blocked**.  The accepted unresolved-fact register is carried
+forward as future ETB-oracle work with **nothing marked resolved**: **U1** exact OpenCode launch
+syntax / explicit bind capability; **U2** exact Windows frozen-endpoint → owning-PID verification
+primitive and semantics; **U3** process-instance/creation-identity primitive and semantics; **U4**
+concrete deterministic port allocation policy if class B is used; **U5** actual ETB mode
+selection — the independent review determined that **none** of U1–U5 blocks definition
+acceptance.  Review P3s are recorded accurately as **non-blocking**: **P3-1** the construction
+instruction "No amend" was violated by amending a seconds-old, unreviewed, unpushed intermediate
+local commit — classified as a **bounded process-hygiene deviation only** (no
+accepted/reviewed/shared history rewritten; final ancestry deterministic), explicitly **not
+normalized**, with future rounds required to honor **NO AMEND**; **P3-2** the ETB definition
+freezes the future endpoint form as HTTP-only, narrower than config validation's http/https
+acceptance, with an explicit future review escape clause — **not** broadened now; **P3-3** Mode-P
+endpoint-scoped verification still leaves bounded mechanism discretion, which a future ETB oracle
+must concretely precommit — **not** solved now.  The accepted sequencing is unchanged and no stage
+may be skipped: ETB definition **ACCEPTED** → next, separately, ETB execution/oracle design →
+independent oracle review → separate execution authorization → ETB execution → independent ETB
+result review → **only if ETB SATISFIED** may Mode-B SIC oracle construction resume.  The accepted
+definition artifact is **immutable** and was **not** modified: its own at-construction header may
+remain `DEFINITION CANDIDATE / NOT ACCEPTED`, because acceptance is represented through the
+independent approval record and the active authoritative status surfaces, following the existing
+immutable-artifact + approval-record pattern.  Mode-B status is unchanged — `SIC MODE-B = NOT RUN /
+NO ORACLE / ORACLE NOT FREEZABLE / CONCRETE ENDPOINT NOT ESTABLISHED / PRE-ORACLE CONFIGURATION /
+TARGET-BINDING PREREQUISITE BLOCKER` — and Mode-B oracle construction has **not** resumed,
+precisely because ETB has **not** been executed and is **not** SATISFIED.  Mode A remains
+completed and authoritative (`SIC_NOT_EXPOSED_IN_INSPECTED_CONTRACT`, strictly scoped to its
+accepted frozen static surface); `G0.5 / P6` remains `NOT RUN / DEFINITION ACCEPTED / ORACLE NOT
+FREEZABLE / LOCAL REACHABILITY GAP` with `P6 = UNPROVEN / UNSATISFIED` and **NOT CLOSED**;
+`G1`/`G2` remain `NOT RUN`; Case-C and v0.3-E implementation remain **NOT AUTHORIZED**;
+`adopt_completed_turn` remains **DISABLED**.  This bookkeeping round established no endpoint,
+selected no endpoint or port, changed no configuration (`.devrelay/config.yaml` untouched,
+`opencode.base_url` still `""`), started no OpenCode, created no listener, designed no ETB
+execution oracle, executed no ETB, created no Mode-B oracle, issued **0** HTTP, touched neither
+`/doc` nor `/session`, executed no SIC attempt, ran no G0.5/G1/G2, and made 0
+runtime/test/dependency/version changes.
+
 That approval followed three earlier review rounds: the first independent design
 review returned `REQUEST_CHANGES` (P0 = 1, P1 = 6, P2 = 5) and the
 recovery/reconciliation contract was repaired in `f67bf9e`; two narrow re-reviews
