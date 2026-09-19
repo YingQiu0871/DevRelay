@@ -370,6 +370,62 @@ created and no sequencing decision about them was made; 0 new SIC attempts, 0 ne
 `/session`, 0 OpenCode activity, 0 provider/model/fake-provider calls and 0 network activity
 occurred, and 0 runtime/test/config changes were made.
 
+**A Mode-B (live local read-only) SIC pre-run oracle construction round produced no oracle, and
+that freezability failure was independently approved.**  The independent review issued *APPROVE
+V0.3-E SIC MODE-B ORACLE FREEZABILITY FAILURE* (**P0 = 0, P1 = 0, P2 = 0**) for the scoped
+pre-oracle finding **`SIC MODE-B ORACLE NOT FREEZABLE — CONCRETE ENDPOINT NOT ESTABLISHED`**
+under **current** accepted configuration/state — an independent review decision, not executor
+self-approval, and **not** `MODE-B FAIL`, `SIC FAIL`, `P6 FAIL` or `G0.5 FAIL`.  The accepted
+cause is the endpoint-authority path itself: the only supported current runtime endpoint
+authority for DevRelay's local OpenCode bridge is `<root>/.devrelay/config.yaml` →
+`opencode.base_url`, with the `OpenCodeConfig` empty-string model default as the absent/empty
+fallback, and the current value is `base_url: ""` — so no exact scheme, numeric loopback
+address, address family, port or base URI is established.  Resolution precision (recorded as
+independently reviewed): environment supplies no `opencode.base_url`; the CLI has no endpoint
+override; profiles are policy-only and provide no runtime OpenCode wiring; state and task
+snapshots are reproducibility/runtime records, not endpoint-resolution authority; no user-level
+DevRelay endpoint config participates; OpenCode `provider.*.options.baseURL` values are upstream
+model-provider endpoints, not the local OpenCode service endpoint; runtime
+logs/database/storage are not accepted endpoint authority; and the documented
+`127.0.0.1:4096` value is example text only.  Default/template precision: the packaged
+`profiles/default.yaml` contains **no** `opencode` section, the runtime empty fallback derives
+from the `OpenCodeConfig` model default, and `WORKSPACE_CONFIG_TEMPLATE` contains `base_url: ""`
+as workspace-generation material — the workspace template is **not** the packaged runtime
+default.  Current Mode-B status is therefore `SIC MODE-B = NOT RUN / NO ORACLE / ORACLE NOT
+FREEZABLE / CONCRETE ENDPOINT NOT ESTABLISHED / PRE-ORACLE CONFIGURATION / TARGET-BINDING
+PREREQUISITE BLOCKER`, with **no semantic Mode-B attempt**; the `/doc`-completeness question,
+the exact Mode-B request set, live schema parsing, reference traversal, live candidate
+extraction and the Mode-B semantic outcome are all **NOT REACHED / UNDECIDED**, and no partial
+Mode-B oracle, Mode-B result, Mode C or endpoint-prerequisite artifact exists.  Mode A is
+untouched: it stays completed and authoritative with `SIC_NOT_EXPOSED_IN_INSPECTED_CONTRACT`,
+strictly scoped to its exact successfully inspected OpenCode 1.18.11 static package surface.
+A future Mode-B design needs a deterministic, precommitted mechanism binding endpoint →
+listener → PID → canonical executable → executable hash → process creation identity where
+available; the independent review classified the executor's stronger "DevRelay itself must
+launch OpenCode" claim as **TOO STRONG / MECHANISM NOT YET DETERMINED**, so a future design may
+choose controlled launch **or** another sound deterministic read-only binding mechanism,
+subject to later independent review — **no choice was made in this round**.  The next dependency
+is recorded only as **MODE-B ENDPOINT / TARGET-BINDING PREREQUISITE = NOT YET DEFINED / NOT
+AUTHORIZED** (its future definition must settle endpoint-selection ownership, authoritative
+endpoint source, numeric loopback address, address family, deterministic port policy,
+pre-existing-vs-explicitly-launched target policy, deterministic target-binding mechanism and
+the no-endpoint-shopping rule; none of that was designed).  Hygiene record (independent
+finding, **P3 only**): the prior construction report's "NO FILES MODIFIED" wording was
+overbroad, because a round record was appended to the git-ignored/untracked `PROJECT_MEMORY.md`;
+that file is outside tracked repository content, is ignored/untracked, does not participate in
+DevRelay runtime/config, altered no endpoint/config/oracle evidence, and left the tracked
+worktree clean — the precise wording going forward is "**no tracked repository/config/oracle/
+source/test/document artifact modified**", and `PROJECT_MEMORY.md` was **not** edited to address
+the wording issue.  `G0.5 / P6` remains `NOT RUN / DEFINITION ACCEPTED / ORACLE NOT FREEZABLE /
+LOCAL REACHABILITY GAP` with `P6 = UNPROVEN / UNSATISFIED` and **NOT CLOSED**; `G1`/`G2` remain
+`NOT RUN`; Case-C and v0.3-E implementation remain **NOT AUTHORIZED**; `adopt_completed_turn`
+remains **DISABLED**; no endpoint was established, no port was selected, `opencode.base_url` and
+`.devrelay` configuration were **not** modified, no listener was created, no port was scanned
+and no listener was probed; 0 new SIC semantic attempts, 0 Mode-B executions,
+0 HTTP/`/doc`/`/session`, 0 OpenCode starts/restarts, 0 endpoint selection, 0
+provider/model/fake-provider calls, 0 external network, 0 G0.5 and 0 G1/G2 activity occurred,
+and 0 runtime/test/dependency/version/config changes were made.
+
 That approval followed three earlier review rounds: the first independent design
 review returned `REQUEST_CHANGES` (P0 = 1, P1 = 6, P2 = 5) and the
 recovery/reconciliation contract was repaired in `f67bf9e`; two narrow re-reviews
