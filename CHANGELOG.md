@@ -699,6 +699,51 @@ query; did no ETB oracle work and no ETB execution; issued **0** HTTP; touched n
 `/session`; executed no SIC attempt; ran no G0.5/G1/G2; and made 0 runtime/test/dependency/version
 changes.
 
+**A round-2 candidate capability finding resolved the ETB U2 and U3 semantic gaps (design support
+only; not accepted).**  `docs/v0.3/V03E_G0_5_PRE_ETB_U2_U3_AUTHORITY_RESOLUTION.md` records a bounded
+resolution of **U2** (frozen-endpoint → unique owning PID) and **U3** (known PID → executable
+identity + process-instance identity + canonical executable path) using a **closed authoritative
+source set** — exactly **nine** approved Microsoft Learn pages (D1–D9, all HTTP 200, bodies hashed,
+no page body committed, no search-engine result or third-party source used as evidence) — plus
+exactly **four** local metadata/schema probes (S1–S4) that retrieved **no** instance and performed
+**no** live TCP, listener, port or process query.  Durable evidence is tracked under
+`docs/v0.3/evidence/etb-u2-u3-authoritative-semantics/` (14 evidence files + `MANIFEST.sha256`, all
+hashes verified).  Candidate results: **`U2 = U2_ESTABLISHED`** — the exact-local-address and
+exact-local-port filter semantics are documented (both `Supports wildcards: False`), `-State`
+restricts to the states specified with `Listen` among the accepted values (and `State` is a read-only
+property whose `Listen` value means waiting for a connection request), the installed command metadata
+binds `OutputType` to `…CimInstance#ROOT/StandardCimv2/MSFT_NetTCPConnection` (corroborated by the
+class documentation's `Root\StandardCimv2` namespace and by local class metadata), `OwningProcess` is
+documented as a **read-only** uint32 property holding "the PID of the owning process of the TCP
+connection" (kept distinct from the `-OwningProcess` **input** filter), and `@(...)`+`.Count`
+deterministically distinguishes 0/1/N results — so the endpoint-scoped verification
+`-LocalAddress <frozen> -LocalPort <frozen> -State Listen` with `@(...).Count == 1` and a read of
+`OwningProcess` is freezable, with wildcard-bound or multi-match cases failing closed; and
+**`U3 = U3_ESTABLISHED`** — the WQL/CQL `-Filter` contract plus the documented `=` **Equal** operator
+(with `LIKE` as the separate wildcard form) establish the exact PID-scoped predicate,
+`ProcessId`/`ExecutablePath`/`CreationDate` are all present locally as read-only properties,
+`ExecutablePath` is documented as "Path to the executable file of the process", `CreationDate` is
+documented (qualifier `Fixed`) as "Date the process begins executing" so a reused PID necessarily
+belongs to a newly started instance with a different creation date, and the canonical/final-path
+capability is established by `GetFinalPathNameByHandleW` (`FILE_NAME_NORMALIZED` = "Return the
+normalized drive name", "A final path is the path that is returned when a path is fully resolved")
+with a read-only `GENERIC_READ` + `OPEN_EXISTING` handle (no creation, no truncation) invoked through
+`Add-Type` P/Invoke (present locally), SHA-256 hashing being already accepted.  Consequently the
+candidate **`MODE P = MODE_P_MECHANISM_FREEZABLE`** — mechanism semantics are now sufficient for later
+ETB oracle design — while **U1 = `U1_NOT_ESTABLISHED`** and **MODE L =
+`MODE_L_MECHANISM_NOT_YET_FREEZABLE`** are **unchanged** (no OpenCode probe, no server launch, no
+contradicting evidence), and **U4/U5 remain `UNRESOLVED BY DESIGN / OWNER-ORACLE DECISION REMAINS`**
+(Mode-P mechanism freezability is **not** mode selection).  Recorded fail-closed caveats (design
+requirements, not gaps): the `SeDebugPrivilege` qualifier on `ExecutablePath`; `ERROR_ACCESS_DENIED`
+on component-access failure under normalized resolution; the `\\?\` DOS-prefix form requiring the
+**identical** canonicalization on both sides; and `ExecutablePath` never being treated as canonical
+without that route.  No endpoint was established, no port or address selected, no mode selected, no
+configuration changed (`opencode.base_url` still `""`), no OpenCode started, no listener created, no
+HTTP issued, no `/doc` or `/session` access, no provider/model call, and no ETB execution, ETB oracle
+or Mode-B oracle work occurred; this round is a **candidate only until independent review**, and the
+current authoritative state remains `ETB = DEFINITION ACCEPTED / NOT EXECUTED` with `ETB EXECUTION /
+ORACLE = NOT YET DEFINED / NOT AUTHORIZED`.
+
 That approval followed three earlier review rounds: the first independent design
 review returned `REQUEST_CHANGES` (P0 = 1, P1 = 6, P2 = 5) and the
 recovery/reconciliation contract was repaired in `f67bf9e`; two narrow re-reviews

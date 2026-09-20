@@ -1,0 +1,24 @@
+SOURCE D7 — GetFinalPathNameByHandleW function (fileapi.h)
+canonical: https://learn.microsoft.com/en-us/windows/win32/api/fileapi/nf-fileapi-getfinalpathnamebyhandlew
+retrieved final URL: https://learn.microsoft.com/en-us/windows/win32/api/fileapi/nf-fileapi-getfinalpathnamebyhandlew
+retrieved: 2026-09-20T12:57:53 (local, UTC+02:00)
+retrieved body: 59967 bytes, SHA-256 79eece1aa66bb7305039bd583f7e157606270d432fd1c74cd3f03141151cdea9
+scope: closed-set retrieval for the ETB U2/U3 authoritative-semantics round.  No full page text is stored here; only the propositions and the minimal excerpts needed to prove them.
+
+SEMANTIC PROPOSITIONS (paraphrase)
+P1  The function "Retrieves the final path for the specified file", taking a file/directory handle.
+P2  `FILE_NAME_NORMALIZED` (0x0) is documented as "Return the normalized drive name. This is the default."; `FILE_NAME_OPENED` (0x8) is "Return the opened file name (not normalized)".
+P3  `VOLUME_NAME_DOS` (0x0) is documented as "Return the path with the drive letter. This is the default."; alternatives return volume-GUID, NT-device or no-volume forms.
+P4  "A final path is the path that is returned when a path is fully resolved" — illustrated by a symbolic link `C:\tmp\mydir` pointing to `D:\yourdir` whose final path would be `D:\yourdir`.
+P5  Recorded caveats: with `FILE_NAME_NORMALIZED` the function splits the path into components and queries each component's normalized name, and if the caller lacks access permission to any component the call fails with `ERROR_ACCESS_DENIED`; when using `VOLUME_NAME_DOS` the returned string uses the `\\?\` syntax.
+
+MINIMAL EXCERPTS
+"Retrieves the final path for the specified file."
+"FILE_NAME_NORMALIZED 0x0 Return the normalized drive name. This is the default.  FILE_NAME_OPENED 0x8 Return the opened file name (not normalized)."
+"VOLUME_NAME_DOS 0x0 Return the path with the drive letter. This is the default."
+"A final path is the path that is returned when a path is fully resolved. For example, for a symbolic link named "C:\tmp\mydir" that points to "D:\yourdir", the final path would be "D:\yourdir"."
+"If the user lacks access permission to any one of those components, then the function call fails with ERROR_ACCESS_DENIED."
+"When using VOLUME_NAME_DOS , the string that is returned by this function uses the "\\?\" syntax."
+
+CLASSIFICATION (this round)
+- U3 final/canonical path API semantics: ESTABLISHED, with the access-permission failure mode and the `\\?\` DOS-prefix form recorded as fail-closed design caveats.  The API was not called in this round.

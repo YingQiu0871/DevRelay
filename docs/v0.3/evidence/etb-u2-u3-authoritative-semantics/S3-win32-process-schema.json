@@ -1,0 +1,67 @@
+{
+  "probe": "S3",
+  "command": "Get-CimClass -Namespace root/cimv2 -ClassName Win32_Process",
+  "CimClassName": "Win32_Process",
+  "CimSystemProperties_Namespace": "ROOT/CIMV2",
+  "Requested": [
+    "ProcessId",
+    "ExecutablePath",
+    "CreationDate"
+  ],
+  "Found": [
+    "CreationDate",
+    "ExecutablePath",
+    "ProcessId"
+  ],
+  "Properties": [
+    {
+      "Name": "CreationDate",
+      "CimType": "DateTime",
+      "Flags": "Property, ReadOnly, NullValue",
+      "Qualifiers": [
+        {
+          "Name": "Fixed",
+          "Value": "True"
+        },
+        {
+          "Name": "read",
+          "Value": "True"
+        }
+      ]
+    },
+    {
+      "Name": "ExecutablePath",
+      "CimType": "String",
+      "Flags": "Property, ReadOnly, NullValue",
+      "Qualifiers": [
+        {
+          "Name": "MappingStrings",
+          "Value": "Win32API|Tool Help Structures|MODULEENTRY32|szExePath"
+        },
+        {
+          "Name": "Privileges",
+          "Value": "SeDebugPrivilege"
+        },
+        {
+          "Name": "read",
+          "Value": "True"
+        }
+      ]
+    },
+    {
+      "Name": "ProcessId",
+      "CimType": "UInt32",
+      "Flags": "Property, ReadOnly, NullValue",
+      "Qualifiers": [
+        {
+          "Name": "MappingStrings",
+          "Value": "Win32API|Process and Thread Structures|PROCESS_INFORMATION|dwProcessId "
+        },
+        {
+          "Name": "read",
+          "Value": "True"
+        }
+      ]
+    }
+  ]
+}

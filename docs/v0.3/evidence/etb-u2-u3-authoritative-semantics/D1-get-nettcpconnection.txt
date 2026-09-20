@@ -1,0 +1,26 @@
+SOURCE D1 — Get-NetTCPConnection (NetTCPIP)
+canonical: https://learn.microsoft.com/en-us/powershell/module/nettcpip/get-nettcpconnection
+retrieved final URL: https://learn.microsoft.com/en-us/powershell/module/nettcpip/get-nettcpconnection?view=windowsserver2025-ps
+retrieved: 2026-09-20T12:57:51 (local, UTC+02:00)
+retrieved body: 69290 bytes, SHA-256 e6d01fef2b73cda806d21b57399bcc7f470d1edf4b115f2f053265961f6d815c
+scope: closed-set retrieval for the ETB U2/U3 authoritative-semantics round.  No full page text is stored here; only the propositions and the minimal excerpts needed to prove them.
+
+SEMANTIC PROPOSITIONS (paraphrase)
+P1  The cmdlet gets current TCP connections and exposes connection properties such as local or remote IP address, local or remote port, and connection state.
+P2  `-LocalAddress` takes an array of local IP addresses, and the cmdlet gets the connections for the addresses that the caller specifies.  The parameter does not support wildcards.  Alias: IPAddress; position 0.
+P3  `-LocalPort` takes an array of local ports, and the cmdlet gets the connections for the ports that the caller specifies.  The parameter does not support wildcards.  Position 1.
+P4  `-State` takes an array of TCP states, and the cmdlet gets the connections that match the states the caller specifies; `Listen` is one of the accepted values.
+P5  The cmdlet's documented Outputs type is `CimInstance`: a Microsoft.Management.Infrastructure.CimInstance wrapper for WMI objects, where "the path after the pound sign (#) provides the namespace and class name for the underlying WMI object".  This page does not itself name the underlying class.
+
+MINIMAL EXCERPTS
+"Specifies an array of local IP addresses. The cmdlet gets connections for the addresses that you specify." … "Supports wildcards: False"
+"Specifies an array of local ports. The cmdlet gets connections for the ports that you specify." … "Supports wildcards: False"
+"Specifies an array of TCP states. The cmdlet gets connections that match the states that you specify. The acceptable values for this parameter are: Bound Closed CloseWait Closing DeleteTCB Established FinWait1 FinWait2 LastAck Listen SynReceived SynSent TimeWait"
+"Outputs  CimInstance  The Microsoft.Management.Infrastructure.CimInstance object is a wrapper class that displays Windows Management Instrumentation (WMI) objects. The path after the pound sign (#) provides the namespace and class name for the underlying WMI object."
+"Get-NetTCPConnection -State Established  This command gets all TCP connections that have an Established state."
+
+CLASSIFICATION (this round)
+- U2 exact-local-address filter: ESTABLISHED (P2).
+- U2 exact-local-port filter: ESTABLISHED (P3).
+- U2 Listen restriction: ESTABLISHED for the filter contract (P4); the `Listen` value's meaning comes from D2.
+- U2 output-class binding: corroborated but not completed by D1 alone (P5); completed by local probe S1 together with D2.

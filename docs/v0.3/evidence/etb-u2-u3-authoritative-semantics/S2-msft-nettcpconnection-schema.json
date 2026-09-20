@@ -1,0 +1,81 @@
+{
+  "probe": "S2",
+  "command": "Get-CimClass -Namespace root/StandardCimv2 -ClassName MSFT_NetTCPConnection",
+  "CimClassName": "MSFT_NetTCPConnection",
+  "CimSystemProperties_Namespace": "ROOT/StandardCimv2",
+  "Requested": [
+    "LocalAddress",
+    "LocalPort",
+    "State",
+    "OwningProcess",
+    "CreationTime"
+  ],
+  "Found": [
+    "CreationTime",
+    "LocalAddress",
+    "LocalPort",
+    "OwningProcess",
+    "State"
+  ],
+  "Properties": [
+    {
+      "Name": "CreationTime",
+      "CimType": "DateTime",
+      "Flags": "Property, ReadOnly, NullValue",
+      "Qualifiers": [
+        {
+          "Name": "read",
+          "Value": "True"
+        }
+      ]
+    },
+    {
+      "Name": "LocalAddress",
+      "CimType": "String",
+      "Flags": "Property, ReadOnly, NullValue",
+      "Qualifiers": [
+        {
+          "Name": "read",
+          "Value": "True"
+        }
+      ]
+    },
+    {
+      "Name": "LocalPort",
+      "CimType": "UInt16",
+      "Flags": "Property, ReadOnly, NullValue",
+      "Qualifiers": [
+        {
+          "Name": "read",
+          "Value": "True"
+        }
+      ]
+    },
+    {
+      "Name": "OwningProcess",
+      "CimType": "UInt32",
+      "Flags": "Property, ReadOnly, NullValue",
+      "Qualifiers": [
+        {
+          "Name": "read",
+          "Value": "True"
+        }
+      ]
+    },
+    {
+      "Name": "State",
+      "CimType": "UInt8",
+      "Flags": "Property, ReadOnly, NullValue",
+      "Qualifiers": [
+        {
+          "Name": "read",
+          "Value": "True"
+        },
+        {
+          "Name": "ValueMap",
+          "Value": "1 2 3 4 5 6 7 8 9 10 11 12"
+        }
+      ]
+    }
+  ]
+}

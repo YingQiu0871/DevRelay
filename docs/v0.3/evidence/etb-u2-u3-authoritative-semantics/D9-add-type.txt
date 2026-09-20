@@ -1,0 +1,18 @@
+SOURCE D9 — Add-Type (Microsoft.PowerShell.Utility), Windows PowerShell 5.1 view
+canonical family: https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.utility/add-type
+retrieved final URL: https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.utility/add-type?view=powershell-5.1
+retrieved: 2026-09-20T12:57:53 (local, UTC+02:00)
+retrieved body: 115125 bytes, SHA-256 55f5f2a865f5869f1964ee6ff57511ba2421c29ea64264d212836eecdf1ff3d8
+scope: closed-set retrieval for the ETB U2/U3 authoritative-semantics round.  No full page text is stored here; only the propositions and the minimal excerpts needed to prove them.
+
+SEMANTIC PROPOSITIONS (paraphrase)
+P1  The cmdlet adds .NET types (including inline source code) to a PowerShell session.
+P2  "On Windows, you can use this feature to make Platform Invoke (P/Invoke) calls to unmanaged functions in PowerShell."
+P3  A documented example ("Call native Windows APIs") shows the `[DllImport(...)]` signature form and states that "Add-Type uses the Platform Invoke (P/Invoke) mechanism to call a function in User32.dll from PowerShell", with the note that the example works only on Windows.
+
+MINIMAL EXCERPTS
+"On Windows, you can use this feature to make Platform Invoke (P/Invoke) calls to unmanaged functions in PowerShell."
+"Example 4: Call native Windows APIs … Add-Type uses the Platform Invoke (P/Invoke) mechanism to call a function in User32.dll from PowerShell. This example only works on computers running the Windows operating system."
+
+CLASSIFICATION (this round)
+- U3 locally available route to invoke the final-path capability later: ESTABLISHED in combination with probe S4 (Add-Type is present locally as a Cmdlet in Microsoft.PowerShell.Utility 3.1.0.0).  No native-call code was compiled and no native function was executed in this round.

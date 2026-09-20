@@ -1,0 +1,13 @@
+{
+  "probe": "S1",
+  "command": "Get-Command Get-NetTCPConnection",
+  "Name": "Get-NetTCPConnection",
+  "CommandType": "Function",
+  "ModuleName": "NetTCPIP",
+  "Version": "1.0.0.0",
+  "OutputType": [
+    "Microsoft.Management.Infrastructure.CimInstance",
+    "Microsoft.Management.Infrastructure.CimInstance#ROOT/StandardCimv2/MSFT_NetTCPConnection"
+  ],
+  "OutputTypeCount": 2
+}

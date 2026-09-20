@@ -1,0 +1,8 @@
+{
+  "probe": "S4",
+  "command": "Get-Command Add-Type",
+  "Name": "Add-Type",
+  "CommandType": "Cmdlet",
+  "ModuleName": "Microsoft.PowerShell.Utility",
+  "Version": "3.1.0.0"
+}

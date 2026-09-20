@@ -1,0 +1,27 @@
+SOURCE D2 — MSFT_NetTCPConnection class
+canonical: https://learn.microsoft.com/en-us/windows/win32/fwp/wmi/nettcpipprov/msft-nettcpconnection
+retrieved final URL: https://learn.microsoft.com/en-us/windows/win32/fwp/wmi/nettcpipprov/msft-nettcpconnection
+retrieved: 2026-09-20T12:57:51 (local, UTC+02:00)
+retrieved body: 109836 bytes, SHA-256 6a840d574f233838dc0cb0066b11d0c7ef954e6f589b6befc3b62f6695f025ba
+scope: closed-set retrieval for the ETB U2/U3 authoritative-semantics round.  No full page text is stored here; only the propositions and the minimal excerpts needed to prove them.
+
+SEMANTIC PROPOSITIONS (paraphrase)
+P1  The class lives in namespace `Root\StandardCimv2` (requirements table: Namespace Root\StandardCimv2; MOF NetTCPIP.mof; DLL NetTCPIP.dll).
+P2  `LocalAddress` — data type string, access type Read-only — "The local address of the transport connection."
+P3  `LocalPort` — data type uint16, access type Read-only — "The local port of the transport connection."
+P4  `State` — data type uint8, access type Read-only — "The state of the TCP connection", with the enumerated value `Listen = 2` meaning "Waiting for a connection request from any remote TCP and port."
+P5  `OwningProcess` — data type uint32, access type **Read-only** — "The PID of the owning process of the TCP connection."  This is an OUTPUT/property semantic, distinct from the Get-NetTCPConnection `-OwningProcess` INPUT filter.
+P6  `CreationTime` — data type datetime, access type Read-only — "The creation time of the TCP connection."
+
+MINIMAL EXCERPTS
+"Namespace  Root\StandardCimv2"
+"LocalAddress  Data type: string  Access type: Read-only  The local address of the transport connection. This property is inherited from MSFT_NetTransportConnection."
+"LocalPort  Data type: uint16  Access type: Read-only  The local port of the transport connection."
+"State  Data type: uint8  Access type: Read-only  The state of the TCP connection.  Value Meaning … Listen 2 Waiting for a connection request from any remote TCP and port."
+"OwningProcess  Data type: uint32  Access type: Read-only  The PID of the owning process of the TCP connection."
+"CreationTime  Data type: datetime  Access type: Read-only  The creation time of the TCP connection."
+
+CLASSIFICATION (this round)
+- U2 owning-PID OUTPUT semantics: ESTABLISHED (P5, read-only property carrying the owning PID).
+- U2 Listen value semantics: ESTABLISHED (P4).
+- Local applicability bound through probe S2 (same class and the five properties present in `ROOT/StandardCimv2`, all ReadOnly).

@@ -1,0 +1,21 @@
+SOURCE D5 — about_WQL, Windows PowerShell 5.1 view
+canonical family: https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.core/about/about_wql
+retrieved final URL: https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.core/about/about_wql?view=powershell-5.1
+retrieved: 2026-09-20T12:57:52 (local, UTC+02:00)
+retrieved body: 74466 bytes, SHA-256 e5965760204e20653677cd1096b72ea5ef43c9fa12ba5fb7e1be5ff4f720967c
+scope: closed-set retrieval for the ETB U2/U3 authoritative-semantics round.  No full page text is stored here; only the propositions and the minimal excerpts needed to prove them.
+
+SEMANTIC PROPOSITIONS (paraphrase)
+P1  A WQL WHERE statement establishes conditions for the data a SELECT statement returns, with the documented format `WHERE <property> <operator> <value>`.
+P2  The documented comparison-operator table lists `=` as **Equal**, and lists `LIKE` separately as **Wildcard match** — so `=` is an equality comparison and is not the wildcard form.
+P3  The documentation states that, when using the WHERE statement, the property name and value must be accurate.
+P4  The documented example applies this to the class used by this round: `Get-CimInstance -Query "SELECT * FROM Win32_Process WHERE name='Notepad.exe'"`.
+
+MINIMAL EXCERPTS
+"A WHERE statement establishes conditions for the data that a SELECT statement returns. The WHERE statement has the following format: WHERE <property> <operator> <value>"
+"WHERE statement comparison operators … = Equal … LIKE Wildcard match"
+"When using the WHERE statement, the property name and value must be accurate."
+"Get-CimInstance -Query "SELECT * FROM Win32_Process WHERE name='Notepad.exe'""
+
+CLASSIFICATION (this round)
+- U3 exact PID-scoped query (equality semantics): ESTABLISHED — `ProcessId = <known PID>` is an equality predicate in a WQL/CQL where clause; no wildcard semantics apply to `=`.  No instance was retrieved in this round.
