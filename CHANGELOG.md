@@ -628,6 +628,77 @@ authoritative ETB status is **unchanged** by this design-support round — `ETB 
 / NOT EXECUTED` and `ETB EXECUTION / ORACLE = NOT YET DEFINED / NOT AUTHORIZED` — and Mode-B oracle
 construction has still **not** resumed.
 
+**The ETB U1/U2/U3 capability-resolution candidate was independently approved, so its findings are
+now authoritative design-support status (this supersedes the candidate status recorded in the
+preceding entry).**  The independent review issued *APPROVE V0.3-E ETB U1/U2/U3 CAPABILITY
+RESOLUTION* (**P0 = 0, P1 = 0, P2 = 0**; four non-blocking P3s), binding the immutable capability
+artifact `docs/v0.3/V03E_G0_5_PRE_ETB_CAPABILITY_RESOLUTION.md` (blob
+`59e8ef575fa3ab854f65fee5e25621c51f74c8b76615d7d4d9fb1e071b4049ac`, commit `3151f87`) to that
+decision — an independent review decision, not executor self-approval.  The authoritative capability
+findings are **`U1 = U1_NOT_ESTABLISHED`**, **`U2 = U2_NOT_ESTABLISHED`**, **`U3 =
+U3_NOT_ESTABLISHED`**, **`MODE L = MODE_L_MECHANISM_NOT_YET_FREEZABLE`** and **`MODE P =
+MODE_P_MECHANISM_NOT_YET_FREEZABLE`**, with **`U4 = UNRESOLVED BY DESIGN / OWNER-ORACLE DECISION
+REMAINS`** and **`U5 = UNRESOLVED BY DESIGN / OWNER-ORACLE DECISION REMAINS`**.  These are
+**capability / design-support findings only**: they are **evidence-surface limitations, not
+platform-absence findings**, and they are **not** `ETB UNSATISFIED`, `ETB FAIL`, `SIC FAIL`,
+`P6 FAIL` or `G0.5 FAIL`.  Accepted U1 detail: A (serve subcommand exists), B (exact command form),
+C (explicit hostname/address option) and D (explicit port option) are `ESTABLISHED`, while E
+(exact-bind / bind-failure / no-substitution semantics) and F (deterministic launcher-visible
+process identity) are `SEMANTICS_UNPROVEN` — therefore `U1_NOT_ESTABLISHED`; this does **not** mean
+Mode L is impossible and does **not** mean OpenCode cannot bind an exact endpoint, only that the
+required semantics remain unestablished.  Accepted U2 detail: the `Get-NetTCPConnection` local help
+is **PARTIAL**; exact-local-address filter semantics, exact-local-port filter semantics,
+listener-state restriction semantics and multiple-result detectability are `SEMANTICS_UNPROVEN`, and
+owning-PID **output** exposure is `EVIDENCE_INSUFFICIENT` — therefore `U2_NOT_ESTABLISHED`, with the
+distinction preserved that the existence of `-OwningProcess` as an **input** filter does **not**
+establish an owning-PID **output** property, and no `MSFT_NetTCPConnection` property is inferred from
+general knowledge.  Accepted U3 detail: PID-scoped query and SHA-256 exact-path hashing are
+`ESTABLISHED`, while executable-path exposure, canonical-path semantics and the process-instance
+discriminator are `EVIDENCE_INSUFFICIENT` — therefore `U3_NOT_ESTABLISHED`, with no invented
+`ExecutablePath`, canonicalization or `CreationDate`/`StartTime` semantics.  Reviewed
+next-information ordering (recorded as **current design-support status, not authorization**):
+**FIRST** — U2: authoritative parameter semantics for `-LocalAddress`, `-LocalPort` and `-State`,
+plus authoritative `MSFT_NetTCPConnection` output-property semantics, especially an owning-PID
+output property; **SECOND** — U3: a documented executable-path property with path-comparison /
+canonicalization semantics, plus a documented process-instance / creation-identity property whose
+semantics are strong enough to discriminate PID reuse; **THIRD** — U1: exact-bind, bind-failure and
+no-substitution semantics for `--hostname`/`--port` (including the meaning of `--port 0`), plus a
+deterministic launcher-visible process-identity mechanism.  **The repository does not yet contain
+enough information to construct a sound final ETB execution oracle; additional bounded capability
+evidence is required first** — and no follow-up capability round is designed or authorized here.
+Review P3s are recorded accurately as **non-blocking standing observations, none presented as
+resolved**: **P3-1** the intended PowerShell execution helper failed (`node.exe ENOENT`) and the same
+frozen W1–W9 commands were executed through `powershell.exe -NoProfile -NonInteractive` — a
+non-material process/harness deviation; **P3-2** the OpenCode help invocations produced the disclosed
+**+246-byte** growth in `C:\Users\1\.local\share\opencode\log\opencode.log` during the probe window —
+a non-blocking local metadata/hygiene side effect on which no semantic evidence depended; **P3-3**
+the "no untracked leftovers" wording was technically overbroad because the ignored/untracked
+`PROJECT_MEMORY.md` exists — no runtime/config/evidence impact; **P3-4** previously carried project
+P3s were not re-promoted.  Raw-capture treatment: the review independently corroborated the raw
+captures under `C:\Users\1\AppData\Local\Temp\etb-cap.PC89OZ` during review, but that **ephemeral
+path is not an authoritative long-term repository source**; the accepted repository artifact carries
+the durable summarized evidence and hash record, and future evidence rounds should preserve required
+raw/surrogate evidence in a **durable tracked form** when authorized — user logs and private data
+must never be copied into the repository.  ETB status is unchanged by this acceptance: `ETB =
+DEFINITION ACCEPTED / NOT EXECUTED` and `ETB EXECUTION / ORACLE = NOT YET DEFINED / NOT AUTHORIZED`;
+capability-finding acceptance creates **no** ETB execution oracle, **no** ETB execution
+authorization, **no** `ETB SATISFIED` and **no** `ETB UNSATISFIED`.  Endpoint and mode state is
+unchanged: `opencode.base_url` is still `""`, no endpoint is established, no address, address
+family, port or base URI is selected, no port policy is instantiated, and neither Mode L nor Mode P
+is selected.  Mode A remains completed and authoritative (`SIC_NOT_EXPOSED_IN_INSPECTED_CONTRACT`,
+strictly scoped to the accepted static surface); Mode-B status is unchanged (`NOT RUN / NO ORACLE /
+ORACLE NOT FREEZABLE / CONCRETE ENDPOINT NOT ESTABLISHED / PRE-ORACLE CONFIGURATION / TARGET-BINDING
+PREREQUISITE BLOCKER`) and Mode-B oracle construction has **not** resumed; `G0.5 / P6` remains
+`NOT RUN / DEFINITION ACCEPTED / ORACLE NOT FREEZABLE / LOCAL REACHABILITY GAP` with `P6 = UNPROVEN /
+UNSATISFIED` and **NOT CLOSED**; `G1`/`G2` remain `NOT RUN`; Case-C and v0.3-E implementation remain
+**NOT AUTHORIZED**; `adopt_completed_turn` remains **DISABLED**.  This bookkeeping round ran no
+capability probe, no web lookup, no PowerShell help install and no OpenCode help invocation;
+established no endpoint; selected no endpoint, port, address family or mode; changed no
+configuration; started no OpenCode server; created no listener; performed no process/listener/port
+query; did no ETB oracle work and no ETB execution; issued **0** HTTP; touched neither `/doc` nor
+`/session`; executed no SIC attempt; ran no G0.5/G1/G2; and made 0 runtime/test/dependency/version
+changes.
+
 That approval followed three earlier review rounds: the first independent design
 review returned `REQUEST_CHANGES` (P0 = 1, P1 = 6, P2 = 5) and the
 recovery/reconciliation contract was repaired in `f67bf9e`; two narrow re-reviews
