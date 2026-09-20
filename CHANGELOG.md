@@ -1011,6 +1011,78 @@ attempts, **0** Mode-B oracle work, **0** provider/model calls, **0** G0.5 and *
 **0** runtime/test/dependency/version changes; the tracked worktree is clean, and the ignored/untracked
 `PROJECT_MEMORY.md` persists.
 
+**The ETB Mode-P execution-oracle candidate was rejected by independent review, and a round-2
+remediation revision now exists (still a candidate: not accepted, not frozen, not executed).**  The
+independent review issued *REQUEST_CHANGES — V0.3-E ETB MODE-P EXECUTION ORACLE* (**P0 = 0, P1 = 3,
+P2 = 2**) against candidate `b117daf` (blob `280e688b…`), so that candidate is **not** accepted and
+**not** frozen and the last authoritative pre-oracle baseline remains `b3be79d`.
+`docs/v0.3/V03E_G0_5_PRE_ETB_EXECUTION_ORACLE.md` was revised **in place** (no second oracle file) into a
+self-contained round-2 remediation candidate.  The review's accepted portions are **preserved
+unchanged** — owner tuple; ETB-definition conformance; production config-reader semantics
+(**CONFIG_EXACTNESS_SOUND**); listener query and `Count == 1`; PID/process query; `CreationDate` identity
+semantics; `CreateFileW` parameter values; `GetFinalPathNameByHandleW` flags/buffer size; AS-IS `\\?\`
+with `-ceq`; package/version/bin binding; dual SHA-256 target rule; 25-field snapshot; S0/S1 plan; later
+Mode-B PRE/POST contract; `HARNESS_INVALID` as pre-semantic/no-ETB-result; no-shopping; configuration
+timing; status preservation — and **only the five blocking gaps were tightened**: **P1-A** native
+machinery frozen verbatim (exact type `DevRelayEtbNativeV1`; the complete ready-to-use C# `Add-Type`
+source with three `kernel32.dll` `DllImport` declarations using `EntryPoint`/`CharSet.Unicode`/
+`ExactSpelling`/`SetLastError`, `LPWStr` marshaling, `StringBuilder [Out]` buffer and `bool`
+`CloseHandle` return; the exact `Add-Type -TypeDefinition $nativeSource -Language CSharp -ErrorAction
+Stop` invocation; `IntPtr` handles with `INVALID_HANDLE_VALUE = [IntPtr](-1)`; the
+`[System.Text.StringBuilder]::new(32768)` buffer with the exact `$buffer.ToString(0, [int]$length)`
+read-out; no NUL-terminated unbounded read, no resize, no retry; `CloseHandle` always on a
+`finally`-equivalent path with a `false` return classified `HARNESS_INVALID`; the same helper applied to
+both paths); **P1-B** atomic evidence publication frozen (directory `docs/v0.3/evidence/etb-execution`;
+three finals plus three **same-directory** `.tmp` paths; the six-path preexistence rule where any existing
+path yields `HARNESS_INVALID` with no delete/overwrite/cleanup/retry; the temp write primitive
+`UTF8Encoding(false)` → `FileStream` `CreateNew`/`Write`/`FileShare.None` → `Flush(true)` → close →
+`ReadAllBytes` byte-equality; evidence temp verification for byte equality, exactly one final LF, the
+byte before it being neither LF nor CR, no BOM, `ConvertFrom-Json` parse, matching `schema_version` and
+`outcome`; in-memory result construction written only to the result temp; and `System.IO.File.Move(temp,
+final)` with no overwrite only after all three temps verify, in the exact order evidence → manifest →
+result with the result published **last**, followed by per-move and post-set verification); **P1-C**
+manifest construction/verification frozen (coverage of exactly the one evidence file, never itself and
+never the Markdown result; exactly one line `<64-lowercase-sha256><two ASCII spaces>docs/v0.3/evidence/
+etb-execution/ETB_EVIDENCE.json<LF>`; no header or comments; UTF-8 no-BOM/LF; digest computed over the
+intended evidence bytes before publication; read-back byte equality plus digest/spaces/path exactness;
+and the frozen in-memory hasher `SHA256.Create()` → `ComputeHash` → lowercase hex, which is
+evidence-machinery hashing only and does not change the `Get-FileHash` target-executable rule); **P2-A**
+failure taxonomy frozen per class via a deterministic table (config reader, PowerShell command
+availability, listener, process, Add-Type/P-Invoke, hashing, package manifest, evidence machinery) with
+any unclassified unexpected exception classified `HARNESS_INVALID`, no ETB semantic result, no retry,
+stop; **P2-B** timestamps and JSON frozen (`[System.DateTimeOffset]::UtcNow` formatted
+`yyyy-MM-dd'T'HH:mm:ss.fffffff'Z'` with `InvariantCulture` for both timestamps, no local time;
+`ConvertTo-Json -Depth 12 -Compress` written with `UTF8Encoding($false)` as one JSON line plus exactly
+one LF and no CRLF conversion; every object `[ordered]` with the frozen top-level, `endpoint`, `target`,
+snapshot, `checks` (18 keys valued only `PASS`/`FAIL`/`NOT_REACHED`), `non_claims` (6 ordered entries)
+and `activity_counters` (14 ordered keys) orders, plus a frozen value vocabulary — `MODE_P`, `http`,
+`IPv4`, `127.0.0.1`, `4096`, `http://127.0.0.1:4096`, `NONE`, `Listen`, lowercase-hex digests, integer
+PIDs/ports/ticks — so no executor choice remains).  Also newly frozen: partial-publication semantics (any
+partial output set is non-authoritative and invalid as an ETB result, nothing is deleted, and the
+existence of the evidence or manifest file — or even the Markdown result — without a fully verified final
+set never means an ETB result exists) and the rule that a provisional `ETB_SATISFIED`/`ETB_UNSATISFIED`
+**must not survive** an evidence-integrity failure, the final classification becoming `HARNESS_INVALID /
+NO ETB SEMANTIC RESULT`; the configuration-establishment fidelity requirement that the future separately
+authorized stage write the exact owner literal `http://127.0.0.1:4096` with no trailing slash; and
+static-anchor hygiene (line numbers informational only — module path, symbol names and the semantic call
+path are the frozen authority).  Recorded status is unchanged and unimplicated as accepted: `ETB =
+DEFINITION ACCEPTED / NOT EXECUTED` and `ETB EXECUTION / ORACLE = CANDIDATE / NOT ACCEPTED / NOT
+AUTHORIZED / NOT EXECUTED`.  The executor-choice self-check over the nineteen machinery items found **no
+remaining runtime choice**, which is why the revision may be committed as a candidate.  `opencode.base_url`
+remains `""`; no evidence directory or evidence file was created; no native type was compiled; no
+PowerShell oracle code was executed; the tracked worktree is clean and the ignored/untracked
+`PROJECT_MEMORY.md` persists.  This remediation round performed **0** web/network access, **0** live
+endpoint queries, **0** `Get-NetTCPConnection` executions, **0** live `Get-CimInstance` queries, **0**
+listener/process/port enumeration, **0** config mutations, **0** OpenCode starts, **0** HTTP, **0**
+`/doc`, **0** `/session`, **0** `Add-Type` executions, **0** P/Invoke executions, **0** evidence
+publications, **0** ETB executions, **0** SIC attempts, **0** Mode-B oracle work, **0** provider/model
+calls, **0** G0.5 and **0** G1/G2 activity, and **0** runtime/test/dependency/version changes.  Preserved:
+Mode-B remains `NOT RUN / NO ORACLE / ORACLE NOT FREEZABLE / CONCRETE ENDPOINT NOT ESTABLISHED /
+PRE-ORACLE CONFIGURATION / TARGET-BINDING PREREQUISITE BLOCKER`; `G0.5 / P6` remains `NOT RUN / DEFINITION
+ACCEPTED / ORACLE NOT FREEZABLE / LOCAL REACHABILITY GAP` with `P6 = UNPROVEN / UNSATISFIED` and G0.5
+**NOT CLOSED**; `G1`/`G2` remain `NOT RUN`; Case-C and v0.3-E implementation remain **NOT AUTHORIZED**;
+`adopt_completed_turn` remains **DISABLED**.
+
 That approval followed three earlier review rounds: the first independent design
 review returned `REQUEST_CHANGES` (P0 = 1, P1 = 6, P2 = 5) and the
 recovery/reconciliation contract was repaired in `f67bf9e`; two narrow re-reviews
