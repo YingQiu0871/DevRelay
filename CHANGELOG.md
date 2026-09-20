@@ -944,6 +944,73 @@ Mode-B oracle work, **0** provider/model calls, **0** network, **0** G0.5 and **
 **0** runtime/test/dependency/version changes; `opencode.base_url` remains `""`, the tracked worktree is
 clean, and the ignored/untracked `PROJECT_MEMORY.md` persists.
 
+**A candidate ETB execution oracle for Mode P / Class-A fixed endpoint now exists (design only; not
+accepted, not frozen, not executed).**  `docs/v0.3/V03E_G0_5_PRE_ETB_EXECUTION_ORACLE.md` freezes every
+semantic rule a later authorized ETB attempt must apply — so that the executor chooses no semantic rule
+at runtime — for the owner-selected **MODE P — PRE-EXISTING TARGET** with the **CLASS A
+OWNER-SUPPLIED FIXED ENDPOINT** `http` / IPv4 / `127.0.0.1` / `4096` / `http://127.0.0.1:4096` and
+**fallback = NONE**, against OpenCode / `opencode-ai` **1.18.11**
+(`C:\Users\1\AppData\Roaming\npm\node_modules\opencode-ai\bin\opencode.exe`, SHA-256 `578d7eb3…`).
+The artifact is marked **ETB EXECUTION ORACLE / MODE P / CLASS A OWNER-SUPPLIED FIXED ENDPOINT / ORACLE
+CANDIDATE / NOT ACCEPTED / NOT FROZEN / NOT EXECUTED / DOES NOT MODIFY CONFIGURATION / DOES NOT START
+OPENCODE / DOES NOT PERFORM HTTP / DOES NOT AUTHORIZE ETB EXECUTION**, so the recorded status is
+`ETB = DEFINITION ACCEPTED / NOT EXECUTED` with `ETB EXECUTION / ORACLE = CANDIDATE / NOT ACCEPTED / NOT
+AUTHORIZED / NOT EXECUTED`.  Static design findings and frozen rules (no runtime choice remains): the
+**production config-read mechanism is the existing `src/devrelay/config.py` function
+`load_wiring_config(root_or_path) -> WiringConfig`**, consumed read-only and deterministically through
+`WiringConfig.opencode.base_url` (the validator-normalized field, trailing `/` stripped) with the frozen
+invocation `PYTHONPATH=<repo>/src python -c "…load_wiring_config(sys.argv[1]).opencode.base_url" "<repo>"`,
+required to equal `http://127.0.0.1:4096` exactly (`-ceq`), with precommitted failure mapping (loader
+module import failure → `HARNESS_INVALID`; `ConfigError`/absent file/`""`/mismatch → `ETB_UNSATISFIED`);
+the **exact listener query** `@(Get-NetTCPConnection -LocalAddress '127.0.0.1' -LocalPort 4096 -State
+Listen)` with `Count -eq 1` plus `LocalAddress -ceq '127.0.0.1'`, `LocalPort -eq 4096`, `State -eq
+'Listen'` and a present positive `OwningProcess`; the **exact PID-scoped process query**
+`@(Get-CimInstance -Namespace root/cimv2 -ClassName Win32_Process -Filter "ProcessId = <pid>")` with
+`Count -eq 1` and required `ProcessId` / `ExecutablePath` / `CreationDate`; **process-instance identity =
+PID + `CreationDate.Ticks`** (serialized as `ToString("o", InvariantCulture)` and `.Ticks`) with the
+accepted **sub-resolution collision residual recorded** and no mathematical uniqueness claimed;
+**canonicalization through `CreateFileW`** (`GENERIC_READ` `0x80000000`, share
+`READ|WRITE|DELETE` `0x00000007`, `NULL` security attributes, `OPEN_EXISTING` `3`,
+`FILE_ATTRIBUTE_NORMAL` `0x00000080`, `NULL` template) **plus
+`GetFinalPathNameByHandleW(FILE_NAME_NORMALIZED + VOLUME_NAME_DOS, flags = 0, 32768-WCHAR buffer)`**
+with return `0` or `>= 32768` failing closed and `CloseHandle` always on a `finally`-equivalent path;
+**path text kept exactly as returned** (`\\?\` retained, no slash/case/drive-letter normalization) and
+compared with **`-ceq`** (safe false-negative preferred over permissive equivalence); **SHA-256 via
+`Get-FileHash -Algorithm SHA256 -LiteralPath`** on both the process-reported path and the accepted
+target literal, each required to equal the accepted digest (hex letter case the only normalization,
+`-ieq`); **version verification only through the exact frozen `package.json`** (no binary invocation, no
+PATH/npm lookup) requiring `name = opencode-ai`, `version = 1.18.11` and a `bin.opencode` that resolves
+under the accepted package root to the accepted executable canonicalized by the same procedure; a
+**25-field identity snapshot**; the **S0/S1 two-snapshot plan** (no HTTP between them, full identity
+equality required) that also freezes the **later Mode-B PRE/POST target-continuity contract** (contract
+only — no Mode-B request set, no SIC outcome, no HTTP); the **three-outcome taxonomy**
+`ETB_SATISFIED` / `ETB_UNSATISFIED` / `HARNESS_INVALID` with `ETB_UNSATISFIED` explicitly **not** SIC/P6/
+G0.5 failure and `HARNESS_INVALID` reserved for untrustworthy oracle machinery only (no ETB semantic
+result, no retry, stop and re-authorize); and **evidence serialization** at
+`docs/v0.3/evidence/etb-execution/ETB_EVIDENCE.json` (`schema_version` `devrelay-etb-v1`, ordered
+top-level fields, UTF-8 no-BOM, LF only, one final LF, no comments, no user/session/prompt/provider
+content, frozen `UTF8Encoding($false)` writer) plus `MANIFEST.sha256` and a result artifact
+`docs/v0.3/V03E_G0_5_PRE_ETB_EXECUTION_RESULT.md` marked **CANDIDATE ETB RESULT / AWAITING INDEPENDENT
+RESULT REVIEW**.  Even an accepted `ETB_SATISFIED` would mean only that the exact configured endpoint is
+deterministically bound to the accepted target and that Mode-B SIC oracle **construction** may resume
+after independent ETB result acceptance — it would not establish SIC semantics, P6, G0.5, session
+incarnation, provenance, Mode-B PASS, Case-C authorization or `adopt_completed_turn`.  Preserved
+unchanged: `opencode.base_url` is still `""` (no configuration mutation in this round and none before a
+separate authorization); no endpoint is established; no listener existence or OpenCode liveness is
+asserted; Mode-B remains `NOT RUN / NO ORACLE / ORACLE NOT FREEZABLE / CONCRETE ENDPOINT NOT ESTABLISHED /
+PRE-ORACLE CONFIGURATION / TARGET-BINDING PREREQUISITE BLOCKER`; `G0.5 / P6` remains `NOT RUN /
+DEFINITION ACCEPTED / ORACLE NOT FREEZABLE / LOCAL REACHABILITY GAP` with `P6 = UNPROVEN / UNSATISFIED`
+and G0.5 **NOT CLOSED**; `G1`/`G2` remain `NOT RUN`; Case-C and v0.3-E implementation remain **NOT
+AUTHORIZED**; `adopt_completed_turn` remains **DISABLED**; `U1 = U1_NOT_ESTABLISHED`,
+`U2 = U2_ESTABLISHED`, `U3 = U3_ESTABLISHED`, `MODE L = MODE_L_MECHANISM_NOT_YET_FREEZABLE`,
+`MODE P = MODE_P_MECHANISM_FREEZABLE` and the accepted owner decision are unchanged.  This design round
+performed **0** web/network access, **0** `Get-NetTCPConnection` executions, **0** live `Get-CimInstance`
+process queries, **0** listener/process/port enumeration, **0** endpoint probes, **0** config mutations,
+**0** OpenCode starts, **0** HTTP, **0** `/doc`, **0** `/session`, **0** ETB executions, **0** SIC
+attempts, **0** Mode-B oracle work, **0** provider/model calls, **0** G0.5 and **0** G1/G2 activity, and
+**0** runtime/test/dependency/version changes; the tracked worktree is clean, and the ignored/untracked
+`PROJECT_MEMORY.md` persists.
+
 That approval followed three earlier review rounds: the first independent design
 review returned `REQUEST_CHANGES` (P0 = 1, P1 = 6, P2 = 5) and the
 recovery/reconciliation contract was repaired in `f67bf9e`; two narrow re-reviews
