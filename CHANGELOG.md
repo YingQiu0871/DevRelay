@@ -820,6 +820,61 @@ manifest re-verified 14 OK / 0 mismatch); the artifact retains its `ROUND-2 CAND
 ACCEPTED` header because acceptance is carried by the independent review record and the active
 authoritative status surfaces.
 
+**The human owner has explicitly decided the ETB mode and endpoint parameters; a candidate repository
+record of that decision now exists (not yet independently accepted).**
+`docs/v0.3/V03E_G0_5_PRE_ETB_OWNER_ORACLE_PARAMETERS.md` records the owner's decision as **frozen
+external input** for a future ETB execution-oracle design: **U5 = MODE P — PRE-EXISTING TARGET
+(selected by the owner; MODE L = NOT SELECTED)**, **U4 = CLASS A — OWNER-SUPPLIED FIXED ENDPOINT**, and
+the indivisible endpoint tuple **scheme `http` / address family IPv4 / numeric loopback address
+`127.0.0.1` / port `4096` / base URI `http://127.0.0.1:4096`**, with **fallback = NONE**.  The record is
+marked **CANDIDATE RECORD / HUMAN OWNER DECISION / NOT YET INDEPENDENTLY ACCEPTED**, so the active status
+is `OWNER / ORACLE-PARAMETER DECISION = CANDIDATE RECORD / OWNER INPUT FROZEN / INDEPENDENT FIDELITY
+REVIEW PENDING`.  Acceptance-critical provenance: the **executor did not choose** Mode P, IPv4,
+`127.0.0.1`, `4096` or the base URI — the human owner supplied them and the executor must not
+reinterpret, replace or extend them; the historical documentation example `127.0.0.1:4096` is **not**
+the source of authority.  The record freezes the no-fallback prohibitions (IPv4 → IPv6;
+`127.0.0.1` → `localhost`; `127.0.0.1` → `::1`; `4096` → another port, first-free port or ephemeral
+port; Mode P → Mode L; alternate OpenCode binary or installation; endpoints discovered from logs,
+listener scans or process scans; and retry on another endpoint after failure), requires that a later
+ETB execution verify **the exact frozen endpoint only with no endpoint discovery**, and states the
+fail-closed consequence: no listener at `127.0.0.1:4096`, more than one matching listener, no owning
+PID, ambiguous owner, wrong executable, wrong hash, wrong OpenCode version, process-instance mismatch,
+or unavailable required identity evidence ⇒ **ETB must not be considered SATISFIED**, with **no**
+fallback endpoint or mode attempted.  **Configuration is deliberately untouched:** the owner-authorized
+endpoint is `http://127.0.0.1:4096` while `.devrelay/config.yaml` → `opencode.base_url` **remains `""`**
+— the owner parameter decision exists, but the endpoint is **not** yet established in configuration; a
+future separately authorized action may set `base_url` to the frozen tuple, and this round does **not**
+authorize that mutation.  Preserved unchanged: `U1 = U1_NOT_ESTABLISHED` and `MODE L =
+MODE_L_MECHANISM_NOT_YET_FREEZABLE` (Mode L is neither invalid nor impossible, and no automatic
+Mode P → Mode L fallback exists); `U2 = U2_ESTABLISHED`, `U3 = U3_ESTABLISHED` and `MODE P =
+MODE_P_MECHANISM_FREEZABLE` (not reopened, and the U2/U3 mechanism was **not** executed); the target
+identity (OpenCode / `opencode-ai` 1.18.11,
+`C:\Users\1\AppData\Roaming\npm\node_modules\opencode-ai\bin\opencode.exe`, SHA-256 `578d7eb3…`) with no
+alternate binary, installation or retargeting; `ETB = DEFINITION ACCEPTED / NOT EXECUTED` and
+`ETB EXECUTION / ORACLE = NOT YET DEFINED / NOT AUTHORIZED`, with no `ETB SATISFIED`,
+`ETB UNSATISFIED` or `ETB EXECUTED` created; Mode-B `NOT RUN / NO ORACLE / ORACLE NOT FREEZABLE /
+CONCRETE ENDPOINT NOT ESTABLISHED / PRE-ORACLE CONFIGURATION / TARGET-BINDING PREREQUISITE BLOCKER`
+with oracle construction not resumed; `G0.5 / P6` unchanged with `P6 = UNPROVEN / UNSATISFIED` and G0.5
+**NOT CLOSED**; Case-C and v0.3-E implementation `NOT AUTHORIZED`; `G1`/`G2` `NOT RUN`;
+`adopt_completed_turn` **DISABLED**.  The future-oracle rules left explicitly open (exact
+`Get-NetTCPConnection` expression; exact `Count == 1` enforcement and failure handling; exact
+`Win32_Process` PID query expression; pre/post target snapshot field sets and equality rules;
+`CreationDate` precision-residual handling; `CreateFileW` `dwShareMode`; `ExecutablePath` access-failure
+handling; `SeDebugPrivilege` failure handling; `GetFinalPathNameByHandleW` access-failure handling;
+`\\?\` prefix handling; case comparison, slash normalization and drive-letter normalization rules;
+target-executable canonicalization procedure details; exact evidence serialization; and any
+`HARNESS_INVALID` vs `ETB UNSATISFIED` boundary) were **not** solved in this round.  Sequencing is
+unchanged and no stage may be skipped: owner decision → independent review and acceptance → ETB
+execution-oracle design → independent oracle review → separate execution/configuration authorization →
+configuration establishment as authorized → ETB execution → independent ETB result review → only if
+ETB SATISFIED may Mode-B SIC oracle construction resume.  This round performed **0** web retrievals,
+**0** schema probes, **0** live TCP queries, **0** live process queries, **0** port/listener/process
+enumeration, **0** endpoint establishment or probing, **0** configuration mutations, **0** OpenCode
+starts/restarts, **0** listener work, **0** HTTP, **0** `/doc`, **0** `/session`, **0** ETB oracle
+design, **0** ETB executions, **0** SIC attempts, **0** Mode-B oracle work, **0** provider/model calls,
+**0** network, **0** G0.5 and **0** G1/G2 activity, and **0** runtime/test/dependency/version changes;
+`opencode.base_url` remains `""`.
+
 That approval followed three earlier review rounds: the first independent design
 review returned `REQUEST_CHANGES` (P0 = 1, P1 = 6, P2 = 5) and the
 recovery/reconciliation contract was repaired in `f67bf9e`; two narrow re-reviews
