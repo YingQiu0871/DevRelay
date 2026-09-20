@@ -1147,6 +1147,67 @@ work, **0** provider/model calls, **0** G0.5 and **0** G1/G2 activity, and **0**
 runtime/test/dependency/version changes; no evidence file and no result artifact were created; the
 tracked worktree is clean and the ignored/untracked `PROJECT_MEMORY.md` persists.
 
+**A candidate authorization record for the one-shot ETB execution / configuration action now exists (not
+accepted, not effective, not executed).**  `docs/v0.3/V03E_G0_5_PRE_ETB_EXECUTION_AUTHORIZATION.md` is
+marked **ETB EXECUTION / CONFIGURATION AUTHORIZATION / CANDIDATE RECORD / NOT ACCEPTED / NOT EFFECTIVE /
+DOES NOT MODIFY CONFIGURATION / DOES NOT EXECUTE ETB / DOES NOT START OPENCODE / DOES NOT AUTHORIZE HTTP /
+ONE ETB ATTEMPT ONLY IF LATER INDEPENDENTLY ACCEPTED**, so the current active authorization status is
+`ETB EXECUTION / CONFIGURATION AUTHORIZATION = CANDIDATE / NOT ACCEPTED / NOT EFFECTIVE / NOT EXECUTED`.
+Only if a separate independent authorization review accepts it may it authorize, in order, (A) exactly
+one configuration establishment — writing `http://127.0.0.1:4096` (no trailing slash, no alternate URI,
+no other field) to `<root>/.devrelay/config.yaml` → `opencode.base_url`, currently `""`, with the exact
+before/after diff recorded — and then (B) **exactly ONE** ETB execution attempt under the accepted frozen
+oracle, bound permanently to `oracle_commit = 1c6c7cda468fc4def2cafd85a9ff5da0c87d00bc` and
+`oracle_sha256 = 01675fa7e39f15451900cc306e975e9cde72d69eb01b26322bf21b8a5e54b921` — the future
+execution must **not** use `d058b38`, the authorization commit, the execution-time HEAD or any later
+commit as `oracle_commit`, and no oracle modification is authorized.  Frozen boundaries: Mode P remains
+**pre-existing target** (no OpenCode start/restart, no new instance, no listener creation, no rebinding,
+no Mode P → Mode L switch, and no recovery by target creation); fallback stays **NONE** (no IPv4 → IPv6,
+`localhost`, `::1`, other/first-free/ephemeral port, alternate executable or installation, PATH-selected
+target, log/listener/process-derived endpoint, or retry against another endpoint); the authorized
+**attempt budget is exactly one**, consumed immediately before the **first oracle operational probe after
+configuration establishment** (pure configuration establishment and static preflight of oracle
+provenance, authorization identity and pre-mutation config state do **not** consume it), with no rerun, no
+"verification rerun" and no second attempt after `ETB_SATISFIED`, `ETB_UNSATISFIED` or `HARNESS_INVALID`
+— any further attempt needs new authorization plus independent review; a non-deterministic configuration
+mutation must **not** be improvised but returned as a control failure for review (no substitute endpoint,
+no other field, no alternate config mechanism); outputs may use **only** the oracle-frozen evidence/result
+paths; the result may only be `ETB_SATISFIED`, `ETB_UNSATISFIED` or `HARNESS_INVALID / NO ETB SEMANTIC
+RESULT`, and none is authoritative before separate independent ETB-result review; `ETB_UNSATISFIED` is
+**not** SIC/P6/G0.5 failure and not a claim that OpenCode cannot support Mode B; `HARNESS_INVALID` means
+**no ETB semantic result exists**, with no retry or repair-and-continue inside the same authorization;
+**no HTTP**, no `/doc`, no `/session` and no provider/model request are authorized, and no Mode-B HTTP
+activity is authorized; **no OpenCode start/restart** is authorized; the frozen future execution order is
+authorization identity → oracle provenance → config precondition → exact `base_url` write → production
+reader verification → configuration-establishment evidence → exactly one ETB attempt → consume 1 of 1
+before the first live probe → execute the frozen oracle → publish the oracle-defined candidate
+evidence/result → **STOP** → independent ETB result review (no Mode-B construction in the same round);
+**no automatic configuration rollback is authorized** — `opencode.base_url` remains
+`http://127.0.0.1:4096` after the attempt unless a future separately authorized action changes it, with no
+rollback-on-failure and no executor discretion; and the accepted oracle's output-preexistence rule is
+preserved (no deletion and no overwrite of old outputs; a failed precondition follows the frozen
+`HARNESS_INVALID`/no-result semantics).  Even a future accepted `ETB_SATISFIED` would establish none of
+SIC semantics, P6, G0.5, session incarnation, turn provenance, message provenance, pending-handle
+semantics, Mode-B PASS, Case-C authorization or `adopt_completed_turn`; it would only permit independent
+ETB result review and, only once `ETB_SATISFIED` is independently accepted, the resumption of Mode-B SIC
+oracle construction.  Preserved unchanged: `ETB = DEFINITION ACCEPTED / NOT EXECUTED`; `ETB EXECUTION /
+ORACLE = ACCEPTED / FROZEN / NOT EXECUTED / EXECUTION NOT AUTHORIZED`; owner inputs (**MODE P**,
+**CLASS A**, `http` / IPv4 / `127.0.0.1` / `4096` / `http://127.0.0.1:4096`, fallback **NONE**) with no
+reinterpretation; `opencode.base_url` still `""` with no configuration mutation in this round; Mode-B
+remains `NOT RUN / NO ORACLE / ORACLE NOT FREEZABLE / CONCRETE ENDPOINT NOT ESTABLISHED / PRE-ORACLE
+CONFIGURATION / TARGET-BINDING PREREQUISITE BLOCKER` (this authorization candidate does **not** unblock
+it); `G0.5 / P6` remains `NOT RUN / DEFINITION ACCEPTED / ORACLE NOT FREEZABLE / LOCAL REACHABILITY GAP`
+with `P6 = UNPROVEN / UNSATISFIED` and G0.5 **NOT CLOSED**; `G1`/`G2` remain `NOT RUN`; Case-C and v0.3-E
+implementation remain **NOT AUTHORIZED**; `adopt_completed_turn` remains **DISABLED**.  This
+authorization-recording round performed **0** web/network access, **0** endpoint queries, **0**
+`Get-NetTCPConnection` executions, **0** live `Get-CimInstance` queries, **0** port/listener/process
+enumeration, **0** config mutations, **0** OpenCode starts/restarts, **0** HTTP, **0** `/doc`, **0**
+`/session`, **0** `Add-Type` executions, **0** P/Invoke executions, **0** evidence publications, **0** ETB
+executions, **0** SIC attempts, **0** Mode-B oracle work, **0** provider/model calls, **0** G0.5 and **0**
+G1/G2 activity, and **0** runtime/test/dependency/version changes; no evidence file and no result
+artifact were created; the tracked worktree is clean and the ignored/untracked `PROJECT_MEMORY.md`
+persists.
+
 That approval followed three earlier review rounds: the first independent design
 review returned `REQUEST_CHANGES` (P0 = 1, P1 = 6, P2 = 5) and the
 recovery/reconciliation contract was repaired in `f67bf9e`; two narrow re-reviews
