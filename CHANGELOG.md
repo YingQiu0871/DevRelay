@@ -1083,6 +1083,70 @@ ACCEPTED / ORACLE NOT FREEZABLE / LOCAL REACHABILITY GAP` with `P6 = UNPROVEN / 
 **NOT CLOSED**; `G1`/`G2` remain `NOT RUN`; Case-C and v0.3-E implementation remain **NOT AUTHORIZED**;
 `adopt_completed_turn` remains **DISABLED**.
 
+**The Round-2 ETB Mode-P execution oracle was independently approved and is now authoritative accepted
+repository status: ACCEPTED / FROZEN / NOT EXECUTED / EXECUTION NOT AUTHORIZED.**  The independent review
+issued *APPROVE V0.3-E ETB MODE-P ROUND-2 EXECUTION ORACLE* (**P0 = 0, P1 = 0, P2 = 0**; two
+non-blocking P3s) — an independent review decision, not executor self-approval — binding exactly
+`oracle_commit = 1c6c7cda468fc4def2cafd85a9ff5da0c87d00bc` and `oracle_sha256 =
+01675fa7e39f15451900cc306e975e9cde72d69eb01b26322bf21b8a5e54b921`
+(`docs/v0.3/V03E_G0_5_PRE_ETB_EXECUTION_ORACLE.md`).  **Oracle provenance rule (permanent, authoritative):**
+that `oracle_commit`/`oracle_sha256` pair is the accepted immutable oracle identity; a later
+acceptance-bookkeeping commit, a later execution/configuration-authorization commit, and the current HEAD
+at execution time **MUST NOT** replace `oracle_commit`, and the future ETB evidence fields
+`oracle_commit`/`oracle_sha256` must reference exactly this independently accepted oracle.  The artifact
+itself is **immutable** and was **not** modified: it keeps its construction-time `ORACLE CANDIDATE / NOT
+ACCEPTED / NOT FROZEN` header under the established immutable-candidate-artifact + independent
+approval-record + authoritative active-status pattern.  Authoritative status now reads `ETB = DEFINITION
+ACCEPTED / NOT EXECUTED` together with `ETB EXECUTION / ORACLE = ACCEPTED / FROZEN / NOT EXECUTED /
+EXECUTION NOT AUTHORIZED`; **no** `ETB_SATISFIED`, `ETB_UNSATISFIED`, `HARNESS_INVALID` result or
+`ETB_EXECUTED` is created.  Accepted oracle scope (independently reviewed, semantics unchanged): the
+production config-reader semantics; exact Mode-P endpoint verification; the unique-listener rule; the
+unique owning-PID rule; the PID + `CreationDate` identity discriminator; the exact P/Invoke declarations;
+the `CreateFileW` parameters; the `GetFinalPathNameByHandleW` procedure; the canonical-path AS-IS /
+case-sensitive equality rule; the dual executable SHA-256 checks; package/version/bin binding; the
+25-field identity snapshot; the S0/S1 ETB snapshot plan; the later Mode-B PRE/POST continuity contract;
+the deterministic failure taxonomy; the UTC timestamp format; the ordered JSON schema; the exact JSON
+writer settings; temp/final paths; the preexistence policy; `CreateNew` + `Flush(true)` + read-back
+verification; manifest coverage/format/SHA-256 procedure; the result template; the same-directory
+`File.Move` publication procedure; publication ordering; post-publication verification; partial-output
+semantics; `HARNESS_INVALID` = NO ETB SEMANTIC RESULT; and no shopping / no fallback / no HTTP.  Owner
+inputs remain frozen and unreinterpreted — **MODE P — PRE-EXISTING TARGET**; **CLASS A — OWNER-SUPPLIED
+FIXED ENDPOINT**; `http` / IPv4 / `127.0.0.1` / `4096` / `http://127.0.0.1:4096`; fallback **NONE**.
+Configuration state is unchanged: the owner-authorized endpoint is `http://127.0.0.1:4096` while the
+currently configured endpoint is **NONE** and `.devrelay/config.yaml` → `opencode.base_url` remains
+`""`; no configuration mutation is authorized or performed in this round, and the separately authorized
+future configuration-establishment stage must write the exact owner literal `http://127.0.0.1:4096`
+with **no trailing slash**.  **Rejected-candidate history preserved:** `b117daf` was rejected with
+*REQUEST_CHANGES — V0.3-E ETB MODE-P EXECUTION ORACLE* (P0 = 0, P1 = 3, P2 = 2) and remains
+unrewritten; the accepted oracle is the Round-2 remediation at `1c6c7cd`, **not** `b117daf`.  Review P3s
+recorded as **non-blocking** (neither an unresolved oracle blocker): **P3-1** the executor's chat report
+rendering lost the PowerShell backtick in the displayed `$json + "`n"` expression while the actual
+tracked oracle text was verified correct; **P3-2** the standing `PROJECT_MEMORY` wording issue remains,
+with the preferred wording "**tracked worktree clean; ignored/untracked `PROJECT_MEMORY.md` persists**"
+used here.  **Next-stage classification:** `ETB EXECUTION / CONFIGURATION AUTHORIZATION = NOT YET GRANTED
+/ NOT YET EXECUTED`; the next possible stage after this bookkeeping is independently confirmed is a
+**separate ETB execution/configuration authorization**, which may authorize setting
+`opencode.base_url = http://127.0.0.1:4096` and exactly one ETB execution under the accepted frozen
+oracle — **this bookkeeping authorizes neither**.  **Sequencing (no stage may be skipped):** ETB
+definition accepted → capability prerequisites accepted → owner mode/endpoint decision accepted → ETB
+execution oracle designed → independent oracle approval → acceptance bookkeeping → independent
+bookkeeping confirmation; **then only**: separate execution/configuration authorization → configuration
+establishment → exactly one ETB execution attempt → independent ETB result review → only if
+`ETB_SATISFIED` is independently accepted may Mode-B SIC oracle construction resume.  An accepted ETB
+execution oracle does **not** itself mean the endpoint has been configured or ETB has been satisfied, so
+Mode-B remains `NOT RUN / NO ORACLE / ORACLE NOT FREEZABLE / CONCRETE ENDPOINT NOT ESTABLISHED /
+PRE-ORACLE CONFIGURATION / TARGET-BINDING PREREQUISITE BLOCKER`; `G0.5 / P6` remains `NOT RUN /
+DEFINITION ACCEPTED / ORACLE NOT FREEZABLE / LOCAL REACHABILITY GAP` with `P6 = UNPROVEN / UNSATISFIED`
+and G0.5 **NOT CLOSED**; `G1`/`G2` remain `NOT RUN`; Case-C and v0.3-E implementation remain **NOT
+AUTHORIZED**; `adopt_completed_turn` remains **DISABLED**.  This bookkeeping round performed **0**
+web/network access, **0** endpoint queries, **0** `Get-NetTCPConnection` executions, **0** live
+`Get-CimInstance` queries, **0** listener/process/port enumeration, **0** config mutations, **0** OpenCode
+starts, **0** HTTP, **0** `/doc`, **0** `/session`, **0** `Add-Type` executions, **0** P/Invoke
+executions, **0** evidence publications, **0** ETB executions, **0** SIC attempts, **0** Mode-B oracle
+work, **0** provider/model calls, **0** G0.5 and **0** G1/G2 activity, and **0**
+runtime/test/dependency/version changes; no evidence file and no result artifact were created; the
+tracked worktree is clean and the ignored/untracked `PROJECT_MEMORY.md` persists.
+
 That approval followed three earlier review rounds: the first independent design
 review returned `REQUEST_CHANGES` (P0 = 1, P1 = 6, P2 = 5) and the
 recovery/reconciliation contract was repaired in `f67bf9e`; two narrow re-reviews
