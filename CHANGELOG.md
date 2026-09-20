@@ -1289,6 +1289,83 @@ G1/G2 activity, and **0** runtime/test/dependency/version changes; static read-o
 reads/hashes/audit are recorded separately and are not operational ETB activity; the tracked worktree is
 clean and the ignored/untracked `PROJECT_MEMORY.md` persists.
 
+**The ETB execution/configuration authorization Round-2 candidate was rejected by independent review, and
+a round-3 durable-claim remediation candidate now exists (still a candidate: not accepted, not effective,
+not executed).**  The independent review issued *REQUEST_CHANGES — V0.3-E ETB EXECUTION / CONFIGURATION
+AUTHORIZATION ROUND-2* (**P0 = 0, P1 = 1, P2 = 0, P3 = 2**) against `390eda1aeacb33032611030d47727e0a69650459`,
+which **remains rejected** and unamended (as does the earlier `f52cb2b` rejection with P0 = 0, P1 = 2,
+P2 = 2); the last authoritative pre-authorization baseline remains `d058b38`.  The review **closed**
+`P1_A_CONFIG_MUTATION`, `P1_B_AUTHORIZATION_REUSE`, `P2_A_OUTPUT_TIMING` and `P2_B_CONFIG_EVIDENCE`, and all
+Round-2 frozen semantics are preserved unchanged (byte-exact config mutation with `PRE_CONFIG_SHA256 =
+daaf7257…` / 1876 bytes → `POST_CONFIG_SHA256 = b5e4abab…` / 1897 bytes through the unique 24-byte span;
+`CONFIG TEMP`/`CONFIG FINAL` with `CONFIG BACKUP = NONE`; the `python` `xb`/`os.fsync`/`os.replace` writer
+with read-back verification; the 17-field `devrelay-etb-config-establishment-v1` control-evidence schema and
+its deterministic serialization; both 1-of-1 budgets; the `AUTHORIZATION_CONTROL_FAILURE` token;
+no-rollback; no-retry; owner inputs; oracle provenance).  `docs/v0.3/V03E_G0_5_PRE_ETB_EXECUTION_AUTHORIZATION.md`
+was revised **in place** (no second authorization artifact) as a self-contained round-3 remediation
+candidate that closes the remaining blocking finding — the execution-evidence directory does not exist and
+parent-directory creation behaviour was unfrozen — and tightens the crash/replay nuance so that repository
+state alone durably distinguishes the three states without chat history, executor memory or an ephemeral
+process.  **Durable one-shot claim markers** now live under the **already existing** parent
+`docs/v0.3/evidence` (deliberately not inside the not-yet-existent `etb-execution` directory):
+`docs/v0.3/evidence/ETB_AUTHORIZATION_USE.claim` (+ `.tmp`) with `schema_version =
+devrelay-etb-authorization-use-v1` and the ordered fields `schema_version`, `authorization_commit`,
+`authorization_sha256`, `oracle_commit`, `oracle_sha256`, `state = CONSUMED` (UTF-8, no BOM, one LF), and
+`docs/v0.3/evidence/ETB_ATTEMPT_USE.claim` (+ `.tmp`) with `schema_version =
+devrelay-etb-attempt-use-v1` and the same ordered fields; **temp-or-final presence is authoritative and
+fail-closed** (no parser success required), so a crash during claim writing or a missing final rename still
+means CONSUMED.  The **durable consumption boundaries** are frozen: `AUTHORIZATION_USE = 1/1 CONSUMED` the
+moment exclusive creation of the authorization claim temp succeeds (performed before config mutation,
+before creating the `etb-execution` directory, before config evidence, before ETB-attempt claiming and
+before ETB execution), and `ETB_ATTEMPT = 1/1 CONSUMED` the moment exclusive creation of the ETB attempt
+claim temp succeeds (after successful configuration establishment and `CONFIG_ESTABLISHMENT.json`
+publication, before entering the frozen oracle).  **Crash recovery** is frozen: a crash before successful
+exclusive creation of the authorization claim temp leaves the authorization **UNUSED** (the only window in
+which it remains unused), while a crash after it leaves it **CONSUMED** with no ambiguous pre-mutation
+window; `PRE_CONFIG_SHA256` is **demoted to a corroborating invariant only** and is no longer the sole
+authorization-consumption marker; a crash after ETB-attempt consumption can never permit rerunning ETB.  A
+**durable state recovery table** fixes the interpretation: authorization claim absent + ETB claim absent →
+`AUTHORIZATION UNUSED`; authorization present + ETB absent → `AUTHORIZATION CONSUMED / ETB NOT STARTED`;
+both present → `AUTHORIZATION CONSUMED / ETB ATTEMPT CONSUMED`; ETB present while authorization absent →
+**control-state inconsistency / fail closed / no execution / independent review required**.  The
+**execution-evidence directory rule** is frozen: `docs/v0.3/evidence/etb-execution` is created only after
+the authorization claim is durably consumed and before configuration mutation, exactly via
+`[System.IO.Directory]::CreateDirectory("docs/v0.3/evidence/etb-execution")` (repository-root-resolved
+exact equivalent allowed), with no alternate directory, parent search, timestamped directory, suffix or
+fallback path, followed by a requirement that the exact path exists and **is a directory**; failure or a
+non-directory at that path → `AUTHORIZATION_CONTROL_FAILURE` with authorization consumed and ETB not
+started; a pre-existing **actual directory** is permitted (idempotent, never deleted or recreated), which
+removes executor choice.  Claim markers are **never deleted** after success, `ETB_UNSATISFIED`,
+`HARNESS_INVALID`, `AUTHORIZATION_CONTROL_FAILURE` or crash recovery — they are durable one-shot witnesses
+— and a **future new authorization must define its own claim-marker namespace/path** before execution (no
+executor may delete the markers to reuse the paths).  A 22-step operational order is frozen (static
+identity/oracle verification → require authorization claim absent → **exclusive-create it (AUTHORIZATION
+CONSUMED)** → publish it → create-or-verify the evidence directory → config-evidence paths absent → config
+pre-image verification → production pre-value `""` → post-image construction → write/fsync/read-back temp →
+`os.replace` → final SHA verification → production post-value verification → publish config evidence →
+require ETB claim absent → **exclusive-create it (ETB ATTEMPT CONSUMED)** → publish it → invoke the frozen
+oracle from its first step → only frozen control/result state → only oracle-defined outputs → STOP →
+independent ETB-result review), with failure semantics frozen per window (pre-authorization-claim: still
+UNUSED and no alternate action; post-authorization-claim/pre-ETB: consumed, `AUTHORIZATION_CONTROL_FAILURE`,
+new authorization required; post-ETB-claim: attempt consumed, no second attempt, no ETB semantic result if
+the oracle was never entered) and no-rollback preserved.  Current status:
+`ETB EXECUTION / CONFIGURATION AUTHORIZATION = ROUND-3 CANDIDATE / NOT ACCEPTED / NOT EFFECTIVE / NOT
+EXECUTED`; **no claim marker currently exists**, no evidence directory is created now, and no config
+mutation occurs now.  Preserved unchanged: `ETB = DEFINITION ACCEPTED / NOT EXECUTED`; `ETB EXECUTION /
+ORACLE = ACCEPTED / FROZEN / NOT EXECUTED / EXECUTION NOT AUTHORIZED`; owner inputs; `opencode.base_url`
+still `""`; Mode-B blocked (`NOT RUN / NO ORACLE / ORACLE NOT FREEZABLE / CONCRETE ENDPOINT NOT ESTABLISHED
+/ PRE-ORACLE CONFIGURATION / TARGET-BINDING PREREQUISITE BLOCKER`); `G0.5 / P6` unchanged with `P6 =
+UNPROVEN / UNSATISFIED` and G0.5 **NOT CLOSED**; Case-C and v0.3-E implementation **NOT AUTHORIZED**;
+`G1`/`G2` `NOT RUN`; `adopt_completed_turn` **DISABLED**.  This remediation-design round created **no**
+claim markers, **no** `etb-execution` directory, **no** config-establishment evidence, **no** ETB evidence
+or result, **no** config temp and **no** config mutation, and performed **0** web/network access, **0**
+endpoint queries, **0** `Get-NetTCPConnection` executions, **0** live `Get-CimInstance` queries, **0**
+port/listener/process enumeration, **0** OpenCode starts, **0** HTTP, **0** `/doc`, **0** `/session`, **0**
+`Add-Type` executions, **0** P/Invoke executions, **0** ETB executions, **0** SIC attempts, **0** Mode-B
+work, **0** provider/model calls, **0** G0.5 and **0** G1/G2 activity, and **0**
+runtime/test/dependency/version changes; the tracked worktree is clean and the ignored/untracked
+`PROJECT_MEMORY.md` persists.
+
 That approval followed three earlier review rounds: the first independent design
 review returned `REQUEST_CHANGES` (P0 = 1, P1 = 6, P2 = 5) and the
 recovery/reconciliation contract was repaired in `f67bf9e`; two narrow re-reviews
