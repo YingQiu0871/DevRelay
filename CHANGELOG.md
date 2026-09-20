@@ -744,6 +744,82 @@ or Mode-B oracle work occurred; this round is a **candidate only until independe
 current authoritative state remains `ETB = DEFINITION ACCEPTED / NOT EXECUTED` with `ETB EXECUTION /
 ORACLE = NOT YET DEFINED / NOT AUTHORIZED`.
 
+**The round-2 ETB U2/U3 authoritative-semantics candidate was independently approved, so its results
+are now authoritative capability status (this supersedes the U2/U3 and Mode-P results recorded in the
+preceding capability entries).**  The independent review issued *APPROVE V0.3-E ETB U2/U3
+AUTHORITATIVE SEMANTICS ROUND-2* (**P0 = 0, P1 = 0, P2 = 0**; five non-blocking P3s), binding the
+immutable Round-2 artifact `docs/v0.3/V03E_G0_5_PRE_ETB_U2_U3_AUTHORITY_RESOLUTION.md` (blob
+`49b22a88a593ce9ce59e7da6ae5221d8300d4963cca5b9fdc2dc8c2b47a91453`, commit `dcf899d`) together with
+its tracked evidence manifest `docs/v0.3/evidence/etb-u2-u3-authoritative-semantics/MANIFEST.sha256`
+(blob `579e21e6596e552a1ee453a0a3c08489f4911ff51a1f922dae5bfa71c770a15a`; 14 evidence files,
+manifest re-verified **14 OK / 0 mismatch** against the committed blobs) to that decision — an
+independent review decision, not executor self-approval.  The authoritative capability state is
+therefore **`U1 = U1_NOT_ESTABLISHED`** (unchanged), **`U2 = U2_ESTABLISHED`**, **`U3 =
+U3_ESTABLISHED`**, **`MODE L = MODE_L_MECHANISM_NOT_YET_FREEZABLE`** (unchanged) and **`MODE P =
+MODE_P_MECHANISM_FREEZABLE`**, with **`U4 = UNRESOLVED BY DESIGN / OWNER-ORACLE DECISION REMAINS`**
+and **`U5 = UNRESOLVED BY DESIGN / OWNER-ORACLE DECISION REMAINS`**; this supersedes the previous
+capability state **only** for U2/U3 and the Mode-P mechanism-freezability consequence, and U1/Mode-L
+are **not** changed (Mode L is not claimed impossible).  Accepted U2 detail: exact `LocalAddress`
+filtering, exact `LocalPort` filtering, `State`/`Listen` filtering, installed output-class binding to
+`ROOT/StandardCimv2/MSFT_NetTCPConnection`, `OwningProcess` **output-property** semantics, and 0/1/N
+cardinality normalization with the `Count == 1` uniqueness rule are all ESTABLISHED — with the
+mechanism boundary preserved: the future query is **endpoint-scoped verification against one
+already-frozen exact endpoint**, **not endpoint discovery**.  Accepted U3 detail: the PID-scoped
+`Win32_Process` equality filter, the local `ProcessId` property, the local `ExecutablePath` property,
+`ExecutablePath`'s documented meaning, the local `CreationDate` property, `CreationDate`'s
+process-start semantics, the process-instance-discriminator use at the accepted ETB capability level,
+the `GetFinalPathNameByHandleW` final-path capability, the `CreateFileW` existing-file handle
+capability, the `Add-Type`/P-Invoke local invocation route and SHA-256 exact-path hashing are all
+ESTABLISHED.  Accepted canonicalization chain (freezable semantics; **no implementation code
+written** and the exact implementation rules **not** claimed frozen): raw `Win32_Process.ExecutablePath`
+→ `CreateFileW` on the existing executable under a future fail-closed deterministic share/access rule
+→ `GetFinalPathNameByHandleW` with `FILE_NAME_NORMALIZED` + `VOLUME_NAME_DOS` → the identical
+final-path procedure applied to the accepted target executable → deterministic comparison → SHA-256
+verification.  Mode-P consequence: `MODE_P_MECHANISM_FREEZABLE` holds because `U2_ESTABLISHED` **and**
+`U3_ESTABLISHED` with no contradiction to the accepted ETB definition — and
+**`MODE_P_MECHANISM_FREEZABLE` is NOT Mode-P selection**; it establishes no endpoint, port, address
+family or base URI, no ETB oracle, no ETB execution authorization and no `ETB SATISFIED`.  Review P3s
+are recorded accurately as **non-blocking standing observations, none presented as resolved or
+blocking**: **P3-1** D1 was delivered in the `windowsserver2025-ps` view after the requested
+PowerShell-5.1 fallback and was locally bound through S1/S2 — classified non-material; **P3-2**
+`CreateFileW` `dwShareMode` is not yet precommitted — a deterministic future-oracle implementation
+rule, not a capability semantic gap; **P3-3** `CreationDate` carries a residual precision/collision
+caveat — no mathematical global uniqueness is claimed, and the future ETB oracle must explicitly
+record the residual and use exact pre/post equality with fail-closed treatment of any mismatch or
+ambiguity; **P3-4** the evidence `.txt`/`.json`/`.sha256` paths may materialize CRLF on a future
+checkout — committed Git blobs are authoritative and manifest verification must be against committed
+blobs; **P3-5** web search, where used, only located already-precommitted URLs and supplied no
+semantic evidence; the standing `PROJECT_MEMORY` wording P3 is preserved.  Still **NOT FROZEN**
+(future ETB execution-oracle design items; they do **not** invalidate U2/U3 capability establishment):
+the exact canonicalization comparison rule, `\\?\` prefix handling, case normalization/comparison,
+slash normalization, drive-letter normalization, `CreateFileW` `dwShareMode`,
+`SeDebugPrivilege`/access-denied fail-closed behaviour, the pre/post target snapshot exact field set,
+the pre/post equality/comparison rule, and the exact `Count == 1` expression and failure handling.
+The narrow next stage is recorded as **OWNER / ORACLE-PARAMETER DECISION = NOT YET EXECUTED** (purpose:
+U5 mode selection and, **only if Mode P is selected**, U4 endpoint parameter selection); recording it
+does **not** authorize it, and no such decision was made in this round.  Preserved unchanged: `ETB =
+DEFINITION ACCEPTED / NOT EXECUTED`; `ETB EXECUTION / ORACLE = NOT YET DEFINED / NOT AUTHORIZED` (the
+ETB oracle does not yet exist and ETB execution is not authorized even though Mode-P mechanism
+semantics are now freezable); `opencode.base_url` is still `""` with no endpoint established, no
+address, address family, port or base URI selected and no configuration change; Mode A remains
+completed and authoritative (`SIC_NOT_EXPOSED_IN_INSPECTED_CONTRACT`, strictly scoped to its accepted
+static surface); Mode-B remains `NOT RUN / NO ORACLE / ORACLE NOT FREEZABLE / CONCRETE ENDPOINT NOT
+ESTABLISHED / PRE-ORACLE CONFIGURATION / TARGET-BINDING PREREQUISITE BLOCKER` with oracle construction
+**not** resumed; `G0.5 / P6` remains `NOT RUN / DEFINITION ACCEPTED / ORACLE NOT FREEZABLE / LOCAL
+REACHABILITY GAP` with `P6 = UNPROVEN / UNSATISFIED` and **NOT CLOSED**; `G1`/`G2` remain `NOT RUN`;
+Case-C and v0.3-E implementation remain **NOT AUTHORIZED**; `adopt_completed_turn` remains
+**DISABLED**.  This bookkeeping round performed **0** web retrievals, **0** schema probes, **0** live
+TCP queries, **0** live process queries, **0** port/listener/process enumeration, **0** endpoint
+establishments or selections, **0** port selections, **0** mode selections, **0** configuration
+changes, **0** OpenCode starts, **0** listener work, **0** ETB oracle design, **0** ETB executions,
+**0** OpenCode HTTP, **0** `/doc`, **0** `/session`, **0** SIC attempts, **0** Mode-B oracle work,
+**0** provider/model calls, **0** network, **0** G0.5 and **0** G1/G2 activity, and **0**
+runtime/test/dependency/version changes.  The accepted Round-2 artifact and every file under its
+evidence directory were **not** modified (artifact blob `49b22a88…`, manifest blob `579e21e6…`,
+manifest re-verified 14 OK / 0 mismatch); the artifact retains its `ROUND-2 CANDIDATE FINDING / NOT
+ACCEPTED` header because acceptance is carried by the independent review record and the active
+authoritative status surfaces.
+
 That approval followed three earlier review rounds: the first independent design
 review returned `REQUEST_CHANGES` (P0 = 1, P1 = 6, P2 = 5) and the
 recovery/reconciliation contract was repaired in `f67bf9e`; two narrow re-reviews
