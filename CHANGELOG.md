@@ -1208,6 +1208,87 @@ G1/G2 activity, and **0** runtime/test/dependency/version changes; no evidence f
 artifact were created; the tracked worktree is clean and the ignored/untracked `PROJECT_MEMORY.md`
 persists.
 
+**The ETB execution/configuration authorization candidate was rejected by independent review, and a
+round-2 remediation revision now exists (still a candidate: not accepted, not effective, not executed).**
+The independent review issued *REQUEST_CHANGES — V0.3-E ETB EXECUTION / CONFIGURATION AUTHORIZATION*
+(**P0 = 0, P1 = 2, P2 = 2**) against `f52cb2b4c0ece73097511c816b448d9ede649fb5`, which **remains rejected**
+and unamended; the last authoritative pre-authorization baseline remains `d058b38`.
+`docs/v0.3/V03E_G0_5_PRE_ETB_EXECUTION_AUTHORIZATION.md` was revised **in place** (no second authorization
+artifact) into a self-contained round-2 remediation candidate that preserves the review's accepted
+portions (authorization scope; oracle provenance; owner tuple; one-ETB-attempt ceiling; no OpenCode start;
+no HTTP; fallback NONE; configuration-after-attempt policy; ETB result/non-claim semantics; Mode-B/G0.5
+preservation) and closes exactly four gaps.  **P1-A config-mutation mechanism** is now frozen byte-exactly
+from a read-only static audit of the current file: `PRE_CONFIG_SHA256 =
+daaf72578cb4a91b5adeb481530baf47577174325167caddf7249964da7923a8`, `PRE_CONFIG_SIZE = 1876` bytes, **no
+BOM**, **LF only** (0 CRLF, final LF), valid UTF-8, a **clean duplicate-key structural audit** (exactly one
+effective `opencode` key and exactly one effective `base_url` key; no anchors, aliases or merge keys), and
+production-resolved `opencode.base_url == ""`; the mutation is a **byte-exact patch** over the unique
+24-byte span `OLD_CONFIG_SPAN_HEX = 6f70656e636f64653a0a2020626173655f75726c3a202222` (occurrence count
+exactly 1) replaced by `NEW_CONFIG_SPAN_HEX =
+6f70656e636f64653a0a2020626173655f75726c3a2022687474703a2f2f3132372e302e302e313a3430393622`,
+yielding the statically constructed post-image `POST_CONFIG_SIZE = 1897` bytes / `POST_CONFIG_SHA256 =
+b5e4ababf9b49f4e2bcdba1c1dd20fc320a0ec4aedbc98931f8595ff4416a8cf`, with a verified byte-diff witness
+that only that span changes (1065 unchanged prefix bytes, 787 unchanged suffix bytes) and **no**
+`yaml.safe_dump`, regex edit, generic string replacement or manual-editor mutation authorized; the writer
+is frozen as a single `python` invocation using exclusive-create (`xb`), complete post-image write,
+stream flush, `os.fsync`, close, read-back byte/hash verification, publication by exactly
+`os.replace(CONFIG_TEMP, CONFIG_FINAL)` in the same directory, post-replace read-back verification and one
+production-reader invocation requiring the resolved value `http://127.0.0.1:4096`, with
+`CONFIG TEMP = <root>/.devrelay/config.yaml.etb-auth.tmp`, **CONFIG BACKUP = NONE** and a temp
+non-existence precondition.  **P1-B authorization-use / pre-ETB failure / reuse semantics** are frozen:
+two **separate** one-shot budgets — `AUTHORIZATION_USE_BUDGET = 1 of 1` and `ETB_ATTEMPT_BUDGET = 1 of 1`
+— where the authorization is consumed **immediately at the start of the future operational round, before
+config mutation, config-evidence creation, oracle output checks or ETB execution**, can never be reused,
+and any later failure (even with ETB never started) stops the round with the frozen pre-ETB token
+**`AUTHORIZATION_CONTROL_FAILURE`** (authorization consumed, ETB NOT started, `ETB_ATTEMPT = 0/1`, **no**
+ETB semantic result — and explicitly not `ETB_UNSATISFIED`/`ETB_SATISFIED`/`HARNESS_INVALID`/SIC/P6/G0.5
+failure), with no retry, no repair-and-continue and no preparation-retry loophole.  **P2-A
+output-precondition timing** is reconciled: the authorization layer no longer pre-checks the oracle's six
+output paths; instead `ETB_ATTEMPT = 1 of 1` is consumed **immediately before entering the accepted frozen
+oracle at its first step**, so all oracle machinery (identity checks, output-preexistence checks, HARNESS
+validation, live queries) runs **inside** the single consumed attempt and an oracle preexistence failure
+correctly yields `HARNESS_INVALID / NO ETB SEMANTIC RESULT` with the attempt already consumed.  **P2-B
+config-establishment evidence** is frozen at `docs/v0.3/evidence/etb-execution/CONFIG_ESTABLISHMENT.json`
+(+ `.tmp`) as **authorization/configuration control evidence only** — not ETB semantic evidence, not
+covered by the oracle `MANIFEST.sha256`, not an ETB result — with `schema_version =
+devrelay-etb-config-establishment-v1`, an exact 17-field ordered top-level schema (`schema_version`,
+`authorization_commit`, `authorization_sha256`, `oracle_commit`, `oracle_sha256`, `config_path`,
+`pre_config_sha256`, `expected_pre_config_sha256`, `pre_resolved_base_url`, `authorized_base_url`,
+`post_config_sha256`, `expected_post_config_sha256`, `post_resolved_base_url`, `mutation_scope`,
+`authorization_use`, `etb_attempt`, `control_status`), frozen values (`config_path =
+.devrelay/config.yaml`; `authorized_base_url = http://127.0.0.1:4096`; `mutation_scope =
+opencode.base_url_only`; `authorization_use = 1/1_CONSUMED`; `etb_attempt = 0/1_NOT_STARTED`;
+`control_status = CONFIG_ESTABLISHED`), and the accepted oracle's deterministic serialization discipline
+(`ConvertTo-Json -Depth 12 -Compress`, UTF-8 no-BOM, one JSON line plus exactly one LF, `UTF8Encoding(false)`,
+temp exclusive create → write → durable flush → close → read-back verification → same-directory
+`System.IO.File.Move(temp, final)` without overwrite).  The authorization identity model is frozen too
+(`authorization_commit`/`authorization_sha256` = the independently accepted commit and blob of **this**
+revision, not replaceable by later bookkeeping or execution-time HEAD), and a 19-step future operational
+order is frozen (enter authorization → consume authorization use → verify identities → verify config
+pre-image and pre-value → construct post-image → write/flush/read-back temp → `os.replace` → read-back
+verify → production-reader verify → publish config evidence → consume ETB attempt → invoke the frozen
+oracle from its first step → allow only the oracle's control state → publish only oracle-defined outputs →
+STOP → independent ETB result review), with **no automatic configuration rollback** after any failure and
+the accepted oracle artifact left **immutable**.  Preserved unchanged: `ETB = DEFINITION ACCEPTED / NOT
+EXECUTED`; `ETB EXECUTION / ORACLE = ACCEPTED / FROZEN / NOT EXECUTED / EXECUTION NOT AUTHORIZED`; owner
+inputs (MODE P, CLASS A, `http` / IPv4 / `127.0.0.1` / `4096`, fallback NONE); `opencode.base_url` still
+`""` with **no** configuration mutation in this round; Mode-B remains `NOT RUN / NO ORACLE / ORACLE NOT
+FREEZABLE / CONCRETE ENDPOINT NOT ESTABLISHED / PRE-ORACLE CONFIGURATION / TARGET-BINDING PREREQUISITE
+BLOCKER`; `G0.5 / P6` remains `NOT RUN / DEFINITION ACCEPTED / ORACLE NOT FREEZABLE / LOCAL REACHABILITY
+GAP` with `P6 = UNPROVEN / UNSATISFIED` and G0.5 **NOT CLOSED**; `G1`/`G2` remain `NOT RUN`; Case-C and
+v0.3-E implementation remain **NOT AUTHORIZED**; `adopt_completed_turn` remains **DISABLED**.  The current
+authorization status is `ETB EXECUTION / CONFIGURATION AUTHORIZATION = ROUND-2 CANDIDATE / NOT ACCEPTED /
+NOT EFFECTIVE / NOT EXECUTED` — no authorization is granted, no config changed and no ETB executed.  The
+executor-choice self-check over the eighteen machinery items found **no remaining runtime choice**.  This
+remediation-design round performed **0** web/network access, **0** endpoint queries, **0**
+`Get-NetTCPConnection` executions, **0** live `Get-CimInstance` queries, **0** port/listener/process
+enumeration, **0** config mutations, **0** OpenCode starts, **0** HTTP, **0** `/doc`, **0** `/session`,
+**0** `Add-Type` executions, **0** P/Invoke executions, **0** execution-evidence publications, **0** ETB
+executions, **0** SIC attempts, **0** Mode-B oracle work, **0** provider/model calls, **0** G0.5 and **0**
+G1/G2 activity, and **0** runtime/test/dependency/version changes; static read-only config
+reads/hashes/audit are recorded separately and are not operational ETB activity; the tracked worktree is
+clean and the ignored/untracked `PROJECT_MEMORY.md` persists.
+
 That approval followed three earlier review rounds: the first independent design
 review returned `REQUEST_CHANGES` (P0 = 1, P1 = 6, P2 = 5) and the
 recovery/reconciliation contract was repaired in `f67bf9e`; two narrow re-reviews
