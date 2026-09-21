@@ -1441,6 +1441,76 @@ execution-evidence publications, **0** ETB executions, **0** SIC attempts, **0**
 provider/model calls, **0** G0.5 and **0** G1/G2 activity, and **0** runtime/test/dependency/version
 changes; the tracked worktree is clean and the ignored/untracked `PROJECT_MEMORY.md` persists.
 
+**The ETB execution/configuration authorization Round-4 candidate was rejected by independent review, and
+a round-5 claim-path type semantic closure candidate now exists (still a candidate: not accepted, not
+effective, not executed).**  The independent review issued *REQUEST_CHANGES — V0.3-E ETB EXECUTION /
+CONFIGURATION AUTHORIZATION ROUND-4* (**P0 = 0, P1 = 0, P2 = 1, P3 = 2**) against
+`008115d6988c76d3c4ce185f73d047d44f5d8579` (artifact blob
+`dfe673e6ff961a7bdb324912ea541008d2ade98a5789b9bfc1581efe7f54bc10`); its **only blocking finding** was
+`CLAIM_PATH_TYPE_SEMANTICS = OPEN` — the recovery/state-machine text treated TEMP or FINAL "presence" as
+consumed while the exact writer checked only `[System.IO.File]::Exists(path)`, and `File.Exists` returns
+false when the exact path is occupied by a directory, so a directory at a claim path was classified
+differently by the state machine and by the writer (no authorization-reuse or ETB hazard was demonstrated,
+but the classification was not deterministic).  The candidate **remains rejected** and unamended, as do
+`c106b2d` (P0 = 0, P1 = 1, P2 = 1, P3 = 2), `390eda1` (P0 = 0, P1 = 1, P2 = 0, P3 = 2) and `f52cb2b`
+(P0 = 0, P1 = 2, P2 = 2); the last authoritative pre-authorization baseline remains `d058b38`.
+`docs/v0.3/V03E_G0_5_PRE_ETB_EXECUTION_AUTHORIZATION.md` was revised **in place** (no second authorization
+artifact) as a self-contained round-5 remediation candidate that closes exactly that finding and redesigns
+nothing else.  **One exact path-occupancy predicate is now frozen**: `CLAIM_PATH_OCCUPIED(path) :=
+[System.IO.File]::Exists(path) -or [System.IO.Directory]::Exists(path)`, with `CLAIM PATH ABSENT :=
+File.Exists(path) == false AND Directory.Exists(path) == false`, applied **identically** to the
+authorization claim TEMP, the authorization claim FINAL, the ETB-attempt claim TEMP and the ETB-attempt
+claim FINAL, and no other meaning of "present", "exists" or "occupied" is permitted for claim-path state.
+A **directory at any claim TEMP/FINAL path is OCCUPIED**: for the authorization claim that means
+AUTHORIZATION CONSUMED → STOP → the writer MUST NOT proceed to `CreateNew` → no cleanup, no deletion, no
+rename, no retry → independent review required before any future action; for the ETB-attempt claim it means
+ETB ATTEMPT CONSUMED → STOP → no rerun → the writer MUST NOT proceed to `CreateNew` → no cleanup, no
+deletion, no rename.  The artifact explicitly forbids trying to determine whether such a directory is
+legitimate claim content — **occupancy alone is fail-closed** — and states that a partial claim file, a
+zero-length claim file, a malformed claim file and a claim directory all count as OCCUPIED whenever the
+predicate is true, with no parsing required and no repair authorized.  The **frozen writer source was
+modified in place** (not replaced or redesigned) at exactly its three path checks — the initial TEMP
+pre-check, the initial FINAL pre-check and the pre-`Move` FINAL re-check — to the multi-line
+`File.Exists(...) -or Directory.Exists(...)` form (the function is otherwise byte-identical: same
+`[ordered]` claim object, `ConvertTo-Json -Depth 4 -Compress`, real PowerShell LF, `UTF8Encoding(false)`,
+`FileStream`/`FileMode.CreateNew`/`FileAccess.Write`/`FileShare.None`, single `Write(bytes,0,len)`,
+`Flush(true)`, `Dispose()`, `ReadAllBytes` byte-by-byte verification, and the two-argument
+`System.IO.File.Move`; the three `throw` lines are unchanged, and a mechanical reconstruction from the
+Round-4 source applying only those three authorized replacements reproduces the new source exactly).  The
+`FileMode.CreateNew` **consumption boundary is preserved for a previously ABSENT path**, while an OCCUPIED
+temp path is now classified CONSUMED by fail-closed occupancy semantics and the writer must not attempt
+`CreateNew` — so the directory-at-TEMP corner is never interpreted as UNUSED; the directory-at-FINAL
+corners are covered both before invocation (FINAL OCCUPIED → already CONSUMED → STOP before `CreateNew`)
+and after TEMP creation but before publication (the second frozen FINAL occupancy check throws
+`DEVRELAY_CLAIM_FINAL_APPEARED`, the claim remains CONSUMED, and **no `File.Move` attempt is made**).  The
+**recovery table is restated in OCCUPIED/ABSENT terms only** (both ABSENT → AUTHORIZATION UNUSED; auth
+TEMP/FINAL OCCUPIED + ETB both ABSENT → AUTHORIZATION CONSUMED / ETB NOT STARTED; both OCCUPIED →
+AUTHORIZATION CONSUMED / ETB ATTEMPT CONSUMED; auth both ABSENT + ETB TEMP/FINAL OCCUPIED → CONTROL-STATE
+INCONSISTENCY / FAIL CLOSED / NO EXECUTION / INDEPENDENT REVIEW REQUIRED), with no undefined generic notion
+of presence and no parser success required.  A **wording-only root binding** was added: future operational
+execution MUST run with the repository root as its working directory before any relative frozen
+claim/config/evidence path is evaluated, and all relative paths in this authorization are
+repository-root-relative — no other root-resolution mechanism is introduced (the already accepted
+root-binding verdict is not reopened).  Preserved semantically unchanged: the Round-3 claim-writer closure
+and its PowerShell/.NET-only language, the process-crash-only recovery model with its explicit non-claim of
+power-loss/machine-crash durability for claim directory metadata, the claim tracking/commit policy and the
+frozen "tracked worktree clean" semantics, the future claim-namespace rule, claim non-deletion, the exact
+`Directory.CreateDirectory` directory create/verify rule, the byte-exact config mutation
+(`PRE_CONFIG_SHA256 = daaf7257…` / 1876 → `POST_CONFIG_SHA256 = b5e4abab…` / 1897), the
+`devrelay-etb-config-establishment-v1` path/schema/serialization, both 1-of-1 budgets, the restored
+output-precheck invariant (the authorization layer MUST NOT pre-check, pre-interpret, delete, repair or
+otherwise act on the accepted oracle's six frozen temp/final ETB output paths — only the frozen oracle
+checks them inside the consumed ETB attempt), the owner tuple, oracle provenance and Mode-B/G0.5
+preservation.  Current status: `ETB EXECUTION / CONFIGURATION AUTHORIZATION = ROUND-5 CANDIDATE / NOT
+ACCEPTED / NOT EFFECTIVE / NOT EXECUTED`; no authorization is granted, no claim is created, no directory is
+created, no config mutation occurs and no ETB is executed.  This remediation round performed **0**
+web/network access, **0** endpoint queries, **0** `Get-NetTCPConnection` executions, **0** live
+`Get-CimInstance` queries, **0** port/listener/process enumeration, **0** config mutations, **0** OpenCode
+starts, **0** HTTP, **0** `/doc`, **0** `/session`, **0** `Add-Type` executions, **0** P/Invoke executions,
+**0** execution-evidence publications, **0** ETB executions, **0** SIC attempts, **0** Mode-B work, **0**
+provider/model calls, **0** G0.5 and **0** G1/G2 activity, and **0** runtime/test/dependency/version
+changes; the tracked worktree is clean and the ignored/untracked `PROJECT_MEMORY.md` persists.
+
 That approval followed three earlier review rounds: the first independent design
 review returned `REQUEST_CHANGES` (P0 = 1, P1 = 6, P2 = 5) and the
 recovery/reconciliation contract was repaired in `f67bf9e`; two narrow re-reviews
