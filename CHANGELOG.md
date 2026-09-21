@@ -1511,9 +1511,11 @@ starts, **0** HTTP, **0** `/doc`, **0** `/session`, **0** `Add-Type` executions,
 provider/model calls, **0** G0.5 and **0** G1/G2 activity, and **0** runtime/test/dependency/version
 changes; the tracked worktree is clean and the ignored/untracked `PROJECT_MEMORY.md` persists.
 
-**The ETB execution/configuration authorization is now INDEPENDENTLY ACCEPTED / GRANTED (Round 5), while no
+**(Historical round entry — superseded by the `AUTHORIZATION_CONTROL_FAILURE` entry below, which records that
+this authorization was subsequently consumed and is now SPENT / NOT REUSABLE.)**  The ETB
+execution/configuration authorization is now INDEPENDENTLY ACCEPTED / GRANTED (Round 5), while no
 operational action has occurred yet: authorization use UNUSED, ETB attempt NOT STARTED, `opencode.base_url`
-still `""`.**  The independent review — not executor self-approval — returned **APPROVE V0.3-E ETB
+still `""`.  The independent review — not executor self-approval — returned **APPROVE V0.3-E ETB
 EXECUTION / CONFIGURATION AUTHORIZATION ROUND-5** with **P0 = 0, P1 = 0, P2 = 0, P3 = 2**, explicitly
 closing `P1_A_CONFIG_MUTATION`, `P1_B_AUTHORIZATION_REUSE`, `P2_A_OUTPUT_TIMING`, `P2_B_CONFIG_EVIDENCE`,
 `ROUND2_P1_DIRECTORY_RULE`, `ROUND3_P1_CLAIM_WRITER`, `ROUND3_P2_DURABILITY`, `ROUND3_P3_TRACKING_POLICY`,
@@ -1586,6 +1588,84 @@ enumeration, **0** config mutations, **0** claim creations, **0** claim-path dir
 publications, **0** ETB evidence publications, **0** ETB executions, **0** SIC attempts, **0** Mode-B work,
 **0** provider/model calls, **0** G0.5 and **0** G1/G2 activity, and **0** runtime/test/dependency/version
 changes; the tracked worktree is clean and the ignored/untracked `PROJECT_MEMORY.md` persists.
+
+**The one-shot ETB operational round was executed, consumed the accepted authorization exactly once, and
+ended in `AUTHORIZATION_CONTROL_FAILURE`; a separate Recovery-R1 control-state recovery authorization
+candidate now exists (not accepted, not effective, not executed).**  What actually happened: the
+pre-authorization prerequisites all passed; the authorization claim was created with the artifact's exact
+frozen `Write-DevRelayOneShotClaim` writer, so `AUTHORIZATION_USE` became **1/1 CONSUMED** at the successful
+`FileMode.CreateNew` of `docs/v0.3/evidence/ETB_AUTHORIZATION_USE.claim.tmp` and the published claim
+(`docs/v0.3/evidence/ETB_AUTHORIZATION_USE.claim`, 372 bytes, SHA-256
+`d84b428586f07a55a99f5b1391481d77763ec4ea697a40d1cec8aa0779613d4e`) carries the exact ordered schema with
+`state = CONSUMED`; `docs/v0.3/evidence/etb-execution` was created exactly via
+`[System.IO.Directory]::CreateDirectory`; the **exact frozen byte-level configuration transition completed
+and verified** (pre-image `daaf7257…` / 1876 → post-image `b5e4ababf9b49f4e2bcdba1c1dd20fc320a0ec4aedbc98931f8595ff4416a8cf` / 1897 via
+the unique 24-byte span, `xb` exclusive-create + write + flush + `os.fsync` + close + read-back +
+`os.replace` + read-back, with the production reader resolving `""` before and
+`http://127.0.0.1:4096` after); then the `CONFIG_ESTABLISHMENT.json` publication invocation **aborted
+before entering any frozen primitive** because of **executor nonconformance** — an executor-authored,
+non-frozen pre-write assertion miscompared the *current* (post-mutation) config hash against the *preimage*
+hash and threw `PRE_SHA_NOT_PREIMAGE`.  No serialization ran, no temp was created, no bytes were written and
+no move was attempted, so there is **no partial output** and the evidence directory is empty; per the frozen
+rules (config-evidence "any failure → `AUTHORIZATION_CONTROL_FAILURE` / ETB NOT STARTED" plus §33.2
+"post-authorization-claim failure … STOP, new authorization required, no reuse" and §12.2 "no
+preparation-retry loophole exists") the invocation was **not retried**.  Final state of that round:
+`AUTHORIZATION_CONTROL_FAILURE`; original authorization **SPENT / NOT REUSABLE**; `AUTHORIZATION USE = 1/1
+CONSUMED`; original `ETB ATTEMPT = 0/1 NOT STARTED` (no `ETB_ATTEMPT_USE.claim` / `.tmp` was ever created);
+**no ETB semantic result exists**; config left at the exact frozen post-image (**no rollback**); original
+`CONFIG_ESTABLISHMENT = MISSING`; frozen oracle **NEVER ENTERED** (no `Get-NetTCPConnection`,
+`Get-CimInstance`, `Add-Type`, P/Invoke, HTTP, `/doc`, `/session`, OpenCode start or ETB execution); no
+commit was created (HEAD remained `14c5343`).  The independent control-failure review returned *CONFIRM
+AUTHORIZATION_CONTROL_FAILURE STATE — NEW AUTHORIZATION REQUIRED* (**P0 = 0, P1 = 1, P2 = 0, P3 = 1**) and
+separately concluded `STATE_MACHINE_FINAL_STATE = VALID`, `EXECUTION_PROCEDURE_FIDELITY = NONCONFORMANT`,
+`CONFIG_EVIDENCE_SCHEMA = SOUND`, `FAILURE_CAUSE = EXECUTOR_NONCONFORMANCE`,
+`ORIGINAL_AUTHORIZATION_REUSABLE = NO`, `CONFIG_MUTATION_REPLAY_ALLOWED = NO`.  A **new** artifact
+`docs/v0.3/V03E_G0_5_PRE_ETB_RECOVERY_AUTHORIZATION.md` (not a revision — the accepted original
+authorization artifact remains immutable) now records
+`ETB CONTROL-STATE RECOVERY AUTHORIZATION = RECOVERY-R1 CANDIDATE / NOT ACCEPTED / NOT EFFECTIVE / NOT
+EXECUTED`: it is a **new authorization** with `recovery_authorization_commit` /
+`recovery_authorization_sha256` to be bound only by a later independent approval, a **new and permanently
+distinct claim namespace** (`ETB_RECOVERY_R1_AUTHORIZATION_USE.claim`(+`.tmp`) and
+`ETB_RECOVERY_R1_ATTEMPT_USE.claim`(+`.tmp`)), the same frozen occupancy predicate
+(`File.Exists` **or** `Directory.Exists`), a **byte-for-byte verbatim copy** of the accepted
+`Write-DevRelayOneShotClaim` function (verified identical; the reviewer must diff the two functions), and
+two separate 1-of-1 budgets whose consumption boundary is the successful `CreateNew` of the recovery
+authorization claim temp.  Recovery **does not re-establish configuration**: it performs only read-only
+verification of the existing post-image (`b5e4abab…` / 1897 / `http://127.0.0.1:4096`) and then
+**recovers/publishes the missing original `CONFIG_ESTABLISHMENT.json`** as control evidence of the
+transition that already occurred — so that file must retain the **original** authorization identity
+(`64044fc…` / `511ab1e2…`), never the recovery identity, and the two provenance domains must not be
+conflated.  The artifact reproduces the accepted `devrelay-etb-config-establishment-v1` schema as the exact
+17 ordered fields with explicit values (no recovery-specific field, no added timestamp or comment), treats
+`pre_config_sha256`/`expected_pre_config_sha256`/`pre_resolved_base_url` as **historical evidence inputs**
+(`daaf7257…` / `daaf7257…` / `""`) that must **not** be validated against the current file, and freezes the
+**absolute prohibition** on the `PRE_SHA_NOT_PREIMAGE` assertion and on any executor-authored pre-write
+assertion, together with the exact `ConvertTo-Json -Depth 12 -Compress` / `UTF8Encoding(false)` / one-LF /
+`CreateNew`+`Flush(true)`+read-back / two-argument `File.Move` publication rule and the rule that the
+authorization/recovery layer must not touch the oracle's six frozen output paths.  Failure semantics are
+frozen (`RECOVERY_AUTHORIZATION_CONTROL_FAILURE`, recovery use CONSUMED, recovery ETB attempt NOT STARTED,
+no retry, no cleanup, no rollback, no original-claim deletion, a later Recovery-R2 would be required), as is
+the boundary at which the one Recovery-R1 ETB attempt is consumed (successful `CreateNew` of the recovery
+ETB claim temp, after successful `CONFIG_ESTABLISHMENT.json` publication) — which would be the **first
+actual ETB attempt** — followed by entering the unchanged frozen oracle from its FIRST STEP.  Preserved
+unchanged: `oracle_commit = 1c6c7cd…` / `oracle_sha256 = 01675fa7…` (recovery creates no new oracle); the
+original spent claim and the empty `etb-execution` directory are never deleted or rewritten; the four new
+recovery claim paths are untracked operational control-state artifacts; config is never rolled back to `""`;
+Mode-B remains `NOT RUN / NO ORACLE / ORACLE NOT FREEZABLE / CONCRETE ENDPOINT NOT ESTABLISHED / PRE-ORACLE
+CONFIGURATION / TARGET-BINDING PREREQUISITE BLOCKER` (**the config now containing the endpoint does not
+establish target binding**); `P6 = UNPROVEN / UNSATISFIED`; G0.5 **NOT CLOSED**; Case-C and v0.3-E
+implementation `NOT AUTHORIZED`; `G1`/`G2` `NOT RUN`; `adopt_completed_turn` **DISABLED**.  The current
+authorization status is `ETB EXECUTION / CONFIGURATION AUTHORIZATION = SPENT / NOT REUSABLE / AUTHORIZATION
+USE 1/1 CONSUMED / ETB ATTEMPT 0/1 NOT STARTED / ETB SEMANTIC RESULT NONE /
+AUTHORIZATION_CONTROL_FAILURE`.  This Recovery-R1 design round performed **0** web/network access, **0**
+endpoint queries, **0** `Get-NetTCPConnection` executions, **0** live `Get-CimInstance` queries, **0**
+listener/process/port enumeration, **0** config mutations, **0** claim creations, **0** claim-path
+directory creations, **0** `CONFIG_ESTABLISHMENT` publications, **0** OpenCode starts/restarts, **0** HTTP,
+**0** `/doc`, **0** `/session`, **0** `Add-Type` executions, **0** P/Invoke executions, **0** ETB
+executions, **0** SIC attempts, **0** Mode-B work, **0** provider/model calls, **0** G0.5 and **0** G1/G2
+activity, and **0** runtime/test/dependency/version changes; the spent-authorization claim remains untracked
+and unstaged, the git-ignored config remains uncommitted, and the ignored/untracked `PROJECT_MEMORY.md`
+persists.
 
 That approval followed three earlier review rounds: the first independent design
 review returned `REQUEST_CHANGES` (P0 = 1, P1 = 6, P2 = 5) and the
