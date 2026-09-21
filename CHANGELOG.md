@@ -1589,9 +1589,11 @@ publications, **0** ETB evidence publications, **0** ETB executions, **0** SIC a
 **0** provider/model calls, **0** G0.5 and **0** G1/G2 activity, and **0** runtime/test/dependency/version
 changes; the tracked worktree is clean and the ignored/untracked `PROJECT_MEMORY.md` persists.
 
-**The one-shot ETB operational round was executed, consumed the accepted authorization exactly once, and
+**(Historical round entry — superseded by the Recovery-R1 acceptance entry below, which records that this
+candidate was subsequently independently APPROVED and is now ACCEPTED / GRANTED / USE UNUSED.)**  The one-shot
+ETB operational round was executed, consumed the accepted authorization exactly once, and
 ended in `AUTHORIZATION_CONTROL_FAILURE`; a separate Recovery-R1 control-state recovery authorization
-candidate now exists (not accepted, not effective, not executed).**  What actually happened: the
+candidate now exists (not accepted, not effective, not executed).  What actually happened: the
 pre-authorization prerequisites all passed; the authorization claim was created with the artifact's exact
 frozen `Write-DevRelayOneShotClaim` writer, so `AUTHORIZATION_USE` became **1/1 CONSUMED** at the successful
 `FileMode.CreateNew` of `docs/v0.3/evidence/ETB_AUTHORIZATION_USE.claim.tmp` and the published claim
@@ -1664,6 +1666,88 @@ directory creations, **0** `CONFIG_ESTABLISHMENT` publications, **0** OpenCode s
 **0** `/doc`, **0** `/session`, **0** `Add-Type` executions, **0** P/Invoke executions, **0** ETB
 executions, **0** SIC attempts, **0** Mode-B work, **0** provider/model calls, **0** G0.5 and **0** G1/G2
 activity, and **0** runtime/test/dependency/version changes; the spent-authorization claim remains untracked
+and unstaged, the git-ignored config remains uncommitted, and the ignored/untracked `PROJECT_MEMORY.md`
+persists.
+
+**The Recovery-R1 control-state recovery authorization has been INDEPENDENTLY ACCEPTED / GRANTED, while no
+recovery action has occurred yet: recovery use UNUSED, recovery ETB attempt NOT STARTED, no Recovery-R1
+claim, no `CONFIG_ESTABLISHMENT`, no oracle entry.**  The independent review — not executor self-approval —
+returned **APPROVE V0.3-E ETB CONTROL-STATE RECOVERY AUTHORIZATION RECOVERY-R1** against
+`3541c011cf92d9d66253989c5f576c2ad845ca33` (artifact
+`docs/v0.3/V03E_G0_5_PRE_ETB_RECOVERY_AUTHORIZATION.md`, blob
+`7fb1f28d427cc8c567491afc3137890f79b2bdb8bce88b4be2f63005824f3ab7`), confirming
+`RECOVERY_CLAIM_WRITER = BYTE_IDENTICAL`, `CONFIG_MUTATION_REPLAY = FORBIDDEN`,
+`CONFIG_ESTABLISHMENT_ATTESTATION = TRANSITION_FACT`, `DELAYED_PUBLICATION_PROVENANCE = SUFFICIENT`,
+`CONTEMPORANEITY_SEMANTICS = TRUTHFUL`, and finding the design internally consistent, deterministic,
+repository-self-sufficient, non-reusing of the spent original authorization and non-replaying of the
+original config mutation, **with no blocking design finding**.  **Permanent Recovery-R1 provenance:**
+`recovery_authorization_commit = 3541c011cf92d9d66253989c5f576c2ad845ca33` and
+`recovery_authorization_sha256 = 7fb1f28d427cc8c567491afc3137890f79b2bdb8bce88b4be2f63005824f3ab7`; this
+pair is immutable and must not be replaced by this acceptance-bookkeeping commit, by the Recovery-R1
+operational HEAD, by an evidence commit, by a result-review bookkeeping commit or by any later HEAD — **the
+bookkeeping commit created by this round is NOT `recovery_authorization_commit`**.  **Three distinct
+immutable provenance domains now exist and none may replace another:** (A) the original
+configuration-transition authorization `64044fc…` / `511ab1e2…` — preserved as `ORIGINAL ROUND-5
+AUTHORIZATION = SPENT / NOT REUSABLE / AUTHORIZATION_CONTROL_FAILURE`, with Recovery-R1 never replacing or
+reinterpreting it; (B) the Recovery-R1 publication/execution authorization `3541c01…` / `7fb1f28d…`; and
+(C) the frozen ETB oracle `1c6c7cd…` / `01675fa7…`.  **Authoritative recovery status:**
+`ETB CONTROL-STATE RECOVERY AUTHORIZATION = ACCEPTED / GRANTED / NOT EXECUTED / RECOVERY AUTHORIZATION USE
+UNUSED / RECOVERY ETB ATTEMPT NOT STARTED`.  The accepted Recovery-R1 artifact remains an **immutable
+accepted candidate object** whose construction-time header still reads RECOVERY-R1 CANDIDATE / NOT ACCEPTED
+/ NOT EFFECTIVE / NOT EXECUTED — the established immutable-artifact + approval-record + active-status
+pattern — so it was **not** edited by this bookkeeping; current status is represented only by this CHANGELOG
+and `docs/v0.3/V03E_ACCEPTANCE.md`.  **Current filesystem/control state (verified):** original authorization
+claim FINAL **OCCUPIED**, original authorization claim TEMP **ABSENT**, original ETB attempt claim TEMP and
+FINAL **ABSENT**, and all four Recovery-R1 claim paths (`ETB_RECOVERY_R1_AUTHORIZATION_USE.claim`(+`.tmp`),
+`ETB_RECOVERY_R1_ATTEMPT_USE.claim`(+`.tmp`)) **ABSENT** ⇒ `ORIGINAL AUTHORIZATION = SPENT`, `ORIGINAL ETB
+ATTEMPT = 0/1 NOT STARTED`, `RECOVERY-R1 AUTHORIZATION USE = UNUSED`, `RECOVERY-R1 ETB ATTEMPT = NOT
+STARTED`; no budget has yet been consumed.  **Current config state:** `opencode.base_url =
+http://127.0.0.1:4096`, SHA-256 `b5e4ababf9b49f4e2bcdba1c1dd20fc320a0ec4aedbc98931f8595ff4416a8cf`, size
+1897 — the exact frozen post-image (historical preimage `daaf7257…` / 1876 / `""` remains historical only);
+config is not mutated by this round.  **`CONFIG_ESTABLISHMENT` state:** `docs/v0.3/evidence/etb-execution`
+exists as a directory but is empty — `CONFIG_ESTABLISHMENT.json` and `.tmp` are ABSENT, therefore
+`CONFIG_ESTABLISHMENT = MISSING`; the empty directory itself is not evidence publication.  **Recovery-R1
+scope (by reference to the immutable artifact):** one Recovery-R1 authorization use → read-only
+verification of the existing exact post-image → publication of the missing `CONFIG_ESTABLISHMENT` evidence
+for the **original** configuration transition → one Recovery-R1 ETB attempt → entry into the unchanged
+frozen ETB oracle.  Recovery-R1 must **not** mutate config, restore `""`, reapply the original config patch,
+reuse the original authorization or its claim paths, start/restart OpenCode, perform HTTP, perform Mode-B
+work or run G0.5.  **Delayed-publication provenance (independently accepted semantics):**
+`CONFIG_ESTABLISHMENT_ATTESTATION = TRANSITION_FACT` — the recovered record describes the **original**
+transition, so its embedded authorization provenance remains `64044fc…` / `511ab1e2…`, while Recovery-R1
+authority to publish the delayed record is separately established by `3541c01…` / `7fb1f28d…` plus its
+future Recovery-R1 claim; hence `DELAYED_PUBLICATION_PROVENANCE = SUFFICIENT` and
+`CONTEMPORANEITY_SEMANTICS = TRUTHFUL`; this does **not** imply that the original authorization itself later
+re-executes publication.  **Recovery-R1 namespace/budgets:** the four new claim paths are permanently
+distinct (the original namespace stays reserved), and `RECOVERY_AUTHORIZATION_USE_BUDGET = 1/1` /
+`RECOVERY_ETB_ATTEMPT_BUDGET = 1/1` are both unconsumed.  **Config replay prohibition:**
+`CONFIG_MUTATION_REPLAY = FORBIDDEN` — Recovery-R1 operational execution may only verify the current
+post-image SHA, size and resolved `base_url`, and must never restore `""`, re-run OLD→NEW, re-run the
+original Python config writer, reuse the original config temp or perform `os.replace` on config.  **Original
+control-failure history preserved (not erased by this approval):** *CONFIRM AUTHORIZATION_CONTROL_FAILURE
+STATE — NEW AUTHORIZATION REQUIRED* (P0 = 0, P1 = 1, P2 = 0, P3 = 1) with
+`STATE_MACHINE_FINAL_STATE = VALID`, `EXECUTION_PROCEDURE_FIDELITY = NONCONFORMANT`,
+`CONFIG_EVIDENCE_SCHEMA = SOUND`, `FAILURE_CAUSE = EXECUTOR_NONCONFORMANCE`,
+`ORIGINAL_AUTHORIZATION_REUSABLE = NO`, `CONFIG_MUTATION_REPLAY_ALLOWED = NO`.  **Preserved unchanged:**
+Mode-B `NOT RUN / NO ORACLE / ORACLE NOT FREEZABLE / CONCRETE ENDPOINT NOT ESTABLISHED / PRE-ORACLE
+CONFIGURATION / TARGET-BINDING PREREQUISITE BLOCKER`; `P6 = UNPROVEN / UNSATISFIED`; G0.5 **NOT CLOSED**;
+Case-C and v0.3-E implementation `NOT AUTHORIZED`; `G1`/`G2` `NOT RUN`; `adopt_completed_turn` **DISABLED**;
+**Recovery-R1 approval is not target-binding evidence**.  **Next stage:** only after independent
+confirmation of this Recovery-R1 acceptance bookkeeping may the next stage be the **RECOVERY-R1 OPERATIONAL
+ROUND**, binding to exactly `3541c01…` / `7fb1f28d…` plus the original pair `64044fc…` / `511ab1e2…` and the
+oracle pair `1c6c7cd…` / `01675fa7…`; **this bookkeeping round does not begin recovery**.  Authoritative
+sequence: Round-5 authorization accepted → Round-5 acceptance bookkeeping accepted → original authorization
+consumed → exact config mutation completed → `CONFIG_ESTABLISHMENT` publication failed due to executor
+nonconformance → `AUTHORIZATION_CONTROL_FAILURE` → independent control-state review confirmed → original
+authorization SPENT → Recovery-R1 design → **Recovery-R1 independently approved** → **Recovery-R1
+acceptance bookkeeping (this round)** → independent Recovery-R1 bookkeeping confirmation → one Recovery-R1
+authorization use → verify the exact existing post-image → recover/publish the missing
+`CONFIG_ESTABLISHMENT` → consume one Recovery-R1 ETB attempt → frozen oracle once → independent ETB-result
+review → only an independently accepted `ETB_SATISFIED` may permit Mode-B construction; no stage is skipped.
+This bookkeeping round performed **0** config mutations, **0** claim creations, **0** claim deletions, **0**
+`CONFIG_ESTABLISHMENT` publications, **0** endpoint queries, **0** listener/process enumerations, **0**
+OpenCode starts/restarts, **0** HTTP, **0** ETB, **0** SIC, **0** Mode-B work, **0** G0.5, **0** G1/G2
+activity and **0** runtime/test/dependency/version changes; the spent-authorization claim remains untracked
 and unstaged, the git-ignored config remains uncommitted, and the ignored/untracked `PROJECT_MEMORY.md`
 persists.
 
