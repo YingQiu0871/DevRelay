@@ -1751,6 +1751,85 @@ activity and **0** runtime/test/dependency/version changes; the spent-authorizat
 and unstaged, the git-ignored config remains uncommitted, and the ignored/untracked `PROJECT_MEMORY.md`
 persists.
 
+**The Recovery-R1 published candidate ETB result was REJECTED by independent review, and a new ETB
+execution oracle R2 (execution-fidelity / output-namespace closure) design candidate now exists — still a
+candidate: not accepted, not frozen, not executed.**  The independent final decision was **REJECT
+RECOVERY-R1 PUBLISHED ETB RESULT — NO AUTHORITATIVE ETB SEMANTIC RESULT** (**P0 = 0, P1 = 1, P2 = 1,
+P3 = 2**) with `RECOVERY_CONTROL_STATE = VALID`, `CONFIG_ESTABLISHMENT_RECOVERY = VALID`,
+`ORACLE_IMPLEMENTATION_FIDELITY = NONCONFORMANT / INDETERMINATE`, `BLANKET_CATCH_CLASSIFICATION =
+NONCONFORMANT`, `MANDATORY_STOP_FIDELITY = NONCONFORMANT`, `RESULT_ENCODING_FIDELITY = NONCONFORMANT`,
+`RESULT_ARTIFACT_VALIDITY = VALID_WITH_NONBLOCKING_TEXT_DEFECT`, `PUBLISHED_RESULT_CLASSIFICATION =
+UNRESOLVABLE`, `FROZEN_TAXONOMY_RESULT = INDETERMINATE DUE TO EXECUTION NONCONFORMANCE`,
+`INDEPENDENT_RECLASSIFICATION_PERMITTED = NO` and `NEW_ETB_AUTHORIZATION_REQUIRED = YES`.  Therefore
+`RECOVERY-R1 AUTHORIZATION = SPENT / NOT REUSABLE`, `RECOVERY-R1 ETB ATTEMPT = SPENT / NOT REUSABLE`,
+`RECOVERY-R1 PUBLISHED ETB RESULT = REJECTED`, `AUTHORITATIVE ETB SEMANTIC RESULT = NONE`; the rejected
+candidate is **not** relabelled as `ETB_UNSATISFIED`, as an authoritative `HARNESS_INVALID` or as
+`ETB_SATISFIED`, and no independent reclassification is permitted.  Two blockers are recorded for why the
+original oracle cannot simply be re-run: **(A) output namespace occupied** — the immutable Recovery-R1 finals
+`docs/v0.3/evidence/etb-execution/ETB_EVIDENCE.json`, `…/MANIFEST.sha256` and
+`docs/v0.3/V03E_G0_5_PRE_ETB_EXECUTION_RESULT.md` are present, and the original oracle requires all six of its
+output paths absent before a consumed attempt proceeds; **(B) executable implementation not frozen** — the
+Recovery-R1 execution script was not preserved, so its actual executable bytes could not be compared against
+the accepted oracle and a blanket catch materially changed classification.  This round therefore freezes a
+**new oracle as two tracked artifacts**: the specification
+`docs/v0.3/V03E_G0_5_PRE_ETB_EXECUTION_ORACLE_R2.md` and the **normative tracked executable**
+`docs/v0.3/V03E_G0_5_PRE_ETB_EXECUTION_ORACLE_R2.ps1`.  The script is **ASCII-only** (every byte ≤ `0x7F`,
+mechanically verified; no BOM, LF only) and constructs the result template's em dash at runtime as
+`$EmDash = [char]0x2014`, serialized through `[System.Text.UTF8Encoding]::new($false)` so the result artifact
+carries the exact UTF-8 bytes `E2 80 94`, with a pre-publication byte check for those three bytes — this
+eliminates the PowerShell-5.1 source-decoding ambiguity that corrupted the previous result artifact's first
+line.  The listener taxonomy is now explicit and mechanically distinct in both the spec and the script:
+`COMMAND_UNAVAILABLE` (cmdlet/module genuinely unavailable, decided by an explicit
+`Get-Command -ErrorAction SilentlyContinue` availability branch **before** the query) → `HARNESS_INVALID`;
+`QUERY_EXCEPTION`, `ZERO_ROWS`, `MULTIPLE_ROWS` and `FIELD_OR_PID_INVALID` → `ETB_UNSATISFIED`;
+`ONE_VALID_ROW` → continue the target-binding chain; `NOT_REACHED` only before the listener stage or after an
+earlier frozen terminal condition.  The exact listener query
+(`@(Get-NetTCPConnection -LocalAddress '127.0.0.1' -LocalPort 4096 -State Listen -ErrorAction SilentlyContinue
+-ErrorVariable qerr)`) has its own **narrow** try/catch, and a no-match condition surfaced as a terminating
+exception is classified `ETB_UNSATISFIED`, never `HARNESS_INVALID`; **no blanket or outer catch may map
+snapshot/listener exceptions to `HARNESS_INVALID`** — the only remaining catches are the narrow, typed ones
+frozen by the original taxonomy (native invocation / `CloseHandle` false / `Add-Type` load /
+config-reader failure → `HARNESS_INVALID`; process query, package manifest, hash read → `ETB_UNSATISFIED`),
+plus a delimited evidence-publication stage that contains **no** listener, process, canonicalization, hash or
+package logic.  The evidence schema keeps every accepted field and adds exactly **one** audit field,
+`listener_probe_outcome`, placed between `checks` and `outcome`, whose value is bound to the published
+semantic outcome by the frozen mapping (and re-verified on read-back, so a mismatch surfaces as the frozen
+evidence-machinery `HARNESS_INVALID` rather than being executor-selectable); unobserved snapshot fields
+remain truthful placeholders (`""` / `0`).  The output namespace is **new and disjoint**: evidence
+`docs/v0.3/evidence/etb-execution-r2/ETB_EVIDENCE.json` (+`.tmp`), manifest
+`docs/v0.3/evidence/etb-execution-r2/MANIFEST.sha256` (+`.tmp`) and result
+`docs/v0.3/V03E_G0_5_PRE_ETB_EXECUTION_RESULT_R2.md` (+`.tmp`), all six required absent before publication
+work (file **or** directory occupancy fails closed), with the old Recovery-R1 paths neither reused nor
+inspected; publication order stays evidence → manifest → result **last** with the two-argument
+`File.Move` and read-back verification, and the manifest covers only the R2 evidence file.  The executable
+terminates immediately after final publication and verification — **no post-result `Get-Command`,
+`Get-NetTCPConnection`, `Get-CimInstance`, endpoint/listener/process probe, diagnostic, repair,
+reclassification or extra evidence collection**.  Identity model: after independent acceptance,
+`oracle_r2_commit` (the accepted commit containing both files), `oracle_r2_script_sha256` and
+`oracle_r2_spec_sha256` are immutable and must be bound by the future Recovery-R2 authorization; the
+executor must run the tracked `.ps1` directly (no extraction from Markdown, no temporary script, no
+translation, no wrapper, no injected assertions) via the frozen invocation
+`powershell.exe -NoProfile -ExecutionPolicy Bypass -File "docs/v0.3/V03E_G0_5_PRE_ETB_EXECUTION_ORACLE_R2.ps1"`.
+Static validation performed in this design round: **parser-only** syntax validation of the tracked script
+(PowerShell AST parser: **0 parse errors**, 4638 tokens), an ASCII-byte sweep (**0 non-ASCII bytes**), a
+structural audit of every `catch`/`throw`/`HARNESS_INVALID`/`ETB_UNSATISFIED` branch, and hash computation —
+**the operational main path was not executed, no listener/process command was run and the endpoint was not
+contacted**.  Current statuses: `ETB EXECUTION ORACLE-R2 = DESIGN CANDIDATE / NOT ACCEPTED / NOT FROZEN / NOT
+EXECUTED`; `RECOVERY-R1 AUTHORIZATION = SPENT / NOT REUSABLE`; `RECOVERY-R1 ETB ATTEMPT = SPENT / NOT
+REUSABLE`; `RECOVERY-R1 PUBLISHED ETB RESULT = REJECTED`; `AUTHORITATIVE ETB SEMANTIC RESULT = NONE`;
+`NEW_ETB_AUTHORIZATION_REQUIRED = YES`.  No Recovery-R2 authorization and no Recovery-R2 claim namespace
+exist; config remains the exact post-image (`b5e4abab…` / 1897 / `http://127.0.0.1:4096`) and
+`CONFIG_ESTABLISHMENT = VALID / PRESENT`; the Recovery-R1 evidence/result artifacts and all claims remain
+untouched historical artifacts; Mode-B remains `NOT RUN / NO ORACLE / ORACLE NOT FREEZABLE / CONCRETE
+ENDPOINT NOT ESTABLISHED / PRE-ORACLE CONFIGURATION / TARGET-BINDING PREREQUISITE BLOCKER`; `P6 = UNPROVEN /
+UNSATISFIED`; G0.5 **NOT CLOSED**; Case-C and v0.3-E implementation `NOT AUTHORIZED`; `G1`/`G2` `NOT RUN`;
+`adopt_completed_turn` **DISABLED**.  This design round performed **0** config mutations, **0** claim
+creations, **0** R2 directory or output creations, **0** Oracle-R2 executions, **0** old-oracle executions,
+**0** endpoint queries, **0** `Get-NetTCPConnection` listener queries, **0** live `Get-CimInstance` queries,
+**0** listener/process/port enumeration, **0** P/Invoke executions, **0** OpenCode starts/restarts, **0**
+HTTP, **0** ETB executions, **0** SIC, **0** Mode-B work, **0** G0.5 and **0** G1/G2 activity, and **0**
+runtime/test/dependency/version changes; the ignored/untracked `PROJECT_MEMORY.md` persists.
+
 That approval followed three earlier review rounds: the first independent design
 review returned `REQUEST_CHANGES` (P0 = 1, P1 = 6, P2 = 5) and the
 recovery/reconciliation contract was repaired in `f67bf9e`; two narrow re-reviews
