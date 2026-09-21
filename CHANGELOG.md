@@ -1366,6 +1366,81 @@ work, **0** provider/model calls, **0** G0.5 and **0** G1/G2 activity, and **0**
 runtime/test/dependency/version changes; the tracked worktree is clean and the ignored/untracked
 `PROJECT_MEMORY.md` persists.
 
+**The ETB execution/configuration authorization Round-3 candidate was rejected by independent review, and
+a round-4 claim-writer mechanical-closure candidate now exists (still a candidate: not accepted, not
+effective, not executed).**  The independent review issued *REQUEST_CHANGES — V0.3-E ETB EXECUTION /
+CONFIGURATION AUTHORIZATION ROUND-3* (**P0 = 0, P1 = 1, P2 = 1, P3 = 2**) against
+`c106b2d93b272fb337795e8712f58e0c273088fa` (artifact blob
+`29019f683c4c217654034fc1408d2942b0b384832125fe80b7a6303927d015b0`), which **remains rejected** and
+unamended (as do `390eda1` with P0 = 0, P1 = 1, P2 = 0, P3 = 2 and `f52cb2b` with P0 = 0, P1 = 2, P2 = 2);
+the last authoritative pre-authorization baseline remains `d058b38`.  `docs/v0.3/V03E_G0_5_PRE_ETB_EXECUTION_AUTHORIZATION.md`
+was revised **in place** (no second authorization artifact) as a self-contained round-4 remediation
+candidate that closes exactly the four Round-3 findings and redesigns nothing else.  **P1 — claim-writer
+exactness:** both claim writers are now frozen to **Windows PowerShell / .NET only** (no Python claim
+writer, no `os.fsync` alternative, no alternate language, no executor-authored replacement code) with one
+exact implementation, `Write-DevRelayOneShotClaim`, embedded **verbatim** in the artifact (104 lines,
+byte-identical to the frozen source): `[ordered]` claim object; `ConvertTo-Json -Depth 4 -Compress`;
+`$json + "`n"` (exactly one final LF); `[System.Text.UTF8Encoding]::new($false)` (no BOM);
+`[System.IO.FileStream]::new($TempPath, [System.IO.FileMode]::CreateNew, [System.IO.FileAccess]::Write,
+[System.IO.FileShare]::None)`; a single `$stream.Write($bytes, 0, $bytes.Length)`; `$stream.Flush($true)`;
+`$stream.Dispose()` on a `finally`-equivalent path; `[System.IO.File]::ReadAllBytes` with explicit
+byte-by-byte equality for both the temp and the published final; and publication by the **two-argument**
+`[System.IO.File]::Move($TempPath, $FinalPath)` as the **sole** publication primitive, which must fail
+rather than overwrite an existing destination (the explicit `File.Exists` check before the move is only an
+additional fail-closed check) — with every alternative forbidden: no overwrite `File.Move` overload, no
+`File.Replace`, no `Move-Item`, no `Rename-Item`, no Python rename, no `os.rename`, no `os.replace`, no
+other primitive.  The **consumption boundary** remains the successful return of `FileMode.CreateNew` (which
+MUST fail if the temp exists; no truncation, reuse or overwrite), and the exact future invocations for both
+claims are frozen (authorization claim: temp/final `docs/v0.3/evidence/ETB_AUTHORIZATION_USE.claim.tmp` /
+`.claim` with `devrelay-etb-authorization-use-v1`; ETB attempt claim: temp/final
+`docs/v0.3/evidence/ETB_ATTEMPT_USE.claim.tmp` / `.claim` with `devrelay-etb-attempt-use-v1`; both bound to
+the independently accepted authorization commit/SHA and to oracle `1c6c7cd` / `01675fa7…`), with writer
+failure semantics frozen per claim (pre-existing temp or final ⇒ already CONSUMED ⇒ STOP without invoking
+the writer; any later writer exception ⇒ remains CONSUMED, `AUTHORIZATION_CONTROL_FAILURE` for the
+authorization claim with ETB not started, and for the ETB claim no ETB semantic result if the oracle was not
+entered; no cleanup, no retry, no alternate writer, no second attempt).  **P2 — durability narrowing:** the
+supported guarantee is now explicitly **PROCESS-CRASH RECOVERY** only — "if the PowerShell/executor process
+terminates after successful OS-visible exclusive creation of a claim temp file, the next executor is
+required to interpret TEMP or FINAL presence as CONSUMED and fail closed" — with an explicit non-claim
+("THIS AUTHORIZATION DOES NOT CLAIM POWER-LOSS DURABILITY OR MACHINE-CRASH DURABILITY FOR CLAIM DIRECTORY
+METADATA"), `Flush(true)` described as **file-content** flushing only, no parent-directory fsync guarantee,
+and no guarantee for sudden power loss between filesystem metadata operations; unbounded
+"durable/durably/durability" wording for claim markers was replaced with process-crash-recovery terminology
+("process-crash recovery consumption boundary", "process-crash-persistent one-shot marker",
+"filesystem-presence one-shot witness") without changing the logical state machine.  **P3-1 — tracking
+policy:** the four claim paths are declared intended **untracked operational control-state artifacts**,
+**not** part of the tracked-worktree-clean predicate, whose presence is expected after operational
+authorization use; they MUST NOT be `git add`ed, staged, committed, deleted, renamed, archived or
+normalized before independent ETB-result review; bookkeeping commits before that review MUST use an exact
+allowlist of intended tracked documentation files and MUST exclude the markers; `.gitignore` must not be
+modified; "**tracked worktree clean**" is frozen to mean *no tracked-file modification outside the
+explicitly authorized operational changes* (not a globally empty `git status --porcelain`), and future
+reports must list expected untracked operational artifacts separately rather than classifying the expected
+markers as worktree drift; if a marker is found staged → STOP without auto-unstaging/deleting, and if found
+committed unexpectedly → STOP without rewriting history, both reported for independent review, with the
+presence semantics remaining fail-closed regardless of Git tracking state.  **P3-2 — restored invariant:**
+the explicit rule is restored verbatim — the authorization layer MUST NOT pre-check, pre-interpret, delete,
+repair or otherwise act on the accepted oracle's six frozen temp/final ETB output paths; only after
+configuration establishment succeeds, `CONFIG_ESTABLISHMENT.json` succeeds and the ETB claim is
+consumed/finalized does execution enter the accepted frozen oracle from its FIRST STEP, and the oracle
+alone performs its own six-path output-preexistence validation inside the already-consumed ETB attempt.
+Preserved semantically unchanged: the byte-exact config mutation (`PRE_CONFIG_SHA256 = daaf7257…` / 1876 →
+`POST_CONFIG_SHA256 = b5e4abab…` / 1897 through the unique 24-byte span), the Python `xb`/`fsync`/`os.replace`
+config writer and read-back, config no-rollback, the `devrelay-etb-config-establishment-v1`
+path/schema/serialization, the exact `Directory.CreateDirectory` directory create/verify rule (still
+CLOSED), the four-row state machine and TEMP-or-FINAL-means-consumed rule with no parser success required,
+claim non-deletion, the future claim-namespace rule, the ETB attempt boundary, oracle provenance and the
+owner tuple, and Mode-B/G0.5/implementation preservation.  Current status:
+`ETB EXECUTION / CONFIGURATION AUTHORIZATION = ROUND-4 CANDIDATE / NOT ACCEPTED / NOT EFFECTIVE / NOT
+EXECUTED`; no operational authorization is granted, no claim is created now, no directory is created now,
+no config is changed now and no ETB is executed now.  This remediation round performed **0** web/network
+access, **0** endpoint queries, **0** `Get-NetTCPConnection` executions, **0** live `Get-CimInstance`
+queries, **0** port/listener/process enumeration, **0** config mutations, **0** OpenCode starts, **0** HTTP,
+**0** `/doc`, **0** `/session`, **0** `Add-Type` executions, **0** P/Invoke executions, **0**
+execution-evidence publications, **0** ETB executions, **0** SIC attempts, **0** Mode-B work, **0**
+provider/model calls, **0** G0.5 and **0** G1/G2 activity, and **0** runtime/test/dependency/version
+changes; the tracked worktree is clean and the ignored/untracked `PROJECT_MEMORY.md` persists.
+
 That approval followed three earlier review rounds: the first independent design
 review returned `REQUEST_CHANGES` (P0 = 1, P1 = 6, P2 = 5) and the
 recovery/reconciliation contract was repaired in `f67bf9e`; two narrow re-reviews

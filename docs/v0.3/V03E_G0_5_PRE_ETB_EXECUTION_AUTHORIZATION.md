@@ -10,19 +10,21 @@
 > **DOES NOT AUTHORIZE HTTP**
 > **ONE ETB ATTEMPT ONLY IF LATER INDEPENDENTLY ACCEPTED**
 
-Status: **ETB EXECUTION / CONFIGURATION AUTHORIZATION = ROUND-3 CANDIDATE / NOT ACCEPTED / NOT EFFECTIVE / NOT EXECUTED**
+Status: **ETB EXECUTION / CONFIGURATION AUTHORIZATION = ROUND-4 CANDIDATE / NOT ACCEPTED / NOT EFFECTIVE / NOT EXECUTED**
 
-Revision: **round-3 durable-claim remediation candidate** (supersedes the Round-2 candidate `390eda1`,
-which received *REQUEST_CHANGES — V0.3-E ETB EXECUTION / CONFIGURATION AUTHORIZATION ROUND-2*,
-P0 = 0, P1 = 1, P2 = 0, P3 = 2; and the earlier `f52cb2b`, which received *REQUEST_CHANGES — V0.3-E ETB
-EXECUTION / CONFIGURATION AUTHORIZATION*, P0 = 0, P1 = 2, P2 = 2).  Both remain **rejected**.
+Revision: **round-4 claim-writer mechanical closure candidate** (supersedes the Round-3 candidate
+`c106b2d`, which received *REQUEST_CHANGES — V0.3-E ETB EXECUTION / CONFIGURATION AUTHORIZATION ROUND-3*,
+P0 = 0, P1 = 1, P2 = 1, P3 = 2; the Round-2 candidate `390eda1`, which received *REQUEST_CHANGES — V0.3-E
+ETB EXECUTION / CONFIGURATION AUTHORIZATION ROUND-2*, P0 = 0, P1 = 1, P2 = 0, P3 = 2; and the earlier
+`f52cb2b`, which received *REQUEST_CHANGES — V0.3-E ETB EXECUTION / CONFIGURATION AUTHORIZATION*,
+P0 = 0, P1 = 2, P2 = 2).  **All three remain rejected.**
 
-Baseline: `390eda1aeacb33032611030d47727e0a69650459` (branch `v0.3-e-recovery-reconciliation`).
+Baseline: `c106b2d93b272fb337795e8712f58e0c273088fa` (branch `v0.3-e-recovery-reconciliation`).
 
-This artifact is a **candidate authorization record only**.  It authorizes nothing today: it modifies no
-configuration, creates no claim marker, creates no evidence directory, executes no ETB attempt, starts no
-OpenCode, issues no HTTP and publishes no evidence.  It becomes effective **only** if a separate
-independent authorization review accepts it.  It is self-contained for a future executor and reviewer.
+This artifact is a **candidate authorization record only**.  It authorizes nothing today: it creates no
+claim marker, creates no evidence directory, modifies no configuration, executes no ETB attempt, starts
+no OpenCode, issues no HTTP and publishes no evidence.  It becomes effective **only** if a separate
+independent authorization review accepts it.
 
 Accepted frozen oracle provenance (immutable; bound permanently):
 
@@ -35,13 +37,19 @@ Accepted frozen oracle provenance (immutable; bound permanently):
 Current authoritative status: `ETB = DEFINITION ACCEPTED / NOT EXECUTED`; `ETB EXECUTION / ORACLE =
 ACCEPTED / FROZEN / NOT EXECUTED / EXECUTION NOT AUTHORIZED`.
 
-**Remediation scope.**  The Round-2 independent review **closed** `P1_A_CONFIG_MUTATION`,
-`P1_B_AUTHORIZATION_REUSE`, `P2_A_OUTPUT_TIMING` and `P2_B_CONFIG_EVIDENCE`; all Round-2 frozen semantics
-are **preserved unchanged** (§4–§9, §17–§18, §28–§31).  Round 3 closes the one remaining blocking finding —
-the execution-evidence directory does not exist and parent-directory creation behaviour was unfrozen
-(§15–§16) — and tightens the crash/replay nuance so that repository state alone durably distinguishes
-**AUTHORIZATION UNUSED** / **AUTHORIZATION CONSUMED, ETB NOT STARTED** / **ETB ATTEMPT CONSUMED** without
-relying on chat history, executor memory or an ephemeral process (§10–§14, §19–§25).
+**Remediation scope.**  Round 4 closes exactly the Round-3 findings and redesigns nothing else:
+**P1** — both claim writers are now frozen to a single language and an exact embedded implementation
+(§13–§20); **P2** — the crash model is narrowed to **process-crash recovery** and every unbounded
+"durable/durability" use for claim markers is removed or qualified (§21–§22); **P3-1** — the claim
+tracking/commit policy and the "tracked worktree clean" semantics are now explicit (§27–§29);
+**P3-2** — the explicit invariant that the authorization layer never pre-checks the oracle's six output
+paths is restored verbatim (§31).  Everything already closed is preserved semantically unchanged:
+byte-exact config mutation, `PRE_CONFIG_SHA256`/`POST_CONFIG_SHA256`, `OLD_CONFIG_SPAN`/`NEW_CONFIG_SPAN`,
+the config temp path, the `python` `os.replace` config procedure, config no-rollback, the
+`CONFIG_ESTABLISHMENT` path/schema/serialization, the directory create/verify rule, the authorization-use
+and ETB-attempt state machines, the TEMP-or-FINAL-means-consumed rule, the crash-recovery table, the
+claim non-deletion rule, the future namespace rule, the ETB attempt boundary, the oracle
+output-precondition placement, the owner tuple, oracle provenance and Mode-B/G0.5 preservation.
 
 ## 1. Purpose and scope
 
@@ -84,9 +92,6 @@ substitution, no alternate endpoint, no Mode P → Mode L, no OpenCode start, no
 | duplicate-key audit | **clean** at every mapping level; exactly one effective `opencode` key and exactly one effective `base_url` key; no anchors, aliases or merge keys |
 | production-resolved pre-value | `opencode.base_url == ""` (`configured == False`) |
 
-Because execution requires byte identity with this audited pre-image, the structural audit remains
-applicable at execution time.
-
 ## 5. Byte-exact mutation anchor (preserved)
 
 Unique span at offset **1065**, length 24, **occurrence count exactly 1**:
@@ -113,7 +118,7 @@ hash/size to the post-image facts.  Any failure → `AUTHORIZATION_CONTROL_FAILU
 **`CONFIG BACKUP = NONE`**; the temp must not exist before mutation (else
 `AUTHORIZATION_CONTROL_FAILURE`), with no delete, reuse, overwrite or retry.
 
-## 8. Config write / durability procedure (preserved)
+## 8. Config write / durability procedure (preserved; the CONFIG writer remains Python)
 
 Single `python` invocation: read/verify pre-image → construct exact post-image bytes → exclusive create
 (`xb`) the temp → write the complete post-image → stream flush → `os.fsync(temp_file.fileno())` → close →
@@ -121,7 +126,8 @@ read-back byte/hash verification → publish by exactly `os.replace(CONFIG_TEMP,
 directory → post-replace read-back verification → one production-reader invocation requiring the resolved
 value `http://127.0.0.1:4096`.  No alternate rename primitive, no backup, no copy-delete sequence, no
 direct in-place write, no retry.  Any failure → `AUTHORIZATION_CONTROL_FAILURE` / ETB NOT STARTED /
-AUTHORIZATION SPENT.
+AUTHORIZATION SPENT.  **This is the CONFIG writer only; the CLAIM writers are PowerShell/.NET only
+(§13).**
 
 ## 9. Config semantic-preservation rule (preserved)
 
@@ -129,187 +135,326 @@ The post-image must be byte-identical to the pre-image outside the frozen span r
 executor must produce an exact byte-diff witness proving that only that span changed.  No unrelated
 semantic or formatting change is authorized.
 
-## 10. Control-marker parent and exact claim paths
+## 10. Control-marker parent and exact claim paths (preserved)
 
-**10.1** The two durable one-shot **claim markers** use the **already existing** repository directory
-`docs/v0.3/evidence` as their parent.  They are **not** placed inside the currently non-existent
-`etb-execution` directory.
+The two one-shot **claim markers** use the **already existing** repository directory `docs/v0.3/evidence`
+as their parent, and are deliberately **not** placed inside the non-existent `etb-execution` directory:
 
 | Marker | Final path | Temp path |
 | --- | --- | --- |
 | authorization claim | `docs/v0.3/evidence/ETB_AUTHORIZATION_USE.claim` | `docs/v0.3/evidence/ETB_AUTHORIZATION_USE.claim.tmp` |
 | ETB attempt claim | `docs/v0.3/evidence/ETB_ATTEMPT_USE.claim` | `docs/v0.3/evidence/ETB_ATTEMPT_USE.claim.tmp` |
 
-**10.2** These files are **control-state markers**: **not** ETB semantic evidence, **not** included in the
-ETB `MANIFEST.sha256`, and **not** Mode-B evidence.
+These files are **control-state markers**: not ETB semantic evidence, not included in the ETB
+`MANIFEST.sha256`, and not Mode-B evidence.
 
-## 11. Claim presence is authoritative
+## 11. Claim presence is authoritative (preserved; terminology per §22)
 
 **11.1** If **neither** the authorization claim temp **nor** its final exists → authorization state =
 **UNUSED**.
 
-**11.2** If **either** the authorization claim temp **or** its final exists → authorization state =
-**CONSUMED**.  This remains true even if the claim content is incomplete, a process crashed during claim
-writing, or the final rename never occurred.  **Presence of either file is deliberately fail-closed
-evidence that the authorization was claimed.  No parser success is required.**
+**11.2** If **either** exists → authorization state = **CONSUMED**.  This remains true even if the claim
+content is incomplete, a process crashed during claim writing, or the final rename never occurred.
+**Presence of either file is deliberately fail-closed evidence that the authorization was claimed.  No
+parser success is required.**
 
 **11.3** If **neither** the ETB attempt claim temp **nor** its final exists → ETB attempt state =
 **NOT STARTED** (subject to the authorization state).  If **either** exists → ETB attempt state =
 **CONSUMED**.  Again: temp **or** final existence is enough, and no parser success is required.
 
-## 12. Authorization claim content (schema)
+## 12. Claim content (schemas; preserved)
 
-Deterministic UTF-8 / **no BOM** / one-LF JSON; `schema_version = devrelay-etb-authorization-use-v1`;
-`[ordered]` fields exactly:
+Authorization claim — `schema_version = devrelay-etb-authorization-use-v1`; ordered fields exactly
+`schema_version`, `authorization_commit`, `authorization_sha256`, `oracle_commit`, `oracle_sha256`,
+`state`; `state = CONSUMED`.
 
+ETB attempt claim — `schema_version = devrelay-etb-attempt-use-v1`; the same ordered fields;
+`state = CONSUMED`.
+
+Both: deterministic UTF-8, **no BOM**, exactly one final LF; no timestamp; no
+user/session/message/provider/model content.
+
+## 13. Single claim-writer language (P1 closure)
+
+**13.1** BOTH claim writers are frozen to **Windows PowerShell / .NET ONLY**.
+
+**13.2** No Python claim writer.  No `os.fsync` alternative.  No alternate implementation language.  No
+executor-authored replacement code.
+
+**13.3** The exact frozen writer source in §14 MUST be embedded and used **verbatim** by a future
+executor.
+
+## 14. Exact frozen claim writer source (P1 closure)
+
+```powershell
+function Write-DevRelayOneShotClaim {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string] $TempPath,
+
+        [Parameter(Mandatory = $true)]
+        [string] $FinalPath,
+
+        [Parameter(Mandatory = $true)]
+        [string] $SchemaVersion,
+
+        [Parameter(Mandatory = $true)]
+        [string] $AuthorizationCommit,
+
+        [Parameter(Mandatory = $true)]
+        [string] $AuthorizationSha256,
+
+        [Parameter(Mandatory = $true)]
+        [string] $OracleCommit,
+
+        [Parameter(Mandatory = $true)]
+        [string] $OracleSha256
+    )
+
+    $ErrorActionPreference = 'Stop'
+
+    if ([System.IO.File]::Exists($TempPath)) {
+        throw "DEVRELAY_CLAIM_ALREADY_PRESENT_TEMP"
+    }
+
+    if ([System.IO.File]::Exists($FinalPath)) {
+        throw "DEVRELAY_CLAIM_ALREADY_PRESENT_FINAL"
+    }
+
+    $claim = [ordered]@{
+        schema_version     = $SchemaVersion
+        authorization_commit = $AuthorizationCommit
+        authorization_sha256 = $AuthorizationSha256
+        oracle_commit      = $OracleCommit
+        oracle_sha256      = $OracleSha256
+        state              = 'CONSUMED'
+    }
+
+    $json = $claim | ConvertTo-Json -Depth 4 -Compress
+
+    $text = $json + "`n"
+
+    $encoding = [System.Text.UTF8Encoding]::new($false)
+
+    $bytes = $encoding.GetBytes($text)
+
+    $stream = $null
+
+    try {
+        $stream = [System.IO.FileStream]::new(
+            $TempPath,
+            [System.IO.FileMode]::CreateNew,
+            [System.IO.FileAccess]::Write,
+            [System.IO.FileShare]::None
+        )
+
+        $stream.Write($bytes, 0, $bytes.Length)
+
+        $stream.Flush($true)
+    }
+    finally {
+        if ($null -ne $stream) {
+            $stream.Dispose()
+        }
+    }
+
+    $tempBytes = [System.IO.File]::ReadAllBytes($TempPath)
+
+    if ($tempBytes.Length -ne $bytes.Length) {
+        throw "DEVRELAY_CLAIM_TEMP_LENGTH_MISMATCH"
+    }
+
+    for ($i = 0; $i -lt $bytes.Length; $i++) {
+        if ($tempBytes[$i] -ne $bytes[$i]) {
+            throw "DEVRELAY_CLAIM_TEMP_BYTE_MISMATCH"
+        }
+    }
+
+    if ([System.IO.File]::Exists($FinalPath)) {
+        throw "DEVRELAY_CLAIM_FINAL_APPEARED"
+    }
+
+    [System.IO.File]::Move(
+        $TempPath,
+        $FinalPath
+    )
+
+    $finalBytes = [System.IO.File]::ReadAllBytes($FinalPath)
+
+    if ($finalBytes.Length -ne $bytes.Length) {
+        throw "DEVRELAY_CLAIM_FINAL_LENGTH_MISMATCH"
+    }
+
+    for ($i = 0; $i -lt $bytes.Length; $i++) {
+        if ($finalBytes[$i] -ne $bytes[$i]) {
+            throw "DEVRELAY_CLAIM_FINAL_BYTE_MISMATCH"
+        }
+    }
+}
 ```
-schema_version
-authorization_commit
-authorization_sha256
-oracle_commit
-oracle_sha256
-state
+
+**14.1 Frozen mechanisms (no alternatives):** `ConvertTo-Json -Depth 4 -Compress`;
+`[System.Text.UTF8Encoding]::new($false)`; `$json + "`n"`; `[System.IO.FileStream]::new(...)` with
+`[System.IO.FileMode]::CreateNew`, `[System.IO.FileAccess]::Write`, `[System.IO.FileShare]::None`;
+`$stream.Write($bytes, 0, $bytes.Length)`; `$stream.Flush($true)`; `$stream.Dispose()`;
+`[System.IO.File]::ReadAllBytes(...)`; explicit byte-by-byte equality; `[System.IO.File]::Move(source,
+destination)` using the **two-argument overload**.
+
+**14.2 Forbidden:** any overwrite `File.Move` overload; `File.Replace`; `Move-Item`; `Rename-Item`; any
+Python rename; `os.rename`; `os.replace`; and any other alternate primitive.
+
+## 15. Exclusive-create consumption semantics (P1 closure)
+
+**15.1** The semantic consumption boundary remains the **successful return** from
+
+```powershell
+[System.IO.FileStream]::new(
+    $TempPath,
+    [System.IO.FileMode]::CreateNew,
+    [System.IO.FileAccess]::Write,
+    [System.IO.FileShare]::None
+)
 ```
 
-with `state = CONSUMED`.  No timestamp is required and no user/session/message/provider/model content is
-included.
+**15.2** At that exact point the temp has been exclusively created and, as applicable, `AUTHORIZATION_USE`
+or `ETB_ATTEMPT` is **CONSUMED**.
 
-## 13. Authorization claim write procedure and durable consumption boundary
+**15.3** `FileMode.CreateNew` **MUST fail if `TempPath` already exists**.  No truncation.  No reuse.  No
+overwrite.
 
-**13.1** At future operational execution, **before** config mutation, before creation of the
-`etb-execution` directory, before `CONFIG_ESTABLISHMENT` evidence, before ETB-attempt claiming and before
-ETB execution, the executor performs the **authorization claim**.
+## 16. Move / no-overwrite semantics (P1 closure)
 
-**13.2 Precondition:** the authorization claim **temp** and **final** must both be absent.  If either
-exists, the authorization is **ALREADY CONSUMED** → STOP; do not reuse it, do not overwrite, delete or
-repair it.
+**16.1** Publication is exactly `[System.IO.File]::Move($TempPath, $FinalPath)` using the **two-argument
+overload**.
 
-**13.3 Claim steps:** (1) construct the exact JSON bytes in memory; (2) open the authorization claim
-**temp** with **exclusive-create** semantics; (3) **the moment exclusive creation of the temp succeeds,
-`AUTHORIZATION_USE = 1/1 CONSUMED` — this is the durable consumption boundary**; (4) write all bytes;
-(5) durably flush using the same frozen durable-write discipline used elsewhere (`Flush(true)` /
-`os.fsync`); (6) close; (7) read back and verify the intended bytes; (8) move temp → final using a
-same-directory **no-overwrite** move.
+**16.2** The destination **MUST NOT** exist.  The two-argument .NET `File.Move` used here is the **sole**
+publication primitive and is required to **fail rather than overwrite** an existing destination.
 
-**13.4** If **any** failure occurs after step 3, the authorization **remains CONSUMED**, because temp
-and/or final presence is the authoritative marker.  **No cleanup.  No retry.  No reuse.**  A new
-authorization plus independent review is required.
+**16.3** The explicit `[System.IO.File]::Exists($FinalPath)` check before the move is an **additional
+fail-closed check**; it does **not** authorize another move primitive.
 
-## 14. Authorization crash recovery
+## 17. Write-all rule (P1 closure)
 
-**14.1** Crash **before** successful exclusive creation of the authorization claim temp → authorization =
-**UNUSED**; a later operational invocation may still claim it.
+**17.1** The entire byte array is written by the single `$stream.Write($bytes, 0, $bytes.Length)`
+operation.
 
-**14.2** Crash **after** successful exclusive creation of the authorization claim temp → authorization =
-**CONSUMED**; a later invocation sees temp or final and **MUST STOP**.
+**17.2** After `Flush(true)` and close, `ReadAllBytes(temp)` must equal the intended byte array exactly;
+after `File.Move`, `ReadAllBytes(final)` must equal the intended byte array exactly.
 
-**14.3** There is therefore **no ambiguous pre-mutation crash window**.  **`PRE_CONFIG_SHA256` is no
-longer used as the sole authorization-consumption marker** — the config pre-image/post-image remains a
-**corroborating invariant only**.
+**17.3** No serializer or encoding alternatives.
 
-## 15. Execution-evidence directory rule
+## 18. Exact authorization claim invocation
 
-**15.1** Exact execution-evidence directory: `docs/v0.3/evidence/etb-execution`.  **Design-time state: the
-directory does NOT exist.**
+Future invocation must be exactly equivalent to:
 
-**15.2** Future creation occurs **only after the authorization claim has been durably consumed and before
-configuration mutation**.
+```powershell
+Write-DevRelayOneShotClaim `
+    -TempPath 'docs/v0.3/evidence/ETB_AUTHORIZATION_USE.claim.tmp' `
+    -FinalPath 'docs/v0.3/evidence/ETB_AUTHORIZATION_USE.claim' `
+    -SchemaVersion 'devrelay-etb-authorization-use-v1' `
+    -AuthorizationCommit '<INDEPENDENTLY_ACCEPTED_AUTHORIZATION_COMMIT>' `
+    -AuthorizationSha256 '<INDEPENDENTLY_ACCEPTED_AUTHORIZATION_SHA256>' `
+    -OracleCommit '1c6c7cda468fc4def2cafd85a9ff5da0c87d00bc' `
+    -OracleSha256 '01675fa7e39f15451900cc306e975e9cde72d69eb01b26322bf21b8a5e54b921'
+```
 
-**15.3** Frozen rule: if the directory does not exist, create **exactly**
-`docs/v0.3/evidence/etb-execution` using
-`[System.IO.Directory]::CreateDirectory("docs/v0.3/evidence/etb-execution")` (or the repository-root-resolved
-exact equivalent).  **No alternate directory, no parent search, no timestamped directory, no suffix, no
-fallback path.**
+**18.1** The two authorization placeholders are **NOT executor choices**: they are populated **only** from
+the independent approval record for the immutable authorization artifact.  If **this** Round-4 candidate
+is approved, they become `authorization_commit` = the Round-4 candidate commit and
+`authorization_sha256` = the committed SHA-256 of this revised authorization artifact.
 
-**15.4** After the call, require that **that exact path exists and is a directory**.  If creation fails or
-the path resolves to anything else → `AUTHORIZATION_CONTROL_FAILURE`; `AUTHORIZATION_USE = 1/1 CONSUMED`;
-`ETB_ATTEMPT = 0/1 NOT STARTED`; STOP.  No retry, no cleanup, no alternate directory.
+## 19. Exact ETB attempt claim invocation
 
-## 16. Directory preexistence policy
+Future invocation must be exactly equivalent to:
 
-**16.1** If `docs/v0.3/evidence/etb-execution` already exists at operational entry, it is permitted
-**only** if it is an actual directory: do **not** delete it, do **not** recreate it, do **not** choose
-another directory; all individually frozen output-preexistence rules still apply.
+```powershell
+Write-DevRelayOneShotClaim `
+    -TempPath 'docs/v0.3/evidence/ETB_ATTEMPT_USE.claim.tmp' `
+    -FinalPath 'docs/v0.3/evidence/ETB_ATTEMPT_USE.claim' `
+    -SchemaVersion 'devrelay-etb-attempt-use-v1' `
+    -AuthorizationCommit '<INDEPENDENTLY_ACCEPTED_AUTHORIZATION_COMMIT>' `
+    -AuthorizationSha256 '<INDEPENDENTLY_ACCEPTED_AUTHORIZATION_SHA256>' `
+    -OracleCommit '1c6c7cda468fc4def2cafd85a9ff5da0c87d00bc' `
+    -OracleSha256 '01675fa7e39f15451900cc306e975e9cde72d69eb01b26322bf21b8a5e54b921'
+```
 
-**16.2** If the path exists but is **not** a directory → `AUTHORIZATION_CONTROL_FAILURE` / authorization
-consumed / ETB not started / STOP.  This makes `Directory.CreateDirectory` idempotency explicit and
-removes executor choice.
+**19.1** No other schema, version or path is allowed.
 
-## 17. Config-establishment paths (preserved)
+## 20. Claim writer failure semantics
 
-`docs/v0.3/evidence/etb-execution/CONFIG_ESTABLISHMENT.json` (final) and
-`docs/v0.3/evidence/etb-execution/CONFIG_ESTABLISHMENT.json.tmp` (temp).  After the exact directory rule of
-§15–§16, **both must not exist before config mutation**; any existence → `AUTHORIZATION_CONTROL_FAILURE`
-with authorization consumed, ETB not started, no deletion, no overwrite, no retry.
+**20.1 Authorization claim.**  If `TempPath` or `FinalPath` exists **before** writer invocation, the
+authorization is already **CONSUMED** → STOP; do **not** invoke the writer.  If `FileMode.CreateNew`
+succeeds, the authorization is **CONSUMED immediately**.  Any later writer exception leaves the
+authorization **CONSUMED** → `AUTHORIZATION_CONTROL_FAILURE`, ETB **NOT STARTED**, STOP.  No cleanup.  No
+retry.  No alternate writer.
 
-## 18. Config-establishment evidence schema (preserved)
+**20.2 ETB attempt claim.**  If `TempPath` or `FinalPath` exists, the ETB attempt is already **CONSUMED** →
+STOP; no rerun.  If `FileMode.CreateNew` succeeds, `ETB_ATTEMPT = 1/1 CONSUMED` immediately.  Any later
+writer exception leaves the ETB attempt **CONSUMED** → **NO ETB SEMANTIC RESULT EXISTS** if the oracle has
+not yet been entered, STOP.  No cleanup.  No retry.  No second ETB attempt.
 
-`schema_version = devrelay-etb-config-establishment-v1`; `[ordered]` objects; the exact frozen 17-field
-top-level order (`schema_version`, `authorization_commit`, `authorization_sha256`, `oracle_commit`,
-`oracle_sha256`, `config_path`, `pre_config_sha256`, `expected_pre_config_sha256`, `pre_resolved_base_url`,
+## 21. Crash model — process-crash recovery only (P2 closure)
+
+**21.1** The supported guarantee for the claim markers is **PROCESS-CRASH RECOVERY**: if the
+PowerShell/executor process terminates after successful OS-visible exclusive creation of a claim temp
+file, the next executor is required to interpret TEMP or FINAL presence as **CONSUMED** and fail closed.
+
+**21.2 Explicit non-claim:**
+
+> **THIS AUTHORIZATION DOES NOT CLAIM POWER-LOSS DURABILITY OR MACHINE-CRASH DURABILITY FOR CLAIM
+> DIRECTORY METADATA.**
+
+**21.3** `Flush(true)` is used for **file-content** flushing before normal publication.  **No
+parent-directory fsync guarantee is claimed**, and no guarantee is made for sudden power loss between
+filesystem metadata operations.
+
+**21.4** This limitation does **not** weaken the required process-crash one-shot semantics.
+
+## 22. Terminology replacement (P2 closure)
+
+Where semantically applicable, phrases such as "durable consumption boundary", "durably consumed" and
+"durable one-shot witness" are replaced by precise phrases such as **"process-crash recovery consumption
+boundary"**, **"process-crash-persistent one-shot marker"** and **"filesystem-presence one-shot
+witness"** — or equivalent wording that does **not** imply power-loss durability.  The logical state
+machine is unchanged.
+
+## 23. Execution-evidence directory rule (preserved)
+
+**23.1** Exact directory: `docs/v0.3/evidence/etb-execution`; **design-time state: it does NOT exist.**
+
+**23.2** Creation occurs **only after** the authorization claim is consumed and **before** configuration
+mutation; if absent, create **exactly** `docs/v0.3/evidence/etb-execution` using
+`[System.IO.Directory]::CreateDirectory("docs/v0.3/evidence/etb-execution")` (repository-root-resolved
+exact equivalent permitted), with **no alternate path, no parent search, no timestamped directory, no
+suffix and no fallback**.
+
+**23.3** After the call, require that the exact path exists and **is a directory**.  Creation failure or a
+non-directory → `AUTHORIZATION_CONTROL_FAILURE`, authorization consumed, ETB attempt not started, STOP;
+no cleanup, no retry, no alternate directory.
+
+**23.4** An already existing **actual directory** is permitted (never deleted or recreated); a path that
+exists but is not a directory → `AUTHORIZATION_CONTROL_FAILURE`.
+
+## 24. Config-establishment outputs (preserved)
+
+`docs/v0.3/evidence/etb-execution/CONFIG_ESTABLISHMENT.json` (final) and `…json.tmp` (temp); both must not
+exist before config mutation; any existence → `AUTHORIZATION_CONTROL_FAILURE` with authorization consumed,
+ETB not started, no deletion, no overwrite, no retry.
+
+**24.1** The `devrelay-etb-config-establishment-v1` schema, its exact 17-field ordered top-level schema
+(`schema_version`, `authorization_commit`, `authorization_sha256`, `oracle_commit`, `oracle_sha256`,
+`config_path`, `pre_config_sha256`, `expected_pre_config_sha256`, `pre_resolved_base_url`,
 `authorized_base_url`, `post_config_sha256`, `expected_post_config_sha256`, `post_resolved_base_url`,
-`mutation_scope`, `authorization_use`, `etb_attempt`, `control_status`) and constants (`config_path =
-.devrelay/config.yaml`; `authorized_base_url = http://127.0.0.1:4096`; `mutation_scope =
+`mutation_scope`, `authorization_use`, `etb_attempt`, `control_status`), its frozen constants
+(`config_path = .devrelay/config.yaml`; `authorized_base_url = http://127.0.0.1:4096`; `mutation_scope =
 opencode.base_url_only`; `authorization_use = 1/1_CONSUMED`; `etb_attempt = 0/1_NOT_STARTED`;
-`control_status = CONFIG_ESTABLISHED`).  Serialization follows the accepted oracle conventions
-(`ConvertTo-Json -Depth 12 -Compress`, UTF-8 no-BOM, one JSON line plus exactly one LF,
-`UTF8Encoding(false)`, temp exclusive create → write → durable flush → close → read-back verification →
-same-directory `System.IO.File.Move(temp, final)` without overwrite).  This file remains
-authorization/configuration control evidence only — not ETB semantic evidence, not covered by the oracle
-manifest, not an ETB result.
+`control_status = CONFIG_ESTABLISHED`) and its deterministic serialization (`ConvertTo-Json -Depth 12
+-Compress`, UTF-8 no-BOM, one JSON line plus exactly one LF, `UTF8Encoding(false)`, temp exclusive create →
+write → durable flush → close → read-back verification → same-directory
+`System.IO.File.Move(temp, final)` without overwrite) remain **exactly** the independently reviewed
+Round-2 design.  This file remains authorization/configuration control evidence only.
 
-## 19. ETB attempt claim content (schema)
-
-`schema_version = devrelay-etb-attempt-use-v1`; `[ordered]` fields exactly:
-
-```
-schema_version
-authorization_commit
-authorization_sha256
-oracle_commit
-oracle_sha256
-state
-```
-
-with `state = CONSUMED`; UTF-8, no BOM, one LF.
-
-## 20. ETB attempt claim procedure and durable consumption boundary
-
-**20.1** Immediately **after** successful configuration establishment **and** successful
-`CONFIG_ESTABLISHMENT.json` publication, but **before** entering the accepted frozen oracle, the executor
-creates the ETB attempt claim.
-
-**20.2 Precondition:** the ETB attempt claim **temp** and **final** must both be absent.  If either
-exists, the ETB attempt has **already been consumed** → STOP; no rerun, no overwrite, no delete, no
-repair.
-
-**20.3 Steps:** exclusive-create `ETB_ATTEMPT_USE.claim.tmp` — **the moment exclusive creation succeeds,
-`ETB_ATTEMPT = 1/1 CONSUMED`**; then write, durably flush, close, read back, and same-directory move
-temp → final.
-
-**20.4** Any failure after exclusive creation leaves the ETB attempt **CONSUMED**.  **No retry.  No second
-ETB attempt.**
-
-## 21. ETB crash recovery
-
-**21.1** Neither ETB claim temp nor final present **and** the authorization claim present ⇒ authorization
-consumed, **ETB attempt not started**.
-
-**21.2** Either ETB claim temp or final present ⇒ **ETB attempt consumed**.
-
-**21.3** Therefore a crash immediately after ETB-attempt consumption but before the oracle publishes
-evidence can **never** permit rerunning ETB.
-
-## 22. Entering the frozen oracle
-
-**22.1** Only after successful ETB attempt claim creation/publication does the executor invoke the
-accepted frozen oracle **from its first step**.  The accepted oracle remains **unchanged**, and its own
-output-preexistence checks remain **inside** the already-consumed ETB attempt.
-
-**22.2** If the oracle returns `ETB_SATISFIED`, `ETB_UNSATISFIED` or `HARNESS_INVALID / NO ETB SEMANTIC
-RESULT`, the ETB attempt **remains consumed**.  No second attempt.
-
-## 23. Durable state recovery table
+## 25. Durable state machine (preserved)
 
 | Authorization claim | ETB claim | Interpretation |
 | --- | --- | --- |
@@ -318,153 +463,195 @@ RESULT`, the ETB attempt **remains consumed**.  No second attempt.
 | present | present | **AUTHORIZATION CONSUMED / ETB ATTEMPT CONSUMED** |
 | absent | present | **CONTROL-STATE INCONSISTENCY / FAIL CLOSED / NO EXECUTION / INDEPENDENT REVIEW REQUIRED** |
 
-"present" means **temp OR final exists**.  No chat history is needed; no executor memory is needed.
+"present" means temp **or** final exists; **no parser success is required** for presence semantics; no
+chat history and no executor memory is needed.
 
-## 24. Claim files after completion
+**25.1** Claim markers are **never deleted** after success, `AUTHORIZATION_CONTROL_FAILURE`,
+`ETB_UNSATISFIED`, `HARNESS_INVALID` or crash recovery: they are **process-crash-persistent one-shot
+markers / filesystem-presence one-shot witnesses**.
 
-**24.1** Neither claim marker may be deleted after success, `ETB_UNSATISFIED`, `HARNESS_INVALID`,
-`AUTHORIZATION_CONTROL_FAILURE` or crash recovery: they are **durable one-shot witnesses**.
+**25.2 Budgets (preserved).**  `AUTHORIZATION_USE_BUDGET = 1 of 1` and `ETB_ATTEMPT_BUDGET = 1 of 1` are
+separate boundaries, witnessed by claim presence.
 
-**24.2** Any later attempt requires a **new independently accepted authorization** with a **different
-authorization identity** and separately frozen claim paths, or a separately reviewed archival/namespace
-policy.  Do **not** silently reuse the old claim paths for a new authorization.
+## 26. ETB attempt boundary (preserved)
 
-## 25. Future new-authorization namespace rule
+`ETB_ATTEMPT = 1/1 CONSUMED` occurs on successful exclusive creation of the ETB claim temp, performed
+**after** successful configuration establishment and `CONFIG_ESTABLISHMENT.json` publication and **before**
+entering the accepted frozen oracle.  Any failure afterwards leaves the attempt consumed; there is no
+second attempt.
 
-**25.1** Because these claim paths permanently mark **this** authorization's use, a future independently
-accepted additional ETB authorization **MUST define its own new claim-marker namespace/path before
-execution**.  This Round-3 candidate authorizes only the current one-shot authorization, and **no future
-executor may delete these markers to reuse the same paths**.
+## 27. Claim tracking policy (P3-1 closure)
 
-**25.2 Authorization identity model (preserved).**  If this Round-3 candidate is later independently
-approved: `authorization_commit` = the approved Round-3 candidate commit; `authorization_sha256` = the
-approved revised authorization artifact SHA.  A later bookkeeping commit or the execution-time HEAD must
-**not** replace it, and the claim-marker content must use that exact accepted pair.
+**27.1** `ETB_AUTHORIZATION_USE.claim`, `ETB_AUTHORIZATION_USE.claim.tmp`, `ETB_ATTEMPT_USE.claim` and
+`ETB_ATTEMPT_USE.claim.tmp` are intended **UNTRACKED OPERATIONAL CONTROL-STATE ARTIFACTS**.
 
-## 26. Revised operational order (frozen)
+**27.2** They are **NOT** part of the tracked-worktree-clean predicate, and their presence is **expected**
+after operational authorization use.
+
+**27.3** They **MUST NOT** be `git add`ed, staged, committed, deleted, renamed, archived or normalized
+**before independent ETB-result review**.
+
+**27.4** Any bookkeeping commit before independent ETB-result review **MUST use an exact allowlist of
+intended tracked documentation files** and **MUST exclude** these claim markers.
+
+**27.5** `.gitignore` must **not** be modified by this remediation.
+
+## 28. Git status semantics (P3-1 closure)
+
+**28.1** Frozen future reporting terminology: **"tracked worktree clean"** means **no tracked-file
+modification outside the explicitly authorized operational changes**.  It does **NOT** mean
+`git status --porcelain` is globally empty once untracked control/evidence markers exist.
+
+**28.2** Future execution/result reports must **list expected untracked operational artifacts
+separately**, and must **not** classify the expected claim markers themselves as accidental worktree
+drift.
+
+## 29. Claim markers must never be committed (P3-1 closure)
+
+**29.1** Before independent ETB-result review completes, claim markers remain **untracked**.
+
+**29.2** If a claim marker is found **staged**: **STOP**; do **not** unstage or delete it automatically;
+report a control-state inconsistency for independent review.
+
+**29.3** If a claim marker is found **committed unexpectedly**: **STOP**; do **not** rewrite history;
+independent review is required.
+
+**29.4** The presence semantics remain **fail closed regardless of Git tracking state**.
+
+## 30. Future namespace rule (preserved)
+
+**30.1** The current claim paths are **permanently reserved for THIS authorization identity**.  A future
+additional authorization must independently freeze a **distinct claim namespace/path**.  Never delete the
+current claims to reuse their names.
+
+**30.2 Authorization identity model.**  If this Round-4 candidate is independently approved:
+`authorization_commit` = the approved Round-4 candidate commit; `authorization_sha256` = the approved
+revised authorization artifact SHA.  A later bookkeeping commit or the execution-time HEAD must **not**
+replace it, and the claim-marker content must use that exact accepted pair.
+
+## 31. Restored explicit output-precheck invariant (P3-2 closure)
+
+> **The authorization layer MUST NOT pre-check, pre-interpret, delete, repair or otherwise act on the
+> accepted oracle's six frozen temp/final ETB output paths.**
+
+**31.1** Only after configuration establishment succeeds, `CONFIG_ESTABLISHMENT.json` succeeds and the ETB
+claim is consumed/finalized does execution enter the accepted frozen oracle **from its FIRST STEP**.
+
+**31.2** The accepted oracle **alone** performs its own six-path output-preexistence validation **inside
+the already-consumed ETB attempt**.  No authorization-layer reinterpretation.
+
+## 32. Operational order (preserved; claim steps now invoke the frozen writer)
 
 1. static verification of the independently accepted authorization identity and oracle provenance;
 2. require the authorization claim temp/final **absent**;
-3. **exclusive-create the authorization claim temp — `AUTHORIZATION_USE` becomes 1/1 CONSUMED here**;
-4. complete/publish the authorization claim;
-5. create-or-verify exactly `docs/v0.3/evidence/etb-execution` under §15–§16;
+3. invoke `Write-DevRelayOneShotClaim` for the authorization claim — **`AUTHORIZATION_USE` becomes 1/1 CONSUMED** on successful `FileMode.CreateNew`;
+4. complete/publish the authorization claim (temp → final via the two-argument `File.Move`);
+5. create-or-verify exactly `docs/v0.3/evidence/etb-execution` under §23;
 6. require `CONFIG_ESTABLISHMENT` final/temp absent;
 7. verify the exact config pre-image SHA/size;
 8. verify the production-resolved pre-value `""`;
 9. construct the exact byte post-image;
-10. write/fsync/read-back the config temp;
+10. write/fsync/read-back the config temp (Python config writer, §8);
 11. `os.replace` config temp → config final;
 12. verify the final `POST_CONFIG_SHA256`;
 13. verify the production-resolved `base_url == http://127.0.0.1:4096`;
 14. publish `CONFIG_ESTABLISHMENT.json`;
 15. require the ETB attempt claim temp/final **absent**;
-16. **exclusive-create the ETB attempt claim temp — `ETB_ATTEMPT` becomes 1/1 CONSUMED here**;
-17. complete/publish the ETB attempt claim;
+16. invoke `Write-DevRelayOneShotClaim` for the ETB attempt claim — **`ETB_ATTEMPT` becomes 1/1 CONSUMED** on successful `FileMode.CreateNew`;
+17. complete/publish the ETB attempt claim (temp → final via the two-argument `File.Move`);
 18. invoke the accepted frozen ETB oracle **from its first step**;
 19. permit only the frozen oracle control/result state;
 20. publish only oracle-defined ETB evidence/result;
 21. **STOP**;
 22. independent ETB-result review.
 
-No Mode-B work.
+No Mode-B work.  No other sequencing change.
 
-## 27. Failure semantics by window
+## 33. Failure semantics by window (preserved)
 
-**27.1 Pre-authorization-claim failure** (before successful exclusive creation of the authorization claim
+**33.1 Pre-authorization-claim failure** (before successful exclusive creation of the authorization claim
 temp): authorization remains **UNUSED**; no config mutation may have occurred; no ETB attempt may have
-begun; no alternate operational action is permitted.  **This is the ONLY window in which the same accepted
-authorization remains unused.**
+begun; no alternate operational action is permitted — the **only** window in which the same accepted
+authorization remains unused.
 
-**27.2 Post-authorization-claim failure** (after successful exclusive creation of the authorization claim
-temp but before ETB claim creation): authorization **CONSUMED**, ETB **not started**,
-`AUTHORIZATION_CONTROL_FAILURE`, STOP, new authorization required, no reuse.
+**33.2 Post-authorization-claim failure** (after successful exclusive creation, before ETB claim
+creation): authorization **CONSUMED**, ETB **not started**, `AUTHORIZATION_CONTROL_FAILURE`, STOP, new
+authorization required, no reuse.
 
-**27.3 Post-ETB-claim failure** (after successful exclusive creation of the ETB claim temp): authorization
-consumed, **ETB attempt consumed**, no second attempt.  If the frozen oracle itself was entered, use only
-its result/control taxonomy.  If the failure occurs during claim finalization **before** the oracle is
-entered: the ETB attempt is **still CONSUMED**, **no ETB semantic result exists**, STOP, independent
-review required, no rerun.
+**33.3 Post-ETB-claim failure** (after successful exclusive creation of the ETB claim temp): authorization
+consumed, **ETB attempt consumed**, no second attempt; if the oracle was not yet entered there is **no ETB
+semantic result**, STOP, independent review required; if the oracle was entered, only the accepted
+oracle's taxonomy applies.
 
-**27.4 Pre-ETB control token (preserved).**  `AUTHORIZATION_CONTROL_FAILURE` means: authorization
+**33.4 Pre-ETB control token (preserved).**  `AUTHORIZATION_CONTROL_FAILURE` means: authorization
 consumed; ETB execution did NOT start; `ETB_ATTEMPT` remains 0 of 1; **no** ETB semantic/control result
 exists; it is **not** `ETB_UNSATISFIED`, **not** `ETB_SATISFIED`, **not** `HARNESS_INVALID` from an ETB
 attempt, **not** SIC/P6/G0.5 failure.
 
-## 28. No-rollback (preserved)
+## 34. Other preserved boundaries
 
-Do **not** restore `base_url` automatically; do **not** delete durable claim markers; do **not** delete
-config-evidence artifacts automatically.  After any failure following configuration replacement, the file
-remains at the exact post-image unless a future separately authorized action changes it.  No executor
-discretion.
-
-## 29. Budgets (preserved; now durably witnessed)
-
-| State variable | Budget | Durable witness |
-| --- | --- | --- |
-| `AUTHORIZATION_USE_BUDGET` | **1 of 1** | authorization claim temp/final presence |
-| `ETB_ATTEMPT_BUDGET` | **1 of 1** | ETB attempt claim temp/final presence |
-
-They are **not** the same boundary.
-
-## 30. Other preserved boundaries
-
-**30.1 Pre-existing target.**  Mode P verifies a pre-existing target; no starting, restarting or launching
+**34.1 Pre-existing target.**  Mode P verifies a pre-existing target; no starting, restarting or launching
 OpenCode, no listener creation, no rebinding, no Mode P → Mode L.  If the exact pre-existing target is
-absent or cannot satisfy the frozen oracle, the attempt fails according to the oracle — **no recovery by
-target creation**.
+absent or cannot satisfy the frozen oracle, the attempt fails according to the oracle — no recovery by
+target creation.
 
-**30.2 No-fallback.**  Fallback stays **NONE**: no IPv4 → IPv6, no `localhost`, no `::1`, no other /
+**34.2 No-fallback.**  Fallback stays **NONE**: no IPv4 → IPv6, no `localhost`, no `::1`, no other /
 first-free / ephemeral port, no alternate executable or installation, no PATH-selected target, no
 log/listener/process-derived endpoint, no retry against another endpoint.
 
-**30.3 HTTP and OpenCode boundaries.**  The ETB execution performs **no HTTP**, no `/doc`, no `/session`
+**34.3 HTTP and OpenCode boundaries.**  The ETB execution performs **no HTTP**, no `/doc`, no `/session`
 and no provider/model request; no Mode-B HTTP activity is authorized; `opencode serve`, OpenCode
 launch/restart, process replacement and listener creation are **not** authorized.
 
-**30.4 Result non-claims.**  The one-shot execution may produce only `ETB_SATISFIED`,
-`ETB_UNSATISFIED`, or `HARNESS_INVALID / NO ETB SEMANTIC RESULT`; none is authoritative before separate
-independent ETB-result review.  `ETB_SATISFIED` does **not** itself establish SIC semantics, P6, G0.5,
-session incarnation, turn provenance, message provenance, pending-handle semantics, Mode-B PASS, Case-C
-authorization or `adopt_completed_turn`; it only allows independent ETB result review and, only once
-`ETB_SATISFIED` is independently accepted, resumption of Mode-B SIC oracle construction.
-`ETB_UNSATISFIED` is only a prerequisite/control result (**not** SIC/P6/G0.5 failure and **not** a claim
-that OpenCode cannot support Mode B).  `HARNESS_INVALID` means **NO ETB SEMANTIC RESULT EXISTS**, with no
-retry and no repair-and-continue inside the same authorization.
+**34.4 Result non-claims.**  The one-shot execution may produce only `ETB_SATISFIED`, `ETB_UNSATISFIED`, or
+`HARNESS_INVALID / NO ETB SEMANTIC RESULT`; none is authoritative before separate independent ETB-result
+review.  `ETB_SATISFIED` does **not** itself establish SIC semantics, P6, G0.5, session incarnation, turn
+provenance, message provenance, pending-handle semantics, Mode-B PASS, Case-C authorization or
+`adopt_completed_turn`; it only allows independent ETB result review and, only once `ETB_SATISFIED` is
+independently accepted, resumption of Mode-B SIC oracle construction.  `ETB_UNSATISFIED` is only a
+prerequisite/control result.  `HARNESS_INVALID` means **NO ETB SEMANTIC RESULT EXISTS**, with no retry and
+no repair-and-continue inside the same authorization.
 
-**30.5 Execution outputs.**  Only the evidence/result paths already frozen by the accepted oracle may be
+**34.5 Execution outputs.**  Only the evidence/result paths already frozen by the accepted oracle may be
 used: no new alternative evidence path, no alternative result path, no alternate manifest, no
-executor-selected filenames.  The oracle's output-preexistence rule applies inside the oracle (§22).
+executor-selected filenames.
 
-**30.6 Mode-B / G0.5 / P6 / implementation.**  Mode-B remains `NOT RUN / NO ORACLE / ORACLE NOT FREEZABLE /
+**34.6 No-rollback.**  Do **not** restore `base_url` automatically; do **not** delete claim markers; do
+**not** delete config-evidence artifacts automatically.  No executor discretion.
+
+**34.7 Mode-B / G0.5 / P6 / implementation.**  Mode-B remains `NOT RUN / NO ORACLE / ORACLE NOT FREEZABLE /
 CONCRETE ENDPOINT NOT ESTABLISHED / PRE-ORACLE CONFIGURATION / TARGET-BINDING PREREQUISITE BLOCKER` (this
 authorization candidate does not unblock it); `G0.5 / P6 = NOT RUN / DEFINITION ACCEPTED / ORACLE NOT
 FREEZABLE / LOCAL REACHABILITY GAP` with `P6 = UNPROVEN / UNSATISFIED` and G0.5 **NOT CLOSED**; Case-C and
 v0.3-E implementation `NOT AUTHORIZED`; `G1`/`G2` `NOT RUN`; `adopt_completed_turn` **DISABLED**.
 
-## 31. Rejected authorization history
+## 35. Rejected authorization history
 
-**31.1** `f52cb2b4c0ece73097511c816b448d9ede649fb5` received *REQUEST_CHANGES — V0.3-E ETB EXECUTION /
-CONFIGURATION AUTHORIZATION* (P0 = 0, P1 = 2, P2 = 2) and remains rejected.
-**31.2** `390eda1aeacb33032611030d47727e0a69650459` received *REQUEST_CHANGES — V0.3-E ETB EXECUTION /
-CONFIGURATION AUTHORIZATION ROUND-2* (P0 = 0, P1 = 1, P2 = 0, P3 = 2) and remains rejected.
-**31.3** Neither is rewritten or amended; the candidate in force is **this round-3 revision**.
+**35.1** `f52cb2b4c0ece73097511c816b448d9ede649fb5` — *REQUEST_CHANGES — V0.3-E ETB EXECUTION /
+CONFIGURATION AUTHORIZATION*, P0 = 0, P1 = 2, P2 = 2 — remains rejected.
+**35.2** `390eda1aeacb33032611030d47727e0a69650459` — *REQUEST_CHANGES — V0.3-E ETB EXECUTION /
+CONFIGURATION AUTHORIZATION ROUND-2*, P0 = 0, P1 = 1, P2 = 0, P3 = 2 — remains rejected.
+**35.3** `c106b2d93b272fb337795e8712f58e0c273088fa` (artifact SHA-256
+`29019f683c4c217654034fc1408d2942b0b384832125fe80b7a6303927d015b0`) — *REQUEST_CHANGES — V0.3-E ETB
+EXECUTION / CONFIGURATION AUTHORIZATION ROUND-3*, P0 = 0, P1 = 1, P2 = 1, P3 = 2 — remains rejected.
+**35.4** None of these is rewritten or amended; the candidate in force is **this round-4 revision**.
 
-## 32. Current round status and activity counters
+## 36. Current round status and activity counters
 
 ```
-ETB EXECUTION / CONFIGURATION AUTHORIZATION = ROUND-3 CANDIDATE / NOT ACCEPTED / NOT EFFECTIVE / NOT EXECUTED
+ETB EXECUTION / CONFIGURATION AUTHORIZATION = ROUND-4 CANDIDATE / NOT ACCEPTED / NOT EFFECTIVE / NOT EXECUTED
 ETB EXECUTION / ORACLE                        = ACCEPTED / FROZEN / NOT EXECUTED
 ETB                                           = DEFINITION ACCEPTED / NOT EXECUTED
 ```
 
-**32.1** No authorization is currently granted; **no claim marker currently exists**; no evidence
-directory is created now; no config mutation occurs now.
+**36.1** No operational authorization is granted; no claim is created now; no directory is created now;
+no config is changed now; no ETB is executed now.
 
-**32.2** This remediation-design round performed: web/network `0`; endpoint query `0`;
-`Get-NetTCPConnection` `0`; live `Get-CimInstance` `0`; port/listener/process enumeration `0`; config
-mutation `0`; OpenCode start `0`; HTTP `0`; `/doc` `0`; `/session` `0`; `Add-Type` `0`; P/Invoke `0`;
-execution-evidence publication `0`; ETB execution `0`; SIC `0`; Mode-B work `0`; provider/model `0`;
-G0.5 `0`; G1/G2 `0`; runtime/test/dependency/version changes `0`.  Static repository/document/config
-inspection is not operational ETB activity.
+**36.2** This remediation round performed: web/network `0`; endpoint query `0`; `Get-NetTCPConnection` `0`;
+live `Get-CimInstance` `0`; port/listener/process enumeration `0`; config mutation `0`; OpenCode start `0`;
+HTTP `0`; `/doc` `0`; `/session` `0`; `Add-Type` `0`; P/Invoke `0`; execution-evidence publication `0`; ETB
+execution `0`; SIC `0`; Mode-B work `0`; provider/model `0`; G0.5 `0`; G1/G2 `0`;
+runtime/test/dependency/version changes `0`.  Static document/config inspection is not operational ETB
+activity.
 
-**End of ETB execution / configuration authorization candidate record (round-3 durable-claim remediation).**
+**End of ETB execution / configuration authorization candidate record (round-4 claim-writer mechanical closure).**
