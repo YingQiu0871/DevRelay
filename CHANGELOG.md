@@ -1511,6 +1511,82 @@ starts, **0** HTTP, **0** `/doc`, **0** `/session`, **0** `Add-Type` executions,
 provider/model calls, **0** G0.5 and **0** G1/G2 activity, and **0** runtime/test/dependency/version
 changes; the tracked worktree is clean and the ignored/untracked `PROJECT_MEMORY.md` persists.
 
+**The ETB execution/configuration authorization is now INDEPENDENTLY ACCEPTED / GRANTED (Round 5), while no
+operational action has occurred yet: authorization use UNUSED, ETB attempt NOT STARTED, `opencode.base_url`
+still `""`.**  The independent review — not executor self-approval — returned **APPROVE V0.3-E ETB
+EXECUTION / CONFIGURATION AUTHORIZATION ROUND-5** with **P0 = 0, P1 = 0, P2 = 0, P3 = 2**, explicitly
+closing `P1_A_CONFIG_MUTATION`, `P1_B_AUTHORIZATION_REUSE`, `P2_A_OUTPUT_TIMING`, `P2_B_CONFIG_EVIDENCE`,
+`ROUND2_P1_DIRECTORY_RULE`, `ROUND3_P1_CLAIM_WRITER`, `ROUND3_P2_DURABILITY`, `ROUND3_P3_TRACKING_POLICY`,
+`ROUND3_P3_OUTPUT_PRECHECK_EXPLICITNESS`, `CLAIM_PATH_ROOT_BINDING` and `CLAIM_PATH_TYPE_SEMANTICS`; the
+authorization design phase is complete.  The approval binds **exactly** `authorization_commit =
+64044fc45082cd63b0ae445c146d85720dfa1435` and `authorization_sha256 =
+511ab1e2eb2e4f1194d2c55951e5b9616dc515d1180c6399dd658207d443d0d8` for the immutable artifact
+`docs/v0.3/V03E_G0_5_PRE_ETB_EXECUTION_AUTHORIZATION.md`.  **Permanent authorization provenance rule:** this
+pair is immutable and must not be replaced by this acceptance-bookkeeping commit, by any later operational,
+evidence or result-review bookkeeping commit, or by the execution-time HEAD; future authorization-claim
+content and all operational provenance referencing this authorization must reference exactly this pair, and
+**the bookkeeping commit produced by this round is NOT `authorization_commit`**.  The accepted authorization
+identity and the accepted oracle identity remain **distinct** immutable provenance pairs — `oracle_commit =
+1c6c7cda468fc4def2cafd85a9ff5da0c87d00bc` / `oracle_sha256 =
+01675fa7e39f15451900cc306e975e9cde72d69eb01b26322bf21b8a5e54b921` (`docs/v0.3/V03E_G0_5_PRE_ETB_EXECUTION_ORACLE.md`) —
+and neither may replace the other.  **Current authoritative authorization status:**
+`ETB EXECUTION / CONFIGURATION AUTHORIZATION = ACCEPTED / GRANTED / NOT EXECUTED / AUTHORIZATION USE UNUSED /
+ETB ATTEMPT NOT STARTED`.  The accepted artifact remains an **immutable accepted object** whose
+construction-time header still reads ROUND-5 CANDIDATE / NOT ACCEPTED / NOT EFFECTIVE / NOT EXECUTED — exactly
+the established immutable-artifact + approval-record + active-status pattern used for the accepted frozen ETB
+oracle candidate — so the artifact was **not** edited by this bookkeeping; current status is represented only
+by this CHANGELOG and by `docs/v0.3/V03E_ACCEPTANCE.md`.  **Current claim state (authoritative, verified):**
+`AUTHORIZATION CLAIM TEMP = ABSENT`, `AUTHORIZATION CLAIM FINAL = ABSENT`, `ETB ATTEMPT CLAIM TEMP = ABSENT`,
+`ETB ATTEMPT CLAIM FINAL = ABSENT`, therefore `AUTHORIZATION USE = UNUSED` and `ETB ATTEMPT = NOT STARTED`;
+no claim has been created and no authorization has yet been operationally consumed.  **Current configuration
+state:** owner-authorized endpoint `http://127.0.0.1:4096`; currently configured endpoint **NONE**;
+`.devrelay/config.yaml` → `opencode.base_url = ""` with `PRE_CONFIG_SHA256 =
+daaf72578cb4a91b5adeb481530baf47577174325167caddf7249964da7923a8` and `PRE_CONFIG_SIZE = 1876`; no config
+mutation has occurred and none is performed by this bookkeeping.  **Future authorized configuration
+mutation (not performed now):** the accepted authorization permits, only in the later operational execution
+round, the exact already-frozen transition `opencode.base_url` from `""` to `http://127.0.0.1:4096` under the
+byte-exact configuration procedure frozen in the accepted artifact.  **One-shot scope (referencing the
+immutable artifact rather than reproducing it):** mode **MODE P — PRE-EXISTING TARGET**; endpoint policy
+**CLASS A — OWNER-SUPPLIED FIXED ENDPOINT**; endpoint `http://127.0.0.1:4096`; fallback **NONE**;
+authorization-use budget **1 of 1**; ETB-attempt budget **1 of 1**; OpenCode start/restart **NOT AUTHORIZED**;
+HTTP **NOT AUTHORIZED**; Mode-B work in the operational ETB round **NOT AUTHORIZED**.  The accepted claim
+model is summarised at status level only and is **not** strengthened: process-crash-only claim model,
+filesystem-node occupancy predicate, exact PowerShell/.NET claim writer, repository-root path binding,
+untracked claim-marker policy and distinct future namespace requirement — **no power-loss durability is
+claimed**.  **Historical rejections preserved (not rewritten):** `f52cb2b` REQUEST_CHANGES (P0 = 0, P1 = 2,
+P2 = 2); `390eda1` REQUEST_CHANGES ROUND-2 (P0 = 0, P1 = 1, P2 = 0, P3 = 2); `c106b2d` REQUEST_CHANGES
+ROUND-3 (P0 = 0, P1 = 1, P2 = 1, P3 = 2); `008115d` REQUEST_CHANGES ROUND-4 (P0 = 0, P1 = 0, P2 = 1,
+P3 = 2); then `64044fc` **APPROVE ROUND-5** (P0 = 0, P1 = 0, P2 = 0, P3 = 2).  The two Round-5 P3 findings
+are recorded as **non-blocking only**: P3-1, an executor chat/report rendering loss of the PowerShell
+backtick while the actual committed artifact was independently verified correct; P3-2, a small
+mechanical-strengthening note around the repository-root/CWD binding whose actual binding was independently
+accepted as CLOSED — **neither is an unresolved authorization blocker**.  **Mode-B is not unblocked** by this
+approval: it remains `NOT RUN / NO ORACLE / ORACLE NOT FREEZABLE / CONCRETE ENDPOINT NOT ESTABLISHED /
+PRE-ORACLE CONFIGURATION / TARGET-BINDING PREREQUISITE BLOCKER`, because configuration establishment has not
+occurred, ETB has not executed, and `ETB_SATISFIED` has not been independently reviewed or accepted.
+`G0.5 / P6` remains `NOT RUN / DEFINITION ACCEPTED / ORACLE NOT FREEZABLE / LOCAL REACHABILITY GAP` with
+`P6 = UNPROVEN / UNSATISFIED` and G0.5 **NOT CLOSED** — authorization approval is **not** P6 evidence.
+Case-C implementation `NOT AUTHORIZED`; v0.3-E implementation `NOT AUTHORIZED`; `G1 = NOT RUN`; `G2 = NOT
+RUN`; `adopt_completed_turn` **DISABLED**.  **Authoritative sequence:** ETB definition accepted → capability
+prerequisites accepted → owner mode/endpoint decision accepted → frozen ETB execution oracle independently
+accepted → oracle acceptance bookkeeping independently accepted → execution/configuration authorization
+designed → authorization Round-1 rejected → Round-2 rejected → Round-3 rejected → Round-4 rejected → Round-5
+independently approved → **authorization acceptance bookkeeping (this round)** → independent bookkeeping
+confirmation → exactly one operational authorization use → exact configuration establishment → exactly one
+ETB attempt → independent ETB-result review → only an independently accepted `ETB_SATISFIED` may permit
+Mode-B SIC oracle construction to resume; no stage may be skipped.  **Next stage classification:** after this
+acceptance bookkeeping is independently confirmed, the next stage may be the **ETB EXECUTION / CONFIGURATION
+OPERATIONAL ROUND** under exactly `authorization_commit = 64044fc…` / `authorization_sha256 = 511ab1e2…`
+plus `oracle_commit = 1c6c7cd…` / `oracle_sha256 = 01675fa7…` — but **this bookkeeping round does not begin
+that operational round**.  This bookkeeping round performed **0** web/network access, **0** endpoint queries,
+**0** `Get-NetTCPConnection` executions, **0** live `Get-CimInstance` queries, **0** port/listener/process
+enumeration, **0** config mutations, **0** claim creations, **0** claim-path directory creations, **0**
+`etb-execution` directory creations, **0** OpenCode starts/restarts, **0** HTTP, **0** `/doc`, **0**
+`/session`, **0** `Add-Type` executions, **0** P/Invoke executions, **0** `CONFIG_ESTABLISHMENT`
+publications, **0** ETB evidence publications, **0** ETB executions, **0** SIC attempts, **0** Mode-B work,
+**0** provider/model calls, **0** G0.5 and **0** G1/G2 activity, and **0** runtime/test/dependency/version
+changes; the tracked worktree is clean and the ignored/untracked `PROJECT_MEMORY.md` persists.
+
 That approval followed three earlier review rounds: the first independent design
 review returned `REQUEST_CHANGES` (P0 = 1, P1 = 6, P2 = 5) and the
 recovery/reconciliation contract was repaired in `f67bf9e`; two narrow re-reviews
