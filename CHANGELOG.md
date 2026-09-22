@@ -1944,6 +1944,67 @@ queries, **0** operational P/Invoke, **0** OpenCode starts/restarts, **0** HTTP,
 **0** G0.5, **0** G1/G2 activity, **0** config mutations, **0** R1 artifact mutations and **0**
 runtime/test/dependency/version changes; the ignored/untracked `PROJECT_MEMORY.md` persists.
 
+**A Recovery-R2 one-shot ETB execution authorization design candidate was created.**  The independent review
+issued *APPROVE V0.3-E ETB EXECUTION ORACLE-R2 ACCEPTANCE BOOKKEEPING*, making
+`9b17912a8b4bd6c87aa45eefc97a73eb3d22db34` the authoritative bookkeeping baseline (explicitly **not** the
+Oracle-R2 provenance), and this round designs — as documentation only — the authorization under which exactly
+**one** future ETB attempt may run the already accepted tracked Oracle-R2 executable.  The new artifact
+`docs/v0.3/V03E_G0_5_PRE_ETB_RECOVERY_R2_AUTHORIZATION.md` is a **DESIGN CANDIDATE / NOT ACCEPTED / NOT
+GRANTED / NOT EXECUTED**: it grants no execution authority today, creates no claim, mutates no configuration,
+performs no endpoint/listener/process probe and does not enter Oracle-R2.  It binds permanently to the accepted
+Oracle-R2 triple (`oracle_r2_commit = dfb78f34d919e8c9863a8398fb4f63ee301167bc`, `oracle_r2_spec_sha256 =
+5e9221e3950af6ec3e0612c4d962562c33e761899dfd6af42d10f5a9895f9f2f`, `oracle_r2_script_sha256 =
+22c5fbd61da609e6cc39e973be6030d4c360019ed1f56e69ca45f92fa1689c17`) plus the future independently accepted
+`recovery_r2_authorization_commit` / `recovery_r2_authorization_sha256` pair.  It freezes a **new, permanently
+distinct** claim namespace (four exact paths — `docs/v0.3/evidence/ETB_RECOVERY_R2_AUTHORIZATION_USE.claim`
+(+`.tmp`) and `docs/v0.3/evidence/ETB_RECOVERY_R2_ATTEMPT_USE.claim` (+`.tmp`)), the accepted file-or-directory
+occupancy predicate, two **new closed 7-field schemas** (`devrelay-etb-recovery-r2-authorization-use-v1` and
+`devrelay-etb-recovery-r2-attempt-use-v1`, each ending in `state = CONSUMED` with no timestamp, hostname, PID,
+operator, comment or extra field), the exact `Write-DevRelayRecoveryR2OneShotClaim` PowerShell/.NET writer
+(exclusive `CreateNew` consumption point, exactly one LF, `UTF8Encoding(false)`, byte read-back, two-argument
+no-overwrite `File.Move`, and TEMP-absent plus FINAL-occupied-as-file post-publication requirements), a **1/1**
+authorization budget and a **1/1** ETB-attempt budget, and a complete 16-item read-only PRE-* checklist
+(baseline HEAD, branch, accepted spec/script blob hashes, worktree byte identity, `text: set` / `eol: lf`, clean
+tracked worktree, config hash/size/resolved value, `CONFIG_ESTABLISHMENT` hash, three historical claim
+witnesses, all four new claim paths ABSENT, the accepted authorization artifact identity, and the
+not-yet-consumed confirmations) with STOP-before-consumption on any failure.  It also freezes the boundary
+rules that keep the oracle's own contract intact: **no authorization-layer precheck of the six Oracle-R2 output
+paths**, **no target/listener/process pre-probe**, no config mutation and no `CONFIG_ESTABLISHMENT`
+republication; the exact oracle entry invocation
+`powershell.exe -NoProfile -ExecutionPolicy Bypass -File "docs/v0.3/V03E_G0_5_PRE_ETB_EXECUTION_ORACLE_R2.ps1"`
+with no parameters, wrapper, generated or extracted script, alternate PowerShell implementation, environment
+mutation, or pre/post-oracle helper; **no repeat of the byte-identity check after consumption** (it is a
+pre-consumption PRE-* condition, and no permitted intervening step may modify the script); oracle-exclusive
+ownership of target binding, the listener taxonomy, S0/S1 continuity, the evidence schema, classification,
+publication and the mandatory stop, with any result **candidate-only** until independent ETB-result review; the
+post-oracle stop rule (no rerun, no probe, no diagnostics, no repair, no reclassification, no retry of
+publication, no HTTP, no SIC, no Mode-B, no G0.5/G1/G2); and the no-second-attempt rule (authorization writer
+max **1**, attempt writer max **1**, Oracle-R2 invocation max **1**; no retry, no repair-and-rerun, no alternate
+target/port/executable, no old-Oracle invocation, no `Mode P → Mode L` transition, no fallback).  Two explicit
+control-failure classifications are frozen and are **not** ETB semantic results:
+`RECOVERY_R2_AUTHORIZATION_CONTROL_FAILURE` (authorization 1/1 consumed, attempt 0/1 not started, result NONE)
+and the post-attempt-claim failure state (authorization 1/1 consumed, attempt 1/1 consumed, result NONE,
+Oracle-R2 not entered).  Static validation of the artifact: PowerShell **parser-only** validation of the
+embedded writer with **0 parse errors** (605 tokens), byte-verified LF-only and BOM-free encoding, and
+structural anchor plus PRE-* presence checks.  Historical state is preserved exactly: original Round-5
+authorization `SPENT / NOT REUSABLE` with its claim FINAL OCCUPIED at `d84b4285…` and its ETB attempt `0/1
+never started` (TEMP and FINAL ABSENT, still not reusable because the parent authorization is spent);
+Recovery-R1 authorization `SPENT / NOT REUSABLE` (`8876bcc6…`); Recovery-R1 ETB attempt `SPENT / NOT REUSABLE`
+(`5f1e9721…`); `AUTHORITATIVE ETB SEMANTIC RESULT = NONE`; config remains the exact post-image (`b5e4abab…` /
+1897 / `http://127.0.0.1:4096`); `CONFIG_ESTABLISHMENT = VALID / PRESENT` (`ea9fc2bc…`).  Active statuses are
+converged to `ETB EXECUTION ORACLE-R2 = ACCEPTED / FROZEN / NOT EXECUTED`, `EXECUTION AUTHORITY = NOT
+GRANTED`, `RECOVERY-R2 AUTHORIZATION = DESIGN CANDIDATE / NOT ACCEPTED / NOT GRANTED / NOT EXECUTED`,
+`RECOVERY-R2 AUTHORIZATION USE = UNUSED / 0 OF 1`, `RECOVERY-R2 ETB ATTEMPT = NOT STARTED / 0 OF 1` and
+`RECOVERY-R2 CLAIM NAMESPACE = DEFINED BY CANDIDATE / NO CLAIM CREATED`.  Mode-B remains `BLOCKED / NOT RUN`;
+`P6 = UNPROVEN / UNSATISFIED`; G0.5 **NOT CLOSED**; Case-C and v0.3-E implementation **NOT AUTHORIZED**;
+`G1`/`G2` `NOT RUN`; `adopt_completed_turn` **DISABLED**.  This design round performed **0** Oracle-R2
+executions, **0** old-oracle executions, **0** claim creations, **0** claim deletions, **0** R2 output
+creations, **0** R2 directory creations, **0** endpoint inspections, **0** listener queries, **0** process
+queries, **0** operational P/Invoke, **0** OpenCode starts/restarts, **0** HTTP, **0** `/doc` or `/session`,
+**0** provider/model calls, **0** SIC, **0** Mode-B, **0** G0.5, **0** G1/G2 activity, **0** config mutations,
+**0** R1 artifact mutations and **0** runtime/test/dependency/version changes; the ignored/untracked
+`PROJECT_MEMORY.md` persists.
+
 That approval followed three earlier review rounds: the first independent design
 review returned `REQUEST_CHANGES` (P0 = 1, P1 = 6, P2 = 5) and the
 recovery/reconciliation contract was repaired in `f67bf9e`; two narrow re-reviews
