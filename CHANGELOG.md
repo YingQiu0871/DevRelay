@@ -1830,6 +1830,75 @@ creations, **0** R2 directory or output creations, **0** Oracle-R2 executions, *
 HTTP, **0** ETB executions, **0** SIC, **0** Mode-B work, **0** G0.5 and **0** G1/G2 activity, and **0**
 runtime/test/dependency/version changes; the ignored/untracked `PROJECT_MEMORY.md` persists.
 
+**The Oracle-R2 candidate `6d252a9` received `REQUEST_CHANGES` and was superseded by a narrow corrective
+design round.**  The independent review issued *REQUEST_CHANGES — V0.3-E ETB EXECUTION ORACLE-R2* with
+severity **P0 = 0, P1 = 1, P2 = 2, P3 = 5**, so that candidate was never accepted, never frozen and never
+executed; it remains historical and is not relabelled as any semantic ETB result.  One blocking P1 was found —
+**config-reader invocation fidelity**: the frozen oracle requires the config-reader subprocess to run with
+`PYTHONPATH=<repo>/src`, and the rejected script invoked `python -c ... 'D:\DevRelay'` with no `PYTHONPATH`
+established, which in a src-layout/non-installed environment could manufacture an artificial import failure
+and turn a reachable result into `config_reader_failure` → `HARNESS_INVALID`, materially changing reachable
+oracle behaviour.  Two blocking P2s were found: **evidence schema identity ambiguity** (the 16-field Oracle-R2
+contract added `listener_probe_outcome` while retaining the closed original identifier `devrelay-etb-v1`) and
+an **executable byte-identity design deadlock** (the accepted script blob is the 28024-byte LF sequence
+`3e2cc721…`, while the canonical worktree under `* text=auto` with `core.autocrlf=true` materializes
+28564-byte CRLF bytes `245e346c…`, and the rejected candidate froze no deterministic mechanism that lets a
+canonical checkout contain the accepted executable bytes, so the accepted sequence would deterministically
+deadlock before a Recovery-R2 authorization could be consumed).  Five P3s were closed as well.
+
+**The corrective design round changed exactly five tracked paths** (`.gitattributes`, `CHANGELOG.md`,
+`docs/v0.3/V03E_ACCEPTANCE.md`, `docs/v0.3/V03E_G0_5_PRE_ETB_EXECUTION_ORACLE_R2.md`,
+`docs/v0.3/V03E_G0_5_PRE_ETB_EXECUTION_ORACLE_R2.ps1`) and no sixth tracked path.  **P1 remediation:** the
+tracked script now deterministically establishes `PYTHONPATH = <repo>/src` for the config-reader subprocess —
+capturing any prior process-level `PYTHONPATH` first, assigning exactly `<repo>/src` (never merged with,
+prepended to or appended to pre-existing content), invoking the byte-identical frozen reader source with the
+frozen repository root as its single repository argument, and restoring the prior state in a deterministic
+`finally` block (restoring **absence**, not an invented empty value, when no prior `PYTHONPATH` existed) — so
+the subprocess semantics are exactly equivalent to the original frozen oracle's
+`PYTHONPATH=<repo>/src python -c "<frozen reader>" "<repo>"` shape.  The hard-coded `D:\DevRelay` is gone: the
+frozen repository root is derived from the tracked script location, and config-reader stderr stays suppressed
+and never participates in classification (classification depends only on the frozen subprocess exit code and
+the returned reader value).  **P2-A remediation:** the Oracle-R2 evidence contract has the distinct identity
+**`devrelay-etb-v1-r2`** (written and asserted on read-back), while `devrelay-etb-v1` remains only the
+historical original closed schema of the Recovery-R1 evidence and is never reinterpreted.  **P2-B
+remediation:** `.gitattributes` gains exactly **one** narrow rule —
+`docs/v0.3/V03E_G0_5_PRE_ETB_EXECUTION_ORACLE_R2.ps1 text eol=lf` (no repository-wide `*.ps1` rule, no other
+text policy changed, `core.autocrlf` untouched), so a normal canonical checkout materializes the normative
+executable as LF bytes independently of the local `core.autocrlf=true`, `git check-attr` resolves to
+`text: set` / `eol: lf`, and the worktree bytes equal the committed blob bytes byte for byte — the accepted
+fail-closed byte-identity gate is preserved unchanged and **no future ad-hoc repair stage is frozen**.  **P3
+remediations:** `listener_probe_outcome` now has frozen total S0/S1 semantics (the published value is the
+listener probe outcome of the last actually executed snapshot probe that determines or contributes to the
+published terminal result, so "S0 or S1?" is not executor-selectable); the ambiguous section reference now
+explicitly names the **original frozen oracle's §15.2** continuity comparison field set rather than this
+specification's own local §15.2; publication failure emits exactly the constant stdout line
+`ORACLE_R2_PUBLICATION_FAILURE` with no exception message, stack, provider text or environment data, and the
+specification's frozen stdout contract now lists every possible Oracle-R2 stdout line; and `RESULT_R2` final
+bytes are explicitly required to be byte-identical to the already validated result temp bytes, so all frozen
+semantic fields are preserved by byte identity with no second semantic parser and no post-result probe.  The
+listener taxonomy, the narrow typed catch structure, the output namespace, the six-path absence precondition,
+the ASCII-only source with the runtime `[char]0x2014` construction through `UTF8Encoding(false)`, the
+target-binding chain, canonicalization, hash/version checks, S0/S1 continuity, publication order, mandatory
+stop, no HTTP, no OpenCode start/restart, no retry and no fallback are all **preserved without regression**.
+Static validation for the corrective candidate: PowerShell **parser-only** validation with **0 parse errors**,
+**0 non-ASCII bytes**, no BOM, LF only with **CR count = 0**, a `git check-attr` LF-contract confirmation,
+residue scans for the corrected defects, and a committed-blob-versus-worktree byte comparison — **the
+operational main path was not executed, no listener/process command was run and the endpoint was not
+contacted**.  Current statuses: `ETB EXECUTION ORACLE-R2 (corrective candidate) = DESIGN CANDIDATE / NOT
+ACCEPTED / NOT FROZEN / NOT EXECUTED`; `PREVIOUS ORACLE-R2 CANDIDATE 6d252a9 = REQUEST_CHANGES / SUPERSEDED AS
+A CANDIDATE`; `RECOVERY-R1 AUTHORIZATION = SPENT / NOT REUSABLE`; `RECOVERY-R1 ETB ATTEMPT = SPENT / NOT
+REUSABLE`; `RECOVERY-R1 PUBLISHED ETB RESULT = REJECTED`; `AUTHORITATIVE ETB SEMANTIC RESULT = NONE`;
+`NEW_ETB_AUTHORIZATION_REQUIRED = YES`; and **no Recovery-R2 authorization and no Recovery-R2 claim namespace
+exist**.  Mode-B remains `NOT RUN / NO ORACLE / ORACLE NOT FREEZABLE / CONCRETE ENDPOINT NOT ESTABLISHED /
+PRE-ORACLE CONFIGURATION / TARGET-BINDING PREREQUISITE BLOCKER`; `P6 = UNPROVEN / UNSATISFIED`; G0.5 **NOT
+CLOSED**; Case-C and v0.3-E implementation `NOT AUTHORIZED`; `G1`/`G2` `NOT RUN`; `adopt_completed_turn`
+**DISABLED**.  This corrective round performed **0** config mutations, **0** claim creations, **0** R2
+directory or output creations, **0** Oracle-R2 executions, **0** old-oracle executions, **0** endpoint
+queries, **0** `Get-NetTCPConnection` listener queries, **0** live `Get-CimInstance` queries, **0**
+listener/process/port enumeration, **0** P/Invoke executions, **0** OpenCode starts/restarts, **0** HTTP,
+**0** ETB executions, **0** SIC, **0** Mode-B work, **0** G0.5 and **0** G1/G2 activity, and **0**
+runtime/test/dependency/version changes; the ignored/untracked `PROJECT_MEMORY.md` persists.
+
 That approval followed three earlier review rounds: the first independent design
 review returned `REQUEST_CHANGES` (P0 = 1, P1 = 6, P2 = 5) and the
 recovery/reconciliation contract was repaired in `f67bf9e`; two narrow re-reviews

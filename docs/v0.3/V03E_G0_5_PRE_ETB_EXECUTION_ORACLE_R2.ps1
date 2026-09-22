@@ -17,7 +17,14 @@
 # process-instance identity; S0/S1 continuity; fail-closed; no retry.
 
 $ErrorActionPreference = 'Stop'
-Set-Location 'D:\DevRelay'
+
+# Repository-root binding (corrective R2). The frozen repository root is derived
+# deterministically from the tracked script location: this file lives at
+# <repo>/docs/v0.3/, so the grandparent of $PSScriptRoot is <repo>. No absolute
+# repository path is hard-coded, and the config-reader repository argument as
+# well as <repo>/src are both resolved against this single frozen root.
+$RepoRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
+Set-Location -LiteralPath $RepoRoot
 $Inv = [System.Globalization.CultureInfo]::InvariantCulture
 
 # ---------------------------------------------------------------- constants
@@ -112,19 +119,50 @@ Write-Output ('ORACLE_R2_SPEC_SHA256=' + $SpecSelfSha)
 # Frozen rows: python cannot be resolved/launched, an import/dependency/runtime
 # failure before the production loader executes -> HARNESS_INVALID.
 # A normally returned value that is not the frozen owner URI -> ETB_UNSATISFIED.
+#
+# Corrective R2 - frozen config-reader invocation contract. The config-reader
+# subprocess must observe PYTHONPATH resolving exactly to <repo>/src for THIS
+# invocation, so that the src-layout production loader is importable without any
+# installed package. The frozen invocation shape is exactly:
+#
+#   PYTHONPATH=<repo>/src
+#   python -c "<frozen config reader>" "<repo>"
+#
+# <repo> is the frozen $RepoRoot derived above (never a second, unrelated,
+# hard-coded import path), and the reader source text below is the original
+# frozen reader logic, unchanged. PYTHONPATH is assigned this single value and is
+# never merged with, prepended to or appended to any pre-existing content. The
+# previous process-level PYTHONPATH is captured first and restored on every exit
+# path through the deterministic finally block; when no prior PYTHONPATH existed
+# it is restored to ABSENT rather than to an invented empty value.
+#
+# Stderr for this invocation is suppressed and NEVER participates in the
+# classification: success/failure depends only on the frozen subprocess exit code
+# and on the returned reader value, never on the mere existence of stderr text.
 $Configured = ''
 $ConfigReaderOk = $true
 if (-not (Test-CommandAvailable 'python')) {
   $ConfigReaderOk = $false
 } else {
   $cfgOut = $null
+  $cfgExit = -1
+  $PriorPythonPathExists = Test-Path -LiteralPath 'Env:PYTHONPATH'
+  $PriorPythonPath = $env:PYTHONPATH
+  $SavedErrorActionPreference = $ErrorActionPreference
   try {
-    $cfgOut = & python -c "import sys; from devrelay.config import load_wiring_config; sys.stdout.write(load_wiring_config(sys.argv[1]).opencode.base_url)" 'D:\DevRelay' 2>$null
+    $env:PYTHONPATH = (Join-Path $RepoRoot 'src')
+    $ErrorActionPreference = 'Continue'
+    $cfgOut = & python -c "import sys; from devrelay.config import load_wiring_config; sys.stdout.write(load_wiring_config(sys.argv[1]).opencode.base_url)" $RepoRoot 2>$null
+    $cfgExit = $LASTEXITCODE
   } catch {
     $ConfigReaderOk = $false
+  } finally {
+    $ErrorActionPreference = $SavedErrorActionPreference
+    if ($PriorPythonPathExists) { $env:PYTHONPATH = $PriorPythonPath }
+    else { Remove-Item -LiteralPath 'Env:PYTHONPATH' -ErrorAction SilentlyContinue }
   }
   if ($ConfigReaderOk) {
-    if ($LASTEXITCODE -ne 0) { $ConfigReaderOk = $false } else { $Configured = ($cfgOut -join '') }
+    if ($cfgExit -ne 0) { $ConfigReaderOk = $false } else { $Configured = ($cfgOut -join '') }
   }
 }
 $script:Configured = $Configured
@@ -341,6 +379,15 @@ function Take-Snapshot {
 $S0 = $null
 $S1 = $null
 
+# Frozen corrective R2 listener_probe_outcome semantics: the single published
+# field always means THE LISTENER PROBE OUTCOME ASSOCIATED WITH THE LAST ACTUALLY
+# EXECUTED SNAPSHOT PROBE THAT DETERMINES OR CONTRIBUTES TO THE PUBLISHED
+# TERMINAL RESULT. It stays NOT_REACHED when the attempt ends before any listener
+# probe; it is the S0 listener outcome when S0 terminates the attempt; it is the
+# S1 listener outcome when S1 is reached and terminates the attempt; and it
+# remains ONE_VALID_ROW when both listener probes succeed even if a later
+# continuity/identity check fails. The assignment below is total: no executor
+# choice between S0 and S1 remains.
 if ($TerminalStage -eq '') {
   $S0 = Take-Snapshot
   $ListenerProbeOutcome = $S0.listener
@@ -349,6 +396,7 @@ if ($TerminalStage -eq '') {
   else {
     $Checks['s0_valid']='PASS'
     $S1 = Take-Snapshot
+    $ListenerProbeOutcome = $S1.listener
     if ($S1.kind -eq 'HARNESS_INVALID') { $Outcome='HARNESS_INVALID'; $TerminalStage='s1_' + $S1.stage }
     elseif ($S1.kind -eq 'ETB_UNSATISFIED') { $Outcome='ETB_UNSATISFIED'; $TerminalStage='s1_' + $S1.stage }
     else {
@@ -376,10 +424,9 @@ Write-Output ('ORACLE_R2_CHECKS ' + (($Checks.GetEnumerator() | ForEach-Object {
 $PublicationFailed = $false
 $EvDigest = ''
 $MfDigest = ''
-$PublicationError = ''
 try {
   $Evidence = [ordered]@{
-    schema_version = 'devrelay-etb-v1'
+    schema_version = 'devrelay-etb-v1-r2'
     oracle_commit = $OriginalOracleCommit
     oracle_sha256 = $OriginalOracleSha
     execution_started_at = $Started
@@ -419,7 +466,7 @@ try {
   if (($rb[$rb.Length-2] -eq 10) -or ($rb[$rb.Length-2] -eq 13)) { throw 'EVIDENCE_TEMP_EXTRA_LF' }
   if (($rb[0] -eq 0xEF) -and ($rb[1] -eq 0xBB) -and ($rb[2] -eq 0xBF)) { throw 'EVIDENCE_TEMP_BOM' }
   $parsed = [System.Text.Encoding]::UTF8.GetString($rb) | ConvertFrom-Json
-  if ($parsed.schema_version -cne 'devrelay-etb-v1') { throw 'EVIDENCE_SCHEMA_VERSION_MISMATCH' }
+  if ($parsed.schema_version -cne 'devrelay-etb-v1-r2') { throw 'EVIDENCE_SCHEMA_VERSION_MISMATCH' }
   if ($parsed.outcome -cne $Outcome) { throw 'EVIDENCE_OUTCOME_MISMATCH' }
   if ($parsed.listener_probe_outcome -cne $ListenerProbeOutcome) { throw 'EVIDENCE_LISTENER_PROBE_OUTCOME_MISMATCH' }
 
@@ -514,15 +561,17 @@ try {
   if ($mfFinalLine.Substring(0,64) -cne $pfDigest) { throw 'POST_MANIFEST_DIGEST_MISMATCH' }
   if ($mfFinalLine.Substring(66) -cne $EvF) { throw 'POST_MANIFEST_PATH_MISMATCH' }
 } catch {
+  # Frozen corrective R2: the publication-failure surface is a constant. No
+  # exception message, stack, provider text or environment data is captured,
+  # persisted or printed.
   $PublicationFailed = $true
-  $PublicationError = [string]$_.Exception.Message
 }
 
 # ------------------------------------------------------- terminal reporting
 # MANDATORY STOP: nothing after this point may probe the endpoint, listeners,
 # processes, commands or any diagnostic surface. The attempt is terminal.
 if ($PublicationFailed) {
-  Write-Output ('ORACLE_R2_PUBLICATION_FAILURE ' + $PublicationError)
+  Write-Output 'ORACLE_R2_PUBLICATION_FAILURE'
   Write-Output 'ORACLE_R2_FINAL_CLASSIFICATION=HARNESS_INVALID'
   Write-Output 'ORACLE_R2_SEMANTIC_RESULT=NONE'
   exit 3
