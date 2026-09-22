@@ -2137,6 +2137,77 @@ starts/restarts, **0** HTTP, **0** SIC, **0** Mode-B, **0** G0.5, **0** G1/G2, *
 mutations and **0** runtime/test/dependency/version changes; all protected artifacts and the seven historical
 R1 operational hashes were re-verified unchanged; the ignored/untracked `PROJECT_MEMORY.md` persists.
 
+**The Recovery-R2 published ETB result was independently reviewed and accepted, so the authoritative ETB
+semantic result is now `ETB_UNSATISFIED`** (active status transition: `AUTHORITATIVE ETB SEMANTIC RESULT =
+NONE` → **`AUTHORITATIVE ETB SEMANTIC RESULT = ETB_UNSATISFIED`**, applying exactly to the accepted one-shot
+attempt, its accepted authorization and Oracle-R2 identities, its two spent claims and its three immutable
+published result artifacts).  The independent result review issued *APPROVE V0.3-E RECOVERY-R2
+PUBLISHED ETB RESULT — ETB_UNSATISFIED* with severity **P0 = 0, P1 = 0, P2 = 0, P3 = 0**, which promotes the
+immutable published candidate to the **current authoritative semantic result** for the accepted one-shot
+attempt.  This authority applies **exactly** to: the accepted Recovery-R2 one-shot attempt; the accepted
+authorization identity `recovery_r2_authorization_commit = 02bef765f74d7349c592138b35280b8b51995a5d` /
+`recovery_r2_authorization_sha256 = 91917bb55cc5b59a811c6a5f7bcbc3bf48ffa4f5688c379914912fe6f092d4ab`; the
+accepted Oracle-R2 identity `oracle_r2_commit = dfb78f34d919e8c9863a8398fb4f63ee301167bc` /
+`oracle_r2_spec_sha256 = 5e9221e3950af6ec3e0612c4d962562c33e761899dfd6af42d10f5a9895f9f2f` /
+`oracle_r2_script_sha256 = 22c5fbd61da609e6cc39e973be6030d4c360019ed1f56e69ca45f92fa1689c17`; the two
+permanently spent one-shot claims; and the three immutable published result artifacts.  **Immutable-artifact
+handling:** the frozen `docs/v0.3/V03E_G0_5_PRE_ETB_EXECUTION_RESULT_R2.md` **still preserves its
+publication-time banner** `CANDIDATE ETB RESULT / AWAITING INDEPENDENT RESULT REVIEW` and was **not** modified;
+under the established immutable-artifact + independent-approval-record model, the subsequent independent review
+promotes that immutable published candidate to the current authoritative semantic result — the artifact's own
+wording remains publication-time history, and the active status surfaces carry the authoritative result.
+**Exact meaning of the authoritative result (recorded narrowly):** `ETB_UNSATISFIED` means that this frozen
+Recovery-R2 attempt did **not** satisfy the ETB precondition required to proceed to Mode-B construction, with
+accepted terminal facts `listener_probe_outcome = QUERY_EXCEPTION`, `terminal_stage = s0_listener` and
+`classification = ETB_UNSATISFIED`.  It does **NOT** mean `P6 = FAIL`, `G0.5 = FAIL`, a failed SIC, a failed
+Mode-B itself, that OpenCode is generally incompatible, that the endpoint can never become usable, or that
+future target binding is impossible; the semantic result is **not** broadened beyond the above.  **Independent
+review findings recorded (all as reviewed):** `AUTHORIZATION_CLAIM = VALID`, `ATTEMPT_CLAIM = VALID`,
+`ONE_SHOT_BUDGET_STATE = SPENT`, `R2_EVIDENCE_SCHEMA = VALID`,
+`EVIDENCE_ORACLE_IDENTITY_BINDING = CORRECT`, `S0_LISTENER_BRANCH = QUERY_EXCEPTION`,
+`QUERY_EXCEPTION_FROZEN_CLASSIFICATION = ETB_UNSATISFIED`, `R1_TAXONOMY_REGRESSION = ABSENT`,
+`PUBLISHED_CLASSIFICATION_FIDELITY = EXACT`, `TERMINAL_STAGE_CONSISTENCY = PASS`,
+`ACTIVITY_COUNTERS = CONSISTENT`, `NON_CLAIMS = VALID`, `MANIFEST_BINDING = VALID`,
+`RESULT_ARTIFACT = VALID`, `RESULT_EVIDENCE_CONSISTENCY = PASS`, `PUBLICATION_COMPLETENESS = PASS`,
+`EXIT_CODE_CONSISTENCY = PASS`, `PRECHECK_AGGREGATION_ANOMALY = REPORTING_ARTIFACT`,
+`PRECONSUMPTION_GATE_VALIDITY = VALID`, `DISCLOSED_PARSE_ERRORS = ZERO_SIDE_EFFECT_TOOLING_ERRORS`,
+`PRE1_APPROVAL_RECORD_CHECK = CONFORMANT`, `OPERATIONAL_SEQUENCE = CONFORMANT`,
+`POST_ORACLE_READ_COMPLIANCE = PASS` and `ONE_SHOT_EXECUTION_DISCIPLINE = PASS`.  **Recovery-R2 terminal
+state:** `RECOVERY-R2 AUTHORIZATION = ACCEPTED / FROZEN / FULLY CONSUMED`; `RECOVERY-R2 AUTHORIZATION USE =
+SPENT / NOT REUSABLE`; `RECOVERY-R2 ETB ATTEMPT = SPENT / NOT REUSABLE`; Oracle-R2 invocation count = **1 /
+MAXIMUM REACHED**; `RECOVERY-R2 RETRY = NOT AUTHORIZED`; `RECOVERY-R2 SECOND ATTEMPT = NOT AUTHORIZED`.  This
+authorization is **not** available and **may not** be described as available; no review or bookkeeping operation
+may reopen either budget.  **No automatic new authorization:** `NEW RECOVERY AUTHORIZATION = NOT AUTHORIZED BY
+THIS RESULT REVIEW` and **NO NEW AUTHORIZATION EXISTS** — the authoritative `ETB_UNSATISFIED` result does not
+itself grant another attempt, and any future diagnostic, remediation or re-authorization path would require a
+new explicitly designed and independently reviewed stage (not designed here).  Preserved exactly and unchanged
+by this bookkeeping: `P6 = UNPROVEN / UNSATISFIED` (never PASS, FAIL, PROVEN or CLOSED — `ETB_UNSATISFIED` is a
+prerequisite/control result, not the semantic execution of P6); `Mode-B = BLOCKED / NOT RUN` with `MODE-B
+CONSTRUCTION = NOT AUTHORIZED` (only an independently accepted `ETB_SATISFIED` could permit Mode-B oracle
+construction); `G0.5 = NOT CLOSED` (never PASS, FAIL or CLOSED — the authoritative ETB result settles the
+Recovery-R2 prerequisite attempt but does not itself execute or close G0.5/P6); `Case-C = NOT AUTHORIZED`;
+`v0.3-E implementation = NOT AUTHORIZED`; `G1`/`G2` = `NOT RUN`; `adopt_completed_turn` = **DISABLED**.  R1
+history is untouched: `RECOVERY-R1 PUBLISHED ETB RESULT = REJECTED`, `RECOVERY-R1 AUTHORIZATION = SPENT / NOT
+REUSABLE`, `RECOVERY-R1 ETB ATTEMPT = SPENT / NOT REUSABLE`.  Authoritative sequence (updated): Oracle-R2
+accepted/frozen → Recovery-R2 authorization accepted/frozen → authorization bookkeeping independently confirmed
+→ one-shot Recovery-R2 operational attempt → independent published-result review → **`ETB_UNSATISFIED` accepted
+as authoritative (current state)** → **result acceptance bookkeeping (this round)** → independent
+result-bookkeeping confirmation → **STOP at the G0.5-PRE reconciliation boundary**; any further
+diagnostic/remediation/re-authorization decision requires a **NEW explicit owner-authorized stage**, and this
+round does **not** automatically proceed to Mode-B, another ETB attempt, G0.5, G1, G2 or v0.3-E implementation.
+Next-gate status: `MODE-B CONSTRUCTION = NOT AUTHORIZED`; `NEW ETB AUTHORIZATION = NOT AUTHORIZED`;
+`G0.5 EXECUTION = NOT AUTHORIZED BY THIS BOOKKEEPING`; `NEXT REQUIRED STAGE AFTER BOOKKEEPING CONFIRMATION =
+G0.5-PRE / ETB UNSATISFIED RECONCILIATION / OWNER DECISION` (decision and reconciliation only unless separately
+authorized).  Restricted operational artifacts were reverified byte-identical and were **not** modified:
+authorization claim `fd7336e4…` (488 bytes, `state = CONSUMED`), attempt claim `69eb6ef0…` (482 bytes,
+`state = CONSUMED`), R2 evidence `6f903f05…` (3820 bytes), R2 manifest `b4701c90…` (120 bytes) and R2 result
+`84f51bb5…` (729 bytes); all protected artifacts, config (`b5e4abab…` / 1897 / `http://127.0.0.1:4096`) and
+`CONFIG_ESTABLISHMENT = VALID / PRESENT` (`ea9fc2bc…`) are unchanged.  This bookkeeping round performed **0**
+oracle executions, **0** claim creations or deletions, **0** output mutations, **0** target/listener/process
+probes, **0** OpenCode starts/restarts, **0** HTTP, **0** SIC, **0** Mode-B, **0** G0.5, **0** G1/G2, **0**
+config mutations, **0** R1 mutations and **0** runtime/test/dependency/version changes; the ignored/untracked
+`PROJECT_MEMORY.md` persists.
+
 That approval followed three earlier review rounds: the first independent design
 review returned `REQUEST_CHANGES` (P0 = 1, P1 = 6, P2 = 5) and the
 recovery/reconciliation contract was repaired in `f67bf9e`; two narrow re-reviews
