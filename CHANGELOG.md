@@ -2074,6 +2074,69 @@ creations, **0** endpoint/listener/process probes, **0** HTTP, **0** SIC, **0** 
 G1/G2 activity, **0** config mutations and **0** runtime/test/dependency/version changes; the
 ignored/untracked `PROJECT_MEMORY.md` persists.
 
+**The corrective Recovery-R2 authorization design was independently approved, so the Recovery-R2 one-shot ETB
+execution authorization is now `ACCEPTED / FROZEN / NOT EXECUTED` (acceptance bookkeeping only; no claim
+created, nothing consumed).**  The independent design review issued *APPROVE V0.3-E RECOVERY-R2 ONE-SHOT ETB
+EXECUTION AUTHORIZATION CORRECTIVE R1* with severity **P0 = 0, P1 = 0, P2 = 0, P3 = 1**, which resolved both
+prior findings — **P1 PRE-1 lifecycle contradiction = RESOLVED** and **P3 post-Oracle read-boundary ambiguity
+= RESOLVED** — and leaves exactly one **non-blocking** P3: the accepted artifact does not contain one
+standalone sentence stating that the independent bookkeeping confirmation creates no commit, although the
+accepted direct-child topology structurally requires confirmation to be review-only; the frozen authorization
+artifact was **not** modified for it, and this status/bookkeeping layer records the missing statement
+explicitly instead.  The permanently accepted immutable Recovery-R2 authorization identity is
+`recovery_r2_authorization_commit = 02bef765f74d7349c592138b35280b8b51995a5d` and
+`recovery_r2_authorization_sha256 = 91917bb55cc5b59a811c6a5f7bcbc3bf48ffa4f5688c379914912fe6f092d4ab` — the
+accepted **authorization-design** commit/blob pair; this acceptance-bookkeeping commit explicitly does **not**
+replace `recovery_r2_authorization_commit`, and no later bookkeeping-confirmation review, operational HEAD or
+ETB-result review may substitute for it.  The permanently accepted Oracle-R2 identity is unchanged
+(`oracle_r2_commit = dfb78f34d919e8c9863a8398fb4f63ee301167bc`, `oracle_r2_spec_sha256 =
+5e9221e3950af6ec3e0612c4d962562c33e761899dfd6af42d10f5a9895f9f2f`, `oracle_r2_script_sha256 =
+22c5fbd61da609e6cc39e973be6030d4c360019ed1f56e69ca45f92fa1689c17`); the accepted spec/script bytes were
+re-verified byte-identical at this baseline, the worktree script still equals its accepted blob, and
+`git check-attr text eol` still resolves the normative executable to `text: set` / `eol: lf`.  Active status
+transition: **`RECOVERY-R2 AUTHORIZATION = ACCEPTED / FROZEN / NOT EXECUTED`** with **`EXECUTION AUTHORITY =
+GRANTED SUBJECT TO ALL PRE-* CONDITIONS / ONE-SHOT ONLY`** and, simultaneously and mandatorily,
+**`OPERATIONAL CONSUMPTION = BLOCKED PENDING INDEPENDENT BOOKKEEPING CONFIRMATION`** — the design is accepted
+and its one-shot authority is defined, but no claim may be consumed until this bookkeeping commit itself
+receives independent confirmation.  Budgets are preserved exactly:
+`RECOVERY-R2 AUTHORIZATION USE = UNUSED / 0 OF 1` and `RECOVERY-R2 ETB ATTEMPT = NOT STARTED / 0 OF 1`
+(consumption is defined **only** by the successful `CreateNew` of the respective TEMP claim; nothing is
+consumed).  The claim namespace is **`ACCEPTED / FROZEN / NO CLAIM CREATED`**; the four exact accepted paths
+(`docs/v0.3/evidence/ETB_RECOVERY_R2_AUTHORIZATION_USE.claim` (+`.tmp`) and
+`docs/v0.3/evidence/ETB_RECOVERY_R2_ATTEMPT_USE.claim` (+`.tmp`)) were read-only verified still ABSENT, and
+`docs/v0.3/evidence/etb-execution-r2/` does not exist.  **Independent authorization bookkeeping confirmation =
+REVIEW-ONLY / NO COMMIT IS CREATED** — after confirmation the operational HEAD remains exactly this
+acceptance-bookkeeping child commit, and no separate confirmation commit is ever created.  This bookkeeping
+commit itself satisfies the accepted structural contract: its parent is exactly
+`02bef765f74d7349c592138b35280b8b51995a5d` and its exact tracked delta is exactly `M CHANGELOG.md` +
+`M docs/v0.3/V03E_ACCEPTANCE.md` with no third tracked path, so the accepted authorization artifact remains
+byte-identical and this new HEAD is the structural HEAD a future operational PRE-1 validates:
+`PRE1_LIFECYCLE_BINDING = STRUCTURALLY SATISFIABLE`, `PRE1_PRE14_COMPATIBILITY = PASS`,
+`SEQUENCE_PRECONDITION_CONSISTENCY = PASS`.  `PRE-* OPERATIONAL EVALUATION = NOT RUN` and `RECOVERY-R2
+AUTHORIZATION CONSUMPTION = NOT STARTED` — the actual PRE-1..PRE-16 operational gate runs only in the future
+operational round after independent bookkeeping confirmation.  Preserved exactly: candidate `af3ec9b7…` =
+REQUEST_CHANGES / SUPERSEDED AS A CANDIDATE / NEVER ACCEPTED / NEVER GRANTED / NEVER EXECUTED (history not
+rewritten); `02bef765…` = ACCEPTED AUTHORIZATION DESIGN / FROZEN / NOT EXECUTED (the bookkeeping HEAD is never
+called the authorization-design commit); `ETB EXECUTION ORACLE-R2 = ACCEPTED / FROZEN / NOT EXECUTED` (never
+executed); `AUTHORITATIVE ETB SEMANTIC RESULT = NONE` — authorization acceptance creates no ETB semantic
+result; `RECOVERY-R1 PUBLISHED ETB RESULT = REJECTED`, `RECOVERY-R1 AUTHORIZATION = SPENT / NOT REUSABLE`,
+`RECOVERY-R1 ETB ATTEMPT = SPENT / NOT REUSABLE` and `NEW_ETB_AUTHORIZATION_REQUIRED = SATISFIED BY ACCEPTED
+RECOVERY-R2 AUTHORIZATION DESIGN` while the authorization use remains unused and no operational attempt has
+started; Mode-B = `BLOCKED / NOT RUN`; `P6 = UNPROVEN / UNSATISFIED`; G0.5 **NOT CLOSED**; Case-C and v0.3-E
+implementation **NOT AUTHORIZED**; `G1`/`G2` `NOT RUN`; `adopt_completed_turn` **DISABLED** — authorization
+acceptance does not establish `ETB_SATISFIED`.  Authoritative sequence: Oracle-R2 accepted/frozen → Oracle-R2
+bookkeeping independently confirmed → initial Recovery-R2 authorization candidate `af3ec9b7` → independent
+REQUEST_CHANGES → corrective Recovery-R2 authorization candidate `02bef765` → independent APPROVE → Recovery-R2
+authorization acceptance bookkeeping (this round) → independent bookkeeping confirmation (review-only, no
+commit) → exactly one operational authorization consumption + exactly one ETB-attempt consumption + at most
+one Oracle-R2 invocation → independent ETB-result review → only an independently accepted `ETB_SATISFIED` may
+permit Mode-B construction; no reset, no detached checkout, no confirmation commit.  This bookkeeping round
+performed **0** claim creations/deletions, **0** Oracle-R2/old-oracle executions, **0** R2 output or directory
+creations, **0** endpoint/listener/process inspections, **0** operational P/Invoke, **0** OpenCode
+starts/restarts, **0** HTTP, **0** SIC, **0** Mode-B, **0** G0.5, **0** G1/G2, **0** config mutations, **0** R1
+mutations and **0** runtime/test/dependency/version changes; all protected artifacts and the seven historical
+R1 operational hashes were re-verified unchanged; the ignored/untracked `PROJECT_MEMORY.md` persists.
+
 That approval followed three earlier review rounds: the first independent design
 review returned `REQUEST_CHANGES` (P0 = 1, P1 = 6, P2 = 5) and the
 recovery/reconciliation contract was repaired in `f67bf9e`; two narrow re-reviews
