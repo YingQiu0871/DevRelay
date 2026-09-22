@@ -2005,6 +2005,75 @@ queries, **0** operational P/Invoke, **0** OpenCode starts/restarts, **0** HTTP,
 **0** R1 artifact mutations and **0** runtime/test/dependency/version changes; the ignored/untracked
 `PROJECT_MEMORY.md` persists.
 
+**The Recovery-R2 authorization candidate `af3ec9b7` received `REQUEST_CHANGES` and was corrected for a PRE-1
+lifecycle contradiction.**  The independent review issued *REQUEST_CHANGES — V0.3-E RECOVERY-R2 ONE-SHOT ETB
+EXECUTION AUTHORIZATION* with severity **P0 = 0, P1 = 1, P2 = 0, P3 = 1**, so that candidate is
+**REQUEST_CHANGES / SUPERSEDED AS A CANDIDATE / NEVER ACCEPTED / NEVER GRANTED / NEVER EXECUTED** and remains
+immutable historical provenance.  The blocking P1 was a **PRE-1 operational-HEAD lifecycle contradiction /
+deterministic design deadlock**: the rejected artifact froze PRE-1 as an exact equality with the earlier
+bookkeeping baseline `9b17912…` while the same artifact required the lifecycle *authorization design →
+independent approval → authorization acceptance bookkeeping → independent bookkeeping confirmation →
+operational attempt*, so a conformant operational HEAD must be a descendant of the accepted
+authorization-design commit and can never equal that earlier baseline; the rejected PRE-1 also conflicted with
+PRE-14, because returning HEAD to `9b17912…` would remove the authorization artifact that is introduced only
+after it (independent verdict `PRE1_LIFECYCLE_BINDING = CONTRADICTORY`,
+`RECOVERY_R2_OPERATIONAL_REACHABILITY = DESIGN_DEADLOCK`, `SEQUENCE_PRECONDITION_CONSISTENCY = FAIL`).  This
+corrective round changes exactly three tracked paths — the authorization artifact, `CHANGELOG.md` and
+`docs/v0.3/V03E_ACCEPTANCE.md` — and no fourth.  **P1 remediation:** the design-construction baseline and the
+future operational-HEAD predicate are now separated — `9b17912…` is retained **only** as the RECOVERY-R2
+AUTHORIZATION DESIGN-CONSTRUCTION BASELINE and as the historical predecessor bookkeeping baseline, is
+explicitly **not** the future operational HEAD requirement, and must never appear in any future operational
+`PRE-*` condition as an exact HEAD requirement; PRE-1 is replaced by a **lifecycle-correct structural binding**
+requiring the operational HEAD to be a **single-parent** commit whose parent is exactly the accepted
+`recovery_r2_authorization_commit`, whose sole tracked delta is exactly `M CHANGELOG.md` +
+`M docs/v0.3/V03E_ACCEPTANCE.md` with no third path, whose authorization artifact bytes are byte-identical to
+the accepted blob and hash to the accepted `recovery_r2_authorization_sha256`, and whose active bookkeeping
+surfaces state `RECOVERY-R2 AUTHORIZATION = ACCEPTED / FROZEN / NOT EXECUTED` bound to that accepted pair —
+structurally identifying the future bookkeeping commit **without** requiring its not-yet-known hash, with no
+reset, no detached checkout, no alternate worktree procedure, no symbolic "latest commit" and no
+executor-selected descendant.  The future acceptance-bookkeeping contract is frozen now (exactly one
+single-parent child of the accepted design commit, exactly the two bookkeeping files, none of the protected
+artifacts touched), the `PRE1_PRE14_COMPATIBILITY = REQUIRED` relationship is made explicit and mutually
+satisfiable in the same canonical worktree, and `SEQUENCE_PRECONDITION_CONSISTENCY` is added as an explicit
+invariant.  Static proof recorded on the current topology: the authorization artifact resolves to a `blob` at
+`af3ec9b7` but **does not exist** at `9b17912…` (`git cat-file -t` → exit `128`), and the bookkeeping shape
+precedent `9b17912` is itself single-parent with exactly the two-file delta — hence
+`PRE1_LIFECYCLE_BINDING = STRUCTURALLY_SATISFIABLE` and `PRE1_PRE14_COMPATIBILITY = PASS`.  The non-blocking P3
+(post-Oracle static-read boundary bounded but not exhaustively enumerated) is closed by replacing the vague
+phrase with an **exact closed 12-item read list** plus an explicit forbidden-operation list after Oracle
+return, and by freezing that post-Oracle reads exist only to inventory already-produced artifacts, bind hashes,
+record one-shot claim state, record repository/config preservation and produce the execution report — never to
+decide a different ETB semantic result, change the Oracle outcome, repair evidence, infer target state beyond
+Oracle evidence or create new target-binding evidence.  Everything else is **preserved unchanged**: the
+authorization provenance model (the accepted design commit, never the bookkeeping HEAD), the four-path claim
+namespace, both closed 7-field claim schemas, the `Write-DevRelayRecoveryR2OneShotClaim` writer and its
+`CreateNew` consumption semantics, the 1/1 + 1/1 budgets, PRE-2 … PRE-16, the no-Oracle-output-precheck rule,
+the no-target-pre-probe rule, the post-authorization control boundary, the exact Oracle-R2 invocation, the
+no-repeat identity check after consumption, Oracle-exclusive result ownership with candidate-only authority,
+the no-second-attempt rule and the failure classifications.  The authorization lifecycle state model is now
+frozen explicitly: `DESIGN CANDIDATE / NOT ACCEPTED / NOT GRANTED / NOT EXECUTED` today; after a future
+independently approved acceptance-bookkeeping round `ACCEPTED / FROZEN / NOT EXECUTED` with `EXECUTION
+AUTHORITY = GRANTED SUBJECT TO ALL PRE-* CONDITIONS / ONE-SHOT ONLY`; authorization use `UNUSED / 0 OF 1` and
+ETB attempt `NOT STARTED / 0 OF 1` until their respective TEMP `CreateNew` succeeds; independent bookkeeping
+confirmation still required before any operational consumption; and authority is **not** marked granted in this
+design round.  Static validation: PowerShell parser-only re-validation of the embedded writer with **0 parse
+errors**, LF-only and BOM-free encoding, unchanged claim paths and schemas, and the verified absence of the
+rejected literal operational condition `HEAD == 9b17912…` from `PRE-*` semantics (historical references to
+`9b17912…` appear only where explicitly marked as design-construction or predecessor history).  Active
+statuses: `ETB EXECUTION ORACLE-R2 = ACCEPTED / FROZEN / NOT EXECUTED`; `EXECUTION AUTHORITY = NOT GRANTED`;
+`PREVIOUS RECOVERY-R2 CANDIDATE af3ec9b7 = REQUEST_CHANGES / SUPERSEDED / NEVER ACCEPTED / NEVER GRANTED /
+NEVER EXECUTED`; `RECOVERY-R2 AUTHORIZATION (corrective) = DESIGN CANDIDATE / NOT ACCEPTED / NOT GRANTED / NOT
+EXECUTED`; `RECOVERY-R2 AUTHORIZATION USE = UNUSED / 0 OF 1`; `RECOVERY-R2 ETB ATTEMPT = NOT STARTED / 0 OF
+1`; `RECOVERY-R2 CLAIM NAMESPACE = DEFINED / NO CLAIM CREATED`; `AUTHORITATIVE ETB SEMANTIC RESULT = NONE`.
+Mode-B remains `BLOCKED / NOT RUN`; `P6 = UNPROVEN / UNSATISFIED`; G0.5 **NOT CLOSED**; Case-C and v0.3-E
+implementation **NOT AUTHORIZED**; `G1`/`G2` `NOT RUN`; `adopt_completed_turn` **DISABLED**; config remains the
+exact post-image (`b5e4abab…` / 1897 / `http://127.0.0.1:4096`); `CONFIG_ESTABLISHMENT = VALID / PRESENT`
+(`ea9fc2bc…`); the accepted Oracle-R2 triple and all R1 artifacts are untouched.  This corrective round
+performed **0** Oracle-R2 executions, **0** claim creations or deletions, **0** R2 output or directory
+creations, **0** endpoint/listener/process probes, **0** HTTP, **0** SIC, **0** Mode-B, **0** G0.5, **0**
+G1/G2 activity, **0** config mutations and **0** runtime/test/dependency/version changes; the
+ignored/untracked `PROJECT_MEMORY.md` persists.
+
 That approval followed three earlier review rounds: the first independent design
 review returned `REQUEST_CHANGES` (P0 = 1, P1 = 6, P2 = 5) and the
 recovery/reconciliation contract was repaired in `f67bf9e`; two narrow re-reviews

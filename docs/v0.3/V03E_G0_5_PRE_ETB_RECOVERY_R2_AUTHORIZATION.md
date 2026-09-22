@@ -12,8 +12,19 @@
 
 Status: **RECOVERY-R2 AUTHORIZATION = DESIGN CANDIDATE / NOT ACCEPTED / NOT GRANTED / NOT EXECUTED**
 
-Baseline: `9b17912a8b4bd6c87aa45eefc97a73eb3d22db34` (branch `v0.3-e-recovery-reconciliation`), the
-independently confirmed Oracle-R2 acceptance-bookkeeping baseline.
+Previous candidate `af3ec9b7e043af4cae09f9499cf363a9359d06a9` received *REQUEST_CHANGES — V0.3-E RECOVERY-R2
+ONE-SHOT ETB EXECUTION AUTHORIZATION* (**P0 = 0, P1 = 1, P2 = 0, P3 = 1**) and is **REQUEST_CHANGES /
+SUPERSEDED AS A CANDIDATE / NEVER ACCEPTED / NEVER GRANTED / NEVER EXECUTED**.  The blocking finding was a
+**PRE-1 operational-HEAD lifecycle contradiction / deterministic design deadlock** (`PRE1_LIFECYCLE_BINDING =
+CONTRADICTORY`, `RECOVERY_R2_OPERATIONAL_REACHABILITY = DESIGN_DEADLOCK`,
+`SEQUENCE_PRECONDITION_CONSISTENCY = FAIL`).  This corrective round replaces PRE-1 with the lifecycle-correct
+structural binding of §11.4 and closes the non-blocking post-Oracle static-read boundary finding in §22.
+
+Design-construction baseline: `9b17912a8b4bd6c87aa45eefc97a73eb3d22db34` (branch
+`v0.3-e-recovery-reconciliation`) — the independently confirmed Oracle-R2 acceptance-bookkeeping baseline, and
+the **RECOVERY-R2 AUTHORIZATION DESIGN-CONSTRUCTION BASELINE**.  **`9b17912…` is NOT the future operational
+HEAD requirement**: it must never appear in any future operational `PRE-*` condition as an exact HEAD
+requirement (§11.6), and no reset to it occurs anywhere in the authoritative sequence (§32).
 
 This is a **new authorization artifact**.  It is **not** a revision of
 `docs/v0.3/V03E_G0_5_PRE_ETB_EXECUTION_AUTHORIZATION.md` (original Round-5 authorization) or of
@@ -73,6 +84,32 @@ Oracle-R2 triple of §2.
 
 **3.4** A later acceptance-bookkeeping HEAD, operational HEAD or result-review HEAD must **not** replace any
 of those provenance values.
+
+**3.5** `recovery_r2_authorization_commit` is the independently accepted **authorization-design** commit —
+**not** the later acceptance-bookkeeping commit and **not** any operational HEAD.  The bookkeeping HEAD never
+substitutes for authorization provenance.
+
+**3.6 Authorization lifecycle state model (frozen).**  During this corrective design candidate:
+
+```
+RECOVERY-R2 AUTHORIZATION = DESIGN CANDIDATE / NOT ACCEPTED / NOT GRANTED / NOT EXECUTED
+EXECUTION AUTHORITY       = NOT GRANTED
+```
+
+After a future independently approved acceptance-bookkeeping round:
+
+```
+RECOVERY-R2 AUTHORIZATION = ACCEPTED / FROZEN / NOT EXECUTED
+EXECUTION AUTHORITY       = GRANTED SUBJECT TO ALL PRE-* CONDITIONS / ONE-SHOT ONLY
+```
+
+Authorization use remains `UNUSED / 0 OF 1` until the authorization TEMP `CreateNew` succeeds, and the ETB
+attempt remains `NOT STARTED / 0 OF 1` until the attempt TEMP `CreateNew` succeeds.  **Independent bookkeeping
+confirmation is still required before any operational consumption**, and authority is **not** marked granted
+in this design round.
+
+**3.7** The future acceptance-bookkeeping commit is structurally identified by §11.7 and verified by §11.4;
+its commit hash need **not** be known in advance by any executor.
 
 ## 4. Historical authorization state (permanent record; not reusable)
 
@@ -343,7 +380,7 @@ No additional precondition may be invented operationally.  Every check is **read
 
 | ID | Required condition |
 | --- | --- |
-| **PRE-1** | current bookkeeping baseline `HEAD` equals the independently confirmed baseline `9b17912a8b4bd6c87aa45eefc97a73eb3d22db34` |
+| **PRE-1** | **authorization-bookkeeping HEAD structure** (§11.4): `HEAD` is a single-parent commit whose parent is exactly the accepted `recovery_r2_authorization_commit`, whose sole tracked delta against that parent is `M CHANGELOG.md` + `M docs/v0.3/V03E_ACCEPTANCE.md`, whose authorization artifact bytes still match the accepted `recovery_r2_authorization_sha256`, and whose active bookkeeping surfaces state `RECOVERY-R2 AUTHORIZATION = ACCEPTED / FROZEN / NOT EXECUTED` bound to that accepted pair — **never** an exact equality with any earlier bookkeeping baseline |
 | **PRE-2** | current branch is `v0.3-e-recovery-reconciliation` |
 | **PRE-3** | the accepted Oracle-R2 spec committed blob at `dfb78f34d919e8c9863a8398fb4f63ee301167bc` hashes exactly `5e9221e3950af6ec3e0612c4d962562c33e761899dfd6af42d10f5a9895f9f2f` |
 | **PRE-4** | the accepted Oracle-R2 script committed blob at that same accepted commit hashes exactly `22c5fbd61da609e6cc39e973be6030d4c360019ed1f56e69ca45f92fa1689c17` |
@@ -371,6 +408,69 @@ single repository argument.  No alternative parser, no raw-YAML parser and no re
 
 **11.3** Failure of **any** PRE-* condition → **STOP BEFORE CONSUMING ANYTHING**.  No repair.  No retry.  No
 fallback.  No claim is created, no config is touched, no oracle is entered.
+
+**11.4 PRE-1 definition — authorization-bookkeeping HEAD structure (acceptance critical).**  At future
+operational execution time:
+
+**A.** let `ACCEPTED_AUTHORIZATION_COMMIT` = the independently accepted `recovery_r2_authorization_commit` from
+this authorization-design lineage (§3.5) — the accepted **authorization-design** commit, never the bookkeeping
+commit and never any operational HEAD;
+
+**B.** current `HEAD` MUST be a **single-parent** commit;
+
+**C.** current `HEAD^` MUST equal exactly `ACCEPTED_AUTHORIZATION_COMMIT`;
+
+**D.** the exact tracked delta `ACCEPTED_AUTHORIZATION_COMMIT → current HEAD` MUST contain exactly
+`M CHANGELOG.md` and `M docs/v0.3/V03E_ACCEPTANCE.md`, and **NO third tracked path**;
+
+**E.** the authorization artifact `docs/v0.3/V03E_G0_5_PRE_ETB_RECOVERY_R2_AUTHORIZATION.md` at current `HEAD`
+MUST be **byte-identical** to the committed blob at `ACCEPTED_AUTHORIZATION_COMMIT`, and MUST hash to the
+independently accepted `recovery_r2_authorization_sha256`;
+
+**F.** therefore the accepted Oracle-R2 spec/script, `.gitattributes` and every protected artifact MUST remain
+unchanged across that bookkeeping child;
+
+**G.** the current bookkeeping surfaces MUST state `RECOVERY-R2 AUTHORIZATION = ACCEPTED / FROZEN / NOT
+EXECUTED` and MUST bind the accepted `recovery_r2_authorization_commit` and
+`recovery_r2_authorization_sha256` **without substituting the current bookkeeping HEAD for the
+authorization-design commit**;
+
+**H.** the current bookkeeping surfaces MUST record the independent authorization-design approval as the
+current authorization verdict.
+
+No reset.  No detached checkout.  No alternate worktree procedure.  No symbolic "latest commit".  No
+executor-selected descendant.
+
+**11.5 PRE-1 ↔ PRE-14 relationship (frozen; `PRE1_PRE14_COMPATIBILITY = REQUIRED`).**  PRE-1 (§11.4)
+establishes that the current operational HEAD is exactly the one bookkeeping child of the accepted
+authorization-design commit; PRE-14 independently establishes that the authorization artifact bytes still
+match the accepted authorization-design commit/blob identity.  These two gates **must be mutually
+satisfiable**, and they are: the child commit of §11.4-D is forbidden to modify the authorization artifact
+(§11.4-E, §11.4-F), and PRE-14 is evaluated in the **same canonical worktree** at that child.  **No
+requirement may force a checkout that precedes the existence of the accepted authorization artifact.**  The
+static proof that the rejected PRE-1 could not satisfy this: the authorization artifact does **not** exist at
+`9b17912a8b4bd6c87aa45eefc97a73eb3d22db34` (`git cat-file -t` → exit `128`), so any requirement making that
+commit the operational HEAD makes PRE-14 unsatisfiable.
+
+**11.6 Role of `9b17912…` (frozen).**  `9b17912a8b4bd6c87aa45eefc97a73eb3d22db34` is retained **only** as the
+**RECOVERY-R2 AUTHORIZATION DESIGN-CONSTRUCTION BASELINE** and as the historical predecessor bookkeeping
+baseline.  **It is NOT the future operational HEAD requirement**, and it MUST NOT appear in any future
+operational `PRE-*` condition as an exact HEAD requirement.  A design that requires HEAD to precede the
+authorization artifact is invalid.
+
+**11.7 Future acceptance-bookkeeping contract (frozen now; this is what PRE-1 later verifies).**  The future
+Recovery-R2 authorization acceptance-bookkeeping round MUST create exactly **ONE** child commit of the
+accepted authorization-design commit.  Its tracked delta MUST be exactly `M CHANGELOG.md` and
+`M docs/v0.3/V03E_ACCEPTANCE.md` — **no third path**.  It MUST NOT modify: the authorization artifact; the
+Oracle-R2 spec/script; `.gitattributes`; config; claims; `CONFIG_ESTABLISHMENT`; `runtime`, `tests` or
+dependencies.  Its purpose is only: independent approval attribution; accepted authorization provenance; the
+status transition; the execution-authority status; and sequence/status bookkeeping.
+
+**11.8 `SEQUENCE_PRECONDITION_CONSISTENCY` (explicit invariant).**  The required lifecycle and the `PRE-*`
+gates MUST be simultaneously satisfiable.  Specifically: the future bookkeeping commit required by the
+authoritative sequence MUST satisfy corrected PRE-1, **AND** PRE-14 MUST remain satisfiable in the same
+canonical worktree.  **A design that requires HEAD to precede the authorization artifact is invalid.**
+Consistency is demonstrated on the current design topology in §36.
 
 ## 12. Critical oracle-output precheck rule
 
@@ -533,15 +633,42 @@ RESULT`.
 **21.3** The operational report may describe the candidate result but MUST NOT promote it to authoritative
 status.
 
-## 22. Oracle exit / stop rule
+## 22. Oracle exit / stop rule, and the exact closed post-Oracle static-read boundary
 
-**22.1** After the tracked Oracle-R2 process returns, do **NOT**: rerun Oracle-R2; inspect listener/process
-state; run `Get-Command` availability probes; run diagnostics; repair outputs; rewrite evidence/result;
-reclassify the result; retry publication; perform HTTP; execute SIC; construct Mode-B; run G0.5/G1/G2.
+**22.0 Post-Oracle read purpose (frozen).**  Post-Oracle reads exist **ONLY** to: inventory already-produced
+artifacts; bind hashes; record one-shot claim state; record repository/config preservation; and produce the
+execution report.  They MUST NOT decide a different ETB semantic result, change the Oracle outcome, repair
+evidence, infer target state beyond Oracle evidence, or create new target-binding evidence.
 
-**22.2** The **only** permitted post-oracle work is: read already-published Oracle-R2 artifacts; hash them;
-read claim markers; read git/config static state as explicitly frozen for the operational report; and produce
-the execution report.  **No new target observation.**
+**22.1 Exact closed post-Oracle read list (P3 closure; exhaustive).**  After the tracked Oracle-R2 process
+returns, the authorization/executor layer may perform **ONLY** these read-only actions:
+
+1. read the two Recovery-R2 FINAL claim files;
+2. read any Recovery-R2 TEMP claim path **only** to report whether it exists after the already-completed claim
+   procedure;
+3. read the three Oracle-R2 FINAL outputs **if present**:
+   `docs/v0.3/evidence/etb-execution-r2/ETB_EVIDENCE.json`,
+   `docs/v0.3/evidence/etb-execution-r2/MANIFEST.sha256`,
+   `docs/v0.3/V03E_G0_5_PRE_ETB_EXECUTION_RESULT_R2.md`;
+4. read the three corresponding Oracle-R2 TEMP paths **only** to report existence;
+5. compute SHA-256 of already-published Oracle-R2 FINAL outputs;
+6. read `git rev-parse HEAD`, `git branch --show-current` and `git status --porcelain --untracked-files=all`
+   **only** for operational-report identity/state;
+7. compute/read the accepted authorization artifact blob/worktree hash;
+8. compute/read the accepted Oracle-R2 spec/script blob/worktree hashes;
+9. read/hash `.devrelay/config.yaml` and report its size, its SHA-256, and the already-frozen configured
+   `base_url` using the **SAME** accepted frozen reader shape already allowed by PRE-8 (§11.2);
+10. read/hash the existing `CONFIG_ESTABLISHMENT.json`;
+11. read/hash the historical R1 claim/result/evidence/manifest files already frozen by this authorization;
+12. produce the execution report.
+
+**22.2 Explicitly FORBIDDEN after Oracle return:** `Get-Command`; `Get-NetTCPConnection`; `Get-CimInstance`;
+`CreateFileW`; `GetFinalPathNameByHandleW`; `OpenCode --version`; target executable hash; package-target
+validation; port scan; HTTP; `/doc`; `/session`; provider/model calls; any new target observation; semantic
+reclassification; repair; rewrite; retry.
+
+**22.3** **No other post-Oracle read is permitted.**  This list is exhaustive and closed; it replaces the
+earlier general phrase about "static git/config state explicitly frozen for the operational report".
 
 ## 23. Attempt result authority
 
@@ -622,10 +749,16 @@ accepted authorization artifact; the accepted Oracle-R2 spec/script; the reposit
 operational artifacts.  **No chat-memory-only step may be required.**
 
 **30.2** Frozen inside this artifact: the claim paths (§5); the claim schemas (§7, §8); the claim writer
-(§9); the consumption points and budgets (§10); the preconditions (§11); the oracle-output precheck
-prohibition (§12); the target pre-probe prohibition (§13); the failure classifications (§16, §18); the oracle
-invocation and entry boundary (§19); the stop rules (§15, §16, §18, §22); the provenance values (§2, §3); and
-the budget semantics (§10).
+(§9); the consumption points and budgets (§10); the preconditions including the lifecycle-correct PRE-1, the
+bookkeeping contract and the consistency invariant (§11); the oracle-output precheck prohibition (§12); the
+target pre-probe prohibition (§13); the failure classifications (§16, §18); the oracle invocation and entry
+boundary (§19); the stop rules, the exact closed post-Oracle read list and its purpose (§15, §16, §18, §22);
+the provenance values and the lifecycle state model (§2, §3); and the budget semantics (§10).
+
+**30.3** A future executor must **NOT** need to know the future acceptance-bookkeeping commit hash in advance.
+Corrected PRE-1 derives its validity **structurally** from: the accepted authorization-design commit; the
+single-parent relationship; the exact two-file bookkeeping delta; the accepted authorization artifact
+identity; and the active bookkeeping status (§11.4).
 
 ## 31. Mode-B / G0.5 / implementation preservation
 
@@ -634,28 +767,35 @@ AUTHORIZED**; v0.3-E implementation = **NOT AUTHORIZED**; `G1`/`G2` = `NOT RUN`;
 **DISABLED**.  **Oracle-R2 acceptance alone does NOT establish target binding, and this authorization does
 not run anything.**
 
-## 32. Authoritative sequence
+## 32. Authoritative sequence (corrected)
 
-Recovery-R1 rejected → Oracle-R2 accepted/frozen → Oracle-R2 acceptance bookkeeping independently confirmed
-→ **Recovery-R2 authorization design (this round)** → independent Recovery-R2 authorization review → if
-approved: Recovery-R2 acceptance bookkeeping → independent bookkeeping confirmation → exactly one Recovery-R2
-operational ETB attempt → independent ETB-result review → only an independently accepted `ETB_SATISFIED` may
-permit Mode-B oracle construction.  **No stage may be skipped.**
+Oracle-R2 accepted/frozen → Oracle-R2 acceptance bookkeeping independently confirmed → initial Recovery-R2
+authorization candidate `af3ec9b7` → independent **REQUEST_CHANGES** → **corrective Recovery-R2 authorization
+candidate (this round)** → independent corrective authorization review → **only if approved**: Recovery-R2
+authorization acceptance bookkeeping → independent bookkeeping confirmation → exactly one operational
+Recovery-R2 authorization/ETB attempt → independent ETB-result review → only an independently accepted
+`ETB_SATISFIED` may permit Mode-B oracle construction.  **No stage may be skipped.**  **No reset to
+`9b17912…` occurs anywhere in this sequence** (§11.6).
+
+The leading historical stages remain recorded: Recovery-R1 rejected → Oracle-R2 accepted/frozen.
 
 ## 33. Current status
 
 ```
-ETB EXECUTION ORACLE-R2            = ACCEPTED / FROZEN / NOT EXECUTED
-EXECUTION AUTHORITY                = NOT GRANTED
-RECOVERY-R2 AUTHORIZATION          = DESIGN CANDIDATE / NOT ACCEPTED / NOT GRANTED / NOT EXECUTED
-RECOVERY-R2 AUTHORIZATION USE      = UNUSED / 0 OF 1
-RECOVERY-R2 ETB ATTEMPT            = NOT STARTED / 0 OF 1
-RECOVERY-R2 CLAIM NAMESPACE        = DEFINED BY CANDIDATE / NO CLAIM CREATED
-AUTHORITATIVE ETB SEMANTIC RESULT  = NONE
+ETB EXECUTION ORACLE-R2                    = ACCEPTED / FROZEN / NOT EXECUTED
+EXECUTION AUTHORITY                        = NOT GRANTED
+PREVIOUS RECOVERY-R2 CANDIDATE af3ec9b7    = REQUEST_CHANGES / SUPERSEDED / NEVER ACCEPTED / NEVER GRANTED / NEVER EXECUTED
+RECOVERY-R2 AUTHORIZATION (corrective)     = DESIGN CANDIDATE / NOT ACCEPTED / NOT GRANTED / NOT EXECUTED
+RECOVERY-R2 AUTHORIZATION USE              = UNUSED / 0 OF 1
+RECOVERY-R2 ETB ATTEMPT                    = NOT STARTED / 0 OF 1
+RECOVERY-R2 CLAIM NAMESPACE                = DEFINED / NO CLAIM CREATED
+AUTHORITATIVE ETB SEMANTIC RESULT          = NONE
+RECOVERY-R2 DESIGN-CONSTRUCTION BASELINE   = 9b17912a8b4bd6c87aa45eefc97a73eb3d22db34 (NOT an operational HEAD requirement)
 ```
 
 **33.1** No Recovery-R2 authority is granted today; no claim is created; no config is modified; no probe is
-performed; Oracle-R2 is not entered.
+performed; Oracle-R2 is not entered.  `EXECUTION AUTHORITY` becomes `GRANTED SUBJECT TO ALL PRE-* CONDITIONS /
+ONE-SHOT ONLY` only after a future independently approved acceptance-bookkeeping round (§3.6).
 
 ## 34. Activity counters (this design round)
 
@@ -668,14 +808,52 @@ runtime/test/dependency/version change `0`.
 
 ## 35. Executor-choice self-check (frozen, no material choice)
 
-Frozen for a future Recovery-R2 executor: the authorization identity binding; the Oracle-R2 identity binding;
-the four claim paths; both claim schemas and their exact field order; the claim serialization (frozen depth,
-compressed JSON, one final LF, UTF-8 no BOM); the claim writer source; both consumption points; the `1 of 1`
-authorization budget and the `1 of 1` attempt budget; the complete PRE-* checklist; the prohibition on
+Frozen for a future Recovery-R2 executor: the **operational HEAD binding** (§11.4); the authorization
+provenance model (§3.5, §11.7); the Oracle-R2 identity binding; the four claim paths; both claim schemas and
+their exact field order; the claim serialization (frozen depth, compressed JSON, one final LF, UTF-8 no BOM);
+the claim writer source; both consumption points; the `1 of 1` authorization budget and the `1 of 1` attempt
+budget; the complete `PRE-*` checklist (the structural PRE-1 binding plus PRE-2 … PRE-16); the prohibition on
 Oracle-output prechecks; the prohibition on target pre-probes; the post-authorization control boundary; the
 attempt consumption step; the post-attempt-claim failure classification; the oracle invocation command and
 script path; the no-wrapper rule; the no-repeat identity check after consumption; the oracle result ownership
-and candidate-only authority; the post-oracle stop rule; the no-second-attempt rule; and the
-authorization-control-failure classification.
+and candidate-only authority; the **exact closed post-Oracle read list and its purpose** (§22); the
+no-second-attempt rule; the failure classifications; and the stop behavior.
 
-**End of Recovery-R2 one-shot ETB execution authorization, design candidate.**
+## 36. Corrective R1 record and the PRE-1 static satisfiability demonstration
+
+**36.1 Rejected finding (recorded accurately).**  The previous candidate
+`af3ec9b7e043af4cae09f9499cf363a9359d06a9` froze PRE-1 as an exact equality with the earlier bookkeeping
+baseline `9b17912…` while the same artifact required the lifecycle *authorization design → independent approval
+→ authorization acceptance bookkeeping → independent bookkeeping confirmation → operational attempt*.  A
+conformant operational HEAD must therefore be a **descendant** of the accepted authorization-design commit and
+cannot equal that earlier baseline; the rejected PRE-1 also conflicted with PRE-14, because returning HEAD to
+`9b17912…` removes the authorization artifact that is introduced only after it.  Independent verdict:
+`PRE1_LIFECYCLE_BINDING = CONTRADICTORY`, `RECOVERY_R2_OPERATIONAL_REACHABILITY = DESIGN_DEADLOCK`,
+`SEQUENCE_PRECONDITION_CONSISTENCY = FAIL`.
+
+**36.2 Correction.**  The design-construction baseline and the future operational-HEAD predicate are now
+**separated**: §11.6 demotes `9b17912…` to a non-operational design-construction and historical predecessor
+baseline, and §11.4 replaces PRE-1 with a structural binding that identifies the future bookkeeping child
+without requiring its not-yet-known commit hash.
+
+**36.3 Static satisfiability demonstration (illustrative only; no future commit is created now).**  Measured on
+the current design topology, read-only:
+
+| Evidence | Observed |
+| --- | --- |
+| `af3ec9b7` is a **single-parent** commit | yes — `parents = [9b17912…]` |
+| the bookkeeping shape precedent `9b17912` is itself single-parent with a two-file delta | yes — delta is exactly `M CHANGELOG.md` + `M docs/v0.3/V03E_ACCEPTANCE.md`; `parents = [dfb78f34…]` |
+| the authorization artifact exists at the design commit | yes — `af3ec9b7:…RECOVERY_R2_AUTHORIZATION.md` resolves to a `blob` |
+| the authorization artifact exists at the rejected PRE-1 baseline | **no** — `9b17912:…RECOVERY_R2_AUTHORIZATION.md` → exit `128` |
+
+Therefore a future bookkeeping commit can validly be a **single-parent child of the future accepted
+corrective candidate** whose tracked delta is exactly the two bookkeeping files, leaving the authorization
+artifact byte-identical and making PRE-14 evaluable in the same canonical worktree.
+
+```
+PRE1_LIFECYCLE_BINDING            = STRUCTURALLY_SATISFIABLE
+PRE1_PRE14_COMPATIBILITY          = PASS
+SEQUENCE_PRECONDITION_CONSISTENCY = PASS
+```
+
+**End of Recovery-R2 one-shot ETB execution authorization, corrective design R1 candidate.**
