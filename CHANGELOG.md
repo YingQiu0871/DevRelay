@@ -1899,6 +1899,51 @@ listener/process/port enumeration, **0** P/Invoke executions, **0** OpenCode sta
 **0** ETB executions, **0** SIC, **0** Mode-B work, **0** G0.5 and **0** G1/G2 activity, and **0**
 runtime/test/dependency/version changes; the ignored/untracked `PROJECT_MEMORY.md` persists.
 
+**The corrective Oracle-R2 candidate was independently approved, so Oracle-R2 is now `ACCEPTED / FROZEN /
+NOT EXECUTED`.**  The independent review issued *APPROVE V0.3-E ETB EXECUTION ORACLE-R2 CORRECTIVE R2* with
+severity **P0 = 0, P1 = 0, P2 = 0, P3 = 2**, which closes all three prior blockers — **P1 config-reader
+invocation fidelity = RESOLVED**, **P2 evidence schema identity = RESOLVED** and **P2 executable byte-identity
+deadlock = RESOLVED** — and leaves only two **non-blocking** P3 findings.  The permanently accepted Oracle-R2
+identity is therefore `oracle_r2_commit = dfb78f34d919e8c9863a8398fb4f63ee301167bc`,
+`oracle_r2_spec_sha256 = 5e9221e3950af6ec3e0612c4d962562c33e761899dfd6af42d10f5a9895f9f2f` and
+`oracle_r2_script_sha256 = 22c5fbd61da609e6cc39e973be6030d4c360019ed1f56e69ca45f92fa1689c17`; these three
+values together are the accepted Oracle-R2 identity, they are immutable, this acceptance-bookkeeping commit
+does **not** replace `oracle_r2_commit`, and no future bookkeeping HEAD, Recovery-R2 authorization commit,
+Recovery-R2 operational HEAD or ETB result-review commit may substitute for them.  Active Oracle-R2 status is
+converged to **`ETB EXECUTION ORACLE-R2 = ACCEPTED / FROZEN / NOT EXECUTED`**, with `EXECUTABLE IDENTITY =
+FROZEN`, `EXECUTION AUTHORITY = NOT GRANTED` and `RECOVERY-R2 AUTHORIZATION = DOES NOT EXIST`: **acceptance of
+Oracle-R2 is design/oracle acceptance only and is NOT authorization to execute it.**  The accepted Oracle-R2
+spec and script bytes are **frozen** and were **not** modified by this round; their own construction-time
+headers may still read as design-candidate text, because acceptance is represented through the independent
+approval record and the active authoritative status surfaces, following the established immutable-artifact +
+approval-record pattern.  Historical provenance is preserved unchanged: candidate
+`6d252a9466d768bb6345aad6c0c7a04562b8845c` = **REQUEST_CHANGES / SUPERSEDED AS A CANDIDATE / NEVER ACCEPTED
+/ NEVER EXECUTED** — its `REQUEST_CHANGES` verdict is history only and is **not** the current Oracle-R2
+verdict.  **No ETB semantic result follows from this acceptance:** `RECOVERY-R1 PUBLISHED ETB RESULT =
+REJECTED`, `AUTHORITATIVE ETB SEMANTIC RESULT = NONE`, `RECOVERY-R1 AUTHORIZATION = SPENT / NOT REUSABLE`,
+`RECOVERY-R1 ETB ATTEMPT = SPENT / NOT REUSABLE` and `NEW_ETB_AUTHORIZATION_REQUIRED = YES` are all preserved
+exactly.  Recovery-R2 is explicitly **`NOT DESIGNED / NOT ACCEPTED / DOES NOT EXIST`**, its claim namespace is
+**NOT CREATED** and its ETB attempt is **NOT STARTED**; no claim path was invented and no Recovery-R2
+authorization was designed.  Mode-B remains `BLOCKED / NOT RUN`; `P6 = UNPROVEN / UNSATISFIED`; G0.5 **NOT
+CLOSED**; Case-C and v0.3-E implementation **NOT AUTHORIZED**; `G1`/`G2` `NOT RUN`;
+`adopt_completed_turn` **DISABLED** — Oracle-R2 acceptance alone establishes neither target binding nor
+`ETB_SATISFIED`.  **Non-blocking P3 recording (preserved, not promoted, not erased):** the review recorded
+**P3 = 2 non-blocking**, and one explicitly noted residual edge case concerns Windows PowerShell
+environment-variable semantics for a prior `PYTHONPATH` that is conceptually "present but empty"; the review
+determined this has no result-classification effect and is non-blocking, and the accepted Oracle-R2 script was
+**not** modified to address it in this round.  Authoritative sequence: Recovery-R1 rejected → Oracle-R2
+initial candidate `6d252a9` → independent REQUEST_CHANGES → corrective Oracle-R2 candidate `dfb78f34` →
+independent APPROVE → **Oracle-R2 acceptance bookkeeping (this round)** → independent acceptance-bookkeeping
+confirmation → Recovery-R2 authorization design → independent Recovery-R2 authorization review → Recovery-R2
+acceptance bookkeeping → independent bookkeeping confirmation → exactly one Recovery-R2 operational ETB
+attempt → independent ETB-result review → only an independently accepted `ETB_SATISFIED` may permit Mode-B
+oracle construction; **no stage may be skipped**.  This bookkeeping round performed **0** Oracle-R2
+executions, **0** old-oracle executions, **0** claim creations, **0** claim deletions, **0** R2 output
+creations, **0** R2 directory creations, **0** endpoint inspections, **0** listener queries, **0** process
+queries, **0** operational P/Invoke, **0** OpenCode starts/restarts, **0** HTTP, **0** SIC, **0** Mode-B,
+**0** G0.5, **0** G1/G2 activity, **0** config mutations, **0** R1 artifact mutations and **0**
+runtime/test/dependency/version changes; the ignored/untracked `PROJECT_MEMORY.md` persists.
+
 That approval followed three earlier review rounds: the first independent design
 review returned `REQUEST_CHANGES` (P0 = 1, P1 = 6, P2 = 5) and the
 recovery/reconciliation contract was repaired in `f67bf9e`; two narrow re-reviews
