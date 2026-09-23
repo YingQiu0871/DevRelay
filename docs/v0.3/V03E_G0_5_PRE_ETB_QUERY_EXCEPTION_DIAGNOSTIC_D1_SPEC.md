@@ -860,3 +860,302 @@ AUTHORIZED`; v0.3-E implementation = `NOT AUTHORIZED`; `G1`/`G2` = `NOT RUN`;
 `adopt_completed_turn` = `DISABLED`.
 
 **End of ETB query diagnostic D1 corrective design R1.**
+
+---
+
+# Part III — implementation design gap clarification C1
+
+## 42. Clarification round C1 — scope and attribution
+
+An implementation / execution-authorization round was attempted against the accepted design
+`6ad917b950c12e7a93579c519cc63f89925c2ab0` (spec SHA-256
+`e9c521ff9d9333999d1ccc2156f3f78400a5b0e5b19b42a7cf2280c8f0def466`) and **stopped before any
+mutation** with the finding **`D1 IMPLEMENTATION DESIGN GAP`**: two required members of the
+accepted 19-field top-level evidence schema had no frozen JSON type or value. That attempt
+created **0 files, 0 commits, 0 claims, 0 queries and consumed 0 budgets**, and it reported:
+
+| Gap | Description |
+| --- | --- |
+| **P1-1** | `diagnostic_mode` exists in the accepted 19-field top-level schema but has no frozen JSON type or value |
+| **P1-2** | `endpoint` exists in the accepted 19-field top-level schema but has no frozen JSON type, shape or value |
+| **P3** | `non_claims` is specified semantically but its exact serialized string-array elements are not frozen |
+
+This clarification round is **design-only**. It closes P1-1 (§43), P1-2 (§44) and P3 (§47)
+and adds the normative closure audit required to prevent a recurrence (§49, §50). It does
+**not** create an executable, an execution-authorization document, a claim, evidence, a
+manifest, a result or an output directory; it executes nothing.
+
+The **only** clarifications in C1 are: `diagnostic_mode` (§43), `endpoint` (§44), the exact
+serialized `non_claims` array (§47) and the comprehensive top-level field closure table
+(§49). Every other accepted design element is preserved verbatim, explicitly including the
+query semantics, query target, query invocation budget, ErrorRecord schema,
+`terminating_error`, `error_records`, the null/empty rules, the observation vocabulary, the
+row schema, the PowerShell environment schema, the command metadata schema, the activity
+counters, the claim namespace, the future budgets, the publication namespace, the source
+provenance, the config contract and the Path C / Path D state.
+
+## 43. `diagnostic_mode` — frozen (P1-1, CLOSED)
+
+| Property | Frozen value |
+| --- | --- |
+| JSON type | **string** |
+| Cardinality | required scalar (always emitted; §33.1) |
+| Value | **constant** `"QUERY_EXCEPTION_DIAGNOSTIC_D1"` |
+
+This value is a **constant**. It **does not vary by runtime observation**. It does **not**
+encode the query outcome, an ETB result, the P6 state or the G0.5 state. It identifies
+**only** the diagnostic procedure that produced the evidence.
+
+Unavailable / `null` / empty representations are **NOT permitted**. The field must always be
+exactly:
+
+`"diagnostic_mode":"QUERY_EXCEPTION_DIAGNOSTIC_D1"`
+
+subject only to normal JSON property framing and the frozen top-level order.
+
+## 44. `endpoint` — frozen (P1-2, CLOSED)
+
+| Property | Frozen value |
+| --- | --- |
+| JSON type | **string** (a scalar — **not** an object) |
+| Cardinality | required scalar (always emitted; §33.1) |
+| Value | **constant** `"http://127.0.0.1:4096"` |
+
+This is the **fixed diagnostic target** selected for D1. It is **NOT an object**. It does
+**not** inherit the Oracle-R2 endpoint object schema, and it does **not** contain `scheme`,
+`address_family`, `host`, `port`, `base_uri` or `fallback` as nested fields.
+
+The exact D1 representation is a scalar JSON string:
+
+`"endpoint":"http://127.0.0.1:4096"`
+
+No `null`. No empty string. No alternate host. No IPv6. No `localhost` alias. No alternate
+port.
+
+## 45. `endpoint` versus `configured_base_url`
+
+The distinction between the two top-level fields is explicitly frozen:
+
+| Field | Meaning |
+| --- | --- |
+| `endpoint` | the **constant** D1 diagnostic target `"http://127.0.0.1:4096"` (§44) |
+| `configured_base_url` | the value **read from** `.devrelay/config.yaml` using the already accepted frozen Recovery-R2 config-reader contract (§19) |
+
+Future execution requires:
+
+`configured_base_url == endpoint == "http://127.0.0.1:4096"`
+
+**before any claim consumption.**
+
+The two fields are intentionally redundant for provenance: `endpoint` records the
+**diagnostic target contract**, while `configured_base_url` records the configuration value
+**actually established** by the frozen config reader. Do **not** merge the fields. Do **not**
+infer one in place of collecting and checking the other.
+
+## 46. No Oracle-R2 endpoint-schema inheritance
+
+D1 `endpoint` is explicitly **NOT** the `devrelay-etb-v1-r2` endpoint object. **No R2 nested
+endpoint fields are inherited.** Oracle-R2 may be cited **only** as historical context. The
+D1 scalar `endpoint` definition in this clarification is authoritative for D1 **after this
+clarification itself is independently accepted**.
+
+## 47. Exact `non_claims` array — frozen (P3, CLOSED)
+
+`non_claims` is a **JSON array of strings** with **EXACTLY 13 elements in this exact order**:
+
+| # | Exact element |
+| --- | --- |
+| 1 | `"does not establish ETB_SATISFIED"` |
+| 2 | `"does not establish a replacement ETB_UNSATISFIED"` |
+| 3 | `"does not establish P6 PASS"` |
+| 4 | `"does not establish P6 FAIL"` |
+| 5 | `"does not establish G0.5 PASS"` |
+| 6 | `"does not establish G0.5 FAIL"` |
+| 7 | `"does not authorize Mode-B"` |
+| 8 | `"does not establish OpenCode general compatibility or incompatibility"` |
+| 9 | `"does not establish permanent endpoint state"` |
+| 10 | `"does not establish permanent listener state"` |
+| 11 | `"does not establish process binding"` |
+| 12 | `"does not establish target executable identity"` |
+| 13 | `"does not establish Oracle-R2 general correctness or incorrectness"` |
+
+**No additional element. No omitted element. No alternative punctuation. No reordering. No
+splitting one sentence into multiple elements. No joining multiple elements.** The array is
+always emitted exactly with these 13 strings.
+
+## 48. §20 → serialized array one-to-one mapping
+
+The frozen 13-string array is a **serialization formalization** of the already accepted §20
+semantic non-claims. It adds **no** new substantive non-claim and deletes **no** existing
+semantic non-claim:
+
+| §20 semantic item | Serialized array element |
+| --- | --- |
+| `ETB_SATISFIED` | 1 |
+| a replacement `ETB_UNSATISFIED` | 2 |
+| P6 PASS | 3 |
+| P6 FAIL | 4 |
+| G0.5 PASS | 5 |
+| G0.5 FAIL | 6 |
+| Mode-B authorization | 7 |
+| OpenCode general compatibility/incompatibility | 8 |
+| permanent endpoint state | 9 |
+| permanent listener state | 10 |
+| process binding | 11 |
+| target executable identity | 12 |
+| the correctness/incorrectness of Oracle-R2 generally | 13 |
+
+The mapping is **13 → 13**, bijective, with no remainder on either side.
+
+## 49. Complete top-level 19-field closure table — ACCEPTANCE CRITICAL
+
+This table is normative for **every** top-level evidence field of
+`devrelay-etb-query-diagnostic-d1-v1`:
+
+| # | Field | JSON type | Cardinality | Value / source contract | Runtime-variable | Detailed rule |
+| --- | --- | --- | --- | --- | --- | --- |
+| 1 | `schema_version` | string | required scalar | constant `"devrelay-etb-query-diagnostic-d1-v1"` | no | §18 |
+| 2 | `source_authoritative_bookkeeping_commit` | string | required scalar | constant `"93e44fe61c59ec5070e2823062a607347bb9163a"` | no | §10, §18 |
+| 3 | `source_r2_evidence_sha256` | string | required scalar | constant `"6f903f05e859a05a99dc0cde253e878ae7235c1554e212ab2f6b27945b2da0c8"` | no | §10, §18 |
+| 4 | `source_r2_result_sha256` | string | required scalar | constant `"84f51bb5d7765112cb65376ea164e10780bb777f1beb6e962d6baa4508fe9efa"` | no | §10, §18 |
+| 5 | `execution_started_at` | string | required scalar | runtime UTC timestamp | **yes** | §51 |
+| 6 | `execution_finished_at` | string | required scalar | runtime UTC timestamp | **yes** | §51 |
+| 7 | `diagnostic_mode` | string | required scalar | constant `"QUERY_EXCEPTION_DIAGNOSTIC_D1"` | no | **§43** |
+| 8 | `endpoint` | string | required scalar | constant `"http://127.0.0.1:4096"` | no | **§44**, §45 |
+| 9 | `configured_base_url` | string | required scalar | runtime-established through the accepted frozen config reader; must equal `"http://127.0.0.1:4096"` | **yes** | §19, §33.10, §45 |
+| 10 | `powershell_environment` | object | required object | closed sub-schema already frozen | yes | §11, §18, §33.8 |
+| 11 | `command_metadata` | object | required object | closed sub-schema already frozen | yes | §11, §16, §18, §33.7 |
+| 12 | `query` | object | required object | closed sub-schema already frozen | partly (`query_invocation_count` only) | §17, §18, §33.9 |
+| 13 | `query_outcome` | string | required scalar | exactly one value from the accepted eight-value vocabulary | yes | §13, §25-§26 |
+| 14 | `row_count` | integer | required scalar | existing accepted integer rules apply | yes | §18, §33.5 |
+| 15 | `rows` | array | required array | zero or more closed row objects; existing accepted order/empty rules apply | yes | §14, §18, §33.3, §33.6 |
+| 16 | `terminating_error` | object **OR** `null` | required key | exact previously accepted optional-object semantics | yes | §31, §33.4 |
+| 17 | `error_records` | array | required array | zero or more closed ErrorRecord objects; qerr-only semantics preserved | yes | §32, §33.3 |
+| 18 | `non_claims` | array | required array | exactly 13 JSON strings, exact values/order frozen by this clarification | no (constant array) | **§47**, §48 |
+| 19 | `activity_counters` | object | required object | existing accepted closed counter schema | yes | §21, §29 |
+
+## 50. Top-level closure audit rule
+
+A top-level field is considered **CLOSED** only if the design specifies either:
+
+- **A.** a complete scalar type and value/source rule; or
+- **B.** a closed object/array sub-schema by explicit cross-reference; or
+- **C.** an explicitly authorized later implementation-stage formatting choice whose semantic
+  type, source and cardinality are **already frozen**.
+
+Every one of the 19 top-level fields satisfies exactly one of those routes (§49). The design
+therefore states:
+
+**`D1_TOPLEVEL_FIELD_CLOSURE = 19 / 19 CLOSED.`**
+
+Future D1 design reviews MUST include this **19/19 top-level field closure audit** as a
+mandatory check (§54).
+
+## 51. Timestamp delegation (authorized, not a gap)
+
+For `execution_started_at` and `execution_finished_at`, this clarification freezes **now**
+only:
+
+| Property | Frozen value |
+| --- | --- |
+| JSON type | **string** |
+| Cardinality | required scalar (always emitted) |
+| Source | UTC runtime timestamp |
+
+The prior authorized implementation-stage freedom to freeze **one** exact invariant textual
+timestamp format **later** is preserved:
+
+**TIMESTAMP STRING FORMAT = INTENTIONALLY DEFERRED TO IMPLEMENTATION / EXECUTION-AUTHORIZATION
+DESIGN**
+
+This is an **AUTHORIZED IMPLEMENTATION-LEVEL FORMAT CHOICE / NOT A MATERIAL D1 SEMANTIC
+GAP**. Type, source and cardinality are **not** left unspecified.
+
+## 52. Previous accepted design status during candidacy
+
+Until this clarification is independently approved and accepted, the previously accepted D1
+design remains:
+
+`6ad917b950c12e7a93579c519cc63f89925c2ab0` / `e9c521ff9d9333999d1ccc2156f3f78400a5b0e5b19b42a7cf2280c8f0def466`
+
+**ACCEPTED / FROZEN / HISTORICAL AUTHORITATIVE PREDECESSOR / IMPLEMENTATION BLOCKED BY
+SUBSEQUENTLY DISCOVERED DESIGN GAP.**
+
+Its acceptance bookkeeping at `8738651ab805b9ccf07a4687627ef0a1d7bb7916` also remains
+**historically valid**. The previously accepted revision is **NOT** relabelled REJECTED or
+NEVER ACCEPTED; the newly discovered gap means only that the accepted revision is
+insufficiently complete to authorize construction of the implementation candidate.
+
+The new clarification is only:
+
+**D1 IMPLEMENTATION DESIGN GAP CLARIFICATION C1 = DESIGN CANDIDATE / NOT ACCEPTED / NOT
+FROZEN / NOT AUTHORIZED / NOT EXECUTED.**
+
+`diagnostic_d1_design_commit` is **NOT** prematurely replaced in active accepted provenance.
+
+## 53. Future successor provenance
+
+If and **only if** this clarification later receives independent approval and acceptance
+bookkeeping:
+
+- the clarification candidate commit becomes the **new** `diagnostic_d1_design_commit`;
+- the SHA-256 of the clarified D1 spec at that commit becomes the **new**
+  `diagnostic_d1_spec_sha256`;
+
+for all future D1 implementation / execution-authorization work. At that future point,
+`6ad917b950c12e7a93579c519cc63f89925c2ab0` must remain recorded as **PREVIOUSLY ACCEPTED /
+HISTORICAL PREDECESSOR / SUPERSEDED BY ACCEPTED CLARIFICATION** — **not** as REJECTED.
+
+**This provenance transition is NOT performed in the current candidate round.**
+
+## 54. Prior review-coverage omission (REVIEW-COVERAGE CORRECTION)
+
+Recorded as a **review-coverage correction**, and explicitly **not** as evidence of malicious
+or invalid prior review:
+
+The prior Corrective Design R1 review verified the **eight listed closed sub-schemas** but did
+**not** cross-check every top-level member of the 19-field schema for an explicit scalar
+type/value/source rule or a sub-schema binding. That omission allowed `diagnostic_mode` and
+`endpoint` to remain materially underdefined, which the attempted implementation round then
+surfaced as **`D1 IMPLEMENTATION DESIGN GAP`**.
+
+**Future D1 design reviews MUST include a 19/19 TOP-LEVEL FIELD CLOSURE AUDIT** (§50).
+
+## 55. C1 status and preserved state
+
+Active status after this clarification candidate:
+
+**D1 IMPLEMENTATION DESIGN GAP CLARIFICATION C1 = DESIGN CANDIDATE / NOT ACCEPTED / NOT
+FROZEN / NOT AUTHORIZED / NOT EXECUTED.**
+
+The stopped implementation attempt is recorded accurately: **D1 IMPLEMENTATION /
+EXECUTION-AUTHORIZATION ATTEMPT = STOPPED BEFORE MUTATION / NO CANDIDATE CREATED / ZERO SIDE
+EFFECTS**; files created `0`; commits created `0`; claims `0`; queries `0`; budgets consumed
+`0`.
+
+Preserved unchanged by C1: the query contract (`Get-NetTCPConnection -LocalAddress '127.0.0.1'
+-LocalPort 4096 -State Listen -ErrorAction SilentlyContinue -ErrorVariable qerr`), the
+one-query maximum, the no-retry rule, the eight-value observation vocabulary, the 15-field
+ErrorRecord schema, `terminating_error` semantics, `error_records` semantics, the row schema,
+the null/empty rules and the activity counters (§19 of this round's instruction).
+
+Preserved source binding: `source_authoritative_bookkeeping_commit = 93e44fe6…`; R2 evidence
+`6f903f05…`; R2 manifest `b4701c90…`; R2 result `84f51bb5…`; R2 authorization claim
+`fd7336e4…`; R2 attempt claim `69eb6ef0…`.
+
+All D1 operational artifacts remain **absent**; budgets remain **D1 AUTHORIZATION USE =
+`UNAVAILABLE / NOT YET GRANTED`**, **D1 DIAGNOSTIC ATTEMPT = `UNAVAILABLE / NOT YET
+GRANTED`**, **D1 LISTENER QUERY EXECUTION = `NOT AUTHORIZED`**. No implementation candidate
+exists and no execution authorization exists.
+
+Preserved downstream state: `AUTHORITATIVE ETB SEMANTIC RESULT = ETB_UNSATISFIED`;
+Recovery-R2 authorization use = `SPENT / NOT REUSABLE`; Recovery-R2 attempt = `SPENT / NOT
+REUSABLE`; Mode-B = `BLOCKED / NOT RUN`; `P6 = UNPROVEN / UNSATISFIED`; G0.5 = `NOT CLOSED`;
+G0.5 execution = `NOT AUTHORIZED`; Case-C = `NOT AUTHORIZED`; v0.3-E implementation = `NOT
+AUTHORIZED`; `G1`/`G2` = `NOT RUN`; `adopt_completed_turn` = `DISABLED`; PATH C = `NO STATIC
+BASIS / NOT AUTHORIZED`; PATH D = `NOT AUTHORIZED`.
+
+Standing P3 preserved unchanged: **ERROR STRING MAXIMUM REPRESENTATION RULE = NOT YET FROZEN /
+NON-BLOCKING DESIGN OBSERVATION** (no truncation invented; status not modified by C1).
+
+**End of ETB query diagnostic D1 implementation design gap clarification C1.**
