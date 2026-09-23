@@ -1,6 +1,6 @@
-# DevRelay v0.3-E — G0.5-PRE / SIC — ETB QUERY_EXCEPTION DIAGNOSTIC D1 (design candidate)
+# DevRelay v0.3-E — G0.5-PRE / SIC — ETB QUERY_EXCEPTION DIAGNOSTIC D1 (corrective design R1 candidate)
 
-> **ETB QUERY_EXCEPTION DIAGNOSTIC D1**
+> **ETB QUERY_EXCEPTION DIAGNOSTIC D1 — CORRECTIVE DESIGN R1**
 > **DESIGN CANDIDATE**
 > **NOT ACCEPTED**
 > **NOT AUTHORIZED**
@@ -10,8 +10,9 @@
 > **CREATES NO EVIDENCE NOW**
 > **DOES NOT TOUCH THE AUTHORITATIVE RECOVERY-R2 RESULT**
 > **DIAGNOSTIC OBSERVATIONS CAN NEVER BECOME ETB SEMANTIC RESULTS**
+> **SUPERSEDES THE REJECTED INITIAL CANDIDATE `78266c954087b33baf5a12dfab1cbdef845a0bbb` (REQUEST_CHANGES — P0 = 0, P1 = 0, P2 = 1, P3 = 2)**
 
-Status: **ETB QUERY_EXCEPTION DIAGNOSTIC D1 = DESIGN CANDIDATE / NOT ACCEPTED / NOT AUTHORIZED / NOT EXECUTED**
+Status: **ETB QUERY_EXCEPTION DIAGNOSTIC D1 = CORRECTIVE DESIGN R1 = DESIGN CANDIDATE / NOT ACCEPTED / NOT AUTHORIZED / NOT EXECUTED**
 
 ## 0. Owner decision (PATH B — new diagnostic-design stage)
 
@@ -314,9 +315,15 @@ No missing fields, no extra fields.
 - `command_metadata`: `Name`, `CommandType`, `Source`, `Version`, `ModuleName`, `availability`
 - `query`: `local_address`, `local_port`, `state`, `error_action`, `error_variable`, `query_invocation_count`
 - row entry: `LocalAddress`, `LocalPort`, `State`, `OwningProcess`
+- `terminating_error`: exactly `null` **or** the exact 15 fields of §15 in the §15 order with
+  `source = "TERMINATING_EXCEPTION"` (a closed single object, never an array, never omitted,
+  never `{}`, never `[]`) — see §31
 - error-record entry: the exact 15 fields of §15
 - `activity_counters`: see §21
 - `non_claims`: the exact ordered list of §20
+
+**Complete closed sub-schema inventory:** see §40 (**`D1_SUBSCHEMAS = ALL_CLOSED`**).
+Per-field representation / absence rules for the whole D1 schema: see §33.
 
 ## 19. Config binding
 
@@ -419,3 +426,437 @@ D1 accepted; D1 authorized; D1 executed; a new ETB authorization exists; Recover
 determined.
 
 **End of ETB query diagnostic D1 design candidate.**
+
+---
+
+# Part II — corrective design R1 (schema-gap closure)
+
+## 30. Corrective round R1 — review findings addressed
+
+The initial D1 design candidate `78266c954087b33baf5a12dfab1cbdef845a0bbb` (parent
+`93e44fe61c59ec5070e2823062a607347bb9163a`; spec SHA-256
+`73af7be76de48cffb6c90a499064194e259f2613cd3906c3fa539c1c44b68b55`) received
+**REQUEST_CHANGES — V0.3-E ETB QUERY_EXCEPTION DIAGNOSTIC D1 DESIGN** with
+**P0 = 0, P1 = 0, P2 = 1, P3 = 2**.
+
+That initial candidate is **REJECTED / SUPERSEDED / NEVER ACCEPTED / NOT AUTHORIZED /
+NOT EXECUTED**. It is preserved permanently as historical provenance (§1) and is never
+relabelled as accepted.
+
+| # | Severity | Finding | Status after R1 |
+| --- | --- | --- | --- |
+| 1 | **P2 (blocking)** | `terminating_error` has no explicit closed schema | **CLOSED** (§31) |
+| 2 | **P2 (blocking)** | null / absent / empty representations are not frozen | **CLOSED** (§33, §34, §35, §37) |
+| A | P3 (non-blocking) | source-provenance mechanical preservation inferable but not explicitly documented | **CLOSED** (§38) |
+| B | P3 (non-blocking) | error strings have no maximum representation rule | **REMAINS OPEN / NON-BLOCKING** (§39) |
+
+This corrective round is **design-only**. It closes findings 1, 2 and A. It deliberately
+does **not** close B (§39). It executes nothing, creates no claim, grants no
+authorization, and changes none of the design elements preserved by §3 of this round's
+instruction: the PATH B owner decision, the D1 purpose, the non-ETB semantic boundary,
+the diagnostic target, the `Get-NetTCPConnection` query shape, the `127.0.0.1` / `4096` /
+`Listen` binding, the one-query maximum, the no-retry rule, the D1 claim and output
+namespaces, the D1 budgets, the provenance model, the allowed environment-metadata
+categories, the diagnostic observation vocabulary, the observation partition, the row
+evidence field set, the 15-field ErrorRecord field set, the 19-field top-level schema and
+its order, the config binding, the non-claims, the activity counters, the publication
+sequence, the claim-model design-only boundary, the diagnostic-result authority model,
+the future control sequence, the Path C / Path D status, and the current Mode-B / P6 /
+G0.5 state.
+
+The corrective delta is **sub-schema and representation ambiguity only**.
+
+## 31. `terminating_error` closed sub-schema (P2 finding 1, blocking)
+
+`terminating_error` is explicitly added to the **CLOSED** sub-schema contract. It is
+exactly one of:
+
+- **A.** JSON `null`; or
+- **B.** exactly one closed `ErrorRecord` object using **exactly the same 15 ordered
+  fields** already defined by the §15 ErrorRecord schema.
+
+When the object form is present:
+
+- `source = "TERMINATING_EXCEPTION"`;
+- the remaining 14 fields use the same field names, ordering and scalar serialization
+  rules as the existing §15 ErrorRecord schema (§34).
+
+`terminating_error` is a **SINGLE object, never an array**. It MUST contain only the
+ErrorRecord captured from the actual `catch { $_ }` path of §12.
+
+If no terminating exception occurred:
+
+- `terminating_error = null`.
+
+Do **not** omit the field. Do **not** serialize `{}`. Do **not** serialize `[]`. Do
+**not** place `qerr`-only records in `terminating_error`.
+
+## 32. `error_records` array relation (P2 finding 1, blocking)
+
+`error_records` contains **ONLY** ErrorRecords captured through `-ErrorVariable qerr`, in
+their observed order.
+
+Every `error_records[]` entry uses the same exact 15-field closed ErrorRecord schema of
+§15. For every entry:
+
+- `source = "ERROR_VARIABLE"`.
+
+A terminating `catch` record MUST NOT be duplicated into `error_records` merely because it
+also caused query termination.
+
+If `qerr` contains zero records:
+
+- `error_records = []`.
+
+This creates an explicit **mechanical** distinction between `terminating_error` and
+`error_records`: they are populated from disjoint capture paths, and neither is derivable
+from the other.
+
+## 33. Complete null / empty representation table (P2 finding 2, blocking) — ACCEPTANCE CRITICAL
+
+This table is normative for the **complete** D1 evidence schema. After it there is no
+implementation choice left over between `null`, `""`, `[]` and an omitted key.
+
+### 33.1 Required fields
+
+Every field defined by the closed top-level schema and every field defined by a closed
+object schema is **ALWAYS emitted**. There is **no conditional key omission** anywhere in
+the D1 evidence schema.
+
+### 33.2 Strings
+
+An unavailable / not-observed value for a field whose schema type is a string is
+serialized as:
+
+- `""`
+
+It is **never** `null`.
+
+### 33.3 Arrays
+
+Every array field is always emitted as a JSON array. Zero elements is:
+
+- `[]`
+
+It is **never** `null`.
+
+This applies explicitly to `rows`, `error_records`, `non_claims`, and any other closed
+array in the D1 schema.
+
+### 33.4 Optional object
+
+The only absence representation for the single optional object field `terminating_error`
+is:
+
+- `null`
+
+When present it is the exact closed 15-field ErrorRecord object of §31.
+
+### 33.5 Integer-valued required counters
+
+These fields are always JSON integers and are **never** `null`:
+
+- `row_count`
+- `query.query_invocation_count`
+- all activity counters (§21)
+- `query.local_port`
+
+Their non-observation semantics are explicit:
+
+| Field | Value | Rule |
+| --- | --- | --- |
+| `row_count` | `0` | no rows returned, or the query did not reach a completed row result |
+| `query.query_invocation_count` | `0` | the listener query was **not** invoked, including `COMMAND_UNAVAILABLE` |
+| `query.query_invocation_count` | `1` | the single allowed listener query **has** been invoked |
+
+**No negative sentinel values** are permitted anywhere in the D1 schema.
+
+### 33.6 Row integer fields
+
+For row-entry integer properties whose value cannot truthfully be obtained — `LocalPort`,
+`OwningProcess` — serialize:
+
+- `null`
+
+Otherwise serialize the observed JSON integer. **The row key itself remains present.**
+
+Row string properties `LocalAddress` and `State` use:
+
+- `""`
+
+when unavailable.
+
+### 33.7 Command metadata
+
+The `command_metadata` object is **ALWAYS present**, and its exact field order remains
+frozen (§18).
+
+When:
+
+- `availability = "UNAVAILABLE"`
+
+**all** string metadata fields are emitted and set to `""`, including the existing `Name`,
+`CommandType`, `Source`, `Version` and `ModuleName` fields. **No command metadata key may
+be omitted.**
+
+When `AVAILABLE`, serialize the observed allowed metadata values (§11).
+
+### 33.8 PowerShell environment
+
+The `powershell_environment` object is **ALWAYS present**. Every frozen string field
+remains present. If an allowed property is unavailable, serialize `""`. Environment
+collection is **not** broadened (§11).
+
+### 33.9 Fixed query object
+
+The `query` object is **ALWAYS present**. Its frozen query-shape values remain:
+
+| Field | Frozen value |
+| --- | --- |
+| `local_address` | `"127.0.0.1"` |
+| `local_port` | `4096` |
+| `state` | `"Listen"` |
+| `error_action` | `"SilentlyContinue"` |
+| `error_variable` | `"qerr"` |
+
+Only `query_invocation_count` varies between `0` and `1`, under the frozen rules of §33.5.
+
+### 33.10 Endpoint / config fields
+
+`endpoint` remains the frozen diagnostic endpoint representation. `configured_base_url`
+must come from the accepted frozen config-reader contract of §19.
+
+No placeholder is invented for config-reader failure. A future inability to establish
+mandatory config identity belongs to the **future diagnostic harness / precondition
+failure path**; it is **not** represented by silently replacing the required configured
+value with `null` or empty text.
+
+## 34. Error-record scalar serialization (closed)
+
+The exact 15-field ErrorRecord order of §15 is preserved verbatim:
+
+| # | Field | Frozen JSON type |
+| --- | --- | --- |
+| 1 | `source` | string |
+| 2 | `fully_qualified_error_id` | string |
+| 3 | `category` | string |
+| 4 | `category_activity` | string |
+| 5 | `category_reason` | string |
+| 6 | `category_target_name` | string |
+| 7 | `category_target_type` | string |
+| 8 | `exception_type` | string |
+| 9 | `exception_message` | string |
+| 10 | `exception_hresult` | string |
+| 11 | `inner_exception_type` | string |
+| 12 | `inner_exception_message` | string |
+| 13 | `error_details_message` | string |
+| 14 | `invocation_position_message` | string |
+| 15 | `script_stack_trace` | string |
+
+Every one of these fields is frozen as a **JSON STRING**. An unavailable value is `""`.
+
+For `exception_hresult`, when available, serialize its invariant signed decimal
+**textual** representation as a JSON string. Example shape only: `"-2146233087"`. It is
+**not** emitted as a JSON number.
+
+This keeps exactly one scalar / absence rule for the full ErrorRecord schema.
+
+## 35. Representation by observation class (frozen, exhaustive)
+
+These per-class representations are frozen and cover the §13 vocabulary completely.
+
+### 35.1 `TERMINATING_EXCEPTION`
+
+- `query_invocation_count = 1`
+- `terminating_error` = the actual `catch` ErrorRecord object (§31)
+- `rows = []`
+- `row_count = 0`
+
+Any `qerr` entries actually captured before termination remain independently represented
+in `error_records` using `source = "ERROR_VARIABLE"`. **No second query is executed to
+clarify row state** (§6).
+
+### 35.2 `COMMAND_UNAVAILABLE`
+
+- `command_metadata.availability = "UNAVAILABLE"`
+- all command metadata strings = `""` (§33.7)
+- `query_invocation_count = 0`
+- `rows = []`
+- `row_count = 0`
+- `terminating_error = null`
+- `error_records = []`
+
+**No listener query occurs.**
+
+### 35.3 `ZERO_ROWS`
+
+- `query_invocation_count = 1`
+- `rows = []`
+- `row_count = 0`
+- `terminating_error = null`
+- `error_records = []`
+
+### 35.4 `ONE_ROW`
+
+- `query_invocation_count = 1`
+- `rows` = exactly one closed row object
+- `row_count = 1`
+- `terminating_error = null`
+- `error_records = []`
+
+### 35.5 `MULTIPLE_ROWS`
+
+- `query_invocation_count = 1`
+- `rows` = all returned closed row objects in observed query order
+- `row_count = rows.length`
+- `terminating_error = null`
+- `error_records = []`
+
+### 35.6 `ERROR_RECORDS_ZERO_ROWS`
+
+- `query_invocation_count = 1`
+- `rows = []`
+- `row_count = 0`
+- `terminating_error = null`
+- `error_records` = one or more `qerr` ErrorRecord objects
+
+### 35.7 `ERROR_RECORDS_WITH_ROWS`
+
+- `query_invocation_count = 1`
+- `rows` = one or more returned row objects
+- `row_count = rows.length`
+- `terminating_error = null`
+- `error_records` = one or more `qerr` ErrorRecord objects
+
+This class covers **both** one row + `qerr` and multiple rows + `qerr` **without**
+introducing a new observation class.
+
+## 36. `DIAGNOSTIC_HARNESS_INVALID` serialization point
+
+The existing D1 semantic rule is **unchanged**: `DIAGNOSTIC_HARNESS_INVALID` is a
+**diagnostic control outcome**, not an ETB semantic result (§4, §13).
+
+This corrective design clarifies **only** the serialization point: if the harness can
+still truthfully construct the frozen closed evidence schema, it **MUST** use the same
+null / empty rules of §33.
+
+If the harness **cannot** truthfully construct the mandatory closed evidence record at
+all, publication / control behavior is handled by the **later
+implementation/authorization design**. That later mechanism is **not invented** in this
+round.
+
+## 37. Null / empty completeness test (design-level walk)
+
+The design walks every required case and fixes its exact JSON representation class:
+
+| # | Case | `query_invocation_count` | `rows` | `row_count` | `terminating_error` | `error_records` |
+| --- | --- | --- | --- | --- | --- | --- |
+| 1 | command unavailable | `0` | `[]` | `0` | `null` | `[]` |
+| 2 | terminating exception | `1` | `[]` | `0` | ErrorRecord object | qerr entries, or `[]` |
+| 3 | zero rows / no qerr | `1` | `[]` | `0` | `null` | `[]` |
+| 4 | one row / no qerr | `1` | 1 object | `1` | `null` | `[]` |
+| 5 | multiple rows / no qerr | `1` | n objects | `n` | `null` | `[]` |
+| 6 | zero rows / qerr | `1` | `[]` | `0` | `null` | one or more objects |
+| 7 | one row / qerr | `1` | 1 object | `1` | `null` | one or more objects |
+| 8 | multiple rows / qerr | `1` | n objects | `n` | `null` | one or more objects |
+| 9 | no terminating exception | `1` (or `0` under COMMAND_UNAVAILABLE) | — | — | `null` | — |
+| 10 | unavailable command metadata | `0` | `[]` | `0` | `null` | `[]`; all metadata strings `""` |
+| 11 | unavailable row scalar | `1` | 1 object with `LocalPort` / `OwningProcess` = `null` and `LocalAddress` / `State` = `""` | `1` | `null` | `[]` |
+| 12 | empty `rows` array | any | `[]` | `0` | as per class | as per class |
+| 13 | empty `error_records` array | as per class | as per class | `rows.length` | as per class | `[]` |
+
+**`D1_NULL_EMPTY_RULES = COMPLETE.`**
+
+## 38. Source-provenance clarification (P3 finding A, closed)
+
+This closes the first non-blocking P3 observation **without** changing the 19-field
+top-level schema (§18).
+
+- **A.** `source_authoritative_bookkeeping_commit = 93e44fe61c59ec5070e2823062a607347bb9163a`
+  anchors the tracked historical source state.
+- **B.** The accepted Recovery-R2 authorization and the accepted Oracle-R2 tracked
+  artifacts are **mechanically recoverable** from that immutable Git ancestry/tree
+  together with their already frozen accepted hashes (§10). No chat memory, transcript or
+  executor recollection is required to re-derive any of them.
+- **C.** The Recovery-R2 manifest relationship remains **externally frozen** by the
+  accepted R2 manifest format and the D1-bound R2 evidence hash
+  (`source_r2_evidence_sha256`). D1 does not restate or re-derive that manifest.
+- **D.** The two untracked Recovery-R2 claim hashes MUST be rebound as **mandatory future
+  execution/authorization preconditions**:
+
+| Precondition | SHA-256 |
+| --- | --- |
+| Recovery-R2 authorization claim | `fd7336e4694f8d491ddd3067880851f96974a29a1117d48f7dd47eb2d629ccf7` |
+| Recovery-R2 attempt claim | `69eb6ef0352375311f72c211d04c8ed39e59d8f7b00b6d7738577044916167f9` |
+
+These two hashes are **not** added as new top-level evidence fields, and the 19-field
+schema is **not** altered. This is explicit **external / precondition** provenance
+binding only, because those two claim artifacts are untracked operational control state
+and are not part of the Git tree.
+
+## 39. Error-string boundedness (P3 finding B — remains open, non-blocking)
+
+This corrective round does **not** introduce arbitrary truncation.
+
+The existing closed scalar field set and the prohibition against arbitrary
+PowerShell-object serialization (§15, §34) are preserved unchanged.
+
+Recorded honestly:
+
+**ERROR STRING MAXIMUM REPRESENTATION RULE = NOT YET FROZEN / NON-BLOCKING DESIGN
+OBSERVATION**
+
+No accepted deterministic boundedness rule exists in the current design for
+`exception_message`, `inner_exception_message`, `error_details_message`,
+`invocation_position_message` or `script_stack_trace`. A lossy truncation policy is
+**not** invented merely to force this P3 to zero, because truncation would silently
+destroy diagnostic evidence D1 exists to capture. This P3 may remain if the independent
+reviewer continues to classify it as non-blocking.
+
+## 40. Closed sub-schema inventory — ALL_CLOSED
+
+The closed sub-schema inventory of §18 is hereby completed. Every object in the D1
+evidence schema is **closed**; no open object schema remains:
+
+| Sub-schema | Status | Definition |
+| --- | --- | --- |
+| `powershell_environment` | CLOSED | §18 (exact order), §33.8 (absence rule) |
+| `command_metadata` | CLOSED | §18 (exact order), §33.7 (absence rule) |
+| `query` | CLOSED | §18 (exact order), §33.9 (frozen values) |
+| row entry | CLOSED | §14, §18, §33.6 |
+| `terminating_error` | CLOSED | **§31** — exactly `null` or the exact 15-field ErrorRecord object; cross-references the §15 / §34 ErrorRecord schema and the null-when-absent rule |
+| error-record entry | CLOSED | §15, §34 |
+| `activity_counters` | CLOSED | §21 |
+| `non_claims` | CLOSED | §20 |
+
+**`D1_SUBSCHEMAS = ALL_CLOSED.`**
+
+## 41. Corrective-round status
+
+Active status after this corrective round:
+
+**ETB QUERY_EXCEPTION DIAGNOSTIC D1 — CORRECTIVE DESIGN R1 = DESIGN CANDIDATE / NOT
+ACCEPTED / NOT AUTHORIZED / NOT EXECUTED.**
+
+This corrective candidate is **not** APPROVED, **not** ACCEPTED, **not** FROZEN, **not**
+AUTHORIZED, **not** EXECUTABLE and **not** READY FOR LIVE DIAGNOSTIC EXECUTION. It
+requires a fresh independent D1 design re-review before any further step of the §25
+sequence.
+
+This corrective round performed: listener-query executions `0`; claim creation `0`;
+diagnostic outputs `0`; Oracle executions `0`; target/listener/process live probes `0`;
+OpenCode starts/restarts `0`; HTTP `0`; provider/model calls `0`; SIC `0`; Mode-B `0`;
+G0.5/G1/G2 `0`; config mutation `0`; Recovery-R2 artifact mutation `0`; R1 mutation `0`;
+runtime/test/dependency/version changes `0`. **No D1 operational path of §7 was created.
+No `.ps1` file was created.** The corrective tracked delta is exactly three files:
+`docs/v0.3/V03E_G0_5_PRE_ETB_QUERY_EXCEPTION_DIAGNOSTIC_D1_SPEC.md`, `CHANGELOG.md` and
+`docs/v0.3/V03E_ACCEPTANCE.md`.
+
+All current gate states are preserved unchanged (§27): `AUTHORITATIVE ETB SEMANTIC RESULT
+= ETB_UNSATISFIED`; Recovery-R2 authorization use = `SPENT / NOT REUSABLE`; Recovery-R2
+attempt = `SPENT / NOT REUSABLE`; Mode-B = `BLOCKED / NOT RUN`; `P6 = UNPROVEN /
+UNSATISFIED`; G0.5 = `NOT CLOSED`; G0.5 execution = `NOT AUTHORIZED`; Case-C = `NOT
+AUTHORIZED`; v0.3-E implementation = `NOT AUTHORIZED`; `G1`/`G2` = `NOT RUN`;
+`adopt_completed_turn` = `DISABLED`.
+
+**End of ETB query diagnostic D1 corrective design R1.**

@@ -2264,6 +2264,90 @@ diagnostic outputs, **0** Oracle executions, **0** live probes, **0** OpenCode s
 **0** provider/model calls, **0** SIC, **0** Mode-B, **0** G0.5/G1/G2, **0** config mutations, **0**
 Recovery-R2/R1 mutations and **0** runtime/test/dependency/version changes.
 
+**D1 CORRECTIVE DESIGN R1 — the initial D1 design candidate `78266c95` was rejected.**  The
+independent D1 design review issued **REQUEST_CHANGES — V0.3-E ETB QUERY_EXCEPTION
+DIAGNOSTIC D1 DESIGN** with **P0 = 0, P1 = 0, P2 = 1, P3 = 2**, so
+`78266c954087b33baf5a12dfab1cbdef845a0bbb` is **REJECTED / SUPERSEDED / NEVER ACCEPTED /
+NOT AUTHORIZED / NOT EXECUTED** and is preserved permanently as historical provenance
+(never relabelled as accepted).  The single blocking **P2** was narrow and purely
+representational: `terminating_error` had no explicit closed schema, and the
+null / absent / empty representations of the D1 evidence schema were not frozen.  A
+**narrow corrective design round** has now closed it: `terminating_error` is explicitly
+added to the closed sub-schema contract as exactly `null` **or** one closed 15-field
+`ErrorRecord` object (`source = "TERMINATING_EXCEPTION"`), a **single** object and never an
+array, whose remaining 14 fields reuse the exact §15 field names, ordering and scalar
+rules, and which must contain only the actual `catch { $_ }` record; `error_records`
+contains **only** `-ErrorVariable qerr` records in observed order (each with
+`source = "ERROR_VARIABLE"`), a terminating catch record is never duplicated into it, and
+a zero-record `qerr` yields `[]` — creating an explicit **mechanical** separation between
+the two fields; one complete normative null / empty representation table now freezes
+every field of the schema (every closed field is always emitted with no conditional key
+omission; unavailable strings are `""` and never `null`; every array is always an array
+and zero elements is `[]` and never `null`, explicitly for `rows`, `error_records` and
+`non_claims`; the only absence form for the optional `terminating_error` is `null`; the
+integer-valued required counters `row_count`, `query.query_invocation_count`, all activity
+counters and `query.local_port` are always JSON integers and never `null`, with
+`row_count = 0` when no rows are returned or no completed row result was reached, and
+`query_invocation_count` `0` only when the listener query was not invoked — including
+`COMMAND_UNAVAILABLE` — and `1` once the single allowed query was invoked, with **no
+negative sentinels**; unavailable row integers `LocalPort` / `OwningProcess` are `null`
+while the row key stays present, and unavailable row strings `LocalAddress` / `State` are
+`""`; `command_metadata` is always present and, when `availability = "UNAVAILABLE"`, every
+string metadata field — `Name`, `CommandType`, `Source`, `Version`, `ModuleName` — is
+emitted as `""` with **no key omitted**; `powershell_environment` and `query` are always
+present with their frozen values and only `query_invocation_count` varying between `0` and
+`1`; `configured_base_url` still comes from the accepted frozen config-reader contract and
+no placeholder is invented for config-reader failure, because that belongs to the future
+harness/precondition failure path); every ErrorRecord field is frozen as a **JSON string**
+with `exception_hresult` serialized as its invariant signed decimal **text**, not a JSON
+number; per-class representations are frozen exhaustively for `TERMINATING_EXCEPTION`,
+`COMMAND_UNAVAILABLE`, `ZERO_ROWS`, `ONE_ROW`, `MULTIPLE_ROWS`, `ERROR_RECORDS_ZERO_ROWS`
+and `ERROR_RECORDS_WITH_ROWS` (the last covering one-row-plus-`qerr` and
+multiple-rows-plus-`qerr` without introducing a new class), `DIAGNOSTIC_HARNESS_INVALID`
+keeps its unchanged non-ETB semantic rule with only its serialization point clarified, and
+a 13-case completeness walk leaves **no** choice between `null`, `""`, `[]` and an omitted
+key (**`D1_NULL_EMPTY_RULES = COMPLETE`**, **`D1_SUBSCHEMAS = ALL_CLOSED`**).  The first
+non-blocking **P3** is closed by explicit normative prose that
+`source_authoritative_bookkeeping_commit = 93e44fe61c59ec5070e2823062a607347bb9163a`
+anchors the tracked historical source state, that the accepted Recovery-R2 authorization
+and the accepted Oracle-R2 tracked artifacts are mechanically recoverable from that
+immutable Git ancestry/tree together with their already frozen accepted hashes, that the
+Recovery-R2 manifest relationship stays externally frozen by the accepted R2 manifest
+format and the D1-bound R2 evidence hash, and that the two untracked Recovery-R2 claim
+hashes (`fd7336e4694f8d491ddd3067880851f96974a29a1117d48f7dd47eb2d629ccf7` and
+`69eb6ef0352375311f72c211d04c8ed39e59d8f7b00b6d7738577044916167f9`) are rebound as
+**mandatory future execution/authorization preconditions** — explicitly **not** as new
+top-level evidence fields, with the 19-field schema unaltered.  The second **P3** is
+deliberately **not** forced to zero: no arbitrary or lossy truncation was introduced, and
+the honest record is **ERROR STRING MAXIMUM REPRESENTATION RULE = NOT YET FROZEN /
+NON-BLOCKING DESIGN OBSERVATION**, because no accepted deterministic boundedness rule
+exists for the message/stack fields and truncating them would silently destroy the
+diagnostic evidence D1 exists to capture.  No design element that review already accepted
+was redesigned: the PATH B owner decision, the D1 purpose, the non-ETB semantic boundary,
+the diagnostic target, the `Get-NetTCPConnection -LocalAddress '127.0.0.1' -LocalPort 4096
+-State Listen` query shape, the one-query maximum, the no-retry rule, the D1 claim and
+output namespaces (all still ABSENT), the 1/1 + 1/1 budgets, the provenance model, the
+allowed environment-metadata categories, the observation vocabulary and its exhaustive
+exclusive partition, the row evidence field set, the 15-field ErrorRecord field set, the
+**19-field top-level schema and its exact order**, the config binding, the non-claims, the
+activity counters, the publication sequence, the claim-model design-only boundary, the
+diagnostic-result authority model, the future control sequence, the Path C / Path D status
+and the Mode-B / P6 / G0.5 state are all **preserved verbatim**.  The corrective round is
+still **design-only**: the active status is **ETB QUERY_EXCEPTION DIAGNOSTIC D1 —
+CORRECTIVE DESIGN R1 = DESIGN CANDIDATE / NOT ACCEPTED / NOT AUTHORIZED / NOT EXECUTED**
+(not APPROVED, not ACCEPTED, not FROZEN, not AUTHORIZED, not EXECUTABLE and not READY FOR
+LIVE DIAGNOSTIC EXECUTION) and it requires a fresh independent D1 design re-review; no
+diagnostic execution, no claim creation, no new ETB authorization, no Mode-B, no `.ps1`
+file and no D1 operational artifact of any kind was created; the corrective tracked delta
+is exactly three files
+(`docs/v0.3/V03E_G0_5_PRE_ETB_QUERY_EXCEPTION_DIAGNOSTIC_D1_SPEC.md`, `CHANGELOG.md`,
+`docs/v0.3/V03E_ACCEPTANCE.md`), `AUTHORITATIVE ETB SEMANTIC RESULT = ETB_UNSATISFIED` is
+untouched, and the corrective round performed **0** listener queries, **0** claims, **0**
+diagnostic outputs, **0** Oracle executions, **0** live probes, **0** OpenCode
+starts/restarts, **0** HTTP, **0** provider/model calls, **0** SIC, **0** Mode-B, **0**
+G0.5/G1/G2, **0** config mutations, **0** Recovery-R2/R1 mutations and **0**
+runtime/test/dependency/version changes.
+
 That approval followed three earlier review rounds: the first independent design
 review returned `REQUEST_CHANGES` (P0 = 1, P1 = 6, P2 = 5) and the
 recovery/reconciliation contract was repaired in `f67bf9e`; two narrow re-reviews
