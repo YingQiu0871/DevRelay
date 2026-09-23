@@ -2348,6 +2348,97 @@ starts/restarts, **0** HTTP, **0** provider/model calls, **0** SIC, **0** Mode-B
 G0.5/G1/G2, **0** config mutations, **0** Recovery-R2/R1 mutations and **0**
 runtime/test/dependency/version changes.
 
+**The corrective D1 diagnostic design was independently approved, so the ETB QUERY_EXCEPTION DIAGNOSTIC D1
+DESIGN is now `ACCEPTED / FROZEN / NOT IMPLEMENTED / NOT AUTHORIZED FOR EXECUTION / NOT EXECUTED`
+(design-acceptance bookkeeping only; no claim created, nothing executed).**  The independent re-review issued
+*APPROVE V0.3-E ETB QUERY_EXCEPTION DIAGNOSTIC D1 CORRECTIVE DESIGN R1* with severity **P0 = 0, P1 = 0, P2 =
+0, P3 = 1**, closing the initial blocking **P2** (narrowly representational: `terminating_error` had no
+explicit closed schema and the null/absent/empty representations were unfrozen) through: (A) an explicit
+closed `terminating_error` schema (exactly `null` or one closed 15-field `ErrorRecord` object with `source =
+"TERMINATING_EXCEPTION"`, never an array/`{}`/`[]`/omitted, catch-path-only); (B) deterministic
+`terminating_error` / `error_records` channel separation (qerr-only entries with `source =
+"ERROR_VARIABLE"`, no catch-record duplication, no qerr → `[]`); (C) complete null/empty/absent
+representation rules; (D) closed required-key semantics; (E) closed string/array/optional-object/integer
+rules; (F) explicit nullable row-observation integer semantics; (G) a complete per-observation
+representation matrix (13 walked cases, `D1_NULL_EMPTY_RULES = COMPLETE`); and (H) all sub-schemas closed
+(`D1_SUBSCHEMAS = ALL_CLOSED`).  The permanently accepted D1 DESIGN provenance is
+`diagnostic_d1_design_commit = 6ad917b950c12e7a93579c519cc63f89925c2ab0` and `diagnostic_d1_spec_sha256 =
+e9c521ff9d9333999d1ccc2156f3f78400a5b0e5b19b42a7cf2280c8f0def466`; this acceptance-bookkeeping commit
+explicitly does **not** replace `diagnostic_d1_design_commit`, and no later bookkeeping confirmation,
+implementation candidate, execution authorization, operational HEAD or diagnostic-result review may
+substitute another commit for this accepted design identity.  The frozen spec was re-verified byte-identical
+before and after this round (worktree = committed blob, UTF-8, no BOM, LF-only).  Design acceptance records
+the independent confirmation of: `D1_R1_TOPOLOGY = PASS`, `D1_R1_DELTA = EXACT`,
+`WORKTREE_EQUALS_BLOB = YES`, `D1_R1_SCOPE_REGRESSION = NONE`, `D1_TERMINATING_ERROR_SCHEMA = CLOSED`,
+`D1_ERROR_CHANNEL_SEPARATION = DETERMINISTIC`, `D1_ERROR_RECORD_SCHEMA = VALID`,
+`D1_ERRORRECORD_SCALAR_NULL_RULE = CONSISTENT`, `D1_REQUIRED_KEY_RULE = CLOSED`,
+`D1_STRING_EMPTY_RULE = DETERMINISTIC`, `D1_ARRAY_EMPTY_RULE = DETERMINISTIC`,
+`D1_OPTIONAL_OBJECT_RULE = DETERMINISTIC`, `D1_INTEGER_RULE = DETERMINISTIC`, `D1_ROW_NULL_RULE =
+CONSISTENT`, `D1_COMMAND_UNAVAILABLE_REPRESENTATION = COMPLETE`,
+`D1_TERMINATING_EXCEPTION_REPRESENTATION = COMPLETE`, `D1_NORMAL_RESULT_REPRESENTATIONS = COMPLETE`,
+`D1_QERR_REPRESENTATIONS = COMPLETE`, `D1_NULL_EMPTY_RULES = COMPLETE`, `D1_SUBSCHEMAS = ALL_CLOSED`,
+`D1_TOPLEVEL_SCHEMA = PRESERVED`, `D1_OBSERVATION_VOCABULARY = PRESERVED`,
+`D1_OBSERVATION_PARTITION = EXHAUSTIVE_AND_EXCLUSIVE`, `D1_HARNESS_INVALID_BOUNDARY = PRESERVED`,
+`D1_SOURCE_PROVENANCE_P3 = CLOSED`, `D1_ERROR_STRING_BOUNDARY = NONBLOCKING_OPEN_P3`,
+`D1_SEMANTIC_ISOLATION = PASS`, `D1_OPERATIONAL_ARTIFACT_STATE = ABSENT`,
+`D1_COMMIT_IDENTITY_RECOVERY = ZERO_SIDE_EFFECT`, `D1_UNTRACKED_COUNT_ANOMALY = REPORTING_ARTIFACT`,
+`D1_R1_CONTRADICTION_SWEEP = PASS`, `D1_R1_MATERIAL_EXECUTOR_CHOICE = NONE`,
+`D1_R1_SELF_SUFFICIENCY = PASS`.  The initial candidate `78266c954087b33baf5a12dfab1cbdef845a0bbb` remains
+permanently **D1 INITIAL DESIGN = REJECTED / SUPERSEDED / NEVER ACCEPTED / NOT AUTHORIZED / NOT EXECUTED**
+with its historical review *REQUEST_CHANGES — V0.3-E ETB QUERY_EXCEPTION DIAGNOSTIC D1 DESIGN* (P0 = 0, P1 =
+0, P2 = 1, P3 = 2); history is not rewritten as though it passed.  The accepted D1 design remains **DIAGNOSTIC
+ONLY / NON-ETB SEMANTIC / ONE-QUERY MAXIMUM / NO RETRY / NO FALLBACK**: design acceptance does **not**
+authorize execution, does **not** create any D1 executable, claim, evidence, manifest, result or output
+directory, does **not** record either future budget as granted, and cannot itself produce or replace
+`AUTHORITATIVE ETB_SATISFIED` / `AUTHORITATIVE ETB_UNSATISFIED` / P6 PASS / P6 FAIL / G0.5 PASS / G0.5 FAIL /
+Mode-B authorization.  Accepted design contracts recorded by reference to the frozen spec: the exact
+diagnostic query shape (`Get-NetTCPConnection -LocalAddress '127.0.0.1' -LocalPort 4096 -State Listen` with
+`-ErrorAction SilentlyContinue -ErrorVariable qerr`; future listener-query invocation maximum = 1, no
+retry/repeat/polling/alternate command/CIM reconstruction/fallback — **design acceptance only, not
+executed**); the closed non-ETB observation vocabulary (`COMMAND_UNAVAILABLE`, `TERMINATING_EXCEPTION`,
+`ERROR_RECORDS_ZERO_ROWS`, `ERROR_RECORDS_WITH_ROWS`, `ZERO_ROWS`, `ONE_ROW`, `MULTIPLE_ROWS`,
+`DIAGNOSTIC_HARNESS_INVALID`; no observation class maps directly to ETB semantic authority); the accepted
+evidence schema `devrelay-etb-query-diagnostic-d1-v1` with its exact 19-field top-level order
+(`schema_version, source_authoritative_bookkeeping_commit, source_r2_evidence_sha256,
+source_r2_result_sha256, execution_started_at, execution_finished_at, diagnostic_mode, endpoint,
+configured_base_url, powershell_environment, command_metadata, query, query_outcome, row_count, rows,
+terminating_error, error_records, non_claims, activity_counters`); `D1_SUBSCHEMAS = ALL_CLOSED` and
+`D1_NULL_EMPTY_RULES = COMPLETE` (the frozen spec is authoritative; the full spec is not duplicated into
+bookkeeping).  Source binding preserved: source authoritative bookkeeping commit `93e44fe…`; R2 evidence
+`6f903f05…`; R2 manifest `b4701c90…`; R2 result `84f51bb5…`; R2 authorization claim `fd7336e4…`; R2 attempt
+claim `69eb6ef0…`; accepted Recovery-R2 authorization and Oracle-R2 provenance unchanged.  The D1 namespace
+is **DEFINED / ACCEPTED / FROZEN / NO OPERATIONAL ARTIFACT CREATED** — all reserved paths verified still
+ABSENT.  Future budget status remains **D1 AUTHORIZATION USE = UNAVAILABLE / NOT YET GRANTED**, **D1
+DIAGNOSTIC ATTEMPT = UNAVAILABLE / NOT YET GRANTED**, **D1 LISTENER QUERY EXECUTION = NOT AUTHORIZED**
+(1/1 + 1/1 + maximum-1 are DESIGN-DEFINITIONS only until a later separately accepted execution
+authorization).  Implementation boundary: **D1 IMPLEMENTATION = NOT YET CREATED / NOT AUTHORIZED**; **D1
+EXECUTION AUTHORIZATION = DOES NOT EXIST**; **D1 EXECUTION = NOT AUTHORIZED**; **D1 CLAIM WRITER = NOT YET
+FROZEN**; **D1 PUBLICATION IMPLEMENTATION = NOT YET FROZEN**.  Authoritative future sequence: D1 corrective
+design accepted (`6ad917b…` / `e9c521ff…`) → D1 design acceptance bookkeeping (this round) → **independent
+D1 design-bookkeeping confirmation [REVIEW-ONLY / NO COMMIT IS CREATED]** (a later confirmation review must
+leave the bookkeeping HEAD unchanged) → separate D1 implementation / execution-authorization candidate →
+independent implementation/authorization review → if approved: execution-authorization bookkeeping →
+independent execution-authorization bookkeeping confirmation → exactly one D1 authorization consumption →
+exactly one D1 diagnostic-attempt consumption → exactly one listener-query invocation → D1 diagnostic
+publication → independent D1 diagnostic-result review → result bookkeeping/confirmation → owner
+reconciliation; no stage may be skipped.  Preserved states: `AUTHORITATIVE ETB SEMANTIC RESULT =
+ETB_UNSATISFIED`; Recovery-R2 authorization use / attempt = `SPENT / NOT REUSABLE`; Mode-B = `BLOCKED / NOT
+RUN`; `P6 = UNPROVEN / UNSATISFIED`; G0.5 = `NOT CLOSED`; G0.5 execution / Case-C / v0.3-E implementation
+`NOT AUTHORIZED`; `G1`/`G2` `NOT RUN`; `adopt_completed_turn` **DISABLED** — D1 design acceptance changes
+none of these.  Path preservation: **PATH C — STATIC ORACLE CORRECTION = NO STATIC BASIS / NOT AUTHORIZED**
+(`STATIC_ORACLE_R2_LISTENER_DEFECT = NOT_PROVEN`); **PATH D — NEW ETB ATTEMPT = NOT AUTHORIZED** — D1 design
+acceptance authorizes neither.  P3 status: source-provenance clarification = **CLOSED**; **ERROR STRING
+MAXIMUM REPRESENTATION RULE = NOT YET FROZEN / NON-BLOCKING DESIGN OBSERVATION** (no truncation rule is
+invented in bookkeeping; not silently closed; not an execution authority).  Contradiction sweep clean: no
+text claims 78266c accepted, D1 execution authorized/executed, a D1 executable/claim exists, a new ETB
+authorization exists, Recovery-R2 reusable, `ETB_SATISFIED`, a P6/G0.5 verdict, G0.5 CLOSED, Mode-B
+authorized, Oracle-R2 defective or root cause determined.  This bookkeeping round performed **0**
+listener-query executions, **0** `Get-NetTCPConnection` calls, **0** claim creations/deletions, **0** D1
+evidence/result/output-directory creations, **0** Oracle executions, **0** target/listener/process probes,
+**0** OpenCode starts/restarts, **0** HTTP, **0** provider/model calls, **0** SIC, **0** Mode-B, **0**
+G0.5/G1/G2, **0** config mutations, **0** Recovery-R2/R1 mutations and **0** runtime/test/dependency/version
+changes; all protected artifacts re-verified unchanged; the ignored/untracked `PROJECT_MEMORY.md` persists.
+
 That approval followed three earlier review rounds: the first independent design
 review returned `REQUEST_CHANGES` (P0 = 1, P1 = 6, P2 = 5) and the
 recovery/reconciliation contract was repaired in `f67bf9e`; two narrow re-reviews
