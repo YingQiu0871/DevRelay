@@ -2208,6 +2208,62 @@ probes, **0** OpenCode starts/restarts, **0** HTTP, **0** SIC, **0** Mode-B, **0
 config mutations, **0** R1 mutations and **0** runtime/test/dependency/version changes; the ignored/untracked
 `PROJECT_MEMORY.md` persists.
 
+**Owner decision PATH B — a new `ETB QUERY_EXCEPTION DIAGNOSTIC D1` design candidate now exists (design
+only; nothing executed).**  The authoritative state remains `AUTHORITATIVE ETB SEMANTIC RESULT =
+ETB_UNSATISFIED` (published `listener_probe_outcome = QUERY_EXCEPTION`, `terminal_stage = s0_listener`) with
+Recovery-R2 permanently `ACCEPTED / FROZEN / FULLY CONSUMED` (both one-shot budgets `SPENT / NOT REUSABLE`,
+Oracle-R2 invocation `1 / MAXIMUM REACHED`) and `NEW RECOVERY AUTHORIZATION = NONE`; the owner elected to
+continue G0.5-PRE work only through a new, separately authorized, read-only diagnostic stage whose sole
+purpose is to capture the missing listener-query failure information — **ROOT_CAUSE_IDENTIFIABILITY =
+PARTIALLY_CONSTRAINED**, **STATIC_ORACLE_R2_LISTENER_DEFECT = NOT_PROVEN**.  The new artifact
+`docs/v0.3/V03E_G0_5_PRE_ETB_QUERY_EXCEPTION_DIAGNOSTIC_D1_SPEC.md` is a **DESIGN CANDIDATE / NOT ACCEPTED /
+NOT AUTHORIZED / NOT EXECUTED** with D1 AUTHORIZATION USE = `UNAVAILABLE / NOT YET GRANTED`, D1
+DIAGNOSTIC ATTEMPT = `UNAVAILABLE / NOT YET GRANTED`, and a **D1 LISTENER QUERY INVOCATION maximum = 1**;
+it is NOT an ETB semantic attempt and can never produce or replace `ETB_SATISFIED` / `ETB_UNSATISFIED` /
+`HARNESS_INVALID` (a future diagnostic row observation MUST NOT be promoted to `ETB_SATISFIED`).  Frozen
+inside the design: the exact same listener-query shape as accepted Oracle-R2 (`Get-NetTCPConnection
+-LocalAddress '127.0.0.1' -LocalPort 4096 -State Listen` with `-ErrorAction SilentlyContinue -ErrorVariable
+qerr`, initialized immediately before, executed exactly once, no second clarifying query, no alternate
+address/port/IPv6/discovery); a **new permanently distinct D1 namespace** (`ETB_QUERY_DIAGNOSTIC_D1_*` claim
+paths with `.tmp` variants, `docs/v0.3/evidence/etb-query-diagnostic-d1/` evidence/manifest, result
+`V03E_G0_5_PRE_ETB_QUERY_DIAGNOSTIC_RESULT_D1.md` (+`.tmp`); nothing created this round); 1/1 + 1/1
+diagnostic budgets wholly independent from Recovery-R2; a future provenance model without self-reference
+(`diagnostic_d1_design_commit` / `diagnostic_d1_spec_sha256` populated only by a later independent approval
+record); permanent source binding to the authoritative state at `93e44fe61c59ec5070e2823062a607347bb9163a`
+(R2 evidence `6f903f05…`, result `84f51bb5…`, both R2 claims, the accepted authorization and Oracle-R2
+identities); closed future **environment metadata** categories only (PowerShell `PSEdition`/`PSVersion`/
+`Platform`/`OS` + command `Name`/`CommandType`/`Source`/`Version`/`ModuleName` + module metadata for the
+command only — no broad inventory, no unrelated modules, no software/user lists); the exact future query
+semantics ($qerr reset before the single query, terminating `$_` capture, all qerr records preserved, rows
+not discarded); an explicit **non-ETB** diagnostic observation vocabulary (`COMMAND_UNAVAILABLE`,
+`TERMINATING_EXCEPTION`, `ERROR_RECORDS_ZERO_ROWS`, `ERROR_RECORDS_WITH_ROWS`, `ZERO_ROWS`, `ONE_ROW`,
+`MULTIPLE_ROWS`, `DIAGNOSTIC_HARNESS_INVALID`) that never collapses the terminating-catch vs error-record
+distinction; row evidence limited to `LocalAddress`/`LocalPort`/`State`/`OwningProcess` + row count (no
+process lookup, no `Win32_Process`, no binding); a closed **15-field error-record schema** (source,
+FullyQualifiedErrorId, category/activity/reason/target name/target type, exception type/message/HResult,
+inner type/message, error-details message, invocation position, script stack trace; unavailable fields →
+exact frozen empty-string rule, no conditional omission); explicit persisted **command-availability**
+evidence; explicit **query-shape** evidence (closing the gap where query parameters were not persisted);
+a new closed evidence schema `devrelay-etb-query-diagnostic-d1-v1` with exact 19-field top-level order and
+exact closed sub-schema orders; config binding through the same frozen reader shape; the non-claims list
+(diagnostic observation alone establishes no ETB/P6/G0.5 outcome, no Mode-B authorization, no permanent
+state claims, no Oracle-R2 correctness judgment); a closed activity-counter structure requiring
+`listener_query_invocations <= 1` and all prohibited counters = 0; and a future publication/claim model on
+new D1 paths only.  A future D1 result is **diagnostic evidence only**: it may become an authoritative
+diagnostic result but can never replace `AUTHORITATIVE ETB SEMANTIC RESULT = ETB_UNSATISFIED`; any later
+new ETB authorization remains a separate owner decision.  Recorded: **PATH C — STATIC ORACLE CORRECTION**
+currently lacks a static basis (`STATIC_ORACLE_R2_LISTENER_DEFECT = NOT_PROVEN`; D1 does not authorize
+Oracle-R2 modification) and **PATH D — NEW ETB ATTEMPT** remains NOT AUTHORIZED.  Future sequence: D1
+design review → bookkeeping → confirmation → separate implementation/execution-authorization round → its
+own bookkeeping + confirmation → exactly one authorization consumption, one attempt consumption, one
+listener-query invocation → publication → independent D1 result review → separate result bookkeeping →
+owner reconciliation.  All current gate states are preserved unchanged (Mode-B BLOCKED/NOT RUN, P6
+UNPROVEN/UNSATISFIED, G0.5 NOT CLOSED, Case-C/v0.3-E implementation NOT AUTHORIZED, G1/G2 NOT RUN,
+adopt_completed_turn DISABLED); this design round performed **0** listener queries, **0** claims, **0**
+diagnostic outputs, **0** Oracle executions, **0** live probes, **0** OpenCode starts/restarts, **0** HTTP,
+**0** provider/model calls, **0** SIC, **0** Mode-B, **0** G0.5/G1/G2, **0** config mutations, **0**
+Recovery-R2/R1 mutations and **0** runtime/test/dependency/version changes.
+
 That approval followed three earlier review rounds: the first independent design
 review returned `REQUEST_CHANGES` (P0 = 1, P1 = 6, P2 = 5) and the
 recovery/reconciliation contract was repaired in `f67bf9e`; two narrow re-reviews
