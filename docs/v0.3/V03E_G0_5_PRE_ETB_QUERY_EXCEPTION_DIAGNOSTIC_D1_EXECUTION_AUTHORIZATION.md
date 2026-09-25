@@ -556,6 +556,22 @@ original frozen oracle, Recovery-R1 artifacts, the original authorization, `V03E
 `.devrelay/config.yaml`, `CONFIG_ESTABLISHMENT.json`, `src/devrelay`, `tests`,
 `pyproject.toml`, `.gitattributes`.
 
+## 40.1 Script materialization contract (LF reproducibility correction)
+
+The execution script now carries an explicit repository materialization rule:
+
+```
+docs/v0.3/V03E_G0_5_PRE_ETB_QUERY_EXCEPTION_DIAGNOSTIC_D1_EXECUTION.ps1 text eol=lf
+```
+
+Its purpose is that ordinary supported Git materialization (any normal checkout/reset under
+the repository's supported settings, including `core.autocrlf=true`) preserves the exact LF
+bytes bound by `ExpectedScriptSha256` in the worktree, so precondition **PRE-G** can be
+satisfied deterministically. This attribute rule **improves reproducibility only**: PRE-G
+remains **fail-closed** (any worktree script byte mismatch still stops before claim
+consumption with exit 10), and the rule does **not** weaken, replace or bypass the
+self-integrity gate in any way. No diagnostic semantic change.
+
 ## 41. Downstream non-claims
 
 Future D1 evidence/result must state that the diagnostic observation does not by itself

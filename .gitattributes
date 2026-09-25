@@ -7,3 +7,4 @@ MANIFEST.in text eol=lf
 *.json text eol=lf
 *.gitignore text eol=lf
 docs/v0.3/V03E_G0_5_PRE_ETB_EXECUTION_ORACLE_R2.ps1 text eol=lf
+docs/v0.3/V03E_G0_5_PRE_ETB_QUERY_EXCEPTION_DIAGNOSTIC_D1_EXECUTION.ps1 text eol=lf
