@@ -11,8 +11,10 @@
 > **DOES NOT TOUCH THE AUTHORITATIVE RECOVERY-R2 RESULT**
 > **DIAGNOSTIC OBSERVATIONS CAN NEVER BECOME ETB SEMANTIC RESULTS**
 > **SUPERSEDES THE REJECTED INITIAL CANDIDATE `78266c954087b33baf5a12dfab1cbdef845a0bbb` (REQUEST_CHANGES — P0 = 0, P1 = 0, P2 = 1, P3 = 2)**
+> **C1 CLARIFICATION `b8f8a67beac154894e496aaa601fa0a4cd4e9905` / `29f0f9cc1632f2f344f5cb4e01d25a832ba9acc78caedbdd43861b7d68ac4154` = ACCEPTED / FROZEN / CURRENT ACCEPTED AUTHORITY (IMPLEMENTATION BLOCKED BY OVERLAP-SEMANTICS GAP)**
+> **C2 OVERLAP-SEMANTICS CLARIFICATION = DESIGN CANDIDATE / OWNER OPTION B SELECTED / NOT ACCEPTED / NOT FROZEN / NOT AUTHORIZED / NOT EXECUTED**
 
-Status: **ETB QUERY_EXCEPTION DIAGNOSTIC D1 = CORRECTIVE DESIGN R1 = DESIGN CANDIDATE / NOT ACCEPTED / NOT AUTHORIZED / NOT EXECUTED**
+Status: **ETB QUERY_EXCEPTION DIAGNOSTIC D1 = CORRECTIVE DESIGN R1 + C1 (ACCEPTED / FROZEN) + C2 (DESIGN CANDIDATE / NOT ACCEPTED) / NOT AUTHORIZED / NOT EXECUTED**
 
 ## 0. Owner decision (PATH B — new diagnostic-design stage)
 
@@ -209,7 +211,8 @@ catch {
 
 The future implementation must ensure: `$qerr` is initialized immediately before the query; the query occurs
 exactly once; the `catch` captures the actual `$_` `ErrorRecord`; all `qerr` entries are preserved for
-evidence; rows are not silently discarded; **no second query is used to clarify the first**.
+evidence **except the single narrowly authorized C2-B cross-channel suppression of the final `qerr` record
+(§56.4-§56.6, §56.10)**; rows are not silently discarded; **no second query is used to clarify the first**.
 
 ## 13. Future diagnostic observation vocabulary (non-ETB semantics)
 
@@ -494,7 +497,10 @@ Do **not** omit the field. Do **not** serialize `{}`. Do **not** serialize `[]`.
 ## 32. `error_records` array relation (P2 finding 1, blocking)
 
 `error_records` contains **ONLY** ErrorRecords captured through `-ErrorVariable qerr`, in
-their observed order.
+their observed order, **except that at most one — the final observed `qerr` record — MAY be
+suppressed under the narrowly frozen C2-B cross-channel rule (§56.4-§56.6, §56.7, §56.10) and
+under no other circumstance**. `error_records` is therefore the **PUBLISHED** `qerr` evidence and
+is **not** necessarily equal in length to the raw number of records captured in `qerr` (§56.13).
 
 Every `error_records[]` entry uses the same exact 15-field closed ErrorRecord schema of
 §15. For every entry:
@@ -509,8 +515,14 @@ If `qerr` contains zero records:
 - `error_records = []`.
 
 This creates an explicit **mechanical** distinction between `terminating_error` and
-`error_records`: they are populated from disjoint capture paths, and neither is derivable
-from the other.
+`error_records`: they are populated from **disjoint capture mechanisms**, and neither is
+derivable from the other. **Disjoint capture paths do NOT imply disjoint payload values**: the two
+channels may expose records whose normalized 14-field payloads are equal. C2 (§56) authorizes
+**exactly one** narrowly bounded, normalization-time cross-channel publication transformation
+under the frozen conditions of §56.4-§56.6, and no other. That rule is an **OWNER-SELECTED
+EVIDENCE NORMALIZATION POLICY**; it is neither a claim that PowerShell guarantees the two channels
+to be semantically distinct, nor a claim that payload equality proves one underlying runtime
+event.
 
 ## 33. Complete null / empty representation table (P2 finding 2, blocking) — ACCEPTANCE CRITICAL
 
@@ -673,7 +685,9 @@ These per-class representations are frozen and cover the §13 vocabulary complet
 - `row_count = 0`
 
 Any `qerr` entries actually captured before termination remain independently represented
-in `error_records` using `source = "ERROR_VARIABLE"`. **No second query is executed to
+in `error_records` using `source = "ERROR_VARIABLE"`, **except that at most one — the final
+observed `qerr` record — MAY be suppressed under the narrowly frozen C2-B rule (§56.4-§56.6,
+§56.10); this is the only exception to this preservation clause**. **No second query is executed to
 clarify row state** (§6).
 
 ### 35.2 `COMMAND_UNAVAILABLE`
@@ -1159,3 +1173,241 @@ Standing P3 preserved unchanged: **ERROR STRING MAXIMUM REPRESENTATION RULE = NO
 NON-BLOCKING DESIGN OBSERVATION** (no truncation invented; status not modified by C1).
 
 **End of ETB query diagnostic D1 implementation design gap clarification C1.**
+
+---
+
+# Part IV — overlap-semantics design clarification C2 (owner-selected Option B)
+
+## 56. C2 — NORMALIZED TERMINATING-DUPLICATE SUPPRESSION
+
+### 56.1 Owner decision record
+
+The human owner selected, as a final decision for this clarification round:
+
+**OWNER DECISION = OPTION B — SUPPRESS EXACTLY ONE FINAL NORMALIZED QERR RECORD WHEN IT
+DUPLICATES THE TERMINATING CATCH RECORD.**
+
+This owner choice resolves the previously discovered **QERR / TERMINATING OVERLAP SEMANTICS
+DESIGN GAP** identified by the independent implementation review of the rejected candidate
+`a25e15416dba2c1d31918e6b41824204c219d948` (severity `P0 = 0, P1 = 0, P2 = 2, P3 = 2`, with
+`P2-2 = QERR / TERMINATING OVERLAP SEMANTICS — DESIGN CLARIFICATION REQUIRED`). The alternative
+raw-preservation option is **not** reopened by this round.
+
+**The C2 candidate is NOT accepted by this round.** Until it passes independent review and
+subsequent acceptance bookkeeping, the accepted design remains `b8f8a67…` / `29f0f9cc…`.
+
+### 56.2 Normalization precedes comparison
+
+Normalization precedes comparison. Both the terminating `catch` record and each eligible
+`qerr` record MUST first be normalized into the accepted closed 15-field ErrorRecord schema of
+§15. Every field remains a JSON string; unavailable values remain `""` (§33.2, §34). No
+comparison may be performed on un-normalized PowerShell objects.
+
+### 56.3 Exact comparison field set
+
+Comparison MUST exclude `source` and MUST exclude no other field. The exact compared field set
+is these **14** fields, in this exact order:
+
+| # | Compared field |
+| --- | --- |
+| 1 | `fully_qualified_error_id` |
+| 2 | `category` |
+| 3 | `category_activity` |
+| 4 | `category_reason` |
+| 5 | `category_target_name` |
+| 6 | `category_target_type` |
+| 7 | `exception_type` |
+| 8 | `exception_message` |
+| 9 | `exception_hresult` |
+| 10 | `inner_exception_type` |
+| 11 | `inner_exception_message` |
+| 12 | `error_details_message` |
+| 13 | `invocation_position_message` |
+| 14 | `script_stack_trace` |
+
+All 14 fields MUST compare equal using **ordinal string equality**. The following are
+**prohibited**: case folding; culture-aware comparison; partial comparison; message-only
+comparison; `FullyQualifiedErrorId`-only comparison; exception-type-only comparison; reference
+identity; object identity; hash comparison; timing heuristic.
+
+### 56.4 Eligibility
+
+A `qerr` record is eligible for cross-channel suppression **ONLY** if **all** of the following
+hold:
+
+- **A.** a terminating `catch` record exists; **and**
+- **B.** at least one `qerr` record exists; **and**
+- **C.** the candidate `qerr` record is the **FINAL** observed `qerr` record.
+
+**No earlier `qerr` record is ever eligible.**
+
+### 56.5 Exact suppression condition
+
+Suppress the final `qerr` record **if and only if** all 14 normalized payload fields listed in
+§56.3 are ordinal-string equal to the terminating `catch` record. If even one field differs, do
+**not** suppress. No fuzzy equivalence, no inferred equivalence, no partial match.
+
+### 56.6 Exact suppression count
+
+If the suppression condition is satisfied, suppress **exactly ONE** record: the final observed
+`qerr` record. **At most ONE** `qerr` record may be suppressed per D1 execution. Never suppress
+two, multiple, all matching, all identical, or earlier matching entries.
+
+### 56.7 Earlier qerr preservation
+
+All `qerr` entries before the final entry MUST remain in `error_records` **unconditionally**.
+This remains true even if their 14 payload fields equal the terminating `catch` record, and even
+if their payload equals another `qerr` record. **No `qerr`-to-`qerr` deduplication is
+permitted.**
+
+### 56.8 Published order
+
+After optional suppression, the published `error_records` order equals the original observed
+`qerr` order with at most the single eligible final entry omitted. Surviving relative order
+MUST NOT change. No sorting, no regrouping, no merge, no rewrite.
+
+### 56.9 Channel ownership
+
+`terminating_error` remains **catch-only**: it is `null` or exactly one closed 15-field
+ErrorRecord captured from the actual `catch { $_ }` path, with `source =
+"TERMINATING_EXCEPTION"` (§31). Every published `error_records` entry comes from `qerr` and
+carries `source = "ERROR_VARIABLE"` (§32). **No `qerr`-only record may populate
+`terminating_error`**, and **no catch-only synthetic copy may be inserted into
+`error_records`**.
+
+### 56.10 Reconciliation of the prior preservation wording
+
+The accepted design previously stated, in §12, that "all `qerr` entries are preserved for
+evidence", and in §35.1 that "Any `qerr` entries actually captured before termination remain
+independently represented in `error_records`". Those clauses are herein **narrowly
+cross-qualified** so that the resulting design means exactly:
+
+**ALL actually captured `qerr` entries are preserved in observed order EXCEPT for the one
+narrowly authorized C2-B cross-channel suppression** — which applies **only** to the final
+`qerr` record, **only** when a terminating `catch` exists, **only** when all 14 normalized
+payload fields excluding `source` are ordinal-equal, and **at most once**.
+
+Preservation is **not** weakened beyond this exact exception, and **no general deduplication
+authority is created**. §12 and §35.1 carry the corresponding qualifiers.
+
+### 56.11 Disjoint capture paths — reconciliation
+
+`terminating_error` and `error_records` continue to originate from **disjoint capture
+mechanisms** (§32), and neither is derivable from the other. It is hereby made explicit that
+**disjoint capture paths do NOT imply disjoint payload values**: the two channels may expose
+records whose normalized 14-field payloads are equal.
+
+C2 authorizes **one** normalization-time evidence transformation across those channels, under
+the exact rule of §56.4-§56.6 and no other. The design does **not** claim that PowerShell
+guarantees the two channels to be semantically distinct, and does **not** claim that payload
+equality proves one underlying runtime event.
+
+**The suppression rule is an OWNER-SELECTED EVIDENCE NORMALIZATION POLICY.**
+
+### 56.12 Design non-claim about underlying event identity
+
+The C2-B suppression condition does **NOT** establish, as a factual proposition, that the
+`qerr` record and the terminating `catch` record are the same underlying PowerShell event. It
+defines **only** the accepted D1 evidence-normalization policy. Therefore:
+
+**payload equality = suppression eligibility — NOT proof of runtime event identity.**
+
+### 56.13 Raw qerr count versus published `error_records`
+
+`error_records` represents the **PUBLISHED** `qerr` evidence after the exact optional C2-B
+suppression. It is **NOT** necessarily equal in length to the raw number of records captured in
+`qerr`:
+
+- if one final record is suppressed: published `error_records` count = raw `qerr` count − 1;
+- otherwise: published `error_records` count = raw `qerr` count.
+
+**No new top-level raw-`qerr`-count field is added by C2**, and the 19-field top-level schema is
+**not** changed.
+
+### 56.14 `query_outcome` interaction
+
+The optional C2-B suppression MUST NOT change whether `qerr` was actually observed **for the
+purpose of query-outcome classification**. Classification MUST use the **actual raw `qerr`
+capture state BEFORE** optional cross-channel suppression.
+
+**Consistency verification (required by this clarification).** No internal contradiction
+arises, because:
+
+- the `ERROR_RECORDS_ZERO_ROWS` and `ERROR_RECORDS_WITH_ROWS` classes both require
+  `terminating_error = null` (§35.6, §35.7), i.e. **no terminating `catch`**; and
+- C2-B eligibility requires **a terminating `catch` record to exist** (§56.4 condition A).
+
+Therefore **C2-B can never suppress a `qerr` record in either `ERROR_RECORDS_*` class**, and
+the "one or more `qerr` ErrorRecord objects" representation of §35.6/§35.7 remains satisfied
+under all C2-B executions. Under `TERMINATING_EXCEPTION`, §37 case 2 already admits
+`error_records` = "qerr entries, **or `[]`**", so a fully suppressed sole `qerr` record is
+already a representable outcome and **no new representation rule is required**.
+
+**No `query_outcome` value is silently redefined.** Should a future revision of this design
+require `ERROR_RECORDS_*` to imply non-empty published `error_records`, that would be a
+secondary design gap to be reported rather than resolved by invention; under the current frozen
+text it does not.
+
+### 56.15 `TERMINATING_EXCEPTION` precedence
+
+The accepted classifier precedence is preserved: if a terminating `catch` occurred, then
+`query_outcome = TERMINATING_EXCEPTION`. C2 suppression affects **only** the published
+`error_records`. It MUST NOT change `terminating_error`, `query_outcome`, `row_count`, `rows`,
+or the listener-query invocation count.
+
+### 56.16 No vocabulary change
+
+No `query_outcome` value is added, removed, renamed or reinterpreted. The accepted eight-value
+vocabulary is preserved exactly: `COMMAND_UNAVAILABLE`, `TERMINATING_EXCEPTION`,
+`ERROR_RECORDS_ZERO_ROWS`, `ERROR_RECORDS_WITH_ROWS`, `ZERO_ROWS`, `ONE_ROW`, `MULTIPLE_ROWS`,
+`DIAGNOSTIC_HARNESS_INVALID`.
+
+### 56.17 No query contract change
+
+The listener-query contract is preserved unchanged: `Get-NetTCPConnection -LocalAddress
+'127.0.0.1' -LocalPort 4096 -State Listen -ErrorAction SilentlyContinue -ErrorVariable qerr`;
+maximum **one** listener query; no retry, no repeat, no polling, no alternate command, no CIM
+reconstruction, no fallback.
+
+### 56.18 No ErrorRecord schema change
+
+The exact 15-field ErrorRecord schema is preserved. **No** duplicate flag, suppressed flag,
+`raw_qerr_count`, overlap flag, dedup metadata, event identity, suppression reason or any other
+new evidence field is added. C2 changes **only** the exact publication-selection semantics for
+one eligible final `qerr` record.
+
+### 56.19 No top-level schema change
+
+`D1_TOPLEVEL_FIELD_CLOSURE = 19 / 19 CLOSED` is preserved, together with the exact 19-field
+top-level order. No field is added, removed or reordered.
+
+### 56.20 C2 test matrix (normative)
+
+| # | Case | Suppressed | Published `error_records` | Earlier retention |
+| --- | --- | --- | --- | --- |
+| 1 | catch exists, `qerr` empty | **0** | `[]` | n/a |
+| 2 | catch exists, one `qerr`, payload differs | **0** | 1 entry (that record) | n/a |
+| 3 | catch exists, one `qerr`, payload identical | **final one** | **`[]`** (length 0) | n/a |
+| 4 | catch exists, two `qerr`, final identical | **final one** | 1 entry (earlier retained) | yes |
+| 5 | catch exists, two `qerr`, first identical, final differs | **0** | 2 entries (both retained) | yes |
+| 6 | catch exists, two `qerr`, both identical | **final one only** | 1 entry (first retained) | yes |
+| 7 | no catch, one `qerr` | **0** | 1 entry | n/a |
+| 8 | no catch, multiple `qerr` | **0** | all entries | yes |
+
+The matrix is consistent with §56.4-§56.8: eligibility requires a terminating `catch`
+(cases 1-6 only), the single eligible position is the final `qerr` record, comparison is
+all-14-field ordinal equality excluding `source`, at most one suppression occurs, and earlier
+`qerr` entries are always retained.
+
+### 56.21 C2 candidate status
+
+**D1 OVERLAP-SEMANTICS CLARIFICATION C2 = DESIGN CANDIDATE / OWNER OPTION B SELECTED / NOT
+ACCEPTED / NOT FROZEN / NOT AUTHORIZED / NOT EXECUTED.**
+
+The previously accepted design remains `b8f8a67beac154894e496aaa601fa0a4cd4e9905` /
+`29f0f9cc1632f2f344f5cb4e01d25a832ba9acc78caedbdd43861b7d68ac4154` = **ACCEPTED / FROZEN /
+IMPLEMENTATION BLOCKED BY OVERLAP-SEMANTICS GAP** until C2 itself passes independent review and
+acceptance bookkeeping. `diagnostic_d1_design_commit` and `diagnostic_d1_spec_sha256` are
+**NOT** prematurely replaced in active accepted provenance.
+
+**End of ETB query diagnostic D1 overlap-semantics design clarification C2.**
