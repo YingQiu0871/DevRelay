@@ -1,8 +1,8 @@
 # DevRelay v0.3-E — G0.5-PRE / SIC
-# ETB QUERY_EXCEPTION DIAGNOSTIC D1 — EXECUTION AUTHORIZATION (candidate)
+# ETB QUERY_EXCEPTION DIAGNOSTIC D1 — EXECUTION AUTHORIZATION (corrected candidate)
 
 > **ETB QUERY_EXCEPTION DIAGNOSTIC D1 — EXECUTION AUTHORIZATION**
-> **CANDIDATE**
+> **CORRECTED CANDIDATE (post-C2)**
 > **NOT ACCEPTED**
 > **NOT EFFECTIVE**
 > **GRANTS NO EXECUTION**
@@ -14,6 +14,7 @@
 
 Status: **D1 EXECUTION AUTHORIZATION = CANDIDATE / NOT ACCEPTED / NOT EFFECTIVE**
 Script status: **D1 IMPLEMENTATION = CANDIDATE / NOT ACCEPTED / NOT AUTHORIZED FOR EXECUTION / NOT EXECUTED**
+Owner-selected accepted design policy: **OPTION B — NORMALIZED TERMINATING-DUPLICATE SUPPRESSION**
 
 ---
 
@@ -34,17 +35,28 @@ future observed listener row MUST NOT be promoted to `ETB_SATISFIED`.
 
 | Item | Value |
 | --- | --- |
-| `diagnostic_d1_design_commit` | `b8f8a67beac154894e496aaa601fa0a4cd4e9905` |
-| `diagnostic_d1_spec_sha256` | `29f0f9cc1632f2f344f5cb4e01d25a832ba9acc78caedbdd43861b7d68ac4154` |
+| `diagnostic_d1_design_commit` | `14b85bd2365d500ef87f357aeecb94de14211cc9` |
+| `diagnostic_d1_spec_sha256` | `69b7cfda172658fe6c4e726430274a27a6dffb4c4d1c90a374d79feb6956e35d` |
 | spec path | `docs/v0.3/V03E_G0_5_PRE_ETB_QUERY_EXCEPTION_DIAGNOSTIC_D1_SPEC.md` |
 | `D1_TOPLEVEL_FIELD_CLOSURE` | `19 / 19 CLOSED` |
 
-The C1-clarified revision is the **current** accepted authority. The superseded revision
-`6ad917b950c12e7a93579c519cc63f89925c2ab0` / `e9c521ff…` is recorded as
-**PREVIOUSLY ACCEPTED / HISTORICAL AUTHORITATIVE PREDECESSOR / SUPERSEDED BY ACCEPTED C1
-CLARIFICATION** — it is **not** rejected. The design acceptance bookkeeping commit
-`80e937880b3484cac0ff471ffc22ebeb06ff5297` is a bookkeeping commit, **not** a design commit, and
-does not replace the design authority above.
+The **C2** clarification revision is the current accepted authority. It carries the
+owner-selected C2 policy **Option B — normalized terminating-duplicate suppression**.
+
+The earlier accepted revisions are recorded as **PREVIOUSLY ACCEPTED / HISTORICAL AUTHORITATIVE
+PREDECESSOR / SUPERSEDED BY ACCEPTED C2 CLARIFICATION** — they are **not** rejected:
+
+- C1 revision `b8f8a67beac154894e496aaa601fa0a4cd4e9905` / `29f0f9cc1632f2f344f5cb4e01d25a832ba9acc78caedbdd43861b7d68ac4154`
+- corrective R1 revision `6ad917b950c12e7a93579c519cc63f89925c2ab0`
+
+Design acceptance bookkeeping commits are bookkeeping commits, **not** design commits, and do not
+replace the design authority above:
+
+- `8738651` (R1 design acceptance bookkeeping)
+- `80e937880b3484cac0ff471ffc22ebeb06ff5297` (C1 acceptance bookkeeping)
+- `ac8d23089c33e4d3b3c8960e8cdeea3171dff695` (C2 acceptance bookkeeping)
+
+`diagnostic_d1_design_commit` is **never** set to `ac8d230…` or to any other bookkeeping commit.
 
 ## 3. Candidate script provenance model
 
@@ -83,8 +95,8 @@ The script requires three mandatory parameters and has no usable default for any
 
 | Constant | Value |
 | --- | --- |
-| `diagnostic_d1_design_commit` | `b8f8a67beac154894e496aaa601fa0a4cd4e9905` |
-| `diagnostic_d1_spec_sha256` | `29f0f9cc1632f2f344f5cb4e01d25a832ba9acc78caedbdd43861b7d68ac4154` |
+| `diagnostic_d1_design_commit` | `14b85bd2365d500ef87f357aeecb94de14211cc9` |
+| `diagnostic_d1_spec_sha256` | `69b7cfda172658fe6c4e726430274a27a6dffb4c4d1c90a374d79feb6956e35d` |
 | `source_authoritative_bookkeeping_commit` | `93e44fe61c59ec5070e2823062a607347bb9163a` |
 | `source_r2_evidence_sha256` | `6f903f05e859a05a99dc0cde253e878ae7235c1554e212ab2f6b27945b2da0c8` |
 | `source_r2_manifest_sha256` | `b4701c900132ffee9d9f31ac7c7137c906da80de97a08678544c7d7d7eb522c1` |
@@ -190,6 +202,10 @@ two-argument `Move` TEMP → FINAL; (12) read FINAL back; (13) require exact byt
 compute SHA-256 of FINAL for reporting. **No overwrite, no delete, no replace, no retry, no
 alternate filename.**
 
+The script sets a per-stage consumption flag to `1` only after `CreateNew` has returned a
+stream, so a failure report states the **observed** consumption state rather than inferring a
+budget rollback from the exit code.
+
 ## 15. Consumption boundaries
 
 A successful TEMP `CreateNew` is the **irreversible consumption boundary**:
@@ -199,14 +215,21 @@ A successful TEMP `CreateNew` is the **irreversible consumption boundary**:
 - if ATTEMPT TEMP `CreateNew` succeeds → `DIAGNOSTIC ATTEMPT = SPENT` permanently, even if
   later steps fail.
 
+Claim files remain the forensic source of irreversible consumption state. **No budget rollback
+is ever inferred from an exit code or from process termination.**
+
 ## 16. Future execution order (frozen)
 
-`PRECONDITIONS → AUTH claim consumption → ATTEMPT claim consumption → D1 evidence-directory
-creation → command-availability inspection → zero-or-one listener query → evidence publication
-→ manifest publication → result publication → STOP.`
+`PRECONDITIONS → AUTH claim consumption → ATTEMPT claim consumption → post-consumption
+directory occupancy gate → D1 evidence-directory creation → command-availability inspection →
+zero-or-one listener query → evidence publication → manifest publication → result publication
+→ STOP.`
 
 Never query before both claims are consumed. AUTHORIZATION failure ⇒ no ATTEMPT, no query.
 ATTEMPT failure ⇒ no query. No retry in the same or a later run once either budget is consumed.
+
+The **post-consumption directory occupancy gate** is evaluated after **both** claims have been
+consumed and **immediately before** the evidence-directory creation (see §33).
 
 ## 17. Preconsumption preconditions
 
@@ -214,8 +237,8 @@ Before AUTH TEMP `CreateNew`, **all** of the following must hold:
 
 | # | Precondition |
 | --- | --- |
-| A | accepted D1 design commit = `b8f8a67beac154894e496aaa601fa0a4cd4e9905` |
-| B | accepted D1 spec SHA-256 = `29f0f9cc1632f2f344f5cb4e01d25a832ba9acc78caedbdd43861b7d68ac4154`, verified both at the design commit and in the worktree |
+| A | accepted D1 design commit = `14b85bd2365d500ef87f357aeecb94de14211cc9` |
+| B | accepted D1 spec SHA-256 = `69b7cfda172658fe6c4e726430274a27a6dffb4c4d1c90a374d79feb6956e35d`, verified both at the design commit and in the worktree |
 | C | `AcceptedAuthorizationCommit` resolves to an exact Git commit |
 | D | authorization artifact at that commit hashes to `ExpectedAuthorizationSha256` |
 | E | script at that commit hashes to `ExpectedScriptSha256` |
@@ -293,11 +316,13 @@ Only: `COMMAND_UNAVAILABLE`, `TERMINATING_EXCEPTION`, `ERROR_RECORDS_ZERO_ROWS`,
 `ERROR_RECORDS_WITH_ROWS`, `ZERO_ROWS`, `ONE_ROW`, `MULTIPLE_ROWS`,
 `DIAGNOSTIC_HARNESS_INVALID`. No ETB semantic result may be generated.
 
-Classification after availability handling: terminating catch ⇒ `TERMINATING_EXCEPTION`; else
-`qerr > 0 and row_count == 0` ⇒ `ERROR_RECORDS_ZERO_ROWS`; else `qerr > 0 and row_count > 0` ⇒
-`ERROR_RECORDS_WITH_ROWS`; else `qerr == 0 and row_count == 0` ⇒ `ZERO_ROWS`; else `qerr == 0
-and row_count == 1` ⇒ `ONE_ROW`; else `qerr == 0 and row_count > 1` ⇒ `MULTIPLE_ROWS`. No
-overlap.
+Classification after availability handling uses the **raw pre-suppression `qerr` state**:
+terminating catch ⇒ `TERMINATING_EXCEPTION`; else `qerr_raw > 0 and row_count == 0` ⇒
+`ERROR_RECORDS_ZERO_ROWS`; else `qerr_raw > 0 and row_count > 0` ⇒ `ERROR_RECORDS_WITH_ROWS`;
+else `qerr_raw == 0 and row_count == 0` ⇒ `ZERO_ROWS`; else `qerr_raw == 0 and row_count == 1`
+⇒ `ONE_ROW`; else `qerr_raw == 0 and row_count > 1` ⇒ `MULTIPLE_ROWS`. No overlap.
+
+The optional C2-B suppression described in §24 can **never** change the classifier input.
 
 ## 24. ErrorRecord normalization and channel separation
 
@@ -311,17 +336,57 @@ signed decimal **text** as a JSON string. No arbitrary object serialization.
 `terminating_error` is `null` or one normalized record with `source = TERMINATING_EXCEPTION`.
 `error_records` holds `qerr`-only normalized records with `source = ERROR_VARIABLE`.
 
-**Deterministic no-duplication:** if and only if the **final** `qerr` entry has the same
-normalized 14 payload fields as the terminating record (excluding `source`), exactly that one
-final `qerr` entry is suppressed. All earlier entries are retained even if payload-identical.
-Never more than one entry is removed.
+### 24.1 C2 Option B — normalized terminating-duplicate suppression (accepted policy)
 
-## 25. Error-string P3
+Implemented exactly as accepted:
 
-Standing P3 unchanged: **ERROR STRING MAXIMUM REPRESENTATION RULE = NOT YET FROZEN /
-NON-BLOCKING DESIGN OBSERVATION**. This candidate serializes the full observed accepted string
-values: no truncation, no hashing in place of content, no arbitrary object expansion. **This P3
-is not claimed closed.**
+- **Normalization happens before comparison.** Both the terminating record and the eligible
+  `qerr` record are normalized to the closed 15-field shape first.
+- **Eligibility** requires all three: (a) a terminating catch occurred, (b) at least one `qerr`
+  record exists, and (c) the candidate record is the **final** observed `qerr` record.
+- **Comparison excludes `source` only** and compares exactly these 14 fields, in this order:
+  `fully_qualified_error_id`, `category`, `category_activity`, `category_reason`,
+  `category_target_name`, `category_target_type`, `exception_type`, `exception_message`,
+  `exception_hresult`, `inner_exception_type`, `inner_exception_message`,
+  `error_details_message`, `invocation_position_message`, `script_stack_trace`.
+- **Comparison semantics: ordinal string equality on all 14 fields.**
+- Suppression happens **if and only if** all 14 fields match.
+- **Exactly one** record may be suppressed, **at most once per execution**.
+- All **earlier** `qerr` records are retained **unconditionally**, even when payload-identical.
+- **No `qerr`-to-`qerr` deduplication** is performed.
+- **Surviving order is preserved.**
+- `terminating_error` remains catch-only; `error_records` remains `qerr`-only.
+- The classifier uses the raw pre-suppression `qerr` state; only the **published**
+  `error_records` reflects the optional suppression.
+- The observation vocabulary is unchanged.
+
+Prohibited comparison methods (none is used): case folding, culture-aware comparison, partial
+or subset comparison, message-only comparison, fully-qualified-error-id-only comparison,
+exception-type-only comparison, reference identity, object identity, hashing, timing heuristic.
+
+**Non-inference:** payload equality is **suppression eligibility only**. It is **not** proof
+that the two records are the same underlying PowerShell event, and this contract makes no such
+stronger causal claim.
+
+**No new field or flag:** the published evidence contains **no** `raw_qerr_count`, **no**
+suppression flag, **no** duplicate flag and **no** overlap flag. Top-level field closure
+remains exactly **19 fields**.
+
+### 24.2 C2 Option B consistency with the `ERROR_RECORDS_*` classes
+
+The `ERROR_RECORDS_ZERO_ROWS` and `ERROR_RECORDS_WITH_ROWS` classes require
+`terminating_error = null`, i.e. no terminating catch. C2-B eligibility requires a terminating
+catch. Therefore C2-B can never suppress a record inside those two classes, and the accepted
+`query_outcome` meaning is not silently redefined. Under `TERMINATING_EXCEPTION` the accepted
+contract already admits `error_records` as "`qerr` entries, or `[]`", so no secondary design
+gap arises.
+
+## 25. Error-string P3-A
+
+Standing P3-A unchanged: **ERROR STRING MAXIMUM REPRESENTATION RULE = NOT YET FROZEN /
+NON-BLOCKING DESIGN OBSERVATION**. This candidate serializes the complete observed accepted
+string values: **no truncation, no hashing in place of content, no dropped long value, no
+arbitrary object expansion, and no invented maximum size**. **P3-A is not claimed closed.**
 
 ## 26. Row evidence
 
@@ -336,7 +401,7 @@ Exactly, in order: `schema_version`, `source_authoritative_bookkeeping_commit`,
 `execution_finished_at`, `diagnostic_mode`, `endpoint`, `configured_base_url`,
 `powershell_environment`, `command_metadata`, `query`, `query_outcome`, `row_count`, `rows`,
 `terminating_error`, `error_records`, `non_claims`, `activity_counters`. No missing field, no
-extra field.
+extra field. `D1_TOPLEVEL_FIELD_CLOSURE = 19 / 19 CLOSED`.
 
 ## 28. Null / empty contract
 
@@ -376,12 +441,29 @@ terminal LF.
 
 Only their already reserved TEMP counterparts are used. No alternate path. No R2 path reuse.
 
-## 33. Directory-creation timing
+## 33. Directory occupancy gate and directory-creation timing (P2 correction)
 
 The D1 evidence directory MUST be absent during precondition validation and is **not** created
-then. It is created exactly once, **after both claims are consumed**, before evidence TEMP
-publication. If creation fails: the attempt remains spent, no retry, and no query if the query
-has not yet occurred. This operational failure is distinct from any diagnostic query outcome.
+then.
+
+After **both** claims are consumed, and **immediately before** the evidence-directory creation,
+the script evaluates **both**:
+
+```
+[System.IO.File]::Exists(<evidence directory>)
+[System.IO.Directory]::Exists(<evidence directory>)
+```
+
+If **either** is true: **FAIL CLOSED** — no creation, no reuse, no delete, no cleanup, no retry,
+and no fall-through into command availability or the listener query. The control state is
+reported as a **post-consumption harness failure** with exit class **40**, with both budgets
+reported **SPENT** and the listener-query invocation count reported **0** (the query has not
+occurred at that point).
+
+Only if both checks remain false is directory creation attempted. If creation **throws** or if
+the directory is **not observed** afterwards, the same terminal behaviour applies: authorization
+remains **SPENT**, the attempt remains **SPENT**, no retry, no reuse, no query, exit **40**.
+This operational failure is distinct from any diagnostic query outcome.
 
 ## 34. Atomic output publication
 
@@ -426,19 +508,45 @@ execution-control state only, **not** `COMMAND_UNAVAILABLE`, **not** `TERMINATIN
 **not** `DIAGNOSTIC_HARNESS_INVALID`, **not** `ETB_UNSATISFIED` and **not** any ETB semantic
 result.
 
-## 39. Exit-code contract (closed)
+## 39. Exit-code contract (closed, six codes)
 
 | Code | Meaning |
 | --- | --- |
 | `0` | complete evidence + manifest + result publication success |
-| `10` | precondition failure before claim consumption |
-| `20` | authorization claim consumption failure |
-| `30` | attempt claim consumption failure |
-| `40` | post-consumption harness failure |
-| `50` | publication incomplete |
+| `10` | pre-consumption / pre-authorization failure |
+| `20` | authorization-claim consumption-stage failure |
+| `30` | attempt-claim consumption-stage failure |
+| `40` | post-attempt-consumption harness failure before publication completion |
+| `50` | evidence / manifest / result publication incomplete |
 
-No other success code. Unexpected internal failures map deterministically to the appropriate
-non-zero class without retry. The identical mapping is implemented in the script.
+### 39.1 Contract boundary (explicit)
+
+The six-code D1 harness contract applies **once the script body has been entered after
+successful PowerShell parsing and mandatory parameter binding**.
+
+PowerShell **parser** failure, **host** failure and **mandatory-parameter binding** failure
+occur **outside D1 harness entry**. They cannot consume a claim, cannot create evidence, cannot
+create a result, and **must not be classified as a D1 diagnostic observation** or as a D1
+result. They are not represented by any of the six codes above and are not mapped by script-body
+logic.
+
+### 39.2 Deterministic failure-stage mapping
+
+Unexpected exceptions raised inside the script body map deterministically according to the
+current irreversible stage:
+
+| Stage at failure | Exit | Resulting consumption state |
+| --- | --- | --- |
+| before AUTH TEMP `CreateNew` (including AUTH-claim byte construction) | `10` | neither consumed |
+| during AUTH claim consumption, after AUTH-claim byte construction through AUTH stage completion | `20` | authorization `SPENT` if its TEMP `CreateNew` succeeded, otherwise `NOT_CONSUMED`; attempt not consumed |
+| after AUTH completion through ATTEMPT claim stage completion | `30` | authorization `SPENT`; attempt `SPENT` if its TEMP `CreateNew` succeeded, otherwise `NOT_CONSUMED` |
+| after ATTEMPT completion, before the publication phase | `40` | both `SPENT` |
+| during evidence / manifest / result publication | `50` | both `SPENT` |
+
+A script-scope failure mapping covers the whole script body, so **no known throwing operation is
+left outside a deterministic mapped boundary** and no reachable script-body failure escapes as
+an unmapped host exit code. No budget rollback is inferred from an exit code; the claim files
+remain the forensic source of irreversible consumption state.
 
 ## 40. Protected-source requirements
 
@@ -457,7 +565,38 @@ endpoint state; permanent listener state; process binding; target executable ide
 correctness/incorrectness of Oracle-R2 generally. Any later decision to create a new ETB
 authorization remains a separate owner decision.
 
-## 42. Candidate status of this round
+## 42. Corrections carried by this corrected candidate
+
+| Item | Status in this candidate |
+| --- | --- |
+| **P2** — directory occupancy race | **CORRECTED IN THIS CANDIDATE / REQUIRES INDEPENDENT REVIEW** — post-consumption occupancy gate implemented as specified in §33 |
+| **P3-B** — unexpected exception / six-code mapping consistency | **CORRECTED IN THIS CANDIDATE / REQUIRES INDEPENDENT REVIEW** — see §39; the prose and the implementation now describe one identical closed six-code contract for the script body |
+| **P3-A** — error string maximum representation rule | **STILL OPEN / NOT CLOSED / NOT YET FROZEN / NON-BLOCKING DESIGN OBSERVATION** — see §25 |
+
+`P3-B` is **not** stated as `CLOSED`, `ACCEPTED` or `RESOLVED` here; that determination belongs
+to independent review.
+
+The rejected predecessor implementation candidate
+`a25e15416dba2c1d31918e6b41824204c219d948` remains
+**REQUEST_CHANGES / HISTORICAL REJECTED IMPLEMENTATION CANDIDATE / NOT ACCEPTED / NOT
+AUTHORIZED FOR EXECUTION / NOT EXECUTED**. It is preserved and is neither amended, rewritten
+nor relabelled. This corrected candidate is a **new descendant candidate**; it does not reuse
+or amend it. Its bytes are recorded only as a rejected implementation baseline, never as
+accepted provenance.
+
+## 43. Current authority after this corrected candidate
+
+- D1 DESIGN = **ACCEPTED / FROZEN** at `14b85bd2365d500ef87f357aeecb94de14211cc9` /
+  `69b7cfda172658fe6c4e726430274a27a6dffb4c4d1c90a374d79feb6956e35d`
+- D1 IMPLEMENTATION = **CANDIDATE / NOT ACCEPTED / NOT AUTHORIZED FOR EXECUTION / NOT EXECUTED**
+- D1 EXECUTION AUTHORIZATION = **CANDIDATE / NOT ACCEPTED / NOT EFFECTIVE**
+- D1 AUTHORIZATION USE = **UNAVAILABLE / NOT YET GRANTED**
+- D1 DIAGNOSTIC ATTEMPT = **UNAVAILABLE / NOT YET GRANTED**
+- D1 LISTENER QUERY EXECUTION = **NOT AUTHORIZED**
+- D1 claims = **ABSENT**
+- D1 result = **ABSENT**
+
+## 44. Candidate status of this round
 
 **D1 EXECUTION AUTHORIZATION = CANDIDATE / NOT ACCEPTED / NOT EFFECTIVE.**
 **D1 IMPLEMENTATION = CANDIDATE / NOT ACCEPTED / NOT AUTHORIZED FOR EXECUTION / NOT EXECUTED.**
@@ -467,4 +606,4 @@ listener query, and consumed no budget. Budgets remain **D1 AUTHORIZATION USE = 
 NOT YET GRANTED**, **D1 DIAGNOSTIC ATTEMPT = UNAVAILABLE / NOT YET GRANTED** and **D1 LISTENER
 QUERY EXECUTION = NOT AUTHORIZED**. Both D1 claim paths and all six output paths remain ABSENT.
 
-**End of D1 execution authorization candidate.**
+**End of D1 execution authorization corrected candidate.**

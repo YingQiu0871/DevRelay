@@ -7,9 +7,22 @@
 #   This file MUST NOT be executed until an independently accepted execution authorization
 #   and its independently confirmed bookkeeping exist. This construction round does not run it.
 #
-# AUTHORITATIVE DESIGN (C1-clarified, accepted):
-#   diagnostic_d1_design_commit = b8f8a67beac154894e496aaa601fa0a4cd4e9905
-#   diagnostic_d1_spec_sha256   = 29f0f9cc1632f2f344f5cb4e01d25a832ba9acc78caedbdd43861b7d68ac4154
+# AUTHORITATIVE DESIGN (C2-clarified, accepted):
+#   diagnostic_d1_design_commit = 14b85bd2365d500ef87f357aeecb94de14211cc9
+#   diagnostic_d1_spec_sha256   = 69b7cfda172658fe6c4e726430274a27a6dffb4c4d1c90a374d79feb6956e35d
+#
+# OWNER-SELECTED ACCEPTED C2 POLICY: OPTION B - NORMALIZED TERMINATING-DUPLICATE SUPPRESSION.
+#   Implemented exactly as accepted; see the C2 section inside the execution phase.
+#
+# CORRECTIONS CARRIED BY THIS CANDIDATE (the candidate replaces, but never rewrites, the
+# rejected candidate a25e15416dba2c1d31918e6b41824204c219d948):
+#   P2   - post-consumption directory occupancy gate (File.Exists OR Directory.Exists)
+#          evaluated after BOTH claims are consumed and immediately before directory creation.
+#   P3-B - deterministic script-body failure mapping onto the closed six-code set; no known
+#          throwing operation is left outside a mapped boundary.
+#   P3-A - UNCHANGED AND STILL OPEN: ERROR STRING MAXIMUM REPRESENTATION RULE = NOT YET FROZEN.
+#          This candidate serializes complete observed accepted string values. No truncation,
+#          no hashing in place of content, no invented maximum size, no dropped long value.
 #
 # This script is the future execution entrypoint. It is NOT an ETB semantic attempt:
 # no observation produced by it may become or replace AUTHORITATIVE ETB SEMANTIC RESULT.
@@ -17,6 +30,24 @@
 # Self-integrity: this script does NOT embed its own commit id or its own expected SHA-256.
 # Those arrive as mandatory parameters and are frozen only after independent review and
 # acceptance bookkeeping.
+#
+# ---------------------------------------------------------------------------------------
+# THROWING-OPERATION INVENTORY (static, for independent audit)
+# The script body is covered by a single script-scope trap that maps every otherwise
+# unhandled failure onto the closed set {0,10,20,30,40,50} using the irreversible-stage
+# tracker $Stage. Operations that can raise and their mapping boundary:
+#   git object access / hashing / worktree reads / config-reader invocation /
+#   filesystem existence checks   -> PRE      -> 10 (or explicit precondition failure 10)
+#   auth claim byte construction   -> PRE      -> 10   (before the AUTH TEMP CreateNew)
+#   auth claim CreateNew/write/flush/readback/move/hash -> AUTH -> 20 (explicit catch)
+#   attempt claim byte construction/CreateNew/write/flush/readback/move/hash
+#                                  -> ATTEMPT -> 30 (explicit catch)
+#   directory occupancy gate / directory creation / command availability /
+#   query setup / ErrorRecord normalization / row normalization /
+#   evidence byte construction     -> HARNESS -> 40
+#   JSON serialization / manifest construction / result construction /
+#   output TEMP creation / output Move/readback/hash -> PUBLICATION -> 50
+# No reachable failing operation is intentionally left outside these boundaries.
 
 [CmdletBinding()]
 param(
@@ -24,6 +55,57 @@ param(
   [Parameter(Mandatory = $true)][string]$ExpectedAuthorizationSha256,
   [Parameter(Mandatory = $true)][string]$ExpectedScriptSha256
 )
+
+# ================================================================ exit-code contract
+# Closed set: {0,10,20,30,40,50}. Declared first so that the script-body failure mapping
+# below can be expressed in terms of them.
+# This contract governs the script BODY. PowerShell parser, host and mandatory-parameter
+# binding failures happen BEFORE the body is entered: they are outside D1 harness entry,
+# can consume no claim and can never represent a D1 result or a D1 observation.
+$ExitOk           = 0
+$ExitPrecondition = 10
+$ExitAuthClaim    = 20
+$ExitAttemptClaim = 30
+$ExitHarness      = 40
+$ExitPublication  = 50
+
+# ========================================================= script-body failure mapping
+# Irreversible-stage tracker. Exactly one of: PRE, AUTH, ATTEMPT, HARNESS, PUBLICATION.
+# It is only ever advanced, never rolled back.
+$Stage = 'PRE'
+# 1 only once the single listener-query site has been entered.
+$QueryStarted = 0
+
+trap {
+  # Deterministic mapping of any otherwise-unhandled failure raised inside the script body
+  # onto the closed six-code set. There is no reachable script-body exception path that
+  # escapes to the host as an unmapped exit code.
+  $stageNow = 'UNKNOWN'
+  if ($null -ne $script:Stage) { $stageNow = [string]$script:Stage }
+  $code = $script:ExitHarness
+  if ($stageNow -eq 'PRE') { $code = $script:ExitPrecondition }
+  elseif ($stageNow -eq 'AUTH') { $code = $script:ExitAuthClaim }
+  elseif ($stageNow -eq 'ATTEMPT') { $code = $script:ExitAttemptClaim }
+  elseif ($stageNow -eq 'PUBLICATION') { $code = $script:ExitPublication }
+  $exType = ''
+  $exMsg = ''
+  if ($null -ne $_) {
+    if ($null -ne $_.Exception) {
+      $exType = [string]$_.Exception.GetType().FullName
+      $exMsg = [string]$_.Exception.Message
+    }
+  }
+  Write-Output ('D1_SCRIPT_BODY_FAILURE_MAPPED=' + [string]$code)
+  Write-Output ('D1_SCRIPT_BODY_FAILURE_STAGE=' + $stageNow)
+  Write-Output ('D1_SCRIPT_BODY_FAILURE_EXCEPTION_TYPE=' + $exType)
+  Write-Output ('D1_SCRIPT_BODY_FAILURE_EXCEPTION_MESSAGE=' + $exMsg)
+  Write-Output ('D1_LISTENER_QUERY_STARTED=' + [string]$script:QueryStarted)
+  Write-Output 'D1_BUDGET_ROLLBACK_INFERRED=0'
+  Write-Output 'D1_CLAIM_FILES_ARE_FORENSIC_SOURCE=1'
+  Write-Output 'D1_RETRY_AUTHORIZED=0'
+  Write-Output 'D1_SECOND_QUERY_AUTHORIZED=0'
+  exit $code
+}
 
 $ErrorActionPreference = 'Stop'
 
@@ -33,21 +115,14 @@ $RepoRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
 Set-Location -LiteralPath $RepoRoot
 $Inv = [System.Globalization.CultureInfo]::InvariantCulture
 
-# ------------------------------------------------------------------ exit codes
-$ExitOk            = 0
-$ExitPrecondition  = 10
-$ExitAuthClaim     = 20
-$ExitAttemptClaim  = 30
-$ExitHarness       = 40
-$ExitPublication   = 50
-
 # ------------------------------------------------------- fixed design constants
 $SchemaVersion = 'devrelay-etb-query-diagnostic-d1-v1'
 $DiagnosticMode = 'QUERY_EXCEPTION_DIAGNOSTIC_D1'
 $EndpointUri = 'http://127.0.0.1:4096'
 
-$DesignCommit = 'b8f8a67beac154894e496aaa601fa0a4cd4e9905'
-$DesignSpecSha = '29f0f9cc1632f2f344f5cb4e01d25a832ba9acc78caedbdd43861b7d68ac4154'
+# Accepted C2 design authority. This is the DESIGN commit, never a bookkeeping commit.
+$DesignCommit = '14b85bd2365d500ef87f357aeecb94de14211cc9'
+$DesignSpecSha = '69b7cfda172658fe6c4e726430274a27a6dffb4c4d1c90a374d79feb6956e35d'
 
 $SourceBookkeepingCommit = '93e44fe61c59ec5070e2823062a607347bb9163a'
 $SourceR2EvidenceSha = '6f903f05e859a05a99dc0cde253e878ae7235c1554e212ab2f6b27945b2da0c8'
@@ -115,8 +190,16 @@ function Test-CommandAvailable([string]$name) {
 }
 
 function Test-Occupied([string]$relPath) {
+  # Occupancy means a FILE or a DIRECTORY at that path.
   $abs = Join-Path $RepoRoot $relPath
   return ([System.IO.File]::Exists($abs) -or [System.IO.Directory]::Exists($abs))
+}
+
+function Test-BytesEqual([byte[]]$a, [byte[]]$b) {
+  if ($null -eq $a -or $null -eq $b) { return $false }
+  if ($a.Length -ne $b.Length) { return $false }
+  for ($i = 0; $i -lt $a.Length; $i++) { if ($a[$i] -ne $b[$i]) { return $false } }
+  return $true
 }
 
 function Get-FileSha256([string]$absPath) {
@@ -130,21 +213,6 @@ function Get-FileSha256([string]$absPath) {
 
 function Get-UtcStamp {
   return [System.DateTimeOffset]::UtcNow.ToString($StampFormat, $Inv)
-}
-
-function Get-GitBlobText([string]$commit, [string]$relPath) {
-  $psi = [System.Diagnostics.ProcessStartInfo]::new()
-  $psi.FileName = 'git'
-  $psi.Arguments = '-C "' + $RepoRoot + '" cat-file blob ' + $commit + ':' + $relPath
-  $psi.RedirectStandardOutput = $true
-  $psi.RedirectStandardError = $true
-  $psi.UseShellExecute = $false
-  $psi.StandardOutputEncoding = [System.Text.Encoding]::UTF8
-  $p = [System.Diagnostics.Process]::Start($psi)
-  $out = $p.StandardOutput.ReadToEnd()
-  $p.WaitForExit()
-  if ($p.ExitCode -ne 0) { return $null }
-  return $out
 }
 
 function Get-GitBlobSha256([string]$commit, [string]$relPath) {
@@ -186,6 +254,7 @@ function Get-Text([object]$value) {
 
 function New-ErrorRecordObject([object]$rec, [string]$source) {
   # Exactly the accepted 15 ordered fields, every one a JSON string, unavailable -> "".
+  # P3-A standing: the complete observed string value is carried, never truncated.
   $fqid = ''
   $cat = ''
   $catAct = ''
@@ -243,7 +312,12 @@ function New-ErrorRecordObject([object]$rec, [string]$source) {
 }
 
 function Test-RecordPayloadEqual([object]$a, [object]$b) {
-  # Compare the 14 payload fields (all except `source`), in the accepted order.
+  # C2 Option B comparison: exactly these 14 payload fields, in the accepted order,
+  # ordinal string equality. `source` is the only excluded field, and it is excluded
+  # because the two records legitimately carry different channel labels.
+  # No case folding, no culture-aware comparison, no partial or subset comparison,
+  # no message-only / fully-qualified-id-only / exception-type-only comparison,
+  # no reference identity, no object identity, no hashing, no timing heuristic.
   $keys = @(
     'fully_qualified_error_id', 'category', 'category_activity', 'category_reason',
     'category_target_name', 'category_target_type', 'exception_type', 'exception_message',
@@ -292,36 +366,36 @@ function Write-AtomicFile([string]$relTemp, [string]$relFinal, [byte[]]$bytes) {
                                     [System.IO.FileAccess]::Write, [System.IO.FileShare]::None)
   try { $fs.Write($bytes, 0, $bytes.Length); $fs.Flush($true) } finally { $fs.Dispose() }
   $back = [System.IO.File]::ReadAllBytes($absTemp)
-  if ($back.Length -ne $bytes.Length) { return $false }
-  for ($i = 0; $i -lt $bytes.Length; $i++) { if ($back[$i] -ne $bytes[$i]) { return $false } }
+  if (-not (Test-BytesEqual $back $bytes)) { return $false }
   [System.IO.File]::Move($absTemp, $absFinal)
   $back2 = [System.IO.File]::ReadAllBytes($absFinal)
-  if ($back2.Length -ne $bytes.Length) { return $false }
-  for ($i = 0; $i -lt $bytes.Length; $i++) { if ($back2[$i] -ne $bytes[$i]) { return $false } }
+  if (-not (Test-BytesEqual $back2 $bytes)) { return $false }
   return $true
 }
 
 function Get-ListenerRow([object]$row) {
-  # Only the accepted row fields, frozen order. LocalPort / OwningProcess: observed integer or null.
-  # LocalAddress / State: observed string or "".
+  # Only the accepted row fields, frozen order. LocalPort / OwningProcess: observed integer
+  # or null. LocalAddress / State: observed string or "".
+  # NOTE: the local variable must not be named `pid`; `$PID` is a read-only PowerShell
+  # automatic variable and assigning to it raises SessionStateUnauthorizedAccessException.
   $addr = ''
   $state = ''
   $port = $null
-  $pid = $null
+  $owningProcess = $null
   if ($null -ne $row.LocalAddress) { $addr = [string]$row.LocalAddress }
   if ($null -ne $row.State) { $state = [string]$row.State }
   if ($null -ne $row.LocalPort) { $port = [int]$row.LocalPort }
-  if ($null -ne $row.OwningProcess) { $pid = [int]$row.OwningProcess }
+  if ($null -ne $row.OwningProcess) { $owningProcess = [int]$row.OwningProcess }
   return [ordered]@{
     LocalAddress  = $addr
     LocalPort     = $port
     State         = $state
-    OwningProcess = $pid
+    OwningProcess = $owningProcess
   }
 }
 
 # ================================================================== PRECONDITIONS
-# Every precondition A-P is evaluated BEFORE any claim consumption.
+# Stage PRE. Every precondition A-P is evaluated BEFORE any claim consumption.
 # Any failure exits with $ExitPrecondition, without creating a claim or running a query.
 $PreOk = $true
 $PreFail = ''
@@ -457,47 +531,94 @@ if (-not $PreOk) {
   Write-Output 'D1_CLAIM_CREATED=0'
   Write-Output 'D1_QUERY_EXECUTED=0'
   Write-Output 'D1_OUTPUT_CREATED=0'
+  Write-Output 'D1_BUDGET_ROLLBACK_INFERRED=0'
   exit $ExitPrecondition
 }
 
 # ============================================================ CLAIM CONSUMPTION
-# The successful TEMP CreateNew of each claim is the irreversible consumption boundary.
+# A successful TEMP CreateNew is the irreversible consumption boundary. The per-stage
+# flag is set to 1 only after CreateNew has returned a stream, so a failure report states
+# the observed consumption state instead of inferring budget rollback from an exit code.
+# The claim files themselves remain the forensic source of consumption state.
 $AuthClaimSha = ''
 $AttemptClaimSha = ''
+$AuthClaimConsumed = 0
+$AttemptClaimConsumed = 0
 
+# --- AUTH claim. Claim byte construction is still stage PRE (no CreateNew yet).
 $authBytes = New-ClaimBytes $ClaimSchemaAuth $DesignCommit $DesignSpecSha `
   $AcceptedAuthorizationCommit $ExpectedAuthorizationSha256 $ExpectedScriptSha256
 
+$Stage = 'AUTH'
 try {
-  if (-not (Write-AtomicFile $AuthTemp $AuthFinal $authBytes)) { throw 'auth_claim_write_or_readback_failed' }
+  $authFs = [System.IO.FileStream]::new((Join-Path $RepoRoot $AuthTemp),
+              [System.IO.FileMode]::CreateNew, [System.IO.FileAccess]::Write, [System.IO.FileShare]::None)
+  $AuthClaimConsumed = 1
+  try {
+    $authFs.Write($authBytes, 0, $authBytes.Length)
+    $authFs.Flush($true)
+  } finally { $authFs.Dispose() }
+  $authBack = [System.IO.File]::ReadAllBytes((Join-Path $RepoRoot $AuthTemp))
+  if (-not (Test-BytesEqual $authBack $authBytes)) { throw 'auth_claim_temp_readback_mismatch' }
+  [System.IO.File]::Move((Join-Path $RepoRoot $AuthTemp), (Join-Path $RepoRoot $AuthFinal))
+  $authBack2 = [System.IO.File]::ReadAllBytes((Join-Path $RepoRoot $AuthFinal))
+  if (-not (Test-BytesEqual $authBack2 $authBytes)) { throw 'auth_claim_final_readback_mismatch' }
+  $AuthClaimSha = Get-FileSha256 (Join-Path $RepoRoot $AuthFinal)
 } catch {
-  Write-Output 'D1_AUTHORIZATION_USE=SPENT'
-  Write-Output ('D1_AUTHORIZATION_CONSUMPTION_ERROR=' + $_.Exception.Message)
+  Write-Output 'D1_AUTHORIZATION_CLAIM_STAGE_FAILED=1'
+  if ($AuthClaimConsumed -eq 1) { Write-Output 'D1_AUTHORIZATION_USE=SPENT' }
+  else { Write-Output 'D1_AUTHORIZATION_USE=NOT_CONSUMED' }
+  Write-Output ('D1_AUTHORIZATION_CLAIM_CONSUMED=' + [string]$AuthClaimConsumed)
+  Write-Output ('D1_AUTHORIZATION_CONSUMPTION_ERROR=' + (Get-Text $_.Exception.Message))
   Write-Output 'D1_ATTEMPT_CONSUMED=0'
-  Write-Output 'D1_QUERY_EXECUTED=0'
+  Write-Output ('D1_LISTENER_QUERY_STARTED=' + [string]$QueryStarted)
+  Write-Output 'D1_BUDGET_ROLLBACK_INFERRED=0'
+  Write-Output 'D1_CLAIM_FILES_ARE_FORENSIC_SOURCE=1'
   exit $ExitAuthClaim
 }
-$AuthClaimSha = Get-FileSha256 (Join-Path $RepoRoot $AuthFinal)
 
+# --- ATTEMPT claim. Stage ATTEMPT begins after AUTH completion.
+$Stage = 'ATTEMPT'
 $attemptBytes = New-ClaimBytes $ClaimSchemaAttempt $DesignCommit $DesignSpecSha `
   $AcceptedAuthorizationCommit $ExpectedAuthorizationSha256 $ExpectedScriptSha256
 
 try {
-  if (-not (Write-AtomicFile $AttemptTemp $AttemptFinal $attemptBytes)) { throw 'attempt_claim_write_or_readback_failed' }
+  $attemptFs = [System.IO.FileStream]::new((Join-Path $RepoRoot $AttemptTemp),
+                 [System.IO.FileMode]::CreateNew, [System.IO.FileAccess]::Write, [System.IO.FileShare]::None)
+  $AttemptClaimConsumed = 1
+  try {
+    $attemptFs.Write($attemptBytes, 0, $attemptBytes.Length)
+    $attemptFs.Flush($true)
+  } finally { $attemptFs.Dispose() }
+  $attemptBack = [System.IO.File]::ReadAllBytes((Join-Path $RepoRoot $AttemptTemp))
+  if (-not (Test-BytesEqual $attemptBack $attemptBytes)) { throw 'attempt_claim_temp_readback_mismatch' }
+  [System.IO.File]::Move((Join-Path $RepoRoot $AttemptTemp), (Join-Path $RepoRoot $AttemptFinal))
+  $attemptBack2 = [System.IO.File]::ReadAllBytes((Join-Path $RepoRoot $AttemptFinal))
+  if (-not (Test-BytesEqual $attemptBack2 $attemptBytes)) { throw 'attempt_claim_final_readback_mismatch' }
+  $AttemptClaimSha = Get-FileSha256 (Join-Path $RepoRoot $AttemptFinal)
 } catch {
+  Write-Output 'D1_ATTEMPT_CLAIM_STAGE_FAILED=1'
   Write-Output 'D1_AUTHORIZATION_USE=SPENT'
   Write-Output ('D1_AUTHORIZATION_CLAIM_SHA256=' + $AuthClaimSha)
-  Write-Output 'D1_DIAGNOSTIC_ATTEMPT=SPENT'
-  Write-Output ('D1_ATTEMPT_CONSUMPTION_ERROR=' + $_.Exception.Message)
-  Write-Output 'D1_QUERY_EXECUTED=0'
+  if ($AttemptClaimConsumed -eq 1) { Write-Output 'D1_DIAGNOSTIC_ATTEMPT=SPENT' }
+  else { Write-Output 'D1_DIAGNOSTIC_ATTEMPT=NOT_CONSUMED' }
+  Write-Output ('D1_ATTEMPT_CLAIM_CONSUMED=' + [string]$AttemptClaimConsumed)
+  Write-Output ('D1_ATTEMPT_CONSUMPTION_ERROR=' + (Get-Text $_.Exception.Message))
+  Write-Output ('D1_LISTENER_QUERY_STARTED=' + [string]$QueryStarted)
+  Write-Output 'D1_BUDGET_ROLLBACK_INFERRED=0'
+  Write-Output 'D1_CLAIM_FILES_ARE_FORENSIC_SOURCE=1'
   exit $ExitAttemptClaim
 }
-$AttemptClaimSha = Get-FileSha256 (Join-Path $RepoRoot $AttemptFinal)
 
 # ============================================================== EXECUTION PHASE
-# Order: evidence-directory creation -> command availability -> zero-or-one listener query
+# Stage HARNESS. Both budgets are now irreversibly SPENT.
+# Order: post-consumption directory occupancy gate -> evidence-directory creation ->
+#        command availability -> zero-or-one listener query -> evidence byte construction
 #        -> evidence publication -> manifest publication -> result publication -> STOP.
-$Started = Get-UtcStamp
+$Stage = 'HARNESS'
+$HarnessFailure = ''
+$EvDirAbs = Join-Path $RepoRoot $EvDir
+
 $ListenerQueryInvocations = 0
 $QueryOutcome = 'DIAGNOSTIC_HARNESS_INVALID'
 $Rows = @()
@@ -510,14 +631,54 @@ $CmdType = ''
 $CmdSource = ''
 $CmdVersion = ''
 $CmdModule = ''
-$OperationalFailure = ''
+$Started = ''
+$Finished = ''
+$Evidence = $null
+
+# Failure report shared by the two post-consumption directory controls below.
+function Write-DirectoryControlFailure([string]$reason) {
+  Write-Output ('D1_POST_CONSUMPTION_DIRECTORY_CONTROL=' + $reason)
+  Write-Output 'D1_EVIDENCE_DIRECTORY_CREATED=0'
+  Write-Output 'D1_DIRECTORY_REUSE_ATTEMPTED=0'
+  Write-Output 'D1_DIRECTORY_DELETED=0'
+  Write-Output 'D1_CLEANUP_ATTEMPTED=0'
+  Write-Output 'D1_PUBLISHED=0'
+  Write-Output 'D1_LISTENER_QUERY_INVOCATIONS=0'
+  Write-Output 'D1_RETRY_AUTHORIZED=0'
+  Write-Output 'D1_SECOND_QUERY_AUTHORIZED=0'
+  Write-Output 'D1_AUTHORIZATION_USE=SPENT'
+  Write-Output 'D1_DIAGNOSTIC_ATTEMPT=SPENT'
+  Write-Output 'D1_BUDGET_ROLLBACK_INFERRED=0'
+}
 
 try {
-  # Executing this script is forbidden until a separately accepted authorization exists.
-  # The directory is created only AFTER both claims are consumed.
-  [void][System.IO.Directory]::CreateDirectory((Join-Path $RepoRoot $EvDir))
+  # --- P2: post-consumption directory occupancy gate.
+  # Evaluated AFTER both claims are consumed and IMMEDIATELY BEFORE evidence-directory
+  # creation, so a directory that appeared between the precondition check and this point
+  # can no longer be silently reused. Occupancy means a FILE or a DIRECTORY at that path.
+  if ([System.IO.File]::Exists($EvDirAbs) -or [System.IO.Directory]::Exists($EvDirAbs)) {
+    Write-DirectoryControlFailure 'DIRECTORY_OCCUPIED_FAIL_CLOSED'
+    exit $ExitHarness
+  }
+  Write-Output 'D1_POST_CONSUMPTION_DIRECTORY_GATE=UNOCCUPIED'
 
-  # Command availability: narrow inspection only, NOT the listener query, no inventory.
+  # --- Evidence-directory creation. Failure is terminal: exit 40, no retry, no cleanup,
+  #     no reuse and no fall-through into command availability or the listener query.
+  try {
+    [void][System.IO.Directory]::CreateDirectory($EvDirAbs)
+  } catch {
+    Write-DirectoryControlFailure ('DIRECTORY_CREATION_THREW_' + (Get-Text $_.Exception.Message))
+    exit $ExitHarness
+  }
+  if (-not [System.IO.Directory]::Exists($EvDirAbs)) {
+    Write-DirectoryControlFailure 'DIRECTORY_CREATION_NOT_OBSERVED'
+    exit $ExitHarness
+  }
+  Write-Output 'D1_EVIDENCE_DIRECTORY_CREATED=1'
+
+  $Started = Get-UtcStamp
+
+  # --- Command availability: narrow inspection only, NOT the listener query, no inventory.
   $cmdInfo = Get-Command -Name 'Get-NetTCPConnection' -ErrorAction SilentlyContinue
   if ($null -ne $cmdInfo) {
     $CmdAvailability = 'AVAILABLE'
@@ -541,6 +702,7 @@ try {
     $qerr = @()
     $TerminatingRecord = $null
     $Rows = @()
+    $QueryStarted = 1
     try {
       $Rows = @(
         Get-NetTCPConnection `
@@ -557,176 +719,182 @@ try {
 
     $qerrList = @()
     if ($null -ne $qerr) { $qerrList = @($qerr) }
-    $qerrCount = $qerrList.Count
-    $normalized = @()
-    foreach ($q in $qerrList) { $normalized += (New-ErrorRecordObject $q 'ERROR_VARIABLE') }
+    # RAW pre-suppression qerr state. This count alone drives query_outcome classification;
+    # C2 Option B suppression never changes the classifier input.
+    $qerrRawCount = $qerrList.Count
+    $qerrNormalized = @()
+    foreach ($q in $qerrList) { $qerrNormalized += (New-ErrorRecordObject $q 'ERROR_VARIABLE') }
+
+    # ---------------------------------------------------------------- C2 OPTION B
+    # OWNER-SELECTED ACCEPTED POLICY: NORMALIZED TERMINATING-DUPLICATE SUPPRESSION.
+    # Normalization happens BEFORE comparison. Eligibility requires (a) a terminating
+    # catch to have occurred, (b) at least one qerr record, and (c) the candidate being
+    # the FINAL observed qerr record. Suppression happens if and only if all 14 payload
+    # fields match ordinally. Exactly one record can be suppressed, at most once per
+    # execution. All earlier qerr records are retained unconditionally, even when their
+    # payload is identical, and no qerr-to-qerr deduplication is performed. Surviving
+    # order is preserved. Payload equality is suppression ELIGIBILITY ONLY: it is not
+    # proof that the two records are the same underlying PowerShell event, and no such
+    # stronger causal claim is made anywhere.
+    # There is deliberately NO suppression flag, NO duplicate flag, NO overlap flag and
+    # NO raw-count field in the published evidence (top-level closure stays 19/19).
+    $publishedErrorRecords = $qerrNormalized
 
     if ($null -ne $TerminatingRecord) {
       $termNorm = New-ErrorRecordObject $TerminatingRecord 'TERMINATING_EXCEPTION'
-      # Deterministic no-duplication: if and only if the FINAL qerr entry has the same normalized
-      # 14 payload fields as the terminating record (excluding `source`), drop exactly that one
-      # final qerr entry. Retain all earlier entries, even if payload-identical. Never remove more
-      # than one.
-      if ($normalized.Count -gt 0) {
-        $lastIndex = $normalized.Count - 1
-        if (Test-RecordPayloadEqual $normalized[$lastIndex] $termNorm) {
-          $trimmed = @()
-          for ($i = 0; $i -lt $lastIndex; $i++) { $trimmed += $normalized[$i] }
-          $normalized = $trimmed
+      if ($qerrNormalized.Count -gt 0) {
+        $lastIndex = $qerrNormalized.Count - 1
+        if (Test-RecordPayloadEqual $qerrNormalized[$lastIndex] $termNorm) {
+          $surviving = @()
+          for ($i = 0; $i -lt $lastIndex; $i++) { $surviving += $qerrNormalized[$i] }
+          $publishedErrorRecords = $surviving
         }
       }
       $TerminatingError = $termNorm
-      $ErrorRecords = $normalized
+      $ErrorRecords = $publishedErrorRecords
       $QueryOutcome = 'TERMINATING_EXCEPTION'
       $Rows = @()
       $RowCount = 0
     } else {
       $TerminatingError = $null
-      $ErrorRecords = $normalized
+      $ErrorRecords = $publishedErrorRecords
       $RowCount = @($Rows).Count
-      if ($qerrCount -gt 0 -and $RowCount -eq 0) { $QueryOutcome = 'ERROR_RECORDS_ZERO_ROWS' }
-      elseif ($qerrCount -gt 0 -and $RowCount -gt 0) { $QueryOutcome = 'ERROR_RECORDS_WITH_ROWS' }
-      elseif ($qerrCount -eq 0 -and $RowCount -eq 0) { $QueryOutcome = 'ZERO_ROWS' }
-      elseif ($qerrCount -eq 0 -and $RowCount -eq 1) { $QueryOutcome = 'ONE_ROW' }
-      elseif ($qerrCount -eq 0 -and $RowCount -gt 1) { $QueryOutcome = 'MULTIPLE_ROWS' }
+      if ($qerrRawCount -gt 0 -and $RowCount -eq 0) { $QueryOutcome = 'ERROR_RECORDS_ZERO_ROWS' }
+      elseif ($qerrRawCount -gt 0 -and $RowCount -gt 0) { $QueryOutcome = 'ERROR_RECORDS_WITH_ROWS' }
+      elseif ($qerrRawCount -eq 0 -and $RowCount -eq 0) { $QueryOutcome = 'ZERO_ROWS' }
+      elseif ($qerrRawCount -eq 0 -and $RowCount -eq 1) { $QueryOutcome = 'ONE_ROW' }
+      elseif ($qerrRawCount -eq 0 -and $RowCount -gt 1) { $QueryOutcome = 'MULTIPLE_ROWS' }
       else { $QueryOutcome = 'DIAGNOSTIC_HARNESS_INVALID' }
     }
   }
+
+  $Finished = Get-UtcStamp
+
+  $RowObjects = @()
+  foreach ($r in @($Rows)) { $RowObjects += (Get-ListenerRow $r) }
+
+  $Evidence = [ordered]@{
+    schema_version                       = $SchemaVersion
+    source_authoritative_bookkeeping_commit = $SourceBookkeepingCommit
+    source_r2_evidence_sha256            = $SourceR2EvidenceSha
+    source_r2_result_sha256              = $SourceR2ResultSha
+    execution_started_at                 = $Started
+    execution_finished_at                = $Finished
+    diagnostic_mode                      = $DiagnosticMode
+    endpoint                             = $EndpointUri
+    configured_base_url                  = $Configured
+    powershell_environment               = [ordered]@{
+      PSEdition = Get-Text $PSVersionTable.PSEdition
+      PSVersion = Get-Text $PSVersionTable.PSVersion
+      Platform  = Get-Text $PSVersionTable.Platform
+      OS        = Get-Text $PSVersionTable.OS
+    }
+    command_metadata                     = [ordered]@{
+      Name         = $CmdName
+      CommandType  = $CmdType
+      Source       = $CmdSource
+      Version      = $CmdVersion
+      ModuleName   = $CmdModule
+      availability = $CmdAvailability
+    }
+    query                                = [ordered]@{
+      local_address        = '127.0.0.1'
+      local_port           = 4096
+      state                = 'Listen'
+      error_action         = 'SilentlyContinue'
+      error_variable       = 'qerr'
+      query_invocation_count = $ListenerQueryInvocations
+    }
+    query_outcome                        = $QueryOutcome
+    row_count                            = [int]$RowCount
+    rows                                 = @($RowObjects)
+    terminating_error                    = $TerminatingError
+    error_records                        = @($ErrorRecords)
+    non_claims                           = @($NonClaims)
+    activity_counters                    = [ordered]@{
+      listener_query_invocations = [int]$ListenerQueryInvocations
+      process_queries            = 0
+      target_executable_hashes   = 0
+      opencode_starts            = 0
+      http_requests              = 0
+      provider_model_calls       = 0
+      retries                    = 0
+      fallbacks                  = 0
+    }
+  }
 } catch {
-  # A harness/control failure after consumption. If the closed schema can still be constructed
-  # truthfully it is published as DIAGNOSTIC_HARNESS_INVALID; otherwise no evidence record is
-  # fabricated and the control state becomes an operational harness/publication failure.
-  $QueryOutcome = 'DIAGNOSTIC_HARNESS_INVALID'
-  $OperationalFailure = $_.Exception.Message
+  # A harness/control failure after consumption. Nothing is published; the control state
+  # becomes a D1 operational harness failure, which is NOT a query_outcome value.
+  $HarnessFailure = Get-Text $_.Exception.Message
 }
 
-$Finished = Get-UtcStamp
-$RowObjects = @()
-foreach ($r in @($Rows)) { $RowObjects += (Get-ListenerRow $r) }
-
-$Evidence = [ordered]@{
-  schema_version                       = $SchemaVersion
-  source_authoritative_bookkeeping_commit = $SourceBookkeepingCommit
-  source_r2_evidence_sha256            = $SourceR2EvidenceSha
-  source_r2_result_sha256              = $SourceR2ResultSha
-  execution_started_at                 = $Started
-  execution_finished_at                = $Finished
-  diagnostic_mode                      = $DiagnosticMode
-  endpoint                             = $EndpointUri
-  configured_base_url                  = $Configured
-  powershell_environment               = [ordered]@{
-    PSEdition = Get-Text $PSVersionTable.PSEdition
-    PSVersion = Get-Text $PSVersionTable.PSVersion
-    Platform  = Get-Text $PSVersionTable.Platform
-    OS        = Get-Text $PSVersionTable.OS
-  }
-  command_metadata                     = [ordered]@{
-    Name         = $CmdName
-    CommandType  = $CmdType
-    Source       = $CmdSource
-    Version      = $CmdVersion
-    ModuleName   = $CmdModule
-    availability = $CmdAvailability
-  }
-  query                                = [ordered]@{
-    local_address        = '127.0.0.1'
-    local_port           = 4096
-    state                = 'Listen'
-    error_action         = 'SilentlyContinue'
-    error_variable       = 'qerr'
-    query_invocation_count = $ListenerQueryInvocations
-  }
-  query_outcome                        = $QueryOutcome
-  row_count                            = [int]$RowCount
-  rows                                 = @($RowObjects)
-  terminating_error                    = $TerminatingError
-  error_records                        = @($ErrorRecords)
-  non_claims                           = @($NonClaims)
-  activity_counters                    = [ordered]@{
-    listener_query_invocations = [int]$ListenerQueryInvocations
-    process_queries            = 0
-    target_executable_hashes   = 0
-    opencode_starts            = 0
-    http_requests              = 0
-    provider_model_calls       = 0
-    retries                    = 0
-    fallbacks                  = 0
-  }
-}
-
-if ($OperationalFailure -ne '') {
-  Write-Output ('D1_OPERATIONAL_HARNESS_FAILURE=' + $OperationalFailure)
+if ($HarnessFailure -ne '') {
+  Write-Output ('D1_OPERATIONAL_HARNESS_FAILURE=' + $HarnessFailure)
   Write-Output 'D1_PUBLISHED=0'
   Write-Output 'D1_RETRY_AUTHORIZED=0'
+  Write-Output 'D1_SECOND_QUERY_AUTHORIZED=0'
   Write-Output 'D1_AUTHORIZATION_USE=SPENT'
   Write-Output 'D1_DIAGNOSTIC_ATTEMPT=SPENT'
+  Write-Output 'D1_BUDGET_ROLLBACK_INFERRED=0'
   exit $ExitHarness
 }
 
 # ================================================================== PUBLICATION
-# Order: evidence -> manifest -> result. Atomic, no-overwrite, no retry.
-$enc = [System.Text.UTF8Encoding]::new($false)
-$evJson = $Evidence | ConvertTo-Json -Depth $JsonDepth -Compress
-$evBody = $evJson.Replace("`r`n", "`n").Replace("`r", "`n")
-if (-not $evBody.EndsWith("`n")) { $evBody = $evBody + "`n" }
-$evBytes = $enc.GetBytes($evBody)
-
+# Stage PUBLICATION. Order: evidence -> manifest -> result. Atomic, no-overwrite, no retry.
+$Stage = 'PUBLICATION'
 $pubOk = $true
-$pubStage = ''
-try {
-  if (Test-Occupied $EvTemp -or Test-Occupied $EvFinal) { throw 'evidence_output_occupied' }
-  $pubStage = 'evidence'
-  if (-not (Write-AtomicFile $EvTemp $EvFinal $evBytes)) { $pubOk = $false }
-} catch { $pubOk = $false }
-
+$pubStage = 'evidence_serialization'
 $evSha = ''
-if ($pubOk) { $evSha = Get-FileSha256 (Join-Path $RepoRoot $EvFinal) }
-
-$mfBytes = $null
-if ($pubOk) {
-  try {
-    if (Test-Occupied $MfTemp -or Test-Occupied $MfFinal) { throw 'manifest_output_occupied' }
-    $pubStage = 'manifest'
-    # Manifest binds the evidence file only; exact one-line format; the manifest never self-lists.
-    $mfText = $evSha + '  ' + $EvFinal + "`n"
-    $mfBytes = $enc.GetBytes($mfText)
-    if (-not (Write-AtomicFile $MfTemp $MfFinal $mfBytes)) { $pubOk = $false }
-  } catch { $pubOk = $false }
-}
-
 $mfSha = ''
-if ($pubOk) { $mfSha = Get-FileSha256 (Join-Path $RepoRoot $MfFinal) }
+try {
+  $enc = [System.Text.UTF8Encoding]::new($false)
+  $evJson = $Evidence | ConvertTo-Json -Depth $JsonDepth -Compress
+  $evBody = $evJson.Replace("`r`n", "`n").Replace("`r", "`n")
+  if (-not $evBody.EndsWith("`n")) { $evBody = $evBody + "`n" }
+  $evBytes = $enc.GetBytes($evBody)
 
-if ($pubOk) {
-  try {
-    if (Test-Occupied $RsTemp -or Test-Occupied $RsFinal) { throw 'result_output_occupied' }
-    $pubStage = 'result'
-    $rl = [System.Collections.Generic.List[string]]::new()
-    $rl.Add('# DevRelay v0.3-E - ETB QUERY_EXCEPTION DIAGNOSTIC D1 - diagnostic result (candidate)')
-    $rl.Add('')
-    $rl.Add('result_schema_version=' + $SchemaVersion)
-    $rl.Add('diagnostic_d1_design_commit=' + $DesignCommit)
-    $rl.Add('diagnostic_d1_spec_sha256=' + $DesignSpecSha)
-    $rl.Add('diagnostic_d1_authorization_commit=' + $AcceptedAuthorizationCommit)
-    $rl.Add('diagnostic_d1_authorization_sha256=' + $ExpectedAuthorizationSha256)
-    $rl.Add('diagnostic_d1_script_sha256=' + $ExpectedScriptSha256)
-    $rl.Add('source_authoritative_bookkeeping_commit=' + $SourceBookkeepingCommit)
-    $rl.Add('query_diagnostic_evidence_sha256=' + $evSha)
-    $rl.Add('query_diagnostic_manifest_sha256=' + $mfSha)
-    $rl.Add('query_outcome=' + $QueryOutcome)
-    $rl.Add('listener_query_invocations=' + [string]$ListenerQueryInvocations)
-    $rl.Add('authorization_claim_state=CONSUMED')
-    $rl.Add('attempt_claim_state=CONSUMED')
-    $rl.Add('diagnostic_authority_state=CANDIDATE / REQUIRES INDEPENDENT RESULT REVIEW')
-    $rl.Add('authoritative_etb_semantic_result=ETB_UNSATISFIED')
-    $rl.Add('')
-    $rl.Add('Non-claims:')
-    foreach ($nc in $NonClaims) { $rl.Add('- ' + $nc) }
-    $rl.Add('')
-    $rlText = ($rl.ToArray() -join "`n") + "`n"
-    $rsBytes = $enc.GetBytes($rlText)
-    if (-not (Write-AtomicFile $RsTemp $RsFinal $rsBytes)) { $pubOk = $false }
-  } catch { $pubOk = $false }
+  $pubStage = 'evidence'
+  if (Test-Occupied $EvTemp -or Test-Occupied $EvFinal) { throw 'evidence_output_occupied' }
+  if (-not (Write-AtomicFile $EvTemp $EvFinal $evBytes)) { throw 'evidence_write_or_readback_failed' }
+  $evSha = Get-FileSha256 (Join-Path $RepoRoot $EvFinal)
+
+  $pubStage = 'manifest'
+  if (Test-Occupied $MfTemp -or Test-Occupied $MfFinal) { throw 'manifest_output_occupied' }
+  # Manifest binds the evidence file only; exact one-line format; the manifest never self-lists.
+  $mfText = $evSha + '  ' + $EvFinal + "`n"
+  $mfBytes = $enc.GetBytes($mfText)
+  if (-not (Write-AtomicFile $MfTemp $MfFinal $mfBytes)) { throw 'manifest_write_or_readback_failed' }
+  $mfSha = Get-FileSha256 (Join-Path $RepoRoot $MfFinal)
+
+  $pubStage = 'result'
+  if (Test-Occupied $RsTemp -or Test-Occupied $RsFinal) { throw 'result_output_occupied' }
+  $rl = [System.Collections.Generic.List[string]]::new()
+  $rl.Add('# DevRelay v0.3-E - ETB QUERY_EXCEPTION DIAGNOSTIC D1 - diagnostic result (candidate)')
+  $rl.Add('')
+  $rl.Add('result_schema_version=' + $SchemaVersion)
+  $rl.Add('diagnostic_d1_design_commit=' + $DesignCommit)
+  $rl.Add('diagnostic_d1_spec_sha256=' + $DesignSpecSha)
+  $rl.Add('diagnostic_d1_authorization_commit=' + $AcceptedAuthorizationCommit)
+  $rl.Add('diagnostic_d1_authorization_sha256=' + $ExpectedAuthorizationSha256)
+  $rl.Add('diagnostic_d1_script_sha256=' + $ExpectedScriptSha256)
+  $rl.Add('source_authoritative_bookkeeping_commit=' + $SourceBookkeepingCommit)
+  $rl.Add('query_diagnostic_evidence_sha256=' + $evSha)
+  $rl.Add('query_diagnostic_manifest_sha256=' + $mfSha)
+  $rl.Add('query_outcome=' + $QueryOutcome)
+  $rl.Add('listener_query_invocations=' + [string]$ListenerQueryInvocations)
+  $rl.Add('authorization_claim_state=CONSUMED')
+  $rl.Add('attempt_claim_state=CONSUMED')
+  $rl.Add('diagnostic_authority_state=CANDIDATE / REQUIRES INDEPENDENT RESULT REVIEW')
+  $rl.Add('authoritative_etb_semantic_result=ETB_UNSATISFIED')
+  $rl.Add('')
+  $rl.Add('Non-claims:')
+  foreach ($nc in $NonClaims) { $rl.Add('- ' + $nc) }
+  $rl.Add('')
+  $rlText = ($rl.ToArray() -join "`n") + "`n"
+  $rsBytes = $enc.GetBytes($rlText)
+  if (-not (Write-AtomicFile $RsTemp $RsFinal $rsBytes)) { throw 'result_write_or_readback_failed' }
+} catch {
+  $pubOk = $false
 }
 
 if (-not $pubOk) {
@@ -736,6 +904,7 @@ if (-not $pubOk) {
   Write-Output 'D1_SECOND_QUERY_AUTHORIZED=0'
   Write-Output 'D1_AUTHORIZATION_USE=SPENT'
   Write-Output 'D1_DIAGNOSTIC_ATTEMPT=SPENT'
+  Write-Output 'D1_BUDGET_ROLLBACK_INFERRED=0'
   exit $ExitPublication
 }
 
