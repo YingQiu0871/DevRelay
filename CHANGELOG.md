@@ -2539,6 +2539,62 @@ an independent design review and the open platform proofs in SPEC section 15
 real provider/model call was made.  Design branch:
 `v0.3-e-recovery-reconciliation` (parent `56e7842`).
 
+**ORACLE-PATHD (PATH D NEW EXECUTION ORACLE) DESIGN CANDIDATE — OWNER D-EXEC-1 + OWNER NAMING DECISION N-C.**
+The human owner selected **PATH D — NEW ETB ATTEMPT**; the Path-D authorization design round then returned
+`PATH_D_EXECUTION_ORACLE = NOT AVAILABLE` because Oracle-R2's six-path ABSENT precondition can no longer be
+satisfied (three of its finals are present), the original oracle has no preserved executable, and Oracle-R2
+§17.1/§17.4 forbid modification, wrapping, translation, parameterization, temporary-script reconstruction or
+output-path injection.  The owner therefore selected **D-EXEC-1 — AUTHORIZE A NEW PATH-D ORACLE DESIGN ROUND**
+and, after the naming round returned `PATH_D_ORACLE_IDENTITY = NOT UNIQUELY DETERMINED` (the recovered naming
+rule is `Oracle-<served Recovery cycle>` — `Oracle-R1` does not exist and R1 created no new oracle — which does
+not apply to Path D), selected **N-C — `Oracle-PathD`** with canonical identity token **`PATH_D`**;
+`Oracle-R3`, `Oracle-D` and `Oracle-PD` are **not** used.  This round creates the Oracle-PathD oracle as two new
+tracked artifacts — the normative tracked executable
+`docs/v0.3/V03E_G0_5_PRE_ETB_EXECUTION_ORACLE_PATH_D.ps1` (ASCII-only, every byte `<= 0x7F`, no BOM, LF only,
+CR count `0`, one terminal LF, `31328` bytes, worktree SHA-256
+`8bdeb434794c43fe4a199e7338790ba0dbd319728b6766d54299c894a16ac738`, parser-only validation **0 parse errors**)
+and its specification `docs/v0.3/V03E_G0_5_PRE_ETB_EXECUTION_ORACLE_PATH_D.md` — plus exactly **one** new narrow
+`.gitattributes` rule (`docs/v0.3/V03E_G0_5_PRE_ETB_EXECUTION_ORACLE_PATH_D.ps1 text eol=lf`; no `*.ps1`
+wildcard, no other text policy changed, `core.autocrlf` unaltered, `git check-attr` resolving to `text: set` /
+`eol: lf`) and the minimum status-surface updates in this file and `docs/v0.3/V03E_ACCEPTANCE.md`.  Oracle-PathD
+is the **minimum semantic successor** of accepted Oracle-R2: the exhaustive line-level diff is **43 added / 39
+removed** lines across **19 hunks**, every hunk mapping to `NEW_ORACLE_IDENTITY`, `NEW_OUTPUT_NAMESPACE` or
+`MECHANICAL_REFERENCE_FOR_NEW_IDENTITY_OR_NAMESPACE`, so **`ORACLE_SEMANTIC_DRIFT = NONE`**; the listener
+predicate (`127.0.0.1` / `4096` / `Listen`) and its decision order, the endpoint `http://127.0.0.1:4096`, the
+accepted target literal and `$ExpectedSha` `578d7eb3…`, the `opencode-ai` / `1.18.11` / `bin.opencode` package
+identity, `$OriginalOracleCommit` `1c6c7cd…` / `$OriginalOracleSha` `01675fa7…`, the process-instance identity
+(PID **and** `CreationDate.Ticks`), the `CreateFileW`/`GetFinalPathNameByHandleW` canonicalization chain, the
+S0/S1 continuity comparison field set, the 18 `checks` keys, the 14 `activity_counters` keys, the six
+`non_claims` strings, the publication order and every read-back verification are **provably unchanged** by
+their absence from that diff.  The new output namespace is `docs/v0.3/evidence/etb-execution-path-d/` with six
+exact paths (`ETB_EVIDENCE.json{,.tmp}`, `MANIFEST.sha256{,.tmp}`,
+`docs/v0.3/V03E_G0_5_PRE_ETB_EXECUTION_RESULT_PATH_D.md{,.tmp}`); the new evidence schema identity is
+`devrelay-etb-v1-path-d`, leaving `devrelay-etb-v1` and `devrelay-etb-v1-r2` historical and unreinterpreted; the
+new claim lineage is `PATH_D` (`ETB_PATH_D_AUTHORIZATION_USE.claim{,.tmp}` and
+`ETB_PATH_D_ATTEMPT_USE.claim{,.tmp}` under `docs/v0.3/evidence/`, permanently distinct from every historical
+claim path); and the new provenance field names are `oracle_path_d_commit`, `oracle_path_d_spec_sha256` and
+`oracle_path_d_script_sha256`, which remain **UNKNOWN** until a future independent approval record populates
+them.  All eleven Path-D namespace paths (six output paths, the namespace directory and four claim paths) were
+verified **ABSENT** under the file-or-directory occupancy predicate, and the design-construction baseline is
+`0bd97206584d0726cf86317de8f385ec2720d423`.  Oracle-PathD is **`DESIGN CANDIDATE / NOT ACCEPTED / NOT FROZEN /
+NOT EXECUTED`**: **PATH-D AUTHORIZATION DESIGN = BLOCKED PENDING ORACLE ACCEPTANCE**, **PATH-D ETB EXECUTION =
+NOT AUTHORIZED**, **ORACLE EXECUTION = NOT AUTHORIZED**, **LISTENER QUERY = NOT EXECUTED**; oracle-design
+acceptance is explicitly **not** Path-D execution authorization, and after acceptance the Path-D `NEW ETB
+EXECUTION AUTHORIZATION DESIGN` stage must resume.  Nothing historical was modified, moved, archived,
+normalized, deleted or reused: Oracle-R2, Recovery-R1, Recovery-R2, D1 and the original oracle artifacts,
+claims, evidence, manifests, results and construction-time banners are untouched, and no occupied historical
+output path was disturbed to make room.  The round performed 0 oracle executions, 0 ETB executions, 0 listener
+queries, 0 `Get-NetTCPConnection` calls, 0 claim creations, 0 evidence/manifest/result creations, 0 budget
+consumptions, 0 config mutations, 0 HTTP, 0 provider/model calls, 0 SIC, 0 Mode-B, 0 G0.5/G1/G2 and 0
+runtime/test/dependency/version changes.  Preserved unchanged: `AUTHORITATIVE ETB SEMANTIC RESULT =
+ETB_UNSATISFIED`; Recovery-R2 authorization/attempt `SPENT / NOT REUSABLE`; `D1 = ACCEPTED / FROZEN /
+AUTHORITATIVE DIAGNOSTIC RESULT`; `D1 LISTENER QUERY = EXECUTED ONCE`; Mode-B `BLOCKED / NOT RUN`;
+`P6 = UNPROVEN / UNSATISFIED`; G0.5 `NOT CLOSED`; G0.5 execution / Case-C / v0.3-E implementation
+`NOT AUTHORIZED`; `G1`/`G2` `NOT RUN`; `adopt_completed_turn` `DISABLED`; **PATH C = NO STATIC BASIS /
+NOT AUTHORIZED**.  The exact next stage is an **independent Oracle-PathD design review**; only after that
+review, Oracle-PathD acceptance bookkeeping and independent bookkeeping confirmation may the Path-D `NEW ETB
+EXECUTION AUTHORIZATION DESIGN` resume.  No tag, no release and no push occurred.
+
 ## Unreleased - v0.3-D accepted (bounded orchestration)
 
 Durable, **bounded** orchestration state over the accepted v0.3-C role path: a
