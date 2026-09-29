@@ -1,6 +1,14 @@
 # Oracle-PathE — new ETB execution oracle design candidate (PATH_E)
 
-**Status: DESIGN CANDIDATE / NOT ACCEPTED / NOT FROZEN / NOT EFFECTIVE.**
+**Status: DESIGN CANDIDATE / NOT ACCEPTED / NOT FROZEN / NOT EFFECTIVE.
+Revision: REMEDIATED per third-party design-review findings (see §21).**
+
+**Revision note.** The first Oracle-PathE design candidate commit
+`3b085dae4ff89512bcf23f80043b78ddc82a490f` received a third-party independent
+design-review verdict of `REQUEST_CHANGES` (P0 = 0, P1 = 1, P2 = 1, P3 = 3). The
+accepted findings are remediated in this revision and recorded in §21. The
+remediated artifact remains a **design candidate**: not accepted, not frozen,
+not effective; it authorizes no execution and consumes no budget.
 
 This document specifies the normative Oracle-PathE executable
 `docs/v0.3/V03E_G0_5_PRE_ETB_EXECUTION_ORACLE_PATH_E.ps1`. It is a design
@@ -114,7 +122,7 @@ all, and therefore **not** gated:
   `System.IO.Directory`, `System.IO.FileStream`, `System.Text.StringBuilder`,
   `System.Text.UTF8Encoding`, `System.Text.Encoding`,
   `System.Security.Cryptography.SHA256`, `System.DateTimeOffset`,
-  `System.Globalization.CultureInfo`, `System.Environment`.
+  `System.Console`, `System.Globalization.CultureInfo`, `System.Environment`.
 
 None of the above is a cmdlet. In particular Oracle-PathE uses
 `[System.IO.Path]::GetDirectoryName` instead of `Split-Path`,
@@ -124,7 +132,27 @@ None of the above is a cmdlet. In particular Oracle-PathE uses
 `Test-Path`, so that bootstrap and the target stages do not depend on those
 cmdlets.
 
-### 4.2 Gated facilities
+`System.Console` is the frozen **reporting primitive**. Every line Oracle-PathE
+prints — bootstrap, semantic, publication-failure, publication-OK and guard
+lines alike — is written with `[System.Console]::Out.WriteLine`, which:
+
+- belongs to the same .NET runtime layer that is already required to execute the
+  script at all, so its availability follows from the script executing;
+- is **not** a PowerShell cmdlet, so no reporting surface depends on a module
+  that the bootstrap phase may have just found unavailable;
+- returns nothing and writes nothing into the PowerShell pipeline, so reporting
+  cannot be confused with oracle output objects;
+- throws an ordinary .NET exception if the channel is unavailable or closed;
+  that failure is handled by §4.5, never by an unchecked path.
+
+Two cmdlets that the predecessor did use are **eliminated entirely**, not
+gated: all reporting that used `Write-Output` now goes through
+`[System.Console]::Out.WriteLine`, and all iteration that used `ForEach-Object`
+now uses the `foreach` language statement. Oracle-PathE therefore contains
+**zero** `Write-Output` invocations, **zero** `ForEach-Object` invocations and
+**zero** `Get-FileHash` invocations.
+
+### 4.2 Gated facilities and the complete command taxonomy
 
 Everything else that is a cmdlet or an external executable is a **GATED
 FACILITY** and is availability-checked in the bootstrap phase, before its first
@@ -132,6 +160,27 @@ operational use anywhere in the file:
 
 `python`, `Add-Type`, `Get-NetTCPConnection`, `Get-CimInstance`,
 `ConvertTo-Json`, `ConvertFrom-Json`.
+
+The gate list is **not** the completeness argument by itself. Completeness is
+established by the following taxonomy invariant, which is normative here and is
+a mandatory requirement on every review and on the regression test of §18:
+
+> **Every command invocation (`CommandAst`) in the executable must belong to
+> exactly one of four declared classes: (A) a script-local function defined
+> before its first use; (B) an explicitly declared bootstrap primitive of §4.1;
+> (C) an explicitly declared gated facility of §4.2 whose availability handling
+> precedes its first operational use; (D) an explicitly declared external
+> executable whose gate precedes its first invocation. A command invocation not
+> covered by this taxonomy is a design-review failure.**
+
+There must be **no undeclared operational command**. In the remediated revision
+the enumeration is: 6 script-local functions (`Test-BootstrapFacility`,
+`Get-Utf8FileSha256`, `Get-LowerHex`, `Get-CanonicalPath`, `New-Snapshot`,
+`Take-Snapshot`), the 6 gated facilities listed above, and the 1 external
+executable `python` — 28 `CommandAst` nodes in total, with no dynamic command
+name, no alias, no `Invoke-*` mechanism and no invocation of an undeclared
+cmdlet. `Write-Output`, `ForEach-Object` and `Get-FileHash` appear as **0**
+command invocations and are therefore not gated at all: they are never used.
 
 ### 4.3 The checker cannot terminate the script
 
@@ -151,6 +200,23 @@ If `Get-NetTCPConnection` is among the missing facilities,
 available, the oracle **publishes** the `HARNESS_INVALID / NO ETB SEMANTIC
 RESULT` result; if they are not, the oracle exits with the documented
 infrastructure exit code (see §9) and publishes nothing.
+
+### 4.5 Reporting-channel failure model
+
+Reporting through `[System.Console]::Out.WriteLine` can itself fail if the
+stdout channel is unavailable or closed. The model is fail-closed and is
+identical at both layers:
+
+- at step 6 (terminal reporting) a reporting failure is an unexpected host
+  failure: it reaches the top-level guard of §8, which exits `4` without
+  deleting, retrying, repairing or rewriting anything. If publication had
+  already succeeded, the published artifact **remains on disk**; its presence
+  must be inspected on disk and must never be inferred from the exit code;
+- inside the guard itself, the emergency reporting is wrapped so that a
+  reporting failure cannot prevent the frozen `exit 4`.
+
+No reporting failure can corrupt, delete or rewrite a published artifact, and
+no reporting failure is ever converted into an ETB semantic verdict.
 
 ---
 
@@ -190,14 +256,21 @@ first-use stage.
 | `ConvertTo-Json` | bootstrap phase (`step 0`) | `step 5` evidence serialization | check < use |
 | `ConvertFrom-Json` | bootstrap phase (`step 0`) | `step 5` evidence readback validation | check < use |
 | `Get-FileHash` | **not gated — not used at all** | **none** | vacuous |
+| `Write-Output` | **not gated — not used at all** | **none** | vacuous |
+| `ForEach-Object` | **not gated — not used at all** | **none** | vacuous |
+| `Get-Command` | the bootstrap mechanism itself (§4.3) | only inside `Test-BootstrapFacility`, wrapped in `try`/`catch` | self-checked |
+| `[System.Console]::Out.WriteLine` | **declared bootstrap primitive** (§4.1) | reporting only; never a semantic operation | not a cmdlet |
+| `Get-LowerHex` | script-local function | defined L247, first used L649 | definition < use |
 
-Measured on the candidate revision (`V03E_G0_5_PRE_ETB_EXECUTION_ORACLE_PATH_E.ps1`,
-37 819 bytes): last bootstrap-check call at line 215; earliest gated-facility
-call at line 225 (`python`); therefore the invariant holds with a margin, and
-`Get-NetTCPConnection` is not reached before line 359, inside `Take-Snapshot`
-(lines 351–479). These line numbers are recorded for the candidate revision and
-must be re-measured by review; the stage ordering above is the normative
-statement.
+Measured on the **remediated** revision
+(`V03E_G0_5_PRE_ETB_EXECUTION_ORACLE_PATH_E.ps1`, 41 610 bytes, 772 lines,
+SHA-256 `c08c626cbd859003c3f2a148e4f137f053aef0ccc8cadfd6f4d6bb2a1271badb`):
+the last bootstrap-availability call is at line 267; the earliest
+gated-facility call is at line 277 (`python`); therefore the invariant holds
+with a margin, and `Get-NetTCPConnection` is not reached before line 411, inside
+`Take-Snapshot` (lines 403–531). These line numbers are recorded for this
+candidate revision and must be re-measured by review; the stage ordering above
+is the normative statement.
 
 ---
 
@@ -214,6 +287,7 @@ the oracle itself; they never escape:
 | P/Invoke invocation / marshaling / handle-close failure | `HARNESS_INVALID` | `*_path` stages |
 | listener query raises or is unavailable | `ETB_UNSATISFIED` / `COMMAND_UNAVAILABLE` | `s0_listener` / `s1_listener` |
 | process query raises | `ETB_UNSATISFIED` | `s0_process` / `s1_process` |
+| the reporting channel fails at step 6 | unexpected host failure → guard → exit `4` | no stage: reporting failure is never a semantic stage |
 
 Infrastructure problems and ETB semantic outcomes remain distinct: an
 infrastructure problem is never silently converted into an ETB semantic
@@ -227,21 +301,45 @@ verdict, and an ETB semantic failure is never misclassified as
 Oracle-PathE installs a **top-level `trap`** before anything else runs. It
 exists solely for an unexpected internal or host failure for which no designed
 branch applies. It converts such a failure into the documented fail-closed
-terminal state:
+terminal state, with the emergency reporting itself guarded:
 
 ```
-ORACLE_PATH_E_UNEXPECTED_HOST_FAILURE
-ORACLE_PATH_E_FINAL_CLASSIFICATION=HARNESS_INVALID
-ORACLE_PATH_E_SEMANTIC_RESULT=NONE
+try {
+  ORACLE_PATH_E_UNEXPECTED_HOST_FAILURE
+  ORACLE_PATH_E_FINAL_CLASSIFICATION=HARNESS_INVALID
+  ORACLE_PATH_E_SEMANTIC_RESULT=NONE
+} catch {
+  # emergency-report failure is swallowed; nothing about it is printed
+}
 exit 4
 ```
 
+The implementation is normative in three respects:
+
+- the guard invokes **no cmdlet**: its reporting is
+  `[System.Console]::Out.WriteLine` over frozen string constants only, so the
+  guard cannot fail because a module it needs is unavailable — precisely the
+  failure class it exists to convert;
+- the three reporting writes are wrapped in a local `try`/`catch` whose `catch`
+  body is empty, and `exit 4` is deliberately **outside** that `try`/`catch`.
+  The normative invariant is:
+  **an exception inside the emergency reporting path cannot prevent `exit 4`**;
+- the guard is narrow. It does not absorb the classified branches: the
+  publication region keeps its own local `try`/`catch` (`exit 3`), the
+  expected-infrastructure branch keeps its own `exit 2`, and a normal
+  publication keeps its own `exit 0`. Only an unexpected failure reaches the
+  guard.
+
 Consistent with the inherited frozen discipline, no exception message, stack,
 provider text or environment data is captured, persisted or printed. There is
-therefore **no unexplained "any arbitrary terminating error" bucket**: every
-termination of Oracle-PathE maps to a classified branch or to this documented
-guard, and later governance interprets `exit 4` as *fail-closed, no trusted
-output, no published artifact claimed*.
+therefore **no unexplained "any arbitrary terminating error" bucket** and **no
+reachable undocumented `exit 1` path**: every termination of Oracle-PathE maps
+to a classified branch or to this documented guard.
+
+Because the guard can also catch a failure raised *after* a successful
+publication (§4.5, §14 item 12), later governance interprets `exit 4` as
+*fail-closed; artifact presence must be inspected on disk and is never inferred
+from the exit code*.
 
 ---
 
@@ -250,9 +348,16 @@ output, no published artifact claimed*.
 | Exit code | Meaning |
 |---|---|
 | `0` | the oracle completed and **published** one of the three result classes |
-| `2` | an **expected infrastructure failure** was classified, but the result could not be published because a publication facility was itself unavailable (fail-closed; no output artifacts created) |
-| `3` | the publication/control stage failed **after** the semantic outcome was decided |
-| `4` | an **unexpected internal or host failure** reached the top-level guard (fail-closed; no output artifacts claimed) |
+| `2` | an **expected infrastructure failure** was classified, but the result could not be published because a publication facility was itself unavailable. This branch is reached **before any output path is created**, so no output artifact exists (fail-closed) |
+| `3` | the publication/control stage failed **after** the semantic outcome was decided. This code **does not mean that no output artifact exists**: a control failure can occur after one or more FINAL moves have already happened |
+| `4` | an **unexpected internal or host failure** reached the top-level guard (fail-closed). The guard emits its frozen classification when its reporting channel is usable, and a failure of that channel does not change the exit code. The guard can also catch a failure raised after a successful publication |
+
+**Artifact-presence rule (normative).** Exit codes `3` and `4` are *not*
+artifact-absence assertions. For both, artifact presence must be established by
+inspecting the fail-closed publication state on disk, and must never be inferred
+from the exit code. Only exit `2` asserts that no output artifact was created,
+because that branch is reached before any output path is touched. In every case
+there is no cleanup, no retry, no overwrite and no automatic repair.
 
 The predecessor's undeclared `exit 1` accidental path no longer exists as an
 undocumented outcome: any value other than the four above is a defect of the
@@ -371,7 +476,13 @@ preserves the inherited discipline:
 11. any failure in this region raises, is caught by a narrow local
     `try`/`catch`, and yields the frozen `HARNESS_INVALID` evidence-machinery
     outcome with a constant publication-failure surface — no exception text is
-    persisted.
+    persisted;
+12. that narrow `try`/`catch` covers publication only. Terminal reporting
+    happens after it, through the reporting primitive of §4.1. If reporting
+    fails after a successful publication, the failure reaches the guard of §8:
+    nothing is deleted, retried, repaired or rewritten, the three published
+    artifacts stay on disk exactly as verified by step 10, and their presence
+    must be inspected on disk rather than inferred from the exit code.
 
 No Path-D output path is referenced anywhere in Oracle-PathE.
 
@@ -387,6 +498,13 @@ Reserved for the future Path-E lineage and **not created** in this round:
 - result: `docs/v0.3/V03E_G0_5_PRE_ETB_EXECUTION_RESULT_PATH_E.md{,.tmp}`
 - claims: `docs/v0.3/evidence/ETB_PATH_E_AUTHORIZATION_USE.claim{,.tmp}` and
   `docs/v0.3/evidence/ETB_PATH_E_ATTEMPT_USE.claim{,.tmp}`
+
+The derived reserved namespace is **11 paths** in total: 1 runtime directory,
+2 evidence files (TEMP + FINAL), 2 manifest files, 2 result files, 2
+authorization-claim files and 2 attempt-claim files. The six output paths
+asserted by the §14 occupancy precondition are the evidence/manifest/result
+subset of that namespace. Current occupancy is **0 / 11** — nothing in the
+namespace exists.
 
 The future Path-E execution-authorization design governs those claims. No
 Path-E budget is consumed, or even operationally active, in this round.
@@ -418,6 +536,7 @@ PATH-E EXECUTION AUTHORIZATION = NOT DESIGNED / NOT ACCEPTED
 PATH-E AUTHORIZATION USE = NOT AVAILABLE FOR CONSUMPTION
 PATH-E ETB ATTEMPT = NOT AVAILABLE FOR CONSUMPTION
 PATH-E ETB EXECUTION = NOT AUTHORIZED
+PATH-E RUNTIME OCCUPANCY = 0 / 11
 AUTHORITATIVE ETB SEMANTIC RESULT = ETB_UNSATISFIED / PRESERVED
 PATH-D = EXHAUSTED / CLOSED / IMMUTABLE
 ```
@@ -429,22 +548,30 @@ stage. It creates no ETB observation and changes no authoritative result.
 
 ## 18. Static verification and regression test
 
-Performed on the candidate revision, **statically only** — the executable was
-parsed, never executed:
+Performed on the remediated candidate revision, **statically only** — the
+executable was parsed, never executed:
 
 | Test | Result |
 |---|---|
 | PowerShell parser errors | `0` |
-| ASCII-only source, no BOM, CR = 0, exactly one terminal LF | pass (`MAXBYTE = 125`) |
-| `Get-FileHash` command calls | `0` |
-| Bootstrap check precedes first gated-facility call | pass (check ≤ L215 < use L225) |
-| `Get-NetTCPConnection` only inside the snapshot stage | pass (L359 within L351–479) |
+| ASCII-only source, no BOM, CR = 0, exactly one terminal LF | pass (`MAXBYTE = 125`, 772 LF) |
+| `CommandAst` nodes enumerated and classified | `28`, taxonomy violations `0` |
+| Dynamic command name / alias / `Invoke-*` / `Invoke-Expression` | `0` |
+| `Write-Output` command invocations | `0` |
+| `ForEach-Object` command invocations | `0` |
+| `Get-FileHash` command invocations | `0` |
+| `Split-Path` / `Set-Location` / `Get-Content` / `Test-Path` invocations | `0` each |
+| Guard body `CommandAst` count | `0` (frozen `[System.Console]::Out` constants only) |
+| Bootstrap check precedes first gated-facility call | pass (check ≤ L267 < use L277) |
+| `Get-NetTCPConnection` only inside the snapshot stage | pass (L411 within L403–531) |
+| `[System.Console]::Out.WriteLine` sites | `20` (3 of them inside the guard) |
+| `Get-Command` only inside the wrapped checker | pass (L194 within L192–199) |
 | No Path-D output namespace reference | `0` |
 | No Path-D claim path used as Path-E control state | `0` |
 | No excluded oracle identity used as an active name | `0` each |
-| Result class set exactly three | pass (only writers of the semantic outcome are the three classes) |
+| Result class set exactly three | pass (the only writers of the semantic outcome are the three classes) |
 | No retry / fallback / sleep logic | pass (`Start-Sleep = 0`, `while = 0`; only bounded byte-compare and dash-scan `for` loops) |
-| Exit-code surface exactly `0 / 2 / 3 / 4` | pass |
+| Exit-code surface exactly `0 / 2 / 3 / 4` | pass (L772 / L582 / L760 / L112) |
 
 **Regression test for the Path-D failure (static, non-target-reaching):**
 
@@ -453,20 +580,33 @@ parsed, never executed:
   use-before-availability sequence **cannot** recur.
 - *Property B* — every bootstrap availability check is issued strictly before
   the first call of every gated facility, so no gated facility can be used
-  before its availability is established.
+  before its availability has been established.
 - *Property C* — an unavailable required facility sets the terminal
   `HARNESS_INVALID` outcome with
   `terminal_stage = infrastructure_command_unavailable:<facility>` and reaches
   the oracle's own publication/exit path instead of terminating at an unchecked
   first use.
+- *Property D (enumeration completeness)* — the regression is **not** allowed to
+  rest on a hand-maintained list of expected names. Under the §4.2 taxonomy
+  invariant the enumeration must cover **every** `CommandAst` in the executable
+  and prove class membership for each one, so a newly introduced facility that
+  the author forgot to add to the table fails the property instead of passing
+  silently. Equivalently: the test fails whenever the enumerated command count
+  exceeds the declared taxonomy entries.
+- *Property E (guard fail-closed)* — the guard's reporting writes sit inside a
+  local `try`/`catch` with `exit 4` outside it, and the guard body contains
+  **no** `CommandAst`; therefore neither an unavailable cmdlet nor a failing
+  reporting channel can prevent `exit 4`. This is proved by AST inspection of
+  the guard body plus the isolated language-semantics probe recorded in §21,
+  which executes no DevRelay artifact and touches no DevRelay path.
 
 Therefore the property "if `Get-FileHash` is unavailable at the relevant
 boundary, Oracle-PathE reaches the intended infrastructure-failure handling path
 instead of terminating at an unchecked first use" holds **vacuously and
 structurally**: the oracle never reaches such a boundary because it never uses
-that facility, and every facility it does use is checked first. The test used no
-production runtime namespace, performed no listener query and consumed no
-budget.
+that facility, and every command it does use is enumerated and classified under
+the taxonomy invariant above. The test used no production runtime namespace,
+performed no listener query and consumed no budget.
 
 ---
 
@@ -492,5 +632,45 @@ NEXT STAGE = THIRD-PARTY INDEPENDENT REVIEW OF ORACLE-PATHE DESIGN CANDIDATE
 
 That review must explicitly attempt to reproduce or detect the historical
 Oracle-PathD `Get-FileHash`-before-availability-gate defect, and must
-independently re-measure the ordering invariant of §6. Acceptance bookkeeping is
-**not** performed in this round.
+independently re-measure the ordering invariant of §6. It must additionally
+verify, on the remediated revision:
+
+- `Write-Output` actual `CommandAst` count = `0`;
+- `ForEach-Object` actual `CommandAst` count = `0`;
+- the guard body has no cmdlet dependency;
+- an emergency-reporting failure still terminates at `exit 4`;
+- complete `CommandAst` taxonomy coverage under §4.2;
+- no reachable undocumented `exit 1`;
+- the historical `Get-FileHash` defect remains absent;
+- Path-E runtime occupancy is correctly represented as `0 / 11`.
+
+Acceptance bookkeeping is **not** performed in this round.
+
+---
+
+## 21. Remediation record (third-party design-review findings)
+
+The first Oracle-PathE design candidate
+(`3b085dae4ff89512bcf23f80043b78ddc82a490f`) was reviewed independently and
+returned `REQUEST_CHANGES` with P0 = 0, P1 = 1, P2 = 1, P3 = 3. This revision
+remediates exactly those accepted findings and adds no other change.
+
+| Finding | Severity | Accepted defect | Remediation in this revision |
+|---|---|---|---|
+| P1-1 | P1 | the guard and every reporting surface used the ungated cmdlet `Write-Output`, so an environment in which that cmdlet's module is unavailable made the guard abort before `exit 4` and terminate with an undocumented exit `1` | all 20 reporting sites now use the declared bootstrap primitive `[System.Console]::Out.WriteLine`; the guard's reporting is wrapped with `exit 4` outside it; `Write-Output` command invocations = `0` |
+| P2-1 | P2 | `Write-Output` and `ForEach-Object` were operational cmdlets outside the declared facility model | both are eliminated rather than gated: `Write-Output` → reporting primitive, `ForEach-Object` → `foreach` language statement (`ForEach-Object` invocations = `0`); §4.2 now imposes the taxonomy invariant on every command invocation |
+| P3-1 | P3 | the regression completeness claim overstated what had been enumerated | §18 Property D adds the enumeration-completeness obligation and the "enumerated command count > declared taxonomy entries ⇒ fail" rule |
+| P3-2 | P3 | the exit-`3` wording could be read as "no output artifact exists" | §9 forbids inferring artifact presence from exit `3` or `4`; §14 item 12 records the post-publication reporting behaviour |
+| P3-3 | P3 | Path-E runtime occupancy was reported as `0 / 6` | §15 derives the reserved namespace as `11` paths and reports occupancy `0 / 11`; `0 / 6` survives only as the six-output-path subset asserted by the §14 occupancy precondition |
+
+The remediated artifact remains a design candidate:
+`NOT ACCEPTED / NOT FROZEN / NOT EFFECTIVE`. This remediation round performed no
+execution of Oracle-PathE or Oracle-PathD, no ETB execution, no listener query,
+no endpoint probe, no claim creation, no budget creation or consumption and no
+Path-D modification. Every check listed in §18 is static/parser/AST analysis,
+plus one isolated language-semantics probe (nested `pwsh -NoProfile`, containing
+no DevRelay artifact and touching no DevRelay path) which confirms the two guard
+properties directly: a simulated host failure with a working emergency channel
+terminates at `exit 4`, and the same failure with a throwing emergency channel
+**still** terminates at `exit 4` because the inner `catch` suppresses only the
+reporting failure.

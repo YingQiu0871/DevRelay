@@ -27,9 +27,18 @@
 #       this script, so Get-FileHash is never needed at all;
 #   (3) a top-level guard converts any residual unexpected host/internal
 #       failure into an explicit, documented terminal state instead of an
-#       accidental exit code.
-# Invariant enforced by design: AVAILABILITY-CHECK STAGE < FIRST-USE STAGE for
-# every gated facility.
+#       accidental exit code;
+#   (4) ALL reporting uses the .NET stdout primitive [System.Console]::Out,
+#       never a cmdlet, so that no reporting surface (least of all the guard
+#       itself) depends on a facility that step 0 may have just found
+#       unavailable;
+#   (5) the guard's own emergency reporting is itself wrapped, so a failure of
+#       the reporting channel cannot prevent the guard's frozen
+#       process-control exit code.
+# Invariants enforced by design:
+#   AVAILABILITY-CHECK STAGE < FIRST-USE STAGE for every gated facility;
+#   NO UNGATED CMDLET OR EXTERNAL EXECUTABLE IS EVER INVOKED;
+#   AN EXCEPTION INSIDE THE EMERGENCY REPORTING PATH CANNOT PREVENT EXIT 4.
 #
 # ASCII-ONLY SOURCE. Every byte of this file MUST be <= 0x7F.
 # The U+2014 em dash required by the result artifact is constructed at runtime
@@ -57,10 +66,20 @@
 #   0 = oracle completed and PUBLISHED one of the three result classes
 #   2 = EXPECTED INFRASTRUCTURE FAILURE classified by the oracle, but the
 #       result could not be published because a publication facility was itself
-#       unavailable (fail-closed; no output artifacts exist)
-#   3 = publication/control stage failed after the semantic outcome was decided
+#       unavailable. This branch is reached BEFORE any output path is created,
+#       so no output artifact exists (fail-closed).
+#   3 = publication/control stage failed after the semantic outcome was decided.
+#       This code does NOT mean "no output artifact exists": a control failure
+#       can occur after one or more FINAL moves have already happened, so
+#       artifact presence MUST be inspected on disk and MUST NOT be inferred
+#       from the exit code alone.
 #   4 = UNEXPECTED internal or host failure reached the top-level guard
-#       (fail-closed; no output artifacts are claimed to exist)
+#       (fail-closed). The guard emits a frozen classification when its
+#       reporting channel is usable; a failure of that channel does not change
+#       the exit code. The guard can also catch a failure raised after a
+#       successful publication (for example by the terminal reporting write),
+#       so artifact presence MUST likewise be inspected on disk rather than
+#       inferred from this exit code.
 # Any other value is a defect, not a contract.
 
 $ErrorActionPreference = 'Stop'
@@ -76,10 +95,20 @@ $ErrorActionPreference = 'Stop'
 # of an accidental exit code. Consistent with the inherited frozen discipline,
 # no exception message, stack, provider text or environment data is captured,
 # persisted or printed here.
+#
+# The guard invokes NO cmdlet. Its reporting uses the .NET stdout primitive
+# only, and that reporting is itself wrapped: if emergency reporting fails (for
+# example because the stdout channel is unavailable or closed), the inner catch
+# suppresses ONLY that reporting failure and `exit 4` still runs. `exit 4` is
+# deliberately outside the inner try/catch so that no reporting failure can
+# prevent the frozen process-control termination.
 trap {
-  Write-Output 'ORACLE_PATH_E_UNEXPECTED_HOST_FAILURE'
-  Write-Output 'ORACLE_PATH_E_FINAL_CLASSIFICATION=HARNESS_INVALID'
-  Write-Output 'ORACLE_PATH_E_SEMANTIC_RESULT=NONE'
+  try {
+    [System.Console]::Out.WriteLine('ORACLE_PATH_E_UNEXPECTED_HOST_FAILURE')
+    [System.Console]::Out.WriteLine('ORACLE_PATH_E_FINAL_CLASSIFICATION=HARNESS_INVALID')
+    [System.Console]::Out.WriteLine('ORACLE_PATH_E_SEMANTIC_RESULT=NONE')
+  } catch {
+  }
   exit 4
 }
 
@@ -137,12 +166,23 @@ $Checks = [ordered]@{
 # ---------------------------------------------------------------------------
 # Assumed bootstrap primitives, available because this script is executing under
 # Windows PowerShell / .NET at all: PowerShell language constructs (statements,
-# functions, operators, arrays, ordered hashtables); type literals for
-# System.* types; static .NET members of the runtime libraries already loaded
-# (System.IO.Path, System.IO.File, System.IO.Directory, System.IO.FileStream,
-# System.Text.StringBuilder, System.Text.UTF8Encoding, System.Text.Encoding,
+# functions, operators, arrays, ordered hashtables, foreach, try/catch/finally,
+# throw, trap); type literals for System.* types; static .NET members of the
+# runtime libraries already loaded (System.IO.Path, System.IO.File,
+# System.IO.Directory, System.IO.FileStream, System.Text.StringBuilder,
+# System.Text.UTF8Encoding, System.Text.Encoding,
 # System.Security.Cryptography.SHA256, System.DateTimeOffset,
-# System.Globalization.CultureInfo). None of these is a cmdlet.
+# System.Console, System.Globalization.CultureInfo). None of these is a cmdlet.
+#
+# System.Console is the frozen reporting primitive. It is a .NET static type of
+# the same runtime layer that is already required to execute this script at all,
+# it is not a PowerShell cmdlet, and it is the ONLY output channel this file
+# uses: deterministic single-line stdout reporting through
+# [System.Console]::Out.WriteLine. A write through it returns nothing and adds
+# nothing to the PowerShell pipeline. If that channel is unavailable or closed
+# the write throws like any other .NET call: at step 6 the top-level guard
+# converts it into the frozen exit 4, and inside the guard an emergency-report
+# failure is swallowed so the process-control exit code is unaffected.
 #
 # Everything else is a GATED FACILITY and is availability-checked here, before
 # its first operational use anywhere in this file. Test-BootstrapFacility is
@@ -166,6 +206,9 @@ function Test-BootstrapFacility([string]$name) {
 #   ConvertTo-Json     : step 5 evidence serialization (publication region)
 #   ConvertFrom-Json   : step 4 package manifest parse; step 5 readback validation
 # Get-FileHash is deliberately NOT gated because Oracle-PathE NEVER uses it.
+# Write-Output and ForEach-Object are NOT gated either, because Oracle-PathE
+# never uses them: reporting goes through [System.Console]::Out and iteration
+# uses the foreach language statement.
 $GatedFacilities = @('python','Add-Type','Get-NetTCPConnection','Get-CimInstance','ConvertTo-Json','ConvertFrom-Json')
 $MissingFacilities = @()
 foreach ($fac in $GatedFacilities) {
@@ -175,7 +218,7 @@ $BootstrapOk = ($MissingFacilities.Count -eq 0)
 $CanSerialize = (Test-BootstrapFacility 'ConvertTo-Json')
 $CanValidateJson = (Test-BootstrapFacility 'ConvertFrom-Json')
 $BootstrapMissing = $MissingFacilities -join ','
-Write-Output ('ORACLE_PATH_E_BOOTSTRAP ok=' + $BootstrapOk + ' missing=' + $BootstrapMissing)
+[System.Console]::Out.WriteLine('ORACLE_PATH_E_BOOTSTRAP ok=' + $BootstrapOk + ' missing=' + $BootstrapMissing)
 if (-not $BootstrapOk) {
   $Outcome = 'HARNESS_INVALID'
   $TerminalStage = 'infrastructure_command_unavailable:' + $MissingFacilities[0]
@@ -198,10 +241,19 @@ function Get-Utf8FileSha256([string]$path) {
     $sha.Dispose()
   }
 }
+# step 1a: lowercase-hex rendering of a digest, used by the publication region.
+# Language-level iteration only (foreach): no cmdlet and no pipeline command is
+# involved. Defined here, before its first use in step 5.
+function Get-LowerHex([byte[]]$bytes) {
+  $sb = [System.Text.StringBuilder]::new(($bytes.Length * 2))
+  foreach ($b in $bytes) { [void]$sb.Append($b.ToString('x2')) }
+  return $sb.ToString()
+}
+
 $ScriptSelfSha = Get-Utf8FileSha256 $OraclePathEScriptPath
 $SpecSelfSha   = Get-Utf8FileSha256 $OraclePathESpecPath
-Write-Output ('ORACLE_PATH_E_SCRIPT_SHA256=' + $ScriptSelfSha)
-Write-Output ('ORACLE_PATH_E_SPEC_SHA256=' + $SpecSelfSha)
+[System.Console]::Out.WriteLine('ORACLE_PATH_E_SCRIPT_SHA256=' + $ScriptSelfSha)
+[System.Console]::Out.WriteLine('ORACLE_PATH_E_SPEC_SHA256=' + $SpecSelfSha)
 
 # step 2: authoritative config (read-only).
 # Frozen rows: python cannot be resolved/launched, or an import/dependency/runtime
@@ -515,16 +567,18 @@ if ($null -eq $S0) { $S0 = @{ snapshot = New-Snapshot } }
 if ($null -eq $S1) { $S1 = @{ snapshot = New-Snapshot } }
 $Finished = [System.DateTimeOffset]::UtcNow.ToString("yyyy-MM-dd'T'HH:mm:ss.fffffff'Z'", $Inv)
 
-Write-Output ('ORACLE_PATH_E_SEMANTIC outcome=' + $Outcome + ' listener_probe_outcome=' + $ListenerProbeOutcome + ' terminal_stage=' + $TerminalStage)
-Write-Output ('ORACLE_PATH_E_CHECKS ' + (($Checks.GetEnumerator() | ForEach-Object { $_.Key + '=' + $_.Value }) -join ' '))
+[System.Console]::Out.WriteLine('ORACLE_PATH_E_SEMANTIC outcome=' + $Outcome + ' listener_probe_outcome=' + $ListenerProbeOutcome + ' terminal_stage=' + $TerminalStage)
+$checkParts = @()
+foreach ($checkKey in $Checks.Keys) { $checkParts += ($checkKey + '=' + $Checks[$checkKey]) }
+[System.Console]::Out.WriteLine('ORACLE_PATH_E_CHECKS ' + ($checkParts -join ' '))
 
 if ((-not $BootstrapOk) -and ((-not $CanSerialize) -or (-not $CanValidateJson))) {
   # EXPECTED INFRASTRUCTURE FAILURE with an unavailable serialization facility:
   # the oracle has classified the outcome but cannot publish it. Fail closed with
   # the documented infrastructure exit code; no output path is created.
-  Write-Output 'ORACLE_PATH_E_PUBLICATION_UNAVAILABLE'
-  Write-Output 'ORACLE_PATH_E_FINAL_CLASSIFICATION=HARNESS_INVALID'
-  Write-Output 'ORACLE_PATH_E_SEMANTIC_RESULT=NONE'
+  [System.Console]::Out.WriteLine('ORACLE_PATH_E_PUBLICATION_UNAVAILABLE')
+  [System.Console]::Out.WriteLine('ORACLE_PATH_E_FINAL_CLASSIFICATION=HARNESS_INVALID')
+  [System.Console]::Out.WriteLine('ORACLE_PATH_E_SEMANTIC_RESULT=NONE')
   exit 2
 }
 
@@ -592,7 +646,7 @@ try {
   if ($parsed.listener_probe_outcome -cne $ListenerProbeOutcome) { throw 'EVIDENCE_LISTENER_PROBE_OUTCOME_MISMATCH' }
 
   $sha = [System.Security.Cryptography.SHA256]::Create()
-  $EvDigest = (($sha.ComputeHash($evBytes) | ForEach-Object { $_.ToString('x2') }) -join '')
+  $EvDigest = Get-LowerHex ($sha.ComputeHash($evBytes))
   $mfBytes = $enc.GetBytes($EvDigest + '  ' + $EvF + "`n")
   $fs2 = [System.IO.FileStream]::new($MfT,[System.IO.FileMode]::CreateNew,[System.IO.FileAccess]::Write,[System.IO.FileShare]::None)
   try { $fs2.Write($mfBytes,0,$mfBytes.Length); $fs2.Flush($true) } finally { $fs2.Dispose() }
@@ -603,7 +657,7 @@ try {
   if ($mfLine.Substring(0,64) -cne $EvDigest) { throw 'MANIFEST_DIGEST_MISMATCH' }
   if ($mfLine.Substring(64,2) -cne '  ') { throw 'MANIFEST_SPACES_MISMATCH' }
   if ($mfLine.Substring(66) -cne $EvF) { throw 'MANIFEST_PATH_MISMATCH' }
-  $MfDigest = (($sha.ComputeHash($mfBytes) | ForEach-Object { $_.ToString('x2') }) -join '')
+  $MfDigest = Get-LowerHex ($sha.ComputeHash($mfBytes))
 
   # The em dash is constructed at runtime from an ASCII-only source so the
   # result artifact contains the exact UTF-8 bytes E2 80 94 for U+2014.
@@ -680,7 +734,7 @@ try {
   $pf = [System.Text.Encoding]::UTF8.GetString($f1) | ConvertFrom-Json
   if ($pf.outcome -cne $Outcome) { throw 'POST_EVIDENCE_OUTCOME_MISMATCH' }
   if ($pf.listener_probe_outcome -cne $ListenerProbeOutcome) { throw 'POST_LISTENER_PROBE_OUTCOME_MISMATCH' }
-  $pfDigest = (($sha.ComputeHash($f1) | ForEach-Object { $_.ToString('x2') }) -join '')
+  $pfDigest = Get-LowerHex ($sha.ComputeHash($f1))
   $mfFinalLine = ($enc.GetString($f2)).TrimEnd("`n")
   if ($mfFinalLine.Substring(0,64) -cne $pfDigest) { throw 'POST_MANIFEST_DIGEST_MISMATCH' }
   if ($mfFinalLine.Substring(66) -cne $EvF) { throw 'POST_MANIFEST_PATH_MISMATCH' }
@@ -693,20 +747,26 @@ try {
 # step 6: terminal reporting.
 # MANDATORY STOP: nothing after this point may probe the endpoint, listeners,
 # processes, commands or any diagnostic surface. The attempt is terminal.
+# Reporting uses [System.Console]::Out only; no cmdlet is invoked. If the
+# reporting channel itself fails here after a successful publication, the
+# failure reaches the top-level guard, which exits 4 without deleting, retrying,
+# repairing or rewriting anything: the already-published artifact remains on
+# disk, and its presence must be inspected on disk and never inferred from the
+# exit code.
 if ($PublicationFailed) {
-  Write-Output 'ORACLE_PATH_E_PUBLICATION_FAILURE'
-  Write-Output 'ORACLE_PATH_E_FINAL_CLASSIFICATION=HARNESS_INVALID'
-  Write-Output 'ORACLE_PATH_E_SEMANTIC_RESULT=NONE'
+  [System.Console]::Out.WriteLine('ORACLE_PATH_E_PUBLICATION_FAILURE')
+  [System.Console]::Out.WriteLine('ORACLE_PATH_E_FINAL_CLASSIFICATION=HARNESS_INVALID')
+  [System.Console]::Out.WriteLine('ORACLE_PATH_E_SEMANTIC_RESULT=NONE')
   exit 3
 }
 
-Write-Output 'ORACLE_PATH_E_PUBLICATION_OK'
-Write-Output ('ORACLE_PATH_E_EVIDENCE_SHA256=' + $EvDigest)
-Write-Output ('ORACLE_PATH_E_MANIFEST_SHA256=' + $MfDigest)
-Write-Output ('ORACLE_PATH_E_FINAL_CLASSIFICATION=' + $Outcome)
+[System.Console]::Out.WriteLine('ORACLE_PATH_E_PUBLICATION_OK')
+[System.Console]::Out.WriteLine('ORACLE_PATH_E_EVIDENCE_SHA256=' + $EvDigest)
+[System.Console]::Out.WriteLine('ORACLE_PATH_E_MANIFEST_SHA256=' + $MfDigest)
+[System.Console]::Out.WriteLine('ORACLE_PATH_E_FINAL_CLASSIFICATION=' + $Outcome)
 if ($Outcome -eq 'HARNESS_INVALID') {
-  Write-Output 'ORACLE_PATH_E_SEMANTIC_RESULT=NONE'
+  [System.Console]::Out.WriteLine('ORACLE_PATH_E_SEMANTIC_RESULT=NONE')
 } else {
-  Write-Output ('ORACLE_PATH_E_SEMANTIC_RESULT=' + $Outcome)
+  [System.Console]::Out.WriteLine('ORACLE_PATH_E_SEMANTIC_RESULT=' + $Outcome)
 }
 exit 0
