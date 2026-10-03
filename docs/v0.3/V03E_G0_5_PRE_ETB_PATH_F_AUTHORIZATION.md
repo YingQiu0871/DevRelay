@@ -1,19 +1,22 @@
 # DevRelay v0.3-E — G0.5-PRE / SIC — Path-F one-shot ETB execution authorization
 
-> **PATH-F AUTHORIZATION = DESIGN CANDIDATE / NOT ACCEPTED / NOT FROZEN / NOT EFFECTIVE / NOT EXECUTED.**
+> **PATH-F AUTHORIZATION = CORRECTIVE SUCCESSOR DESIGN CANDIDATE / NOT ACCEPTED / NOT FROZEN / NOT EFFECTIVE / NOT EXECUTED.**
 > **THIS AUTHORIZATION DESIGN GRANTS NO EXECUTION AUTHORITY TODAY.**
+> **IT SUPERSEDES NOTHING BY ITSELF: THE PREVIOUSLY ACCEPTED PATH-F AUTHORIZATION REMAINS HISTORICALLY ACCEPTED / FROZEN / EFFECTIVE, AND ONLY ITS OPERATIONAL USE IS BLOCKED AFTER THE PRE-16 PRECONDITION STOP.**
+> **REQUIRED OPERATIONAL EXECUTION / FILE-ACCESS MODE = `full-file-access`, ESTABLISHED BEFORE THE IRREVERSIBLE SEQUENCE (§6.1, PRE-16).**
 > **IT CREATES NO CLAIM NOW AND CONSUMES NO BUDGET.**
 > **IT DOES NOT ENTER ORACLE-PATHF AND DOES NOT QUERY ANY LISTENER.**
 > **IT IS AUTHORIZED FOR DESIGN ONLY AT THIS STAGE.**
 > **THIS IS NOT A RETRY OF PATH-E, PATH-D OR OF ANY EARLIER LINEAGE.**
 > **ONE AUTHORIZATION USE + ONE ETB ATTEMPT ONLY IF LATER INDEPENDENTLY ACCEPTED.**
 
-**Status:** **PATH-F AUTHORIZATION = DESIGN CANDIDATE / NOT ACCEPTED / NOT FROZEN / NOT EFFECTIVE / NOT EXECUTED**
+**Status:** **PATH-F AUTHORIZATION = CORRECTIVE SUCCESSOR DESIGN CANDIDATE / NOT ACCEPTED / NOT FROZEN / NOT EFFECTIVE / NOT EXECUTED**
 
 **Date:** 2026-10-03
 **Repository:** `D:\DevRelay`
 **Branch:** `v0.3-e-recovery-reconciliation`
-**Parent governance commit (build base):** `1d06f2857840b9f4096bbedc156e3ac4c9eaddec`
+**Parent governance commit (build base):** `5fae11eefdcaddc27b4abf28d3a2258ad654d84d`
+**Corrective successor of (historically accepted; operationally blocked after the PRE-16 precondition stop):** `ed112f8c5f1e35d87092d0339698a792ce0b145a` / `c147af8714164dae8b81cafa4eb01945a3ceb8c74b36f0fc18fbd56db284c4de`
 
 ---
 
@@ -32,6 +35,9 @@ The Owner has recorded, and this artifact may not weaken, reinterpret, relabel o
 9. Any stage that this document requires to be an independent third-party review or confirmation must satisfy `OWNER DETERMINATION = THIRD-PARTY INDEPENDENCE REQUIRES DIFFERENT AGENT/SESSION`; a methodological same-session review is adversarial self-review and is **NOT SUFFICIENT** for third-party independence.
 10. The `PATH-E` operational lessons `L1`–`L5` recorded in the accepted Oracle-PathF specification §2.2 are carried forward as accepted history and are **NOT** repaired by editing any frozen predecessor byte. `L3` (cross-document provenance wording tension) is closed for Path-F **by construction in this document** (§3, §19.4), not by editing the accepted Oracle-PathF specification.
 11. The Owner authorized the creation of this design candidate only. Acceptance, freezing, effectivity and execution authority are **NOT** granted by this round.
+12. `OWNER DECISION = AUTHOR ONE CORRECTIVE SUCCESSOR PATH-F ETB EXECUTION-AUTHORIZATION DESIGN CANDIDATE`, recorded in the Owner order governing this corrective round after the one-shot operational round terminated at its first failed precondition (`PRE-16`) with `PATH-F OPERATIONAL EXECUTION = NOT STARTED`, and governed by the disposition commit `5fae11eefdcaddc27b4abf28d3a2258ad654d84d` with `PATHF_PRE16_STRUCTURAL_GAP = CONFIRMED` and `REMEDIATION ROUTE = ROUTE A`. Route A requires exactly this corrective successor design lifecycle and **forbids** repairing the frozen accepted artifact in place. Acceptance, freezing, effectivity and execution authority are **NOT** granted to this corrective candidate either.
+13. `REQUIRED PATH-F OPERATIONAL EXECUTION / FILE-ACCESS MODE = full-file-access` and `workspace-write = INSUFFICIENT FOR PATH-F OPERATIONAL EXECUTION`. This is a **PRE-EXISTING SESSION MODE requirement** supplied to the future operational execution environment. It is **NOT** reactive escalation authority, **NOT** ACL-repair authority, **NOT** permission-repair authority, **NOT** retry authority and **NOT** authority to switch modes after a failed gate or a failed claim operation. Stating the required mode prospectively is what the accepted Oracle-PathF specification §9.1/§9.2 requires of an execution-authorization record, and it is compatible with the frozen prohibition on reactive escalation (specification §9.3/§9.4; §6 and §7 of this artifact). This decision grants no ability to this authorization layer, the executor, the Oracle or any helper to elevate itself.
+14. This corrective successor **revises this artifact only**. The previously accepted authorization artifact bytes at `c147af8714164dae8b81cafa4eb01945a3ceb8c74b36f0fc18fbd56db284c4de` remain immutable history, their acceptance remains historically valid, and neither identity is operationally usable until the corrective successor completes the lifecycle of §20. No historical status surface is rewritten by this round.
 
 These Owner decisions are recorded in the active tracked status surfaces of this repository and are not re-derivable from this artifact alone.
 
@@ -75,6 +81,8 @@ This candidate was designed from the following recovered repository precedent, a
 | Path-E authorization remediation | `4900625114a38a86aa03a5fa4861c5bcd9436dc5` | corrected `PRE-2` (no self-identity paradox) and corrected `PRE-3` (no contradictory effectivity requirement) |
 | Path-E authorization acceptance bookkeeping | `48e9b66dd5aeb147795dbc57e822e6b3d38e4565` | acceptance stage shape |
 | Path-E authorization confirmation record | `c7ac36a8c596ae2ede8db7bce2e625f8c6ffa21c` | confirmation / materialization stage shape |
+| Path-E authorization corrective successor commit | `4900625114a38a86aa03a5fa4861c5bcd9436dc5` | **the corrective-successor mutation shape reused, in substance, by this round**: exactly three modified paths (`CHANGELOG.md`, `docs/v0.3/V03E_ACCEPTANCE.md` and the authorization artifact), numstat `2 0` / `1 1` / `12 5`, subject family `fix(v03e): remediate <lineage> ETB authorization design review findings`, old candidate identity preserved and superseded prospectively only |
+| Path-F PRE-16 disposition | `5fae11eefdcaddc27b4abf28d3a2258ad654d84d` | binds this corrective round: `PATH-F OPERATIONAL EXECUTION = NOT STARTED` at `PRE-16`, `PATHF_PRE16_STRUCTURAL_GAP = CONFIRMED`, `REMEDIATION ROUTE = ROUTE A`, and the Owner's prospective `full-file-access` mode decision |
 
 **Recovered authorization-design precedent classification:**
 
@@ -83,6 +91,14 @@ PATHF_EXECUTION_AUTHORIZATION_DESIGN_PRECEDENT = DETERMINATIVE
 ```
 
 The classification is `DETERMINATIVE` because the candidate shape (exactly two modified governance surfaces plus exactly one new authorization artifact, and no `.gitattributes` change), the subject family (`docs(v03e): define <lineage> ETB authorization candidate`), the artifact naming family (`docs/v0.3/V03E_G0_5_PRE_ETB_PATH_<X>_AUTHORIZATION.md`), the claim-path family (`docs/v0.3/evidence/ETB_PATH_<X>_*_USE.claim{,.tmp}`), the claim schemas, the frozen claim-writer primitive, the PRE-gate family and the ordered five-stage authorization lifecycle are all fixed by direct repository precedent, and the two blocked design decisions (self-identity and effectivity-gate satisfiability) have a committed corrected precedent to inherit verbatim in substance. No acceptance-critical ambiguity remains.
+
+**Corrective-successor precedent (added by this revision):**
+
+```
+PATHF_CORRECTIVE_AUTHORIZATION_DESIGN_PRECEDENT = DETERMINATIVE
+```
+
+The corrective-successor shape is likewise fixed by direct repository precedent, `4900625114a38a86aa03a5fa4861c5bcd9436dc5`: a frozen artifact with a recorded defect is corrected by a **new successor revision of the same artifact path** (never by amending the frozen revision), the old candidate identity is preserved and superseded **prospectively only**, the correction carries exactly the three-path governance delta, and the corrected successor is what the lineage's single authorization-use budget later binds. The one Path-F-specific novelty — this lineage's superseded identity had already reached `ACCEPTED / FROZEN / EFFECTIVE` while its budgets remained unconsumed — is resolved by the prospective-only supersession and the identity re-binding rules of §5.5, which create no second budget, no reset and no automatic reuse.
 
 ---
 
@@ -110,8 +126,9 @@ The authorization binds the following **accepted, frozen and effective** identit
 | `oracle_path_f_design_acceptance_confirmation_record` | `1d06f2857840b9f4096bbedc156e3ac4c9eaddec` |
 | `Oracle-PathF status` | `ACCEPTED / FROZEN / EFFECTIVE` |
 | `Oracle-PathF execution` | `NOT AUTHORIZED` (the accepted design is effective; **executing it is not**) |
-| `PATH-F EXECUTION AUTHORIZATION` | `NOT CREATED / NOT EFFECTIVE` |
-| `PATH-F EXECUTION AUTHORITY` | `NONE` |
+| `PATH-F EXECUTION AUTHORIZATION` | `ACCEPTED / FROZEN / EFFECTIVE` at `ed112f8c5f1e35d87092d0339698a792ce0b145a` / `c147af8714164dae8b81cafa4eb01945a3ceb8c74b36f0fc18fbd56db284c4de`, **OPERATIONALLY BLOCKED AFTER THE PRE-16 PRECONDITION STOP**; this corrective successor revision of the artifact is `DESIGN CANDIDATE / NOT ACCEPTED / NOT FROZEN / NOT EFFECTIVE` (§5.5, §23) |
+| `PATH-F EXECUTION AUTHORITY` | `NONE` (no operational round may run under either authorization identity until the corrective successor completes the lifecycle of §20) |
+| `PATH-F OPERATIONAL EXECUTION` | `NOT STARTED` / `PRE-16 PRECONDITION STOP` / `NO CLAIM` / `NO BUDGET CONSUMPTION` / `NO ORACLE INVOCATION` |
 
 `oracle_path_f_commit` is the **independently reviewed DESIGN commit**. It is **never** substituted by an acceptance-bookkeeping commit, by a confirmation-record commit, by this authorization's own future commit, by the current branch HEAD, or by any later commit; the acceptance and confirmation commits are recorded above as separate provenance facts only.
 
@@ -265,18 +282,18 @@ No lesson is closed by editing a frozen predecessor byte.
 | `oracle_path_f_spec_sha256` | `b07a822b9b1447c65c60a6707f0f2ece2edec1c9b9c4bdee75d224993bf4f4e5` | §2 (frozen) |
 | `oracle_path_f_script_sha256` | `4c30a68204d46ffcc875265de31e55e0a8fb70b9f0b33b5783fa28ca6eaa25b0` | §2 (frozen) |
 
-**Rule:** an executor may **never** choose, compute-at-runtime, infer from `HEAD`, infer from this document's own revision, or guess `path_f_authorization_commit` or `path_f_authorization_sha256`. Both values must already exist as frozen text in the accepted control surfaces of §13/§25, written there by the independent acceptance and confirmation stages. If either value is still a placeholder, the authorization is **not accepted** and no consumption may occur.
+**Rule:** an executor may **never** choose, compute-at-runtime, infer from `HEAD`, infer from this document's own revision, or guess `path_f_authorization_commit` or `path_f_authorization_sha256`. Both values must already exist as frozen text in the accepted control surfaces that `PRE-2` (§13) evaluates, written there by the independent acceptance and confirmation stages of the lifecycle frozen in §20. If either value is still a placeholder, the authorization is **not accepted** and no consumption may occur.
 
 ### 5.2 State model
 
 ```
 DESIGN-CANDIDATE STATE (now)
-  PATH-F AUTHORIZATION = DESIGN CANDIDATE / NOT ACCEPTED / NOT FROZEN / NOT EFFECTIVE / NOT EXECUTED
+  PATH-F AUTHORIZATION = CORRECTIVE SUCCESSOR DESIGN CANDIDATE / NOT ACCEPTED / NOT FROZEN / NOT EFFECTIVE / NOT EXECUTED
   PATH-F AUTHORIZATION USE = NOT AVAILABLE FOR CONSUMPTION
   PATH-F ETB ATTEMPT       = NOT AVAILABLE FOR CONSUMPTION
   ORACLE-PATHF INVOCATIONS = NOT AUTHORIZED
 
-POST-CONFIRMATION STATE (only after §26 completes in order)
+POST-CONFIRMATION STATE (only after §20 completes in order)
   PATH-F AUTHORIZATION = ACCEPTED / FROZEN / EFFECTIVE
   EXECUTION AUTHORITY  = GRANTED SUBJECT TO ALL PRE-* CONDITIONS / ONE-SHOT ONLY
   PATH-F AUTHORIZATION USE = 1 OF 1 / AVAILABLE FOR CONSUMPTION
@@ -293,7 +310,7 @@ CONSUMED STATE (irreversible)
 
 ### 5.3 Effectivity rule
 
-This document is a **design candidate**. It becomes effective **only** through the ordered lifecycle of §26: (1) qualifying third-party independent review in a different agent/session; (2) authorization acceptance bookkeeping in exactly one single-parent commit whose sole tracked delta is `M CHANGELOG.md` + `M docs/v0.3/V03E_ACCEPTANCE.md`; (3) a fresh independent confirmation of that bookkeeping in a different agent/session; (4) materialization of that confirmation as a repository-verifiable record commit of the same two-file shape.
+This document is a **corrective successor design candidate**. It becomes effective **only** through the ordered lifecycle of §20: (1) qualifying third-party independent review in a different agent/session; (2) authorization acceptance bookkeeping in exactly one single-parent commit whose sole tracked delta is `M CHANGELOG.md` + `M docs/v0.3/V03E_ACCEPTANCE.md`; (3) a fresh independent confirmation of that bookkeeping in a different agent/session; (4) materialization of that confirmation as a repository-verifiable record commit of the same two-file shape.
 
 **No stage may be skipped, merged, collapsed, self-performed or performed by the same session twice.** Until every stage completes, **no** consumption, claim creation, listener query or Oracle invocation is permitted under this authorization.
 
@@ -306,20 +323,102 @@ SELF-IDENTITY REQUIREMENT ON THE DESIGN CANDIDATE = NONE
 SELF-IDENTITY PARADOX = ABSENT BY CONSTRUCTION
 ```
 
+### 5.5 Corrective-successor supersession, budget carry-forward and PRE-16 stop binding
+
+```
+OLD PATH-F AUTHORIZATION IDENTITY = ed112f8c5f1e35d87092d0339698a792ce0b145a / c147af8714164dae8b81cafa4eb01945a3ceb8c74b36f0fc18fbd56db284c4de
+OLD PATH-F AUTHORIZATION STATE    = ACCEPTED / FROZEN / EFFECTIVE (historical, never rewritten) / OPERATIONALLY BLOCKED AFTER THE PRE-16 PRECONDITION STOP
+NEW CORRECTIVE AUTHORIZATION      = DESIGN CANDIDATE / NOT ACCEPTED / NOT FROZEN / NOT EFFECTIVE / NOT OPERATIONALLY USABLE
+SUPERSESSION EFFECT               = PROSPECTIVE ONLY
+```
+
+The precondition stop that motivates this revision is bound as follows and is **not** re-litigated, re-reviewed or re-materialized here:
+
+```
+PATH-F OPERATIONAL EXECUTION = NOT STARTED
+FIRST FAILED GATE            = PRE-16
+PRE-1 … PRE-15               = PASS
+PRE-16                       = FAIL
+PRE-17                       = FAIL (dependent on PRE-16)
+PRE-18                       = NOT REACHED
+BLOCKER                      = REQUIRED FILE-ACCESS MODE NOT ESTABLISHED BEFORE IRREVERSIBLE SEQUENCE
+CLAIM CreateNew ATTEMPTS     = 0
+CLAIMS CREATED               = NONE
+BUDGETS CONSUMED             = NONE
+ORACLE INVOCATIONS           = 0
+RAW PATH-F ETB RESULT        = NONE
+HARNESS_INVALID              = NONE
+DISPOSITION COMMIT           = 5fae11eefdcaddc27b4abf28d3a2258ad654d84d
+PATHF_PRE16_STRUCTURAL_GAP   = CONFIRMED
+REMEDIATION ROUTE            = ROUTE A
+SAME-ROUND RETRY             = FORBIDDEN
+AUTOMATIC RETRY UNDER UNCHANGED GOVERNANCE = FORBIDDEN
+```
+
+Rules frozen by this supersession model:
+
+1. the previously accepted authorization's bytes, commit identity and acceptance history are **immutable**: they are never amended, rewritten, deleted, relabelled `REJECTED` / `INVALID` / `SUPERSEDED-INVALID`, or invalidated retroactively. Its acceptance remains historically valid; what is blocked is its operational **usability**;
+2. this corrective successor is bound by the two external placeholders of §5.1/§5.4 exactly as its predecessor was — it embeds no future commit SHA and no future artifact SHA — and later acceptance governance binds the new corrective identity;
+3. **budget carry-forward.** The lineage holds exactly **one** authorization-use budget and exactly **one** ETB-attempt budget, and they are the claim pairs at the frozen §14 paths. There is **no** second budget, **no** successor-budget path and **no** twelfth namespace member, because the eleven-path namespace and the claim schemas are frozen by the accepted Oracle-PathF specification §18 and by §10/§12/§14 of this artifact. Neither budget was consumed (`0 OF 1 / NOT CONSUMED`, `0 OF 1 / NOT STARTED`), so both remain numerically intact and carry forward to the **new** accepted corrective authorization identity, which supplies the identity binding for the *same* two claim paths once the §20 lifecycle completes;
+4. the carry-forward is **not** an automatic reuse authority: the old identity may not be consumed under, and **no** operational round may run under either identity until the corrective successor is `ACCEPTED / FROZEN / EFFECTIVE`;
+5. the claim writer of §12.3 binds the **new** accepted values — every future Path-F claim carries the corrective successor's accepted `authorization_commit` and `authorization_sha256`, and **never** `ed112f8c…` / `c147af87…`;
+6. this design round creates, resets, replaces, decrements or releases **no** budget, and establishes **no** execution authority.
+
+```
+PATHF_CORRECTIVE_BUDGET_CARRY_FORWARD_MODEL = SAME LINEAGE-LEVEL ONE-SHOT BUDGETS CARRIED FORWARD, IDENTITY RE-BOUND TO THE NEW ACCEPTED CORRECTIVE AUTHORIZATION (NO SECOND BUDGET, NO RESET, NO AUTOMATIC REUSE)
+```
+
+**Precedent support:** in the Path-E corrective cycle the lineage's single authorization-use budget was consumed exactly once and bound the **corrected successor** identity `4900625114a38a86aa03a5fa4861c5bcd9436dc5` / `01d8dc6806e622cb361f47abee178e5beeddb8f95199ff21362938312a299d06`, not the superseded candidate `26b183083fbbe323441283f99f3cf2c931acd6ff`, and no second budget was created for the successor. This artifact applies the same single-budget, successor-bound shape. The Path-F-specific addition — the superseded identity had already reached `ACCEPTED / FROZEN / EFFECTIVE` while its budgets remained unconsumed — is resolved by rule 1 (history preserved intact) together with rules 3 and 4 (identity re-bound, no reuse authority on either identity until the §20 lifecycle completes). It creates no new budget class, no new claim path and no fourth ETB result class.
+
 ---
 
 ## 6. Pre-consumption write-viability and execution-mode ownership
 
-The accepted Oracle-PathF specification §7 already defines the Oracle's internal pre-publication write-viability gate, and §8/§9 define the ACL and execution-mode policy. This authorization **does not restate, reinterpret, weaken or extend** those Oracle internals. It defines only what the **authorization/executor layer** must establish so that a future authorized round begins in the execution/file-access mode the frozen Oracle design requires.
+The accepted Oracle-PathF specification §7 already defines the Oracle's internal pre-publication write-viability gate, and §8/§9 define the ACL and execution-mode policy. This authorization **does not restate, reinterpret, weaken or extend** those Oracle internals. It defines only what the **authorization/executor layer** must establish so that a future authorized round begins in the execution/file-access mode the frozen Oracle design requires — concretely, in `full-file-access` (§6.1, `PRE-16`).
 
-### 6.1 Authorization-layer obligations (capacity, not implementation)
+### 6.1 Authorization-layer obligations: the concrete required mode, and capacity
+
+```
+REQUIRED PATH-F OPERATIONAL EXECUTION / FILE-ACCESS MODE = full-file-access
+workspace-write                                          = INSUFFICIENT FOR PATH-F OPERATIONAL EXECUTION
+full-file-access                                         = REQUIRED PRE-EXISTING OPERATIONAL EXECUTION MODE
+```
+
+`full-file-access` is the **only** mode under which a Path-F operational round may begin. It is a **pre-existing session mode**: the future operational executor must **start** its session already provisioned in `full-file-access`. The executor must **not**:
+
+- start in `workspace-write` and "try";
+- probe a claim path, a governed path or any other file in order to discover whether permissions work;
+- request or acquire `full-file-access` **after** a failure;
+- invoke any elevation mechanism **after** the irreversible sequence begins;
+- mutate an access-control list, restore one, normalize one or repair permissions;
+- use `icacls` or `Set-Acl`;
+- create any authorization-layer empirical governed-path write probe.
+
+If the session is **not** already in `full-file-access` when the preconditions are evaluated:
+
+```
+PRE-16 = FAIL
+ROUND  = FAIL CLOSED BEFORE CONSUMPTION
+NO CLAIM / NO BUDGET CONSUMPTION / NO ORACLE INVOCATION / NO SAME-ROUND RETRY
+```
 
 Before any irreversible claim consumption, the authorization layer must establish **capacity** — nothing more:
 
-1. the required execution/file-access mode is **already established** for the round;
+1. the required execution/file-access mode is **already established** for the round, before any claim path is created;
 2. **no ACL repair is planned, pending or in progress**;
 3. the required mode was **not** obtained by modifying an access-control list and will not be repaired by modifying one;
-4. the failure mode is **fail closed**, not repair-and-retry.
+4. the failure mode is **fail closed**, not repair-and-retry;
+5. the mode is a **pre-existing environmental fact supplied before execution**: it is not a capability that this authorization, the executor, the Oracle or any helper may confer on itself;
+6. **no execution-time elevation mechanism is authorized** for the round.
+
+**Prospective requirement versus reactive escalation:**
+
+```
+PROSPECTIVE EXECUTION-MODE REQUIREMENT = PERMITTED / REQUIRED
+REACTIVE ESCALATION AFTER FAILURE      = FORBIDDEN
+```
+
+Stating the required mode in advance is exactly what the accepted Oracle-PathF specification §9.1/§9.2 requires of an execution-authorization record; it creates, delegates and implies **no** escalation authority, **no** permission-repair authority and **no** retry authority. What the frozen model forbids is the **reactive** elevation invoked after a failed gate or after the irreversible sequence begins (specification §9.3/§9.4; §6.2/§7 and PRE-16 … PRE-18 of this artifact). `full-file-access` is a prerequisite **supplied to** the future execution environment by the Owner-governed operational session; it does **not** grant the authorization layer or the Oracle any ability to elevate itself.
 
 ### 6.2 Explicit non-ownership
 
@@ -329,7 +428,9 @@ This authorization layer must **not**:
 - create any probe file, TEMP artifact, evidence, manifest or result artifact in order to test write viability;
 - run any ACL command, read or enumerate any access-control list, or invoke any elevation mechanism;
 - probe, query or enumerate the target, the listener or the endpoint;
-- create any governed path before the PRE-gates pass.
+- create any governed path before the PRE-gates pass;
+- change, request or escalate its own execution/file-access mode, in any circumstance, including after a failed gate or a failed claim operation;
+- treat the concrete mode requirement of §6.1 as a mandate to inspect, enumerate or modify any access-control list.
 
 The Oracle's probe residue model is frozen and is **not** reconsidered here: probe files are named `.path-f-write-viability-probe-<guid>.tmp`, are outside the reserved namespace of §14, are non-governed, are non-consuming, confer no cleanup or retry authority, and a failed gate terminates the round.
 
@@ -337,11 +438,14 @@ The Oracle's probe residue model is frozen and is **not** reconsidered here: pro
 
 ```
 REQUIRED EXECUTION / FILE-ACCESS MODE NOT ESTABLISHED BEFORE THE IRREVERSIBLE SEQUENCE
-  -> FAIL CLOSED
+  -> PRE-16 = FAIL
+  -> ROUND = FAIL CLOSED BEFORE CONSUMPTION
   -> NO CLAIM CREATION
   -> NO CLAIM CONSUMPTION
   -> NO ORACLE INVOCATION
   -> NO SAME-ROUND ACL REPAIR
+  -> NO SAME-ROUND MODE CHANGE
+  -> NO REACTIVE ESCALATION
   -> NO SAME-ROUND RETRY
   -> a later attempt requires a NEW explicit Owner-governed authority lifecycle
 ```
@@ -358,6 +462,9 @@ The authorization design states deterministically, for any future authorized ope
 | ACL restoration / normalization during the authorized operational round | **FORBIDDEN** |
 | permission repair after any failed gate | **FORBIDDEN** |
 | sandbox / file-access escalation after the irreversible sequence begins | **FORBIDDEN** |
+| reactive escalation after a failed gate, a failed claim operation or any other failure | **FORBIDDEN** |
+| switching the session's execution/file-access mode during an operational round | **FORBIDDEN** |
+| starting a Path-F operational round in any mode other than `full-file-access` | **FORBIDDEN** — `PRE-16` fails closed |
 | improvisational retry after an access failure | **FORBIDDEN** |
 | `icacls` as part of execution | **NOT AUTHORIZED** |
 | `Set-Acl` as part of execution | **NOT AUTHORIZED** |
@@ -373,7 +480,7 @@ CURRENT ACL STATE = OUTSIDE TRACKED GIT GOVERNANCE / NOT NORMALIZED / NO RESTORA
 ACL RESTORATION = OUT OF SCOPE FOR THIS ROUND AND FOR ANY ROUND GOVERNED BY THIS AUTHORIZATION UNTIL SEPARATELY AUTHORIZED
 ```
 
-This design round **documents** the residual condition and **mutation nothing**. It authorizes no normalization, no restoration and no repair. A future operational round must begin in a mode that is already viable; it may not create viability by mutating permissions.
+This design round **documents** the residual condition and **mutates nothing**. It authorizes no normalization, no restoration and no repair. A future operational round must begin in a mode that is already viable — concretely, in `full-file-access` (§6.1, `PRE-16`) — and it may not create viability by mutating permissions, by escalating reactively or by switching modes after a failure.
 
 ---
 
@@ -423,7 +530,7 @@ Three separate one-shot authorities are designed. **None exists**, and none is a
 | Property | Value |
 | --- | --- |
 | Initial state | `NOT CREATED / NOT AVAILABLE FOR CONSUMPTION` |
-| Future availability condition | this authorization design is independently reviewed, accepted, confirmed and materialized per §26, and every PRE-gate of §13 passes |
+| Future availability condition | this authorization design is independently reviewed, accepted, confirmed and materialized per §20, and every PRE-gate of §13 passes |
 | Exact irreversible consumption event | successful `[System.IO.FileMode]::CreateNew` of `docs/v0.3/evidence/ETB_PATH_F_AUTHORIZATION_USE.claim.tmp` |
 | Claim identity | `ETB_PATH_F_AUTHORIZATION_USE.claim` (+ `.tmp`) |
 | TEMP / FINAL semantics | TEMP creation is the consumption record; FINAL is the published immutable marker; a failure after TEMP creation leaves TEMP in place as evidence |
@@ -472,6 +579,8 @@ PATH-F EXECUTION AUTHORITY      = NONE
 ```
 
 No budget is created, allocated, reserved, decremented, consumed or made available by this design round. The three authorities above are **design descriptions of a future, separately authorized round**, not current capabilities.
+
+**Carry-forward note (added by this corrective revision).** The lineage's two one-shot budgets already exist as the unconsumed claim pairs of the previously accepted authorization (`0 OF 1 / NOT CONSUMED`, `0 OF 1 / NOT STARTED`). Per §5.5 they remain numerically intact and are carried forward to the **new** accepted corrective authorization identity, with no second budget, no reset and no automatic reuse authority: they become available **only** once the corrective successor completes the §20 lifecycle and the `PRE-*` gates pass. Nothing in this note creates, restores or releases a budget today.
 
 ---
 
@@ -646,7 +755,7 @@ All eighteen preconditions are **mandatory, ordered and fail-closed**. An execut
 | --- | --- | --- |
 | **PRE-1** | Repository, branch and governance base are the expected ones | repository root `D:\DevRelay`; branch `v0.3-e-recovery-reconciliation`; the accepted Oracle-PathF design acceptance bookkeeping commit `7ad12d1d0b9727548b271981116267f76c362f48` and its confirmation-materialization successor `1d06f2857840b9f4096bbedc156e3ac4c9eaddec` are ancestors of `HEAD`; `HEAD` is on the accepted governance line and is **not** a detached or unrelated state |
 | **PRE-2** | Authorization artifact self-identity is frozen and matches the committed blob | `docs/v0.3/V03E_G0_5_PRE_ETB_PATH_F_AUTHORIZATION.md` exists; its committed-blob SHA-256 equals the accepted `path_f_authorization_sha256`; `path_f_authorization_commit` is a committed ancestor of `HEAD` whose sole tracked delta against its parent is `M CHANGELOG.md` + `M docs/v0.3/V03E_ACCEPTANCE.md` and the new artifact path — the accepted control surfaces already contain populated, frozen values for both `path_f_authorization_commit` and `path_f_authorization_sha256`, populated **only** through the authorization acceptance / confirmation lifecycle of §5.3, with **no unresolved angle-bracket placeholder remaining in those accepted surfaces** — and the executor did **not** choose, guess, infer from `HEAD` or rewrite either value. The **design-candidate** revision of this document is **not** required to contain its own future accepted values: a design candidate necessarily carries the two explicit placeholders of §5.1, and neither the design candidate nor the executor may rewrite this artifact to substitute them. The corrected revision of the artifact — **not** the design-candidate revision — is the artifact bound by the frozen values above |
-| **PRE-3** | Oracle-PathF design effectivity, Path-F execution-authorization effectivity and consumable state are each satisfied at the future operational consumption point | this gate is evaluated at the **future** operational consumption point — immediately before the **first** irreversible authorization-use claim create — and is deliberately **not** evaluated at the design-candidate stage of this document. Three distinct states must simultaneously hold, each in its own layer: **(A) Oracle-PathF design effectivity:** the tracked status surfaces state `ORACLE-PATHF DESIGN = ACCEPTED / FROZEN / EFFECTIVE`, `QUALIFYING THIRD-PARTY PATH-F DESIGN REVIEW = APPROVED`, and the Oracle-PathF design acceptance bookkeeping `7ad12d1…` is confirmed by its materialization record `1d06f28…`; **(B) Path-F execution-authorization effectivity:** the accepted control surfaces state `PATH-F AUTHORIZATION = ACCEPTED / FROZEN / EFFECTIVE` with `EXECUTION AUTHORITY = GRANTED SUBJECT TO ALL PRE-* CONDITIONS / ONE-SHOT ONLY`; **(C) consumable state:** `PATH-F AUTHORIZATION USE = 1 OF 1 / AVAILABLE FOR CONSUMPTION` and `PATH-F ETB ATTEMPT = 1 OF 1 / AVAILABLE FOR CONSUMPTION` per §5.2, both **available but not yet consumed** — zero Path-F claims yet created — while `PATH-F RUNTIME OCCUPANCY = 0 / 11`. The requirement that the authorization be `non-effective` applies to the **design-candidate** stage only — it is the current state, recorded in §5.2 and §24 — and must **not** be required at this gate. `ORACLE-PATHF INVOCATIONS = 1 OF 1` becomes available only after both claims exist, and its revocation of availability is not required here |
+| **PRE-3** | Oracle-PathF design effectivity, Path-F execution-authorization effectivity and consumable state are each satisfied at the future operational consumption point | this gate is evaluated at the **future** operational consumption point — immediately before the **first** irreversible authorization-use claim create — and is deliberately **not** evaluated at the design-candidate stage of this document. Three distinct states must simultaneously hold, each in its own layer: **(A) Oracle-PathF design effectivity:** the tracked status surfaces state `ORACLE-PATHF DESIGN = ACCEPTED / FROZEN / EFFECTIVE`, `QUALIFYING THIRD-PARTY PATH-F DESIGN REVIEW = APPROVED`, and the Oracle-PathF design acceptance bookkeeping `7ad12d1…` is confirmed by its materialization record `1d06f28…`; **(B) Path-F execution-authorization effectivity:** the accepted control surfaces state `PATH-F AUTHORIZATION = ACCEPTED / FROZEN / EFFECTIVE` with `EXECUTION AUTHORITY = GRANTED SUBJECT TO ALL PRE-* CONDITIONS / ONE-SHOT ONLY`; **(C) consumable state:** `PATH-F AUTHORIZATION USE = 1 OF 1 / AVAILABLE FOR CONSUMPTION` and `PATH-F ETB ATTEMPT = 1 OF 1 / AVAILABLE FOR CONSUMPTION` per §5.2, both **available but not yet consumed** — zero Path-F claims yet created — while `PATH-F RUNTIME OCCUPANCY = 0 / 11`. The requirement that the authorization be `non-effective` applies to the **design-candidate** stage only — it is the current state, recorded in §5.2 and in the live-state surface §23 — and must **not** be required at this gate. `ORACLE-PATHF INVOCATIONS = 1 OF 1` becomes available only after both claims exist, and its revocation of availability is not required here |
 | **PRE-4** | Oracle-PathF executable blob identity is exact | the blob of `docs/v0.3/V03E_G0_5_PRE_ETB_EXECUTION_ORACLE_PATH_F.ps1` at the accepted design commit `a5d598a05a0467eea98cd0bf16e4486cceb72c23`, at `HEAD`, in the index and in the worktree is the **same** blob, whose SHA-256 is `4c30a68204d46ffcc875265de31e55e0a8fb70b9f0b33b5783fa28ca6eaa25b0` |
 | **PRE-5** | Oracle-PathF specification blob identity is exact | the blob of `docs/v0.3/V03E_G0_5_PRE_ETB_EXECUTION_ORACLE_PATH_F.md` at the accepted design commit, at `HEAD`, in the index and in the worktree is the **same** blob, whose SHA-256 is `b07a822b9b1447c65c60a6707f0f2ece2edec1c9b9c4bdee75d224993bf4f4e5` |
 | **PRE-6** | Working tree is byte-identical to `HEAD` for the governed artifacts | `git status --porcelain` reports no modification, deletion, rename or staged change for the two accepted Oracle-PathF artifacts, the authorization artifact itself, or any governed control surface; no unmerged path exists |
@@ -659,9 +768,9 @@ All eighteen preconditions are **mandatory, ordered and fail-closed**. An execut
 | **PRE-13** | The reserved Path-F runtime/output and control namespace is empty | all eleven paths of §14 are absent under the §11 predicate: `PATH-F RUNTIME OCCUPANCY = 0 / 11` |
 | **PRE-14** | No prior Path-F authorization or attempt consumption has occurred | neither Path-F claim exists in any form; no Path-F evidence, manifest or result exists; no Path-F budget is recorded as consumed anywhere in the tracked surfaces; the round that performs this evaluation is the **first** Path-F round to reach the consumption boundary |
 | **PRE-15** | No execution has occurred in this round before the preconditions passed | the executor has performed **zero** Oracle invocations, **zero** ETB attempts, **zero** listener queries, **zero** target probes, **zero** endpoint probes and **zero** OpenCode starts before PRE-1 … PRE-14 have all passed |
-| **PRE-16** | Required execution / file-access mode is already established and no ACL repair is pending | the mode required by the accepted Oracle-PathF design for publishing into the governed directories is **already** established for this process **before** any claim path is created; no ACL mutation, ACL restoration, ACL normalization or permission repair has been performed in the current round or in any earlier phase of it; no ACL repair is planned, pending or queued; the executor is **not** operating under an escalated access mode obtained as a response to a failure; and `icacls` / `Set-Acl` / any ACL-repair or permission-normalization script is **not** part of the round. A round that cannot satisfy this row at this point **fails closed** and never proceeds to claim creation, never repairs permissions in-round and never retries |
-| **PRE-17** | Write-viability capacity is established without consuming authority and without creating a governed path | the round has established, **before** the first irreversible claim create, that it can create, write, flush and read back files in every directory it will publish into, using the mode established at PRE-16. This authorization layer establishes **capacity only**: it performs **no** probe on the Oracle's behalf, creates **no** governed path, consumes **no** budget and creates **no** claim, evidence, manifest, result or runtime-namespace entry in doing so. The Oracle's own pre-publication write-viability gate of the accepted specification §7 remains exclusively Oracle-owned, runs inside the Oracle after the bootstrap phase and before the config read, and is **not** re-specified, pre-empted or replaced here. No probe residue is a claim, an attempt or a budget-consumption event; probe residue remains outside the §14 namespace, non-governed, non-consuming and **not** subject to cleanup or retry authority |
-| **PRE-18** | Non-consuming failure confers no re-attempt authority | the executor has accepted, before entering the irreversible sequence, that a `CreateNew` failure that occurs **before** the TEMP file is created consumes **no** budget **and nevertheless terminates the round** (§8): consumption `NO`, outcome `TERMINATED / FAIL CLOSED`, same-round re-attempt `FORBIDDEN`, retry after a permission change `FORBIDDEN`, and any further attempt requires a **new explicit Owner-governed authority lifecycle**. A round that has already suffered such a failure may not continue under this authorization |
+| **PRE-16** | The session execution / file-access mode is exactly `full-file-access` and it existed before the irreversible sequence, with no ACL or permission repair pending | all of the following must hold, and each must be established **before** any claim path is created: **(1)** the current operational session's execution/file-access mode is **exactly `full-file-access`**, as §6.1 requires — `workspace-write` is explicitly **INSUFFICIENT FOR PATH-F OPERATIONAL EXECUTION**; **(2)** that mode **existed before** the irreversible sequence began — it is a pre-existing session mode, not something acquired at or after this point; **(3)** the mode was **not** obtained in response to a failed Path-F gate, a failed claim operation or any other failure, and no reactive escalation occurred in this round at any point; **(4)** no ACL mutation, ACL restoration, ACL normalization or permission repair has been performed in the current round or in any earlier phase of it, and none is planned, pending or queued; **(5)** no permission repair is planned, pending or active; **(6)** no execution-time elevation mechanism is authorized, invoked or available to this round — `icacls`, `Set-Acl` and any ACL-repair or permission-normalization script are **not** part of it; **(7)** the mode is **verifiable from the session's own execution environment**, and that verification requires **no** ACL enumeration, **no** access-control-list read and **no** empirical governed-path write probe. **Inability to verify the exact mode is `PRE-16 = FAIL`** — not a licence to test it. A round that cannot satisfy this row fails closed: it never proceeds to claim creation, never repairs permissions in-round, never changes mode and never retries |
+| **PRE-17** | Write-viability control state is established without consuming authority, without creating a governed path and without any empirical write probe | this row is a **control-state / capacity** gate, and it is **satisfied by the already-established mode of `PRE-16`** together with the frozen publication contract: with the session in `full-file-access`, the round's ability to create, write, flush and read back the claim files and the runtime outputs is a **control-state fact of the established mode**, and it must **never** be established by creating, writing, flushing or reading back any file. This row therefore requires **no file creation of any kind** by the authorization layer: **no** probe file, **no** TEMP artifact, **no** claim, **no** evidence, **no** manifest, **no** result, **no** runtime-namespace entry and **no** write to any governed path may be performed to satisfy it. It performs **no** probe on the Oracle's behalf, consumes **no** budget and creates **no** governed artifact. The Oracle's own pre-publication write-viability gate of the accepted specification §7 remains exclusively Oracle-owned, runs inside the Oracle after the bootstrap phase and before the config read, and is **not** re-specified, pre-empted, replaced or duplicated here. Probe residue, if the **Oracle** ever creates any, remains outside the §14 namespace, is non-governed and non-consuming, is **not** a claim, an attempt or a budget-consumption event, and is **not** subject to cleanup or retry authority. This row must remain satisfiable **after** `PRE-16` has confirmed `full-file-access`, and it may never be read as requiring an empirical governed-path write test |
+| **PRE-18** | Non-consuming failure confers no re-attempt authority | the executor has accepted, before entering the irreversible sequence, that a `CreateNew` failure that occurs **before** the TEMP file is created consumes **no** budget **and nevertheless terminates the round** (§8): consumption `NO`, outcome `TERMINATED / FAIL CLOSED`, same-round re-attempt `FORBIDDEN`, retry after a permission change `FORBIDDEN`, **changing the session's execution/file-access mode to answer the failure `FORBIDDEN`**, **reactive escalation in response to the failure `FORBIDDEN`**, and any further attempt requires a **new explicit Owner-governed authority lifecycle**. A round that has already suffered such a failure may not continue under this authorization |
 
 ### 13.1 Ownership boundary frozen by the preconditions
 
@@ -679,7 +788,7 @@ The authorization layer may verify **only** static artifact identity (PRE-2, PRE
 PRE_GATE_MODEL = CLOSED / COMPLETE
 ```
 
-This statement describes the candidate's own structure — twelve preserved rows plus three Path-F-specific rows, no gaps and no unreachable row — and is **not** a review verdict or an acceptance.
+This statement describes the candidate's own structure — fifteen preserved rows plus three Path-F-specific rows, no gaps and no unreachable row — and is **not** a review verdict or an acceptance.
 
 ---
 
@@ -720,7 +829,7 @@ The authorization-design artifact of this round (`docs/v0.3/V03E_G0_5_PRE_ETB_PA
 
 `Get-NetTCPConnection`; `netstat`; any TCP connection enumeration; any port-4096 probe or scan; any `localhost` probe; any `127.0.0.1` probe; any IPv6-loopback probe; any endpoint reachability check; any HTTP or HTTPS request; any `/doc`, `/session`, `/openapi.json` or equivalent endpoint call; `Test-NetConnection`; `Invoke-WebRequest`; `Invoke-RestMethod`; `curl`; `wget`; `Get-CimInstance` or `Get-WmiObject` target binding; `Get-Process` discovery of the target; `OpenCode --version` or any OpenCode start, restart or CLI query; `Get-FileHash` on the target binary; `CreateFileW` / `GetFinalPathNameByHandleW` on the target; reading the target's `package.json`; and any other read-only or read-write interaction with the target, its process, its port or its files.
 
-**Rationale (accepted history, not re-litigated here):** in this repository's history an out-of-band listener probe during a governance round produced a real, disclosed incident and required a dedicated reconciliation; a pre-Oracle probe would additionally create an **unbudgeted ETB observation**, which the result-authority model of §18 forbids. The Oracle alone owns the single permitted listener query, executed inside its snapshot stage after all bootstrap checks.
+**Rationale (accepted history, not re-litigated here):** in this repository's history an out-of-band listener probe during a governance round produced a real, disclosed incident and required a dedicated reconciliation; a pre-Oracle probe would additionally create an **unbudgeted ETB observation**, which the result-authority model of §17.4 forbids. The Oracle alone owns the single permitted listener query, executed inside its snapshot stage after all bootstrap checks.
 
 **Consequence:** if an executor believes a target probe is necessary in order to proceed, the correct action is to **stop and fail closed** — not to probe. There is no "readiness", "diagnostic", "convenience" or "one-time" exception, and no historical observation may be reused as Path-F evidence.
 
@@ -887,7 +996,7 @@ To consume this authorization and invoke the Oracle, an executor needs **only**:
 2. the accepted Oracle-PathF specification and executable, at the frozen hashes of §2;
 3. the accepted control-state markers in the two active status surfaces;
 4. the frozen claim writer of §12.3;
-5. the repository working copy and an already-established viable execution/file-access mode.
+5. the repository working copy and an already-established viable execution/file-access mode — concretely, a session already provisioned in `full-file-access` (§6.1, `PRE-16`).
 
 No chat history, conversation transcript, agent memory, external testimony, clipboard content, environment variable, out-of-band note or undocumented convention may be required, consulted or trusted. If any required value is missing, the executor fails closed.
 
@@ -921,7 +1030,7 @@ No runtime or generated artifact may become tracked; no governance fact may be r
 
 ### 19.4 Provenance contradiction audit (recorded)
 
-Because the accepted specification reserves its three content-provenance fields as `UNKNOWN` and this authorization binds the lineage externally, the candidate was audited for any sentence that would simultaneously require evidence to carry frozen Path-F identities and to reject `UNKNOWN`. The audit result is recorded in §21.4 and is:
+Because the accepted specification reserves its three content-provenance fields as `UNKNOWN` and this authorization binds the lineage externally, the candidate was audited for any sentence that would simultaneously require evidence to carry frozen Path-F identities and to reject `UNKNOWN`. The audit result is recorded in §3.3 and here (§19.4), and is:
 
 ```
 PATHF_AUTHORIZATION_PROVENANCE_COMPATIBILITY = COHERENT
@@ -993,6 +1102,13 @@ This is an **author self-audit of the design candidate**, performed before commi
 | 18 | `PRE-2` and `PRE-3` satisfiable in the state in which they are evaluated | PASS — §13.2 |
 | 19 | Written-artifact identity: this artifact carries no staged or worktree byte divergence | PASS at commit time |
 | 20 | No runtime namespace path created; no probe performed; no listener query; no Oracle invocation | PASS |
+| 21 | Concrete required execution/file-access mode stated; `workspace-write` explicitly insufficient | PASS — §6.1, `PRE-16` |
+| 22 | `PRE-16` directly evaluable by seven explicit criteria; an unverifiable mode fails closed | PASS — §6.1, §13 `PRE-16` |
+| 23 | `PRE-17` clarified as a non-probing control-state gate, satisfiable after `full-file-access` | PASS — §13 `PRE-17` |
+| 24 | Corrective-successor supersession and single-budget carry-forward model coherent; no second budget, no reset, no automatic reuse | PASS — §5.5, §9.5 |
+| 25 | Recorded design findings P3-A … P3-G corrected by this revision | PASS — §5.2, §5.3, §9.1, §13, §13.2, §15, §19.4 |
+| 26 | No reactive-escalation, ACL-repair, permission-repair or retry authority created | PASS — §6.1, §6.2, §6.3, §7 |
+| 27 | `PRE-18` semantics preserved and extended with the mode-change and reactive-escalation prohibitions | PASS — §13 `PRE-18` |
 
 ### 21.3 Self-audit severity
 
@@ -1010,6 +1126,22 @@ DESIGN SELF-AUDIT SEVERITY (this round, author self-audit only)
 
 No P0, P1 or P2 condition was found in the candidate. This classification is an author self-audit result and does not bind any reviewer.
 
+**Corrective-successor revision self-audit (this round, author self-audit only):**
+
+```
+CORRECTIVE-SUCCESSOR REVISION SELF-AUDIT SEVERITY
+  P0 = 0
+  P1 = 0
+  P2 = 0
+  P3 = 1
+```
+
+| ID | Observation | Class |
+| --- | --- | --- |
+| **P3-2** | The concrete required mode is stated **prospectively** for a future Owner-governed operational session. This design round neither establishes, verifies nor tests any execution/file-access mode, so `PRE-16` cannot be exercised here by construction. That is the intended boundary — the accepted Oracle-PathF specification §9.1/§9.2 permit exactly this prospective declaration and forbid reactive escalation — and it is recorded so that no reader mistakes the requirement for an established capability. | `PROCESS BOUNDARY / NONBLOCKING / NO AUTHORITY CREATED / NOT REPAIRED` |
+
+No P0, P1 or P2 condition was found in this revision. This classification is an author self-audit result and does not bind any reviewer; the qualifying third-party review is a separate, later, differently-sessioned stage (§20, §24).
+
 ### 21.4 Recorded design-time verification of this round
 
 Performed by the design round itself, mechanically:
@@ -1026,6 +1158,15 @@ git check-attr text eol
 PATH-F RUNTIME OCCUPANCY = 0 / 11   (all eleven paths absent, by the §11 predicate)
 PATH-F CLAIM PATHS       = ABSENT (4 / 4)
 PATH-E RUNTIME OCCUPANCY = 6 / 11   (unchanged; no cleanup performed)
+corrective-successor round bounds (this revision)
+  parent governance commit             = 5fae11eefdcaddc27b4abf28d3a2258ad654d84d
+  disposition commit bound             = 5fae11eefdcaddc27b4abf28d3a2258ad654d84d
+  Oracle-PathF spec / script bytes+SHA = unchanged (34308 / b07a822b…, 49704 / 4c30a682…)
+  PATH-F RUNTIME OCCUPANCY             = 0 / 11
+  PATH-F CLAIM PATHS                   = ABSENT (4 / 4)
+  PATH-E RUNTIME OCCUPANCY             = 6 / 11   (unchanged; no cleanup performed)
+  execution-mode establishments/tests  = 0   (requirement stated only; nothing established, probed or switched)
+  claims created = 0   budgets consumed = 0   Oracle invocations = 0
 ```
 
 ---
@@ -1051,6 +1192,7 @@ PATH-F AUTHORIZATION DESIGN ROUND
   evidence / manifest / result creations = 0
   runtime namespace entries created      = 0
   ACL reads / mutations / restorations   = 0
+  execution-mode establishments / tests  = 0   (the required mode is stated only; nothing is established, probed or switched)
   reviewed-artifact mutations            = 0
   predecessor cleanups                   = 0
   historical-lineage reopenings          = 0
@@ -1077,17 +1219,31 @@ Accepted script SHA-256                = 4c30a68204d46ffcc875265de31e55e0a8fb70b
 ORACLE-PATHF DESIGN ACCEPTANCE BOOKKEEPING = 7ad12d1d0b9727548b271981116267f76c362f48
 ORACLE-PATHF DESIGN ACCEPTANCE CONFIRMATION MATERIALIZATION = 1d06f2857840b9f4096bbedc156e3ac4c9eaddec
 ORACLE-PATHF DESIGN CONFIRMATION RECURSION = NONE
-PATH-F AUTHORIZATION DESIGN            = CANDIDATE / NOT ACCEPTED / NOT FROZEN / NOT EFFECTIVE
-PATH-F AUTHORIZATION DESIGN CANDIDATE  = the commit that introduces this artifact (single-parent successor of 1d06f2857840b9f4096bbedc156e3ac4c9eaddec; not embedded here by design)
-PATH-F AUTHORIZATION                   = DESIGN CANDIDATE / NOT ACCEPTED / NOT FROZEN / NOT EFFECTIVE / NOT EXECUTED
-QUALIFYING THIRD-PARTY AUTHORIZATION DESIGN REVIEW OF THIS CANDIDATE = NOT PERFORMED / REQUIRED NEXT
-PATH-F EXECUTION AUTHORIZATION         = NOT CREATED / NOT EFFECTIVE
+PATH-F AUTHORIZATION DESIGN            = CORRECTIVE SUCCESSOR REVISION OF THIS LINEAGE / CANDIDATE / NOT ACCEPTED / NOT FROZEN / NOT EFFECTIVE
+PATH-F AUTHORIZATION DESIGN CANDIDATE  = the commit that introduces this corrective revision (single-parent successor of 5fae11eefdcaddc27b4abf28d3a2258ad654d84d; not embedded here by design)
+PATH-F AUTHORIZATION                   = CORRECTIVE SUCCESSOR DESIGN CANDIDATE / NOT ACCEPTED / NOT FROZEN / NOT EFFECTIVE / NOT EXECUTED
+QUALIFYING THIRD-PARTY AUTHORIZATION DESIGN REVIEW OF THIS CORRECTIVE CANDIDATE = NOT PERFORMED / REQUIRED NEXT
+OLD PATH-F AUTHORIZATION (HISTORICAL)  = ed112f8c5f1e35d87092d0339698a792ce0b145a
+Old authorization artifact SHA-256     = c147af8714164dae8b81cafa4eb01945a3ceb8c74b36f0fc18fbd56db284c4de
+OLD PATH-F AUTHORIZATION EFFECTIVITY   = ACCEPTED / FROZEN / EFFECTIVE (historical; never rewritten, revoked or relabelled)
+OLD PATH-F OPERATIONAL USABILITY       = BLOCKED AFTER THE PRE-16 PRECONDITION STOP / NOT AUTOMATICALLY RETRYABLE
+SUPERSESSION EFFECT                    = PROSPECTIVE ONLY (§5.5)
+PATH-F OPERATIONAL EXECUTION           = NOT STARTED (PRE-16 precondition stop; no claim, no budget consumption, no Oracle invocation)
+PRE-16 STOP BINDING                    = PRE-1 … PRE-15 PASS / PRE-16 FAIL / PRE-17 FAIL (dependent on PRE-16) / PRE-18 NOT REACHED
+PATHF_PRE16_STRUCTURAL_GAP             = CONFIRMED
+REMEDIATION ROUTE                      = ROUTE A / CORRECTIVE SUCCESSOR AUTHORIZATION DESIGN LIFECYCLE REQUIRED
+DISPOSITION COMMIT                     = 5fae11eefdcaddc27b4abf28d3a2258ad654d84d
+REQUIRED PATH-F OPERATIONAL EXECUTION / FILE-ACCESS MODE = full-file-access
+workspace-write                        = INSUFFICIENT FOR PATH-F OPERATIONAL EXECUTION
+PROSPECTIVE EXECUTION-MODE REQUIREMENT = PERMITTED / REQUIRED
+REACTIVE ESCALATION AFTER FAILURE      = FORBIDDEN
+CORRECTIVE SUCCESSOR OPERATIONAL USE   = NOT AVAILABLE UNTIL THE §20 LIFECYCLE COMPLETES FOR THE NEW IDENTITY
 PATH-F EXECUTION AUTHORITY             = NONE
-PATH-F AUTHORIZATION USE               = NOT AVAILABLE FOR CONSUMPTION
-PATH-F ETB ATTEMPT                     = NOT AVAILABLE FOR CONSUMPTION
-ORACLE-PATHF INVOCATIONS               = NOT AUTHORIZED
-PATH-F AUTHORIZATION-USE BUDGET        = NOT CREATED / NOT AVAILABLE FOR CONSUMPTION
+PATH-F AUTHORIZATION USE               = 1 OF 1 / UNCONSUMED (0 OF 1) — CARRIED FORWARD TO THE NEW ACCEPTED CORRECTIVE IDENTITY PER §5.5 / NOT USABLE UNDER EITHER IDENTITY TODAY
+PATH-F ETB ATTEMPT                     = 1 OF 1 / UNSTARTED (0 OF 1) — SAME CARRY-FORWARD / NOT USABLE UNDER EITHER IDENTITY TODAY
+PATH-F AUTHORIZATION-USE BUDGET        = NOT CREATED / NOT AVAILABLE FOR CONSUMPTION (no budget is created, reset or released by this round)
 PATH-F ETB-ATTEMPT BUDGET              = NOT CREATED / NOT AVAILABLE FOR CONSUMPTION
+ORACLE-PATHF INVOCATIONS               = 0 OF 1 / NOT AUTHORIZED
 PATH-F CLAIMS                          = ABSENT (4 / 4)
 PATH-F RUNTIME OCCUPANCY               = 0 / 11
 PATH-F ETB EXECUTION                   = NOT AUTHORIZED
@@ -1112,7 +1268,7 @@ PATH-D ETB SEMANTIC RESULT             = NONE
 PATH-D RETRY AUTHORITY                 = NONE
 A5E592BD BOOKKEEPING                   = HISTORICAL / NOT CONFIRMED / NOT EFFECTIVE FOR ACCEPTANCE / SUPERSEDED FOR REVIEW-AUTHORITY PURPOSES
 MODEL A                                = PRESERVED
-NEXT STAGE                             = FRESH QUALIFYING THIRD-PARTY INDEPENDENT REVIEW OF THE PATH-F ETB EXECUTION-AUTHORIZATION DESIGN CANDIDATE
+NEXT STAGE                             = FRESH QUALIFYING THIRD-PARTY INDEPENDENT REVIEW OF THE CORRECTIVE SUCCESSOR PATH-F ETB EXECUTION-AUTHORIZATION DESIGN CANDIDATE (DIFFERENT SESSION)
 ```
 
 ---
@@ -1121,18 +1277,19 @@ NEXT STAGE                             = FRESH QUALIFYING THIRD-PARTY INDEPENDEN
 
 ```
 NEXT STAGE = FRESH QUALIFYING THIRD-PARTY INDEPENDENT REVIEW
-             OF THE PATH-F ETB EXECUTION-AUTHORIZATION DESIGN CANDIDATE
+             OF THE CORRECTIVE SUCCESSOR PATH-F ETB EXECUTION-AUTHORIZATION DESIGN CANDIDATE
 ```
 
-That review **MUST** occur in a **different agent/session** than the one that authored this candidate, and it is **not** performed by this round. It must state its independence declarations before any technical conclusion. At minimum it must:
+That review **MUST** occur in a **different agent/session** than the one that authored this corrective revision, and it is **not** performed by this round. It must state its independence declarations before any technical conclusion. At minimum it must:
 
 1. attempt to reproduce the two blocked Path-E findings (`P2-1` unsatisfiable self-identity gate, `P2-2` contradictory effectivity gate) and confirm they are absent here;
 2. verify that §3 contains **no** requirement that Oracle-generated evidence carry frozen Path-F identities, and **no** requirement that contradicts the reserved `UNKNOWN`, and that the accepted specification's §19.3 compatibility requirement is met;
-3. verify that the ACL/execution-mode policy of §7 authorizes no `icacls`, `Set-Acl`, ACL repair, permission normalization or escalation-after-failure, and that PRE-16 … PRE-18 close the Path-E L1/L2/L5 failure modes;
-4. verify that the non-consuming-failure rule of §8 has no interpretation gap and never yields re-attempt authority;
+3. verify that the ACL/execution-mode policy of §6/§7 states the required mode concretely (`full-file-access`, with `workspace-write` insufficient), authorizes no `icacls`, `Set-Acl`, ACL repair, permission normalization, mode switching or escalation-after-failure, and that `PRE-16` … `PRE-18` close the Path-E `L1`/`L2`/`L5` failure modes — including the structural gap that stopped the first Path-F operational round;
+4. verify that the non-consuming-failure rule of §8 has no interpretation gap and never yields re-attempt authority, and that `PRE-18` remains closed with the mode-change and reactive-escalation prohibitions added;
 5. verify that the namespace accounting rule of §14 is exact and that the occupancy is `0 / 11`;
-6. verify that no fourth ETB semantic class is introduced, that control descriptors remain distinct, and that the promotion pipeline of §17.4 is intact;
-7. verify that this design round created no claim, no budget, no execution authority and no runtime namespace entry.
+6. verify that the supersession and budget carry-forward model of §5.5 creates no second budget, no reset and no automatic reuse authority, and that a future claim binds the **new** accepted corrective identity and never `ed112f8c…` / `c147af87…`;
+7. verify that no fourth ETB semantic class is introduced, that control descriptors remain distinct, and that the promotion pipeline of §17.4 is intact;
+8. verify that this corrective design round created no claim, no budget, no execution authority, no execution-mode establishment and no runtime namespace entry, and that `PATH-F OPERATIONAL EXECUTION` remains `NOT STARTED`.
 
 **This round does NOT perform that review, does NOT bookkeep an acceptance, does NOT confirm the authorization, does NOT accept or freeze itself, and does NOT execute Path-F.**
 
@@ -1140,8 +1297,8 @@ That review **MUST** occur in a **different agent/session** than the one that au
 
 ## 25. Strict prohibitions carried by this authorization
 
-No Oracle-PathF execution. No ETB attempt. No Path-F execution authorization. No claim creation. No budget creation. No budget consumption. No listener query. No endpoint probe. No runtime publication. No ACL mutation, restoration or normalization. No elevation. No Path-E cleanup. No Path-D mutation. No result promotion. No push. No tag. No release.
+No Oracle-PathF execution. No ETB attempt. No Path-F execution authorization. No claim creation. No budget creation. No budget consumption. No listener query. No endpoint probe. No runtime publication. No ACL mutation, restoration or normalization. No permission repair. No execution-mode establishment, verification, probing or switching. No elevation, and no reactive escalation after any failure. No Path-E cleanup. No Path-D mutation. No historical status-surface rewrite. No result promotion. No push. No tag. No release.
 
 ---
 
-**End of Path-F one-shot ETB execution authorization, design candidate.**
+**End of Path-F one-shot ETB execution authorization, corrective successor design candidate.**
