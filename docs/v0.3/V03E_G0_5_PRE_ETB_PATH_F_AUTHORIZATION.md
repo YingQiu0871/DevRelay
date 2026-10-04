@@ -3,7 +3,9 @@
 > **PATH-F AUTHORIZATION = CORRECTIVE SUCCESSOR DESIGN CANDIDATE / NOT ACCEPTED / NOT FROZEN / NOT EFFECTIVE / NOT EXECUTED.**
 > **THIS AUTHORIZATION DESIGN GRANTS NO EXECUTION AUTHORITY TODAY.**
 > **IT SUPERSEDES NOTHING BY ITSELF: THE PREVIOUSLY ACCEPTED PATH-F AUTHORIZATION REMAINS HISTORICALLY ACCEPTED / FROZEN / EFFECTIVE, AND ONLY ITS OPERATIONAL USE IS BLOCKED AFTER THE PRE-16 PRECONDITION STOP.**
-> **REQUIRED OPERATIONAL EXECUTION / FILE-ACCESS MODE = `full-file-access`, ESTABLISHED BEFORE THE IRREVERSIBLE SEQUENCE (§6.1, PRE-16).**
+> **REQUIRED PATH-F DSH OPERATIONAL EXECUTION / FILE-ACCESS MODE = `danger-full-access` — THE ONE NORMATIVE MODE TOKEN — ESTABLISHED BEFORE THE IRREVERSIBLE SEQUENCE AND OBSERVED THROUGH THE DSH SESSION RUNTIME-CONTEXT POLICY DECLARATION (§6.1, §6.4, PRE-16).**
+> **`read-only` AND `workspace-write` ARE INSUFFICIENT FOR PATH-F OPERATIONAL EXECUTION.**
+> **BOUNDED P2 REMEDIATION REVISION: THIS REVISION PROSPECTIVELY SUCCEEDS THE FIRST CORRECTIVE CANDIDATE `d895856d2efc9683b91b182c33647efe57b01fc3` / `c281f93e6ddfe09351c435e698c5d50c3a5cfcda2053f27159ba921e2eed72eb` (QUALIFYING REVIEW = `REQUEST_CHANGES` / P2 = 1 / NOT ACCEPTED / NOT FROZEN / NOT EFFECTIVE), WHOSE BYTES REMAIN IMMUTABLE HISTORY AND ARE NOT AMENDED, REVOKED OR RELABELLED.**
 > **IT CREATES NO CLAIM NOW AND CONSUMES NO BUDGET.**
 > **IT DOES NOT ENTER ORACLE-PATHF AND DOES NOT QUERY ANY LISTENER.**
 > **IT IS AUTHORIZED FOR DESIGN ONLY AT THIS STAGE.**
@@ -15,8 +17,10 @@
 **Date:** 2026-10-03
 **Repository:** `D:\DevRelay`
 **Branch:** `v0.3-e-recovery-reconciliation`
-**Parent governance commit (build base):** `5fae11eefdcaddc27b4abf28d3a2258ad654d84d`
+**Parent governance commit (build base):** `d895856d2efc9683b91b182c33647efe57b01fc3`
+**Disposition commit bound (predecessor of the first corrective candidate; PRE-16 stop):** `5fae11eefdcaddc27b4abf28d3a2258ad654d84d`
 **Corrective successor of (historically accepted; operationally blocked after the PRE-16 precondition stop):** `ed112f8c5f1e35d87092d0339698a792ce0b145a` / `c147af8714164dae8b81cafa4eb01945a3ceb8c74b36f0fc18fbd56db284c4de`
+**Bounded P2 remediation successor of (qualifying review `REQUEST_CHANGES`, P2 = 1, not accepted / not frozen / not effective):** `d895856d2efc9683b91b182c33647efe57b01fc3` / `c281f93e6ddfe09351c435e698c5d50c3a5cfcda2053f27159ba921e2eed72eb`
 
 ---
 
@@ -36,8 +40,9 @@ The Owner has recorded, and this artifact may not weaken, reinterpret, relabel o
 10. The `PATH-E` operational lessons `L1`–`L5` recorded in the accepted Oracle-PathF specification §2.2 are carried forward as accepted history and are **NOT** repaired by editing any frozen predecessor byte. `L3` (cross-document provenance wording tension) is closed for Path-F **by construction in this document** (§3, §19.4), not by editing the accepted Oracle-PathF specification.
 11. The Owner authorized the creation of this design candidate only. Acceptance, freezing, effectivity and execution authority are **NOT** granted by this round.
 12. `OWNER DECISION = AUTHOR ONE CORRECTIVE SUCCESSOR PATH-F ETB EXECUTION-AUTHORIZATION DESIGN CANDIDATE`, recorded in the Owner order governing this corrective round after the one-shot operational round terminated at its first failed precondition (`PRE-16`) with `PATH-F OPERATIONAL EXECUTION = NOT STARTED`, and governed by the disposition commit `5fae11eefdcaddc27b4abf28d3a2258ad654d84d` with `PATHF_PRE16_STRUCTURAL_GAP = CONFIRMED` and `REMEDIATION ROUTE = ROUTE A`. Route A requires exactly this corrective successor design lifecycle and **forbids** repairing the frozen accepted artifact in place. Acceptance, freezing, effectivity and execution authority are **NOT** granted to this corrective candidate either.
-13. `REQUIRED PATH-F OPERATIONAL EXECUTION / FILE-ACCESS MODE = full-file-access` and `workspace-write = INSUFFICIENT FOR PATH-F OPERATIONAL EXECUTION`. This is a **PRE-EXISTING SESSION MODE requirement** supplied to the future operational execution environment. It is **NOT** reactive escalation authority, **NOT** ACL-repair authority, **NOT** permission-repair authority, **NOT** retry authority and **NOT** authority to switch modes after a failed gate or a failed claim operation. Stating the required mode prospectively is what the accepted Oracle-PathF specification §9.1/§9.2 requires of an execution-authorization record, and it is compatible with the frozen prohibition on reactive escalation (specification §9.3/§9.4; §6 and §7 of this artifact). This decision grants no ability to this authorization layer, the executor, the Oracle or any helper to elevate itself.
+13. `REQUIRED PATH-F DSH OPERATIONAL EXECUTION / FILE-ACCESS MODE = danger-full-access`. This is the **one and only normative execution / file-access mode token of this authorization**, and it is the canonical unconfined mode token of the DSH harness in which the future operational round will run (§6.1, §6.4). `read-only = INSUFFICIENT FOR PATH-F OPERATIONAL EXECUTION` and `workspace-write = INSUFFICIENT FOR PATH-F OPERATIONAL EXECUTION`. This is a **PRE-EXISTING SESSION MODE requirement** supplied to the future operational execution environment. It is **NOT** reactive escalation authority, **NOT** ACL-repair authority, **NOT** permission-repair authority, **NOT** retry authority and **NOT** authority to switch modes after a failed gate or a failed claim operation. Stating the required mode prospectively is what the accepted Oracle-PathF specification §9.1/§9.2 requires of an execution-authorization record, and it is compatible with the frozen prohibition on reactive escalation (specification §9.3/§9.4; §6 and §7 of this artifact). This decision grants no ability to this authorization layer, the executor, the Oracle or any helper to elevate itself. **Superseded token (recorded once, so that the correction is auditable):** the first corrective candidate of this lineage stated this requirement as `full-file-access`. That token is **HISTORICAL / DESCRIPTIVE ONLY / NOT A DSH MODE TOKEN / NOT ACCEPTABLE AS PRE-16 EVIDENCE**; it is not a member of the closed DSH canonical mode vocabulary `read-only` | `workspace-write` | `danger-full-access`, and it appears nowhere in this artifact as a normative execution-mode value.
 14. This corrective successor **revises this artifact only**. The previously accepted authorization artifact bytes at `c147af8714164dae8b81cafa4eb01945a3ceb8c74b36f0fc18fbd56db284c4de` remain immutable history, their acceptance remains historically valid, and neither identity is operationally usable until the corrective successor completes the lifecycle of §20. No historical status surface is rewritten by this round.
+15. `OWNER DECISION = AUTHOR EXACTLY ONE BOUNDED CORRECTIVE SUCCESSOR REVISION TO REMEDIATE THE QUALIFYING-REVIEW P2 IN THE PATH-F CORRECTIVE AUTHORIZATION DESIGN`. The remediated finding is `FULL_FILE_ACCESS_MODE_IDENTITY = LABEL_PRESENT_BUT_NOT_OPERATIONALLY_VERIFIABLE` with `CORRECTED_PRE_16 = AMBIGUOUS`; the corrected prospective governance decision is paragraph 13 above. The scope of the remediation is **the sole blocking P2 plus the mechanical governance and cross-reference updates directly necessary to record it**; the four non-blocking observations of that review cause **no** broader redesign, and the design findings `P3-A` … `P3-G` already corrected by the preceding revision do **not** regress. Acceptance, freezing, effectivity and execution authority are **NOT** granted to this bounded remediation revision either.
 
 These Owner decisions are recorded in the active tracked status surfaces of this repository and are not re-derivable from this artifact alone.
 
@@ -82,7 +87,7 @@ This candidate was designed from the following recovered repository precedent, a
 | Path-E authorization acceptance bookkeeping | `48e9b66dd5aeb147795dbc57e822e6b3d38e4565` | acceptance stage shape |
 | Path-E authorization confirmation record | `c7ac36a8c596ae2ede8db7bce2e625f8c6ffa21c` | confirmation / materialization stage shape |
 | Path-E authorization corrective successor commit | `4900625114a38a86aa03a5fa4861c5bcd9436dc5` | **the corrective-successor mutation shape reused, in substance, by this round**: exactly three modified paths (`CHANGELOG.md`, `docs/v0.3/V03E_ACCEPTANCE.md` and the authorization artifact), numstat `2 0` / `1 1` / `12 5`, subject family `fix(v03e): remediate <lineage> ETB authorization design review findings`, old candidate identity preserved and superseded prospectively only |
-| Path-F PRE-16 disposition | `5fae11eefdcaddc27b4abf28d3a2258ad654d84d` | binds this corrective round: `PATH-F OPERATIONAL EXECUTION = NOT STARTED` at `PRE-16`, `PATHF_PRE16_STRUCTURAL_GAP = CONFIRMED`, `REMEDIATION ROUTE = ROUTE A`, and the Owner's prospective `full-file-access` mode decision |
+| Path-F PRE-16 disposition | `5fae11eefdcaddc27b4abf28d3a2258ad654d84d` | binds this corrective round: `PATH-F OPERATIONAL EXECUTION = NOT STARTED` at `PRE-16`, `PATHF_PRE16_STRUCTURAL_GAP = CONFIRMED`, `REMEDIATION ROUTE = ROUTE A`, and the Owner's prospective required execution-mode decision, whose canonical token is `danger-full-access` (§6.1) |
 
 **Recovered authorization-design precedent classification:**
 
@@ -370,46 +375,81 @@ PATHF_CORRECTIVE_BUDGET_CARRY_FORWARD_MODEL = SAME LINEAGE-LEVEL ONE-SHOT BUDGET
 
 **Precedent support:** in the Path-E corrective cycle the lineage's single authorization-use budget was consumed exactly once and bound the **corrected successor** identity `4900625114a38a86aa03a5fa4861c5bcd9436dc5` / `01d8dc6806e622cb361f47abee178e5beeddb8f95199ff21362938312a299d06`, not the superseded candidate `26b183083fbbe323441283f99f3cf2c931acd6ff`, and no second budget was created for the successor. This artifact applies the same single-budget, successor-bound shape. The Path-F-specific addition — the superseded identity had already reached `ACCEPTED / FROZEN / EFFECTIVE` while its budgets remained unconsumed — is resolved by rule 1 (history preserved intact) together with rules 3 and 4 (identity re-bound, no reuse authority on either identity until the §20 lifecycle completes). It creates no new budget class, no new claim path and no fourth ETB result class.
 
+**Corrective-stage supersession chain (recorded; no historical object is erased, revoked, amended or relabelled):**
+
+```
+CORRECTIVE STAGE 0 — HISTORICAL AUTHORIZATION
+  identity          = ed112f8c5f1e35d87092d0339698a792ce0b145a / c147af8714164dae8b81cafa4eb01945a3ceb8c74b36f0fc18fbd56db284c4de
+  state             = ACCEPTED / FROZEN / EFFECTIVE / OPERATIONALLY BLOCKED AFTER THE PRE-16 PRECONDITION STOP
+CORRECTIVE STAGE 1 — FIRST CORRECTIVE CANDIDATE
+  identity          = d895856d2efc9683b91b182c33647efe57b01fc3 / c281f93e6ddfe09351c435e698c5d50c3a5cfcda2053f27159ba921e2eed72eb
+  qualifying review = REQUEST_CHANGES (P0 = 0 / P1 = 0 / P2 = 1 / P3 = 4)
+  sole blocking P2  = FULL_FILE_ACCESS_MODE_IDENTITY = LABEL_PRESENT_BUT_NOT_OPERATIONALLY_VERIFIABLE
+  corrected PRE-16  = AMBIGUOUS
+  state             = NOT ACCEPTED / NOT FROZEN / NOT EFFECTIVE / SUCCEEDED PROSPECTIVELY BY THIS REVISION
+  its bytes         = immutable history; not amended, not revoked, not relabelled, not deleted
+CORRECTIVE STAGE 2 — THIS BOUNDED P2-REMEDIATION SUCCESSOR
+  identity          = the single-parent successor commit of d895856d2efc9683b91b182c33647efe57b01fc3 that introduces this revision (not embedded here by design)
+  state             = DESIGN CANDIDATE / NOT ACCEPTED / NOT FROZEN / NOT EFFECTIVE / NOT OPERATIONALLY USABLE
+```
+
+The bounded revision is deliberately narrow: it corrects the canonical DSH mode token (§0 decision 13, §6.1), adds the deterministic session-mode observation mechanism (§6.4), rewrites `PRE-16` so that it is objectively and deterministically evaluable, and performs only the mechanical governance and cross-reference updates directly necessary to record those three changes. It does **not** reopen the budget model, the eleven-path namespace, the claim model, the provenance model, the result boundary, the `PRE-17` control-state clarification, the `PRE-18` no-re-attempt closure, or any other already-corrected area. A future Path-F claim binds the **new** accepted corrective identity only; it binds neither `ed112f8c…` / `c147af87…` nor the rejected candidate `d895856…` / `c281f93e…`.
+
 ---
 
 ## 6. Pre-consumption write-viability and execution-mode ownership
 
-The accepted Oracle-PathF specification §7 already defines the Oracle's internal pre-publication write-viability gate, and §8/§9 define the ACL and execution-mode policy. This authorization **does not restate, reinterpret, weaken or extend** those Oracle internals. It defines only what the **authorization/executor layer** must establish so that a future authorized round begins in the execution/file-access mode the frozen Oracle design requires — concretely, in `full-file-access` (§6.1, `PRE-16`).
+The accepted Oracle-PathF specification §7 already defines the Oracle's internal pre-publication write-viability gate, and §8/§9 define the ACL and execution-mode policy. This authorization **does not restate, reinterpret, weaken or extend** those Oracle internals. It defines only what the **authorization/executor layer** must establish so that a future authorized round begins in the execution/file-access mode the frozen Oracle design requires — concretely, in the canonical DSH mode `danger-full-access` (§6.1, §6.4, `PRE-16`).
 
 ### 6.1 Authorization-layer obligations: the concrete required mode, and capacity
 
+**DSH canonical execution / file-access mode vocabulary (closed; recovered from the installed harness):**
+
 ```
-REQUIRED PATH-F OPERATIONAL EXECUTION / FILE-ACCESS MODE = full-file-access
-workspace-write                                          = INSUFFICIENT FOR PATH-F OPERATIONAL EXECUTION
-full-file-access                                         = REQUIRED PRE-EXISTING OPERATIONAL EXECUTION MODE
+read-only | workspace-write | danger-full-access
 ```
 
-`full-file-access` is the **only** mode under which a Path-F operational round may begin. It is a **pre-existing session mode**: the future operational executor must **start** its session already provisioned in `full-file-access`. The executor must **not**:
+**The normative declaration of this authorization:**
 
-- start in `workspace-write` and "try";
+```
+REQUIRED PATH-F DSH OPERATIONAL EXECUTION / FILE-ACCESS MODE = danger-full-access
+read-only                                                   = INSUFFICIENT FOR PATH-F OPERATIONAL EXECUTION
+workspace-write                                             = INSUFFICIENT FOR PATH-F OPERATIONAL EXECUTION
+danger-full-access                                          = REQUIRED PRE-EXISTING DSH OPERATIONAL EXECUTION MODE
+```
+
+`danger-full-access` is the **one and only** normative mode token of this authorization, and it is the **only** mode under which a Path-F operational round may begin. There is **no second source of truth**: every other mode reference in this artifact resolves to this token.
+
+**Recovered DSH evidence for the token (all of it independently reproducible on this machine):** the installed DeepSeek Harness declares its mode type as `SandboxMode = 'read-only' | 'workspace-write' | 'danger-full-access'`; its permission presets map `read-only` and `workspace-write` to a confining sandbox with approval `ask` and `danger-full-access` to an unconfined sandbox with approval `never`; and its sandbox-policy plugin resolves the mode from `DSH_PERMISSION_MODE` in the **launching** harness process, defaulting to `workspace-write`. `danger-full-access` is therefore the canonical **unconfined** token, and no string outside the three above is a DSH mode at all.
+
+It is a **pre-existing session mode**: the future operational executor must **start** its session already provisioned in `danger-full-access`. The executor must **not**:
+
+- start in `workspace-write` (or in `read-only`) and "try";
 - probe a claim path, a governed path or any other file in order to discover whether permissions work;
-- request or acquire `full-file-access` **after** a failure;
+- request or acquire `danger-full-access` **after** a failure;
 - invoke any elevation mechanism **after** the irreversible sequence begins;
+- use the harness's per-call sandbox-escalation facility (`sandbox_permissions`), which is a **reactive** elevation path and is therefore **NOT AUTHORIZED** for any round governed by this authorization;
 - mutate an access-control list, restore one, normalize one or repair permissions;
 - use `icacls` or `Set-Acl`;
 - create any authorization-layer empirical governed-path write probe.
 
-If the session is **not** already in `full-file-access` when the preconditions are evaluated:
+If the session-visible DSH policy declaration of §6.4 does **not** unambiguously report `danger-full-access` when the preconditions are evaluated:
 
 ```
 PRE-16 = FAIL
 ROUND  = FAIL CLOSED BEFORE CONSUMPTION
-NO CLAIM / NO BUDGET CONSUMPTION / NO ORACLE INVOCATION / NO SAME-ROUND RETRY
+NO CLAIM / NO BUDGET CONSUMPTION / NO ORACLE INVOCATION / NO RETRY
 ```
 
 Before any irreversible claim consumption, the authorization layer must establish **capacity** — nothing more:
 
-1. the required execution/file-access mode is **already established** for the round, before any claim path is created;
-2. **no ACL repair is planned, pending or in progress**;
-3. the required mode was **not** obtained by modifying an access-control list and will not be repaired by modifying one;
-4. the failure mode is **fail closed**, not repair-and-retry;
-5. the mode is a **pre-existing environmental fact supplied before execution**: it is not a capability that this authorization, the executor, the Oracle or any helper may confer on itself;
-6. **no execution-time elevation mechanism is authorized** for the round.
+1. the session-visible DSH policy declaration reports the canonical mode **exactly `danger-full-access`**, through the non-mutating observation mechanism of §6.4, before any claim path is created;
+2. the required execution/file-access mode is **already established** for the round, before any claim path is created;
+3. **no ACL repair is planned, pending or in progress**;
+4. the required mode was **not** obtained by modifying an access-control list and will not be repaired by modifying one;
+5. the failure mode is **fail closed**, not repair-and-retry;
+6. the mode is a **pre-existing environmental fact supplied before execution**: it is not a capability that this authorization, the executor, the Oracle or any helper may confer on itself;
+7. **no execution-time elevation mechanism is authorized**, and **no reactive elevation authority or path is available to this Path-F round**.
 
 **Prospective requirement versus reactive escalation:**
 
@@ -418,7 +458,7 @@ PROSPECTIVE EXECUTION-MODE REQUIREMENT = PERMITTED / REQUIRED
 REACTIVE ESCALATION AFTER FAILURE      = FORBIDDEN
 ```
 
-Stating the required mode in advance is exactly what the accepted Oracle-PathF specification §9.1/§9.2 requires of an execution-authorization record; it creates, delegates and implies **no** escalation authority, **no** permission-repair authority and **no** retry authority. What the frozen model forbids is the **reactive** elevation invoked after a failed gate or after the irreversible sequence begins (specification §9.3/§9.4; §6.2/§7 and PRE-16 … PRE-18 of this artifact). `full-file-access` is a prerequisite **supplied to** the future execution environment by the Owner-governed operational session; it does **not** grant the authorization layer or the Oracle any ability to elevate itself.
+Stating the required mode in advance is exactly what the accepted Oracle-PathF specification §9.1/§9.2 requires of an execution-authorization record; it creates, delegates and implies **no** escalation authority, **no** permission-repair authority and **no** retry authority. What the frozen model forbids is the **reactive** elevation invoked after a failed gate or after the irreversible sequence begins (specification §9.3/§9.4; §6.2/§7 and PRE-16 … PRE-18 of this artifact). `danger-full-access` is a prerequisite **supplied to** the future execution environment by the Owner-governed operational session; it does **not** grant the authorization layer or the Oracle any ability to elevate itself. The requirement is `NO REACTIVE ELEVATION AUTHORITY OR PATH IS AVAILABLE TO THIS PATH-F ROUND`; it is **never** a requirement to prove that the host operating system contains no possible elevation facility.
 
 ### 6.2 Explicit non-ownership
 
@@ -430,6 +470,7 @@ This authorization layer must **not**:
 - probe, query or enumerate the target, the listener or the endpoint;
 - create any governed path before the PRE-gates pass;
 - change, request or escalate its own execution/file-access mode, in any circumstance, including after a failed gate or a failed claim operation;
+- rely on any shell environment variable to establish the mode — the mode is observed **only** through the DSH session runtime-context policy declaration of §6.4;
 - treat the concrete mode requirement of §6.1 as a mandate to inspect, enumerate or modify any access-control list.
 
 The Oracle's probe residue model is frozen and is **not** reconsidered here: probe files are named `.path-f-write-viability-probe-<guid>.tmp`, are outside the reserved namespace of §14, are non-governed, are non-consuming, confer no cleanup or retry authority, and a failed gate terminates the round.
@@ -450,6 +491,64 @@ REQUIRED EXECUTION / FILE-ACCESS MODE NOT ESTABLISHED BEFORE THE IRREVERSIBLE SE
   -> a later attempt requires a NEW explicit Owner-governed authority lifecycle
 ```
 
+### 6.4 Deterministic session-mode observation (the non-mutating channel bound by `PRE-16`)
+
+The DSH harness publishes the **effective** file/sandbox policy of a session into that session's own runtime context. The sandbox-policy owner contributes exactly one capability-neutral context entry named `sandbox:policy` to the **current runtime-context snapshot** of **every** agent session, and the agent loop logs that snapshot in the session as a sourced `user/message`. The entry is rendered from the session's resolved canonical mode and is a closed, verbatim set of exactly three literals:
+
+```
+Current DSH file policy: read-only. Any available operation enforced by the DSH file sandbox cannot modify files in the standing mode. Do not refuse a required modification from this policy alone: try an available tool normally and follow any denial and escalation guidance it returns.
+Current DSH file policy: workspace-write. Any available operation enforced by the DSH file sandbox may modify files under the session workspace: "<workspace root>". Some platform temporary areas may also be writable.
+Current DSH file policy: danger-full-access. The DSH file sandbox does not restrict file modifications by available operations.
+```
+
+**The required session-mode observation mechanism is therefore:**
+
+```
+DSH SESSION-MODE OBSERVATION CHANNEL
+  = the `sandbox:policy` runtime-context declaration present in the CURRENT session,
+    delivered as a sourced user/message whose text begins with the literal
+    `Current DSH file policy: `
+REQUIRED OBSERVED VALUE
+  = the canonical token following that literal is exactly `danger-full-access`
+FAIL-CLOSED ON
+  = the declaration is absent, unreadable, or reports any other value
+```
+
+A future executor satisfies `PRE-16` **only** by reading that declaration in its own session and comparing the token. It must **not**:
+
+- look for a shell environment variable: the harness consumes `DSH_PERMISSION_MODE` in the **launching** process to configure the sandbox and approval policies, and that variable is **not** guaranteed to be exported into the child shell — in the authoring environment of this revision it was demonstrably absent while `DSH_HOME`, `DSH_PROFILE`, `DSH_PROFILE_DIR`, `DSH_SESSION_ID`, `DSH_SHELL` and `DSH_WEB_URL` were present. No environment-variable test may be used as primary evidence, and no environment variable may be invented as one;
+- query a registry, a configuration file, an access-control list, a permission descriptor or any other out-of-band surface;
+- probe, write, create, delete or read back any file — including any claim path, governed path, TEMP artifact, probe file or runtime-namespace path — in order to discover the mode;
+- invoke any elevation, escalation or approval facility in order to make the declaration report `danger-full-access`.
+
+**The mode check is non-mutating by construction and must require:**
+
+```
+filesystem writes        = 0
+claim-path accesses      = 0
+governed-path probes     = 0
+ACL reads                = 0
+ACL mutations            = 0
+permission repairs       = 0
+runtime escalation       = 0
+trial CreateNew calls    = 0
+```
+
+**Approval-policy corroboration (secondary only, never primary evidence):** the same resolved mode drives the harness approval policy — `danger-full-access` resolves it to `never`, while `read-only` and `workspace-write` resolve it to `ask`. A round may note that corroboration, but the **primary and only admissible evidence** is the session-visible policy declaration above.
+
+**Fail-closed rule:**
+
+```
+session-visible policy declaration absent, unreadable or not exactly `danger-full-access`
+  -> PRE-16 = FAIL
+  -> ROUND = FAIL CLOSED BEFORE CONSUMPTION
+  -> NO CLAIM / NO BUDGET CONSUMPTION / NO ORACLE INVOCATION / NO RETRY
+  -> NO MODE SWITCHING / NO REACTIVE ESCALATION / NO PERMISSION REPAIR / NO ACL REPAIR
+  -> a later attempt requires a NEW explicit Owner-governed authority lifecycle
+```
+
+This mechanism establishes **no** execution authority, consumes **no** budget and creates **no** governed path. It replaces, for this authorization, the earlier design-candidate wording that described the mode as verifiable "from the session's own execution environment" without naming the channel; `PRE-17` may rely on it and therefore needs no probe of its own (§13 `PRE-17`).
+
 ---
 
 ## 7. ACL and access-mode policy (closes the Path-E failure mode explicitly)
@@ -464,7 +563,9 @@ The authorization design states deterministically, for any future authorized ope
 | sandbox / file-access escalation after the irreversible sequence begins | **FORBIDDEN** |
 | reactive escalation after a failed gate, a failed claim operation or any other failure | **FORBIDDEN** |
 | switching the session's execution/file-access mode during an operational round | **FORBIDDEN** |
-| starting a Path-F operational round in any mode other than `full-file-access` | **FORBIDDEN** — `PRE-16` fails closed |
+| starting a Path-F operational round in any mode other than `danger-full-access` | **FORBIDDEN** — `PRE-16` fails closed |
+| relying on a shell environment variable to establish the required mode | **NOT AUTHORITY** — the mode is observed only through the DSH session runtime-context policy declaration of §6.4 |
+| using the harness per-call sandbox-escalation facility (`sandbox_permissions`) | **NOT AUTHORIZED** — a reactive elevation path (§6.1, `PRE-16`) |
 | improvisational retry after an access failure | **FORBIDDEN** |
 | `icacls` as part of execution | **NOT AUTHORIZED** |
 | `Set-Acl` as part of execution | **NOT AUTHORIZED** |
@@ -480,7 +581,7 @@ CURRENT ACL STATE = OUTSIDE TRACKED GIT GOVERNANCE / NOT NORMALIZED / NO RESTORA
 ACL RESTORATION = OUT OF SCOPE FOR THIS ROUND AND FOR ANY ROUND GOVERNED BY THIS AUTHORIZATION UNTIL SEPARATELY AUTHORIZED
 ```
 
-This design round **documents** the residual condition and **mutates nothing**. It authorizes no normalization, no restoration and no repair. A future operational round must begin in a mode that is already viable — concretely, in `full-file-access` (§6.1, `PRE-16`) — and it may not create viability by mutating permissions, by escalating reactively or by switching modes after a failure.
+This design round **documents** the residual condition and **mutates nothing**. It authorizes no normalization, no restoration and no repair. A future operational round must begin in a mode that is already viable — concretely, in `danger-full-access`, observed through the session-visible DSH policy declaration of §6.4 (§6.1, `PRE-16`) — and it may not create viability by mutating permissions, by escalating reactively or by switching modes after a failure.
 
 ---
 
@@ -768,8 +869,8 @@ All eighteen preconditions are **mandatory, ordered and fail-closed**. An execut
 | **PRE-13** | The reserved Path-F runtime/output and control namespace is empty | all eleven paths of §14 are absent under the §11 predicate: `PATH-F RUNTIME OCCUPANCY = 0 / 11` |
 | **PRE-14** | No prior Path-F authorization or attempt consumption has occurred | neither Path-F claim exists in any form; no Path-F evidence, manifest or result exists; no Path-F budget is recorded as consumed anywhere in the tracked surfaces; the round that performs this evaluation is the **first** Path-F round to reach the consumption boundary |
 | **PRE-15** | No execution has occurred in this round before the preconditions passed | the executor has performed **zero** Oracle invocations, **zero** ETB attempts, **zero** listener queries, **zero** target probes, **zero** endpoint probes and **zero** OpenCode starts before PRE-1 … PRE-14 have all passed |
-| **PRE-16** | The session execution / file-access mode is exactly `full-file-access` and it existed before the irreversible sequence, with no ACL or permission repair pending | all of the following must hold, and each must be established **before** any claim path is created: **(1)** the current operational session's execution/file-access mode is **exactly `full-file-access`**, as §6.1 requires — `workspace-write` is explicitly **INSUFFICIENT FOR PATH-F OPERATIONAL EXECUTION**; **(2)** that mode **existed before** the irreversible sequence began — it is a pre-existing session mode, not something acquired at or after this point; **(3)** the mode was **not** obtained in response to a failed Path-F gate, a failed claim operation or any other failure, and no reactive escalation occurred in this round at any point; **(4)** no ACL mutation, ACL restoration, ACL normalization or permission repair has been performed in the current round or in any earlier phase of it, and none is planned, pending or queued; **(5)** no permission repair is planned, pending or active; **(6)** no execution-time elevation mechanism is authorized, invoked or available to this round — `icacls`, `Set-Acl` and any ACL-repair or permission-normalization script are **not** part of it; **(7)** the mode is **verifiable from the session's own execution environment**, and that verification requires **no** ACL enumeration, **no** access-control-list read and **no** empirical governed-path write probe. **Inability to verify the exact mode is `PRE-16 = FAIL`** — not a licence to test it. A round that cannot satisfy this row fails closed: it never proceeds to claim creation, never repairs permissions in-round, never changes mode and never retries |
-| **PRE-17** | Write-viability control state is established without consuming authority, without creating a governed path and without any empirical write probe | this row is a **control-state / capacity** gate, and it is **satisfied by the already-established mode of `PRE-16`** together with the frozen publication contract: with the session in `full-file-access`, the round's ability to create, write, flush and read back the claim files and the runtime outputs is a **control-state fact of the established mode**, and it must **never** be established by creating, writing, flushing or reading back any file. This row therefore requires **no file creation of any kind** by the authorization layer: **no** probe file, **no** TEMP artifact, **no** claim, **no** evidence, **no** manifest, **no** result, **no** runtime-namespace entry and **no** write to any governed path may be performed to satisfy it. It performs **no** probe on the Oracle's behalf, consumes **no** budget and creates **no** governed artifact. The Oracle's own pre-publication write-viability gate of the accepted specification §7 remains exclusively Oracle-owned, runs inside the Oracle after the bootstrap phase and before the config read, and is **not** re-specified, pre-empted, replaced or duplicated here. Probe residue, if the **Oracle** ever creates any, remains outside the §14 namespace, is non-governed and non-consuming, is **not** a claim, an attempt or a budget-consumption event, and is **not** subject to cleanup or retry authority. This row must remain satisfiable **after** `PRE-16` has confirmed `full-file-access`, and it may never be read as requiring an empirical governed-path write test |
+| **PRE-16** | The session-visible DSH session-policy declaration reports the canonical mode exactly `danger-full-access`, provisioned before the irreversible sequence, with no ACL or permission repair pending and no reactive elevation path available | this row is **objectively and deterministically evaluable**: every clause is a comparison against a stated token or a stated absence, requiring no judgement, no interpretation and no empirical test. All eight clauses must hold, and each must be established **before** any claim path is created: **(1)** the DSH-provided, non-mutating session policy declaration of the **current** session — the `sandbox:policy` runtime-context entry of §6.4, whose text begins with the literal `Current DSH file policy: ` — reports the canonical mode **exactly `danger-full-access`**; **(2)** that mode was **provisioned before the Path-F operational round entered the irreversible sequence** — it is a pre-existing session mode, not something acquired at or after that point; **(3)** the mode was **not** obtained or requested as a response to any failed Path-F PRE gate, claim operation, Oracle action or runtime failure; **(4)** **no ACL repair** is planned, pending or active; **(5)** **no permission repair** is planned, pending or active; **(6)** **no reactive execution-time elevation path is authorized** for this round — `icacls`, `Set-Acl`, any ACL-repair or permission-normalization script, and the harness per-call sandbox-escalation facility (`sandbox_permissions`) are all excluded from it; **(7)** the mode check uses **only** the recovered non-mutating DSH session-policy observation mechanism of §6.4, and it requires **zero** filesystem writes, **zero** claim-path accesses, **zero** governed-path probes, **zero** ACL reads, **zero** ACL mutations, **zero** permission repairs, **zero** runtime escalation and **zero** trial `CreateNew` calls; **(8)** **inability to observe or establish the exact canonical token is `PRE-16 = FAIL`** — not a licence to test the mode, not a licence to switch modes and not a licence to escalate. The requirement is `NO REACTIVE ELEVATION AUTHORITY OR PATH IS AVAILABLE TO THIS PATH-F ROUND`; it is **never** a requirement to prove that the host operating system contains no possible elevation facility. A round that cannot satisfy this row fails closed — `ROUND = FAIL CLOSED BEFORE CONSUMPTION`, with no claim creation, no budget consumption, no Oracle invocation, no retry, no mode switching, no reactive escalation, no permission repair and no ACL repair |
+| **PRE-17** | Write-viability control state is established without consuming authority, without creating a governed path and without any empirical write probe | this row is a **control-state / capacity** gate, and it is **satisfied by `PRE-16` having already confirmed `danger-full-access`** through the session-visible DSH policy declaration of §6.4, together with the frozen publication contract: with the session-visible policy reporting `danger-full-access`, the round's ability to create, write, flush and read back the claim files and the runtime outputs is a **control-state fact of the established mode**, and it must **never** be established by creating, writing, flushing or reading back any file. This row therefore requires **no file creation of any kind** by the authorization layer: **no** probe file, **no** TEMP artifact, **no** claim, **no** evidence, **no** manifest, **no** result, **no** runtime-namespace entry and **no** write to any governed path may be performed to satisfy it. It performs **no** probe on the Oracle's behalf, consumes **no** budget and creates **no** governed artifact. The Oracle's own pre-publication write-viability gate of the accepted specification §7 remains exclusively Oracle-owned, runs inside the Oracle after the bootstrap phase and before the config read, and is **not** re-specified, pre-empted, replaced or duplicated here. Probe residue, if the **Oracle** ever creates any, remains outside the §14 namespace, is non-governed and non-consuming, is **not** a claim, an attempt or a budget-consumption event, and is **not** subject to cleanup or retry authority. This row must remain satisfiable **after** `PRE-16` has confirmed `danger-full-access` through the session-visible policy channel, and it may never be read as requiring an empirical governed-path write test |
 | **PRE-18** | Non-consuming failure confers no re-attempt authority | the executor has accepted, before entering the irreversible sequence, that a `CreateNew` failure that occurs **before** the TEMP file is created consumes **no** budget **and nevertheless terminates the round** (§8): consumption `NO`, outcome `TERMINATED / FAIL CLOSED`, same-round re-attempt `FORBIDDEN`, retry after a permission change `FORBIDDEN`, **changing the session's execution/file-access mode to answer the failure `FORBIDDEN`**, **reactive escalation in response to the failure `FORBIDDEN`**, and any further attempt requires a **new explicit Owner-governed authority lifecycle**. A round that has already suffered such a failure may not continue under this authorization |
 
 ### 13.1 Ownership boundary frozen by the preconditions
@@ -778,7 +879,7 @@ The following belong **exclusively** to the accepted Oracle-PathF executable and
 
 listener query; config comparison against the live endpoint; `OwningProcess` resolution; PID resolution; `Win32_Process` lookup; `ExecutablePath` retrieval; `CreationDate` retrieval; target executable hashing; package identity validation; `package.json` validation; `CreateFileW` / `GetFinalPathNameByHandleW` canonicalization; S0 and S1 snapshot acquisition; S0/S1 continuity evaluation; the pre-publication write-viability gate itself; and **all** ETB result classification.
 
-The authorization layer may verify **only** static artifact identity (PRE-2, PRE-4, PRE-5, PRE-6, PRE-7, PRE-9, PRE-10), governance/precondition state (PRE-1, PRE-3, PRE-8, PRE-11 … PRE-15, PRE-18) and established execution-mode capacity (PRE-16, PRE-17). Hashing of the **accepted Oracle-PathF artifacts themselves** is permitted and required; hashing, opening, probing or enumerating the **target** is not.
+The authorization layer may verify **only** static artifact identity (PRE-2, PRE-4, PRE-5, PRE-6, PRE-7, PRE-9, PRE-10), governance/precondition state (PRE-1, PRE-3, PRE-8, PRE-11 … PRE-15, PRE-18) and the already-established execution-mode capacity (PRE-16, PRE-17) — where the mode itself is read from the DSH session runtime-context policy declaration of §6.4 and from nothing else. Hashing of the **accepted Oracle-PathF artifacts themselves** is permitted and required; hashing, opening, probing or enumerating the **target** is not.
 
 ### 13.2 Non-contradiction of PRE-2 and PRE-3
 
@@ -996,7 +1097,7 @@ To consume this authorization and invoke the Oracle, an executor needs **only**:
 2. the accepted Oracle-PathF specification and executable, at the frozen hashes of §2;
 3. the accepted control-state markers in the two active status surfaces;
 4. the frozen claim writer of §12.3;
-5. the repository working copy and an already-established viable execution/file-access mode — concretely, a session already provisioned in `full-file-access` (§6.1, `PRE-16`).
+5. the repository working copy and an already-established viable execution/file-access mode — concretely, a session whose DSH session policy declaration reports `danger-full-access` through the non-mutating channel of §6.4 (§6.1, `PRE-16`).
 
 No chat history, conversation transcript, agent memory, external testimony, clipboard content, environment variable, out-of-band note or undocumented convention may be required, consulted or trusted. If any required value is missing, the executor fails closed.
 
@@ -1102,13 +1203,15 @@ This is an **author self-audit of the design candidate**, performed before commi
 | 18 | `PRE-2` and `PRE-3` satisfiable in the state in which they are evaluated | PASS — §13.2 |
 | 19 | Written-artifact identity: this artifact carries no staged or worktree byte divergence | PASS at commit time |
 | 20 | No runtime namespace path created; no probe performed; no listener query; no Oracle invocation | PASS |
-| 21 | Concrete required execution/file-access mode stated; `workspace-write` explicitly insufficient | PASS — §6.1, `PRE-16` |
-| 22 | `PRE-16` directly evaluable by seven explicit criteria; an unverifiable mode fails closed | PASS — §6.1, §13 `PRE-16` |
-| 23 | `PRE-17` clarified as a non-probing control-state gate, satisfiable after `full-file-access` | PASS — §13 `PRE-17` |
+| 21 | Concrete required execution/file-access mode stated with the canonical DSH token `danger-full-access`; `read-only` and `workspace-write` explicitly insufficient; no normative `full-file-access` occurrence anywhere | PASS — §0 decision 13, §6.1, `PRE-16` |
+| 22 | `PRE-16` objectively and deterministically evaluable through eight explicit clauses; an unobservable or non-matching canonical token fails closed | PASS — §6.1, §6.4, §13 `PRE-16` |
+| 23 | DSH session-mode observation channel explicit, non-mutating and actually supported by recovered DSH evidence; no environment variable required or assumed; `PRE-17` satisfiable after `PRE-16` has confirmed `danger-full-access` through it | PASS — §6.4, §13 `PRE-16`, §13 `PRE-17` |
 | 24 | Corrective-successor supersession and single-budget carry-forward model coherent; no second budget, no reset, no automatic reuse | PASS — §5.5, §9.5 |
 | 25 | Recorded design findings P3-A … P3-G corrected by this revision | PASS — §5.2, §5.3, §9.1, §13, §13.2, §15, §19.4 |
 | 26 | No reactive-escalation, ACL-repair, permission-repair or retry authority created | PASS — §6.1, §6.2, §6.3, §7 |
 | 27 | `PRE-18` semantics preserved and extended with the mode-change and reactive-escalation prohibitions | PASS — §13 `PRE-18` |
+| 28 | `MODE_TOKEN_GLOBAL_NORMALIZATION = COMPLETE` — exactly one normative mode token, no second source of truth, no surviving generic mode phrase whose normative value cannot be traced to `danger-full-access` | PASS — §0 decision 13, §6.1, §6.4, §7, §13, §19.1, §23 |
+| 29 | Bounded P2 remediation binding: the rejected first corrective candidate `d895856…` / `c281f93e…` is recorded as `REQUEST_CHANGES` / P2 = 1 without being amended, revoked or relabelled; scope limited to that P2 plus the directly necessary mechanical governance; `P3-A` … `P3-G` not regressed and no substantive area reopened | PASS — §0 decisions 13, 15, §5.5 |
 
 ### 21.3 Self-audit severity
 
@@ -1142,6 +1245,22 @@ CORRECTIVE-SUCCESSOR REVISION SELF-AUDIT SEVERITY
 
 No P0, P1 or P2 condition was found in this revision. This classification is an author self-audit result and does not bind any reviewer; the qualifying third-party review is a separate, later, differently-sessioned stage (§20, §24).
 
+**Bounded P2 remediation revision self-audit (this round, author self-audit only):**
+
+```
+BOUNDED P2 REMEDIATION REVISION SELF-AUDIT SEVERITY
+  P0 = 0
+  P1 = 0
+  P2 = 0
+  P3 = 1
+```
+
+| ID | Observation | Class |
+| --- | --- | --- |
+| **P3-3** | The qualifying review of the preceding corrective candidate `d895856d2efc9683b91b182c33647efe57b01fc3` / `c281f93e6ddfe09351c435e698c5d50c3a5cfcda2053f27159ba921e2eed72eb` returned `REQUEST_CHANGES` with `P0 = 0`, `P1 = 0`, `P2 = 1`, `P3 = 4`. The sole blocking P2 was `FULL_FILE_ACCESS_MODE_IDENTITY = LABEL_PRESENT_BUT_NOT_OPERATIONALLY_VERIFIABLE` with `CORRECTED_PRE_16 = AMBIGUOUS`. This revision remediates exactly that one P2 — the canonical mode token becomes `danger-full-access` and the session-visible observation channel of §6.4 is bound — and performs only the mechanical governance/cross-reference updates directly necessary to record the remediation. The four additional P3 observations of that review caused no broader redesign; the `P3-A` … `P3-G` corrections of the preceding revision are preserved and no substantive area is reopened. | `REVIEW-FINDING REMEDIATION / BOUNDED / NONBLOCKING` |
+
+The P2 recorded above was identified by an **independent review of the previous candidate**, not by this revision's own observation, and this revision's author self-audit finds no P0, P1 or P2 condition of its own. This classification is an author self-audit result and does not bind any reviewer; the qualifying third-party review of **this** bounded remediation revision is a separate, later, differently-sessioned stage (§20, §24).
+
 ### 21.4 Recorded design-time verification of this round
 
 Performed by the design round itself, mechanically:
@@ -1158,7 +1277,7 @@ git check-attr text eol
 PATH-F RUNTIME OCCUPANCY = 0 / 11   (all eleven paths absent, by the §11 predicate)
 PATH-F CLAIM PATHS       = ABSENT (4 / 4)
 PATH-E RUNTIME OCCUPANCY = 6 / 11   (unchanged; no cleanup performed)
-corrective-successor round bounds (this revision)
+first corrective-successor round bounds (historical record of the preceding revision)
   parent governance commit             = 5fae11eefdcaddc27b4abf28d3a2258ad654d84d
   disposition commit bound             = 5fae11eefdcaddc27b4abf28d3a2258ad654d84d
   Oracle-PathF spec / script bytes+SHA = unchanged (34308 / b07a822b…, 49704 / 4c30a682…)
@@ -1166,6 +1285,19 @@ corrective-successor round bounds (this revision)
   PATH-F CLAIM PATHS                   = ABSENT (4 / 4)
   PATH-E RUNTIME OCCUPANCY             = 6 / 11   (unchanged; no cleanup performed)
   execution-mode establishments/tests  = 0   (requirement stated only; nothing established, probed or switched)
+  claims created = 0   budgets consumed = 0   Oracle invocations = 0
+bounded P2 remediation revision round bounds (this revision)
+  parent commit (first corrective candidate)  = d895856d2efc9683b91b182c33647efe57b01fc3
+  rejected candidate artifact SHA-256         = c281f93e6ddfe09351c435e698c5d50c3a5cfcda2053f27159ba921e2eed72eb
+  qualifying review verdict / severity        = REQUEST_CHANGES / P0 0 · P1 0 · P2 1 · P3 4
+  sole blocking P2 remediated                 = FULL_FILE_ACCESS_MODE_IDENTITY = LABEL_PRESENT_BUT_NOT_OPERATIONALLY_VERIFIABLE
+  canonical DSH mode token adopted            = danger-full-access
+  normative full-file-access occurrences      = 0
+  Oracle-PathF spec / script bytes+SHA        = unchanged (34308 / b07a822b…, 49704 / 4c30a682…)
+  PATH-F RUNTIME OCCUPANCY                    = 0 / 11
+  PATH-F CLAIM PATHS                          = ABSENT (4 / 4)
+  PATH-E RUNTIME OCCUPANCY                    = 6 / 11   (unchanged; no cleanup performed)
+  execution-mode establishments/tests         = 0   (requirement and observation channel stated only; nothing established, observed, probed or switched)
   claims created = 0   budgets consumed = 0   Oracle invocations = 0
 ```
 
@@ -1192,7 +1324,7 @@ PATH-F AUTHORIZATION DESIGN ROUND
   evidence / manifest / result creations = 0
   runtime namespace entries created      = 0
   ACL reads / mutations / restorations   = 0
-  execution-mode establishments / tests  = 0   (the required mode is stated only; nothing is established, probed or switched)
+  execution-mode establishments / tests  = 0   (the required canonical mode and its observation channel are stated only; nothing is established, observed, probed or switched)
   reviewed-artifact mutations            = 0
   predecessor cleanups                   = 0
   historical-lineage reopenings          = 0
@@ -1219,10 +1351,13 @@ Accepted script SHA-256                = 4c30a68204d46ffcc875265de31e55e0a8fb70b
 ORACLE-PATHF DESIGN ACCEPTANCE BOOKKEEPING = 7ad12d1d0b9727548b271981116267f76c362f48
 ORACLE-PATHF DESIGN ACCEPTANCE CONFIRMATION MATERIALIZATION = 1d06f2857840b9f4096bbedc156e3ac4c9eaddec
 ORACLE-PATHF DESIGN CONFIRMATION RECURSION = NONE
-PATH-F AUTHORIZATION DESIGN            = CORRECTIVE SUCCESSOR REVISION OF THIS LINEAGE / CANDIDATE / NOT ACCEPTED / NOT FROZEN / NOT EFFECTIVE
-PATH-F AUTHORIZATION DESIGN CANDIDATE  = the commit that introduces this corrective revision (single-parent successor of 5fae11eefdcaddc27b4abf28d3a2258ad654d84d; not embedded here by design)
-PATH-F AUTHORIZATION                   = CORRECTIVE SUCCESSOR DESIGN CANDIDATE / NOT ACCEPTED / NOT FROZEN / NOT EFFECTIVE / NOT EXECUTED
-QUALIFYING THIRD-PARTY AUTHORIZATION DESIGN REVIEW OF THIS CORRECTIVE CANDIDATE = NOT PERFORMED / REQUIRED NEXT
+PATH-F AUTHORIZATION DESIGN            = BOUNDED P2 REMEDIATION REVISION OF THIS LINEAGE / CANDIDATE / NOT ACCEPTED / NOT FROZEN / NOT EFFECTIVE
+PATH-F AUTHORIZATION DESIGN CANDIDATE  = the commit that introduces this bounded P2 remediation revision (single-parent successor of d895856d2efc9683b91b182c33647efe57b01fc3; not embedded here by design)
+PATH-F AUTHORIZATION                   = BOUNDED P2 REMEDIATION DESIGN CANDIDATE / NOT ACCEPTED / NOT FROZEN / NOT EFFECTIVE / NOT EXECUTED
+QUALIFYING THIRD-PARTY AUTHORIZATION DESIGN REVIEW OF THIS BOUNDED P2 REMEDIATION REVISION = NOT PERFORMED / REQUIRED NEXT
+PREVIOUS CORRECTIVE CANDIDATE          = d895856d2efc9683b91b182c33647efe57b01fc3
+Previous candidate artifact SHA-256    = c281f93e6ddfe09351c435e698c5d50c3a5cfcda2053f27159ba921e2eed72eb
+PREVIOUS CORRECTIVE CANDIDATE STATE    = REQUEST_CHANGES (P0 0 / P1 0 / P2 1 / P3 4) / NOT ACCEPTED / NOT FROZEN / NOT EFFECTIVE / SUCCEEDED PROSPECTIVELY BY THIS REVISION
 OLD PATH-F AUTHORIZATION (HISTORICAL)  = ed112f8c5f1e35d87092d0339698a792ce0b145a
 Old authorization artifact SHA-256     = c147af8714164dae8b81cafa4eb01945a3ceb8c74b36f0fc18fbd56db284c4de
 OLD PATH-F AUTHORIZATION EFFECTIVITY   = ACCEPTED / FROZEN / EFFECTIVE (historical; never rewritten, revoked or relabelled)
@@ -1233,7 +1368,11 @@ PRE-16 STOP BINDING                    = PRE-1 … PRE-15 PASS / PRE-16 FAIL / P
 PATHF_PRE16_STRUCTURAL_GAP             = CONFIRMED
 REMEDIATION ROUTE                      = ROUTE A / CORRECTIVE SUCCESSOR AUTHORIZATION DESIGN LIFECYCLE REQUIRED
 DISPOSITION COMMIT                     = 5fae11eefdcaddc27b4abf28d3a2258ad654d84d
-REQUIRED PATH-F OPERATIONAL EXECUTION / FILE-ACCESS MODE = full-file-access
+REQUIRED PATH-F DSH OPERATIONAL EXECUTION / FILE-ACCESS MODE = danger-full-access
+read-only                              = INSUFFICIENT FOR PATH-F OPERATIONAL EXECUTION
+DSH CANONICAL MODE VOCABULARY          = read-only | workspace-write | danger-full-access (closed)
+DSH SESSION-MODE OBSERVATION CHANNEL   = DSH `sandbox:policy` runtime-context declaration in the current session; required token exactly `danger-full-access` (§6.4)
+MODE-TOKEN GLOBAL NORMALIZATION        = COMPLETE (exactly one normative mode token; no second source of truth)
 workspace-write                        = INSUFFICIENT FOR PATH-F OPERATIONAL EXECUTION
 PROSPECTIVE EXECUTION-MODE REQUIREMENT = PERMITTED / REQUIRED
 REACTIVE ESCALATION AFTER FAILURE      = FORBIDDEN
@@ -1268,7 +1407,7 @@ PATH-D ETB SEMANTIC RESULT             = NONE
 PATH-D RETRY AUTHORITY                 = NONE
 A5E592BD BOOKKEEPING                   = HISTORICAL / NOT CONFIRMED / NOT EFFECTIVE FOR ACCEPTANCE / SUPERSEDED FOR REVIEW-AUTHORITY PURPOSES
 MODEL A                                = PRESERVED
-NEXT STAGE                             = FRESH QUALIFYING THIRD-PARTY INDEPENDENT REVIEW OF THE CORRECTIVE SUCCESSOR PATH-F ETB EXECUTION-AUTHORIZATION DESIGN CANDIDATE (DIFFERENT SESSION)
+NEXT STAGE                             = FRESH QUALIFYING THIRD-PARTY INDEPENDENT REVIEW OF THE BOUNDED P2 REMEDIATION SUCCESSOR PATH-F ETB EXECUTION-AUTHORIZATION DESIGN CANDIDATE (DIFFERENT SESSION)
 ```
 
 ---
@@ -1277,19 +1416,22 @@ NEXT STAGE                             = FRESH QUALIFYING THIRD-PARTY INDEPENDEN
 
 ```
 NEXT STAGE = FRESH QUALIFYING THIRD-PARTY INDEPENDENT REVIEW
-             OF THE CORRECTIVE SUCCESSOR PATH-F ETB EXECUTION-AUTHORIZATION DESIGN CANDIDATE
+             OF THE BOUNDED P2 REMEDIATION SUCCESSOR PATH-F ETB EXECUTION-AUTHORIZATION DESIGN CANDIDATE
 ```
 
-That review **MUST** occur in a **different agent/session** than the one that authored this corrective revision, and it is **not** performed by this round. It must state its independence declarations before any technical conclusion. At minimum it must:
+That review **MUST** occur in a **different agent/session** than the one that authored this bounded remediation revision, and it is **not** performed by this round. It must state its independence declarations before any technical conclusion. At minimum it must:
 
 1. attempt to reproduce the two blocked Path-E findings (`P2-1` unsatisfiable self-identity gate, `P2-2` contradictory effectivity gate) and confirm they are absent here;
 2. verify that §3 contains **no** requirement that Oracle-generated evidence carry frozen Path-F identities, and **no** requirement that contradicts the reserved `UNKNOWN`, and that the accepted specification's §19.3 compatibility requirement is met;
-3. verify that the ACL/execution-mode policy of §6/§7 states the required mode concretely (`full-file-access`, with `workspace-write` insufficient), authorizes no `icacls`, `Set-Acl`, ACL repair, permission normalization, mode switching or escalation-after-failure, and that `PRE-16` … `PRE-18` close the Path-E `L1`/`L2`/`L5` failure modes — including the structural gap that stopped the first Path-F operational round;
+3. verify that the ACL/execution-mode policy of §6/§7 states the required mode concretely with the canonical DSH token **`danger-full-access`** (with `read-only` and `workspace-write` insufficient and **no normative `full-file-access` occurrence anywhere**), that §6.4's session-mode observation channel is the mechanism the installed DSH harness actually publishes to a session, and that no `icacls`, `Set-Acl`, ACL repair, permission normalization, mode switching, harness per-call sandbox escalation (`sandbox_permissions`) or escalation-after-failure is authorized — and that `PRE-16` … `PRE-18` close the Path-E `L1`/`L2`/`L5` failure modes, including the structural gap that stopped the first Path-F operational round;
 4. verify that the non-consuming-failure rule of §8 has no interpretation gap and never yields re-attempt authority, and that `PRE-18` remains closed with the mode-change and reactive-escalation prohibitions added;
 5. verify that the namespace accounting rule of §14 is exact and that the occupancy is `0 / 11`;
 6. verify that the supersession and budget carry-forward model of §5.5 creates no second budget, no reset and no automatic reuse authority, and that a future claim binds the **new** accepted corrective identity and never `ed112f8c…` / `c147af87…`;
 7. verify that no fourth ETB semantic class is introduced, that control descriptors remain distinct, and that the promotion pipeline of §17.4 is intact;
-8. verify that this corrective design round created no claim, no budget, no execution authority, no execution-mode establishment and no runtime namespace entry, and that `PATH-F OPERATIONAL EXECUTION` remains `NOT STARTED`.
+8. verify that this bounded remediation design round created no claim, no budget, no execution authority, no execution-mode establishment and no runtime namespace entry, and that `PATH-F OPERATIONAL EXECUTION` remains `NOT STARTED`;
+9. verify that §6.4's channel is what the installed DSH harness actually publishes to a session (the `sandbox:policy` runtime-context declaration), that no shell environment variable and no ACL read is required or assumed anywhere in the artifact, and that `PRE-16` is fully evaluable through it with zero filesystem writes, zero claim-path accesses, zero governed-path probes, zero ACL operations, zero permission repairs and zero escalation;
+10. verify `MODE_TOKEN_GLOBAL_NORMALIZATION = COMPLETE` — exactly one normative mode token, no surviving generic mode phrase whose normative value cannot be traced directly to `danger-full-access`, and the single retained historical mention of the superseded token explicitly qualified as `HISTORICAL / DESCRIPTIVE ONLY / NOT A DSH MODE TOKEN / NOT ACCEPTABLE AS PRE-16 EVIDENCE`;
+11. verify that this bounded remediation revision did not regress `P3-A` … `P3-G` and did not reopen the budget model, the runtime namespace, the claim model, the provenance model or the result boundary.
 
 **This round does NOT perform that review, does NOT bookkeep an acceptance, does NOT confirm the authorization, does NOT accept or freeze itself, and does NOT execute Path-F.**
 
