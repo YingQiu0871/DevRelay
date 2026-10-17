@@ -12,8 +12,9 @@ NOT ACCEPTANCE / NOT RELEASE / ONE-SHOT**
 | Frozen oracle | `docs/v0.3/V03E_REAL_RECOVERY_SMOKE_ORACLE_R2.md`, SHA-256 `60e0613a2810b70dc58d7235723044fbc99e2ca2001650c17a6e7097b7cd7289` |
 | Driver | `docs/v0.3/V03E_REAL_RECOVERY_SMOKE_DRIVER_R2.py`, SHA-256 `3ce16c502788f83e5a0a9264b7c527ed4fe401a9c054cc416df379d307ba6bf0` (committed with this record; plumbing-checked with no model-bearing call before the run) |
 | Covers code | the mandatory fail-closed recovery core as already authorized at `f8f52a2` / remediated in `a7fe160`; **no source change** is authorized by this record |
-| Use | **one-shot** — one corrective smoke; spent on execution |
+| Use | **one-shot** — one corrective smoke; **spent** (executed 2026-10-17, see §4) |
 | Decision | **APPROVED** |
+| Spent on | run `DR-ea1c53353d82430e97e3ce9365922b49`; recorded `PASS — V0.3-E REAL CRASH-AND-RECOVERY SMOKE (R2)` in `docs/v0.3/V03E_REAL_RECOVERY_SMOKE_RESULT_R2.md`; not acceptance |
 
 ## 1. Scope authorized
 

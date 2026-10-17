@@ -1,25 +1,24 @@
 # DevRelay v0.3-E — implementation report (mandatory fail-closed core)
 
 Status: **IMPLEMENTED / OFFLINE TESTS PASS / ADVERSARIALLY REVIEWED (findings
-remediated) / AUTHORIZED (draft ratification + one real smoke) / SMOKE EXECUTED →
-FAIL PER THE PRECOMMITTED ORACLE (oracle measurement defect, product criteria
-observed pass) / NOT ACCEPTED**.
+remediated) / AUTHORIZED / REAL SMOKE EXECUTED (R1 FAIL per oracle, R2 PASS under
+the corrective oracle) / NOT ACCEPTED**.
 
-> **Authorization status — read this first.** The authorization now exists:
-> `V03E_IMPLEMENTATION_AUTHORIZATION.md` (issued by the workspace owner via
-> `m01693`, baseline `36fe9c5`, covering the remediated core in `a7fe160`)
-> ratified this implementation and authorized exactly one real
-> crash-and-recovery smoke under the frozen oracle. That smoke was executed once
-> on 2026-10-17 and its verdict is **FAIL per the precommitted oracle**: the
-> oracle's submission-count definition counts the non-submitting ownership-probe
-> GET alongside the one `send_prompt` POST, so it reported `2` ledger records
-> against `1` server process line. The diagnosis, the evidence and the offline
-> reproduction are in `docs/v0.3/V03E_REAL_RECOVERY_SMOKE_RESULT.md`; the
-> authorization is spent, the oracle was not patched and the run was not
-> repeated. The implementation itself remains **NOT ACCEPTED**: no acceptance row
-> is marked COVERED, no stage status is advanced, and a corrective oracle plus a
-> fresh authorization (and the separately authorized independent acceptance
-> review) are still required.
+> **Authorization status — read this first.** Work authorization exists:
+> `V03E_IMPLEMENTATION_AUTHORIZATION.md` (owner instruction `m01693`, baseline
+> `36fe9c5`, ratifying the core as remediated in `a7fe160`), and the corrective
+> `V03E_REAL_RECOVERY_SMOKE_AUTHORIZATION_R2.md` (owner instruction `m02306`,
+> baseline `312dd74`). Revision 1 of the smoke was executed once and recorded
+> **FAIL** per its frozen oracle (its count rule included the non-submitting
+> ownership-probe GET, and its driver never asserted the rule); its authorization is
+> spent. Revision 2 — corrective oracle and driver, with an explicit
+> oracle→driver conformance table — was executed once under its own one-shot
+> authorization and recorded
+> `PASS — V0.3-E REAL CRASH-AND-RECOVERY SMOKE (R2)`
+> (`docs/v0.3/V03E_REAL_RECOVERY_SMOKE_RESULT_R2.md`). The implementation remains
+> **NOT ACCEPTED**: no acceptance row is marked COVERED, no stage status is
+> advanced, and the separately authorized independent acceptance review has not
+> yet decided.
 
 This report records what the v0.3-E implementation actually is, on branch
 `v0.3-e-recovery-reconciliation`, against the design freeze in
@@ -54,9 +53,10 @@ disabled behind its unsatisfied platform proofs.
 | Retry / resume / resubmission / session adoption / replay of an interrupted turn | **absent by design** |
 | Independent adversarial review of this draft (findings remediated) | done — `docs/v0.3/V03E_REVIEW.md`; not acceptance |
 | Implementation authorization (draft ratification + one real smoke) | **done** — `docs/v0.3/V03E_IMPLEMENTATION_AUTHORIZATION.md`, spent on execution |
-| Real crash-and-recovery smoke | **executed once → FAIL per the precommitted oracle** — the count rule includes the ownership-probe GET; product criteria observed pass; `docs/v0.3/V03E_REAL_RECOVERY_SMOKE_RESULT.md` |
-| Corrective oracle + fresh authorization + rerun | **not authorized** |
-| Acceptance review, acceptance bookkeeping | **not done** |
+| Real crash-and-recovery smoke, revision 1 | **executed once → FAIL per the precommitted oracle** — the count rule includes the ownership-probe GET; product criteria observed pass; `docs/v0.3/V03E_REAL_RECOVERY_SMOKE_RESULT.md` |
+| Corrective oracle + driver + fresh authorization (revision 2) | **done** — `V03E_REAL_RECOVERY_SMOKE_ORACLE_R2.md`, `V03E_REAL_RECOVERY_SMOKE_DRIVER_R2.py`, `V03E_REAL_RECOVERY_SMOKE_AUTHORIZATION_R2.md` |
+| Real crash-and-recovery smoke, revision 2 | **executed once → PASS** under the corrective oracle (`PASS — V0.3-E REAL CRASH-AND-RECOVERY SMOKE (R2)`); 14/14 oracle→driver conformance rules asserted and passing; `docs/v0.3/V03E_REAL_RECOVERY_SMOKE_RESULT_R2.md` |
+| Acceptance review, acceptance bookkeeping | **not done** — requested next; no row COVERED |
 
 ## 2. Source changes
 
@@ -256,33 +256,41 @@ regression; both were observed on this machine):
 - Full suite re-run on the committed tree with an isolated `TEMP`/`TMP`/`TMPDIR`
   outside the repository — 66 files / 1236 tests, exit code 0.
 
-Real execution (authorized, one shot, executed 2026-10-17):
+Real execution (authorized, one shot each, executed 2026-10-17):
 
-- `docs/v0.3/V03E_REAL_RECOVERY_SMOKE_DRIVER.py --plumbing` — PASS (no
-  model-bearing call), evidence
-  `C:\Users\1\AppData\Local\Temp\devrelay-recovery-smoke-20261017T175552Z\evidence`.
-- The authorized smoke — driver exit 0, run `DR-7248335182ec4207adb8d9d31b397287`.
-  Phases S0–S8 met their criteria except the oracle's **submission-count** rule:
-  `ledger_send_prompt = 2` (`OC-0004` probe GET, `OC-0007` POST) vs
-  `log_message_process = 1`, `agree: false`. Formal verdict **FAIL** under the
-  frozen oracle; the product made exactly one model-bearing submission. Full
-  evidence, hashes and the offline reproduction:
+- Revision 1: `V03E_REAL_RECOVERY_SMOKE_DRIVER.py --plumbing` PASS; the authorized
+  smoke ran (`DR-7248335182ec4207adb8d9d31b397287`) and is recorded **FAIL** under
+  its frozen oracle — `ledger_send_prompt = 2` (`OC-0004` probe GET, `OC-0007`
+  POST) vs `log_message_process = 1`. Evidence and diagnosis:
   `docs/v0.3/V03E_REAL_RECOVERY_SMOKE_RESULT.md`.
+- Revision 2: `V03E_REAL_RECOVERY_SMOKE_DRIVER_R2.py --plumbing` PASS (no
+  model-bearing call), evidence
+  `C:\Users\1\AppData\Local\Temp\devrelay-recovery-smoke-20261017T180533Z\evidence`.
+  The authorized corrective smoke ran once (`DR-ea1c53353d82430e97e3ce9365922b49`)
+  under oracle R2 and printed `PASS — V0.3-E REAL CRASH-AND-RECOVERY SMOKE (R2)`;
+  S0–S8 plus the conformance phase all pass, the count rule holds
+  (`posts == message=process == 1`, one probe GET recorded separately), the remote
+  assistant reply that existed at kill was not adopted or persisted, and 14/14
+  conformance rules map to asserted criteria. Evidence, hashes and the phase table:
+  `docs/v0.3/V03E_REAL_RECOVERY_SMOKE_RESULT_R2.md`.
 
 ## 7. What this report does not claim
 
 - No authorization gap remains for the work described above — the draft was
-  ratified by `V03E_IMPLEMENTATION_AUTHORIZATION.md` — but that authorization is
-  **spent** and the smoke it governed ended in a formal **FAIL** (measurement
-  defect in the oracle, not a product defect). No rerun is authorized.
+  ratified by `V03E_IMPLEMENTATION_AUTHORIZATION.md` and the corrective smoke by
+  `V03E_REAL_RECOVERY_SMOKE_AUTHORIZATION_R2.md`; both are **spent**. Revision 1
+  ended in a formal **FAIL** (measurement defect in the oracle and in the driver's
+  assertion coverage, not a product defect); revision 2 was executed once and
+  printed **PASS** under the corrective oracle. No further run is authorized.
 - No independent *acceptance* review. An adversarial review of the draft was
   performed and its findings were remediated (`docs/v0.3/V03E_REVIEW.md`), but it
   was performed by a review-only subagent on the same tree — it is not the
   separately authorized review that acceptance would require, and it marks no
-  acceptance row.
-- No **passing** real crash-and-recover execution against a real OpenCode server:
-  one was executed and it is recorded as FAIL; the product evidence it produced
-  is reported as evidence, not as acceptance.
+  acceptance row. The acceptance review is requested next, not yet performed.
+- A **passing** real crash-and-recover execution now exists (revision 2, evidence
+  cited above), but it is reported as **evidence**, not as acceptance; it covers
+  the mandatory local core only and says nothing about adoption, remote
+  correlation or the unsatisfied platform gates.
 - No acceptance row of `docs/v0.3/V03E_ACCEPTANCE.md` is marked COVERED by this
   report; that matrix remains the acceptance authority's document.
 - No tag, release, push or merge; package version stays `0.1.0` and the
