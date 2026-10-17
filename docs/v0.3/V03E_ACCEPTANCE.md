@@ -4,12 +4,20 @@ Status: **DESIGN FROZEN / NOT ACCEPTED / UNRELEASED**
 
 > **Implementation status (branch `v0.3-e-recovery-reconciliation`):** the
 > mandatory fail-closed core has since been implemented and is covered by offline
-> tests — see `docs/v0.3/V03E_IMPLEMENTATION.md`.  This matrix remains the
-> acceptance authority's document: **no row below is marked COVERED** by that
-> implementation, `adopt_completed_turn` stays **DISABLED**, and the platform
-> proof gate is unchanged (G0.4 authoritative FAIL / P4 UNPROVEN; G0.5, G1, G2 not
-> run).  No independent *acceptance* review and no real recovery smoke have
-> occurred; the adversarial review of the unauthorized draft (findings remediated)
+> tests — see `docs/v0.3/V03E_IMPLEMENTATION.md`.  The implementation was
+> **authorized** (draft ratification + exactly one real smoke,
+> `docs/v0.3/V03E_IMPLEMENTATION_AUTHORIZATION.md`, now spent) and that one real
+> crash-and-recovery smoke was executed on 2026-10-17: its verdict is **FAIL per
+> the precommitted oracle**, because the oracle's submission-count rule counted
+> the non-submitting ownership-probe GET alongside the single `send_prompt` POST
+> (2 vs 1).  Every product criterion was observed to pass, the defect is recorded
+> (not patched) in `docs/v0.3/V03E_REAL_RECOVERY_SMOKE_RESULT.md`, no rerun is
+> authorized, and a corrective oracle plus a fresh authorization are required.
+> This matrix remains the acceptance authority's document: **no row below is
+> marked COVERED** by that implementation or smoke, `adopt_completed_turn` stays
+> **DISABLED**, and the platform proof gate is unchanged (G0.4 authoritative FAIL
+> / P4 UNPROVEN; G0.5, G1, G2 not run).  No independent *acceptance* review has
+> occurred; the adversarial review of the draft (findings remediated)
 > is recorded in `docs/v0.3/V03E_REVIEW.md` and is **not** an acceptance review.
 
 Independent design-freeze review of candidate

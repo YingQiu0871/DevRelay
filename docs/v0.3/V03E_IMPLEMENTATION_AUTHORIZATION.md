@@ -12,8 +12,9 @@ NOT ACCEPTANCE / NOT RELEASE**
 | Covers code | the mandatory fail-closed recovery core as remediated in `a7fe160` (`src/devrelay/orchestration/{recovery,ledger_reader,service,invariants,models,state_machine}.py`, `src/devrelay/mcp/{tools,server}.py`, `src/devrelay/errors.py`) |
 | Frozen oracle | `docs/v0.3/V03E_REAL_RECOVERY_SMOKE_ORACLE.md`, SHA-256 `ac9e0318b9257691067ccc6cfb669516dbb6d64d5ee56b9d5eaad46f5ac9df6c` |
 | Driver | `docs/v0.3/V03E_REAL_RECOVERY_SMOKE_DRIVER.py`, SHA-256 `da7d21357adfba5094504a944ce5f1e42310a5abea0508f1d483f80264152b37` (committed with this record; plumbing-checked with no model-bearing call before the run) |
-| Use | **one-shot** — one real crash-and-recovery smoke; spent on execution |
+| Use | **one-shot** — one real crash-and-recovery smoke; **spent** (executed 2026-10-17, see "Spent on") |
 | Decision | **APPROVED** |
+| Spent on | 2026-10-17, run `DR-7248335182ec4207adb8d9d31b397287`; result `docs/v0.3/V03E_REAL_RECOVERY_SMOKE_RESULT.md` — formal verdict **FAIL** (measurement defect in the oracle's submission-count rule; product criteria observed pass); not accepted |
 
 ## 1. Scope authorized
 
@@ -52,6 +53,14 @@ Once the smoke executes, this authorization is **spent**:
 ```
 AUTHORIZATION SPENT ON EXECUTION — NOT REUSABLE
 ```
+
+It was spent on 2026-10-17 by the single smoke recorded in
+`docs/v0.3/V03E_REAL_RECOVERY_SMOKE_RESULT.md` (run
+`DR-7248335182ec4207adb8d9d31b397287`, formal verdict FAIL under the frozen
+oracle: the oracle's submission-count rule counted the ownership-probe GET next
+to the single `send_prompt` POST; the product made exactly one submission, and
+the defect is recorded in the result document rather than patched into the
+oracle).  No second run was performed and none is authorized.
 
 It stays in the tree as a permanent record.  It must not be reused, re-dated or
 silently extended; a further real execution requires a new oracle and a new
