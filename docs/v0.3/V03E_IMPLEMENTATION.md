@@ -2,6 +2,19 @@
 
 Status: **IMPLEMENTED / OFFLINE TESTS PASS / NOT ACCEPTED / NOT SMOKED**.
 
+> **Authorization status — read this first.** The governance chain contains **no
+> implementation authorization** for the mandatory core: `V03E_SPEC.md` §1,
+> `V03_PLAN.md`, `V03E_ACCEPTANCE.md` and `V03E_G0_1_P7_PROOF.md` all state that
+> implementation remains **NOT AUTHORIZED until a separately issued
+> implementation authorization**, and no such record exists in
+> `docs/v0.3/`. The work recorded below was therefore performed **without that
+> authorization**: it is an **unauthorized draft implementation kept for review**,
+> not the authorized v0.3-E implementation. It changes nothing in the acceptance
+> chain — no acceptance row is marked COVERED, no stage status is advanced, and
+> an implementation authorization (plus the independent review and real smoke it
+> would unlock) is still required before any of this work can be treated as the
+> authorized implementation, let alone accepted.
+
 This report records what the v0.3-E implementation actually is, on branch
 `v0.3-e-recovery-reconciliation`, against the design freeze in
 `docs/v0.3/V03E_SPEC.md` and the design matrix `docs/v0.3/V03E_ACCEPTANCE.md`.
@@ -200,6 +213,8 @@ regression; both were observed on this machine):
 
 ## 7. What this report does not claim
 
+- No implementation authorization (see the blockquote at the top of this file:
+  this is an unauthorized draft, and the authorization is still a prerequisite).
 - No independent review of this implementation.
 - No real crash-and-recover execution against a real OpenCode server; all
   evidence above is offline and deterministic.
