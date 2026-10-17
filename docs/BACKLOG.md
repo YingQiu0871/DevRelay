@@ -248,7 +248,7 @@ DevRelay defect and not a backlog item.
 | Field | Value |
 | --- | --- |
 | Status | **BLOCKED (by design)** — the mandatory fail-closed core is implemented (offline tests only); the optional adoption capability is not |
-| Implemented | read-only reconciliation and one-shot `mark_unrecoverable` (see `docs/v0.3/V03E_IMPLEMENTATION.md`), with `ADOPTION_CAPABILITY_ENABLED = False` and the MCP surface refusing `adopt_completed_turn` before any write |
+| Implemented | read-only local reconciliation and one-shot `mark_unrecoverable` (see `docs/v0.3/V03E_IMPLEMENTATION.md`), with `ADOPTION_CAPABILITY_ENABLED = False` and the MCP surface refusing `adopt_completed_turn` before any write; adversarial review performed and its findings remediated (`docs/v0.3/V03E_REVIEW.md`) |
 | Why adoption is blocked | the design freeze requires the identity/ownership veto bound (G0.5 / P6) together with the remote enabling proofs P1/P2/P3/P8 before adoption may ever be authorized; G0.4 is an authoritative FAIL / P4 UNPROVEN and G0.5, G1, G2 were not run |
-| Not done | independent review of the implementation, real crash-and-recover execution, any acceptance bookkeeping; no v0.3-E row of `V03E_ACCEPTANCE.md` is marked COVERED |
+| Not done | independent *acceptance* review, real crash-and-recover execution, any acceptance bookkeeping; no v0.3-E row of `V03E_ACCEPTANCE.md` is marked COVERED |
 | Next step | an authorized real-recovery round plus the outstanding platform proofs; enabling adoption requires new proofs and a new authorization, not a code flip |

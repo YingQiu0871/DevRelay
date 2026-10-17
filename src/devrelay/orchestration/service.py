@@ -526,32 +526,32 @@ class OrchestrationService:
     # ------------------------------------------------------------------
     # v0.3-E: fail-closed recovery (read-only reconcile, single resolution)
     # ------------------------------------------------------------------
-    def _collect_recovery_evidence(
+    def _local_evidence(
         self, run: OrchestrationRun, attempt: TurnRecord
-    ) -> tuple[ledger_reader.LedgerScan | None, recovery.RemoteMatch]:
-        """Best-effort, read-only evidence: gaps are reported, never papered over."""
-        scan: ledger_reader.LedgerScan | None = None
+    ) -> ledger_reader.LedgerScan:
+        """Read-only local accounting evidence.
+
+        Nothing here touches the network: on this bridge every HTTP call is
+        ledger-accounted, so a session-history read would itself append call
+        records and ``sequence.json`` to the surface a "read-only" reconciliation
+        claims not to mutate.  The mandatory core is therefore strictly local; the
+        remote half exists only for the gated adoption capability.
+        """
         try:
             identity = recovery.attempt_identity(run, attempt)
-            scan = ledger_reader.scan_ledger(
+            return ledger_reader.scan_ledger(
                 self.store.devrelay_dir, identity, floor=recovery.previous_floor(run)
             )
-        except Exception:  # noqa: BLE001 - evidence collection never decides a resolution
-            scan = None
-        try:
-            session_id = (
-                run.implementer_session_id
-                if attempt.role == "implementer"
-                else run.reviewer_session_id
+        except Exception as exc:  # noqa: BLE001 - evidence collection never decides a resolution
+            # Never paper the failure over with an empty ledger section: an
+            # unscannable accounting surface is an evidence gap with a reason.
+            return ledger_reader.LedgerScan(
+                outcome=ledger_reader.OUTCOME_GAP,
+                gap_reason=(
+                    "the local accounting ledger could not be scanned "
+                    f"({type(exc).__name__})"
+                ),
             )
-            result = self._bridge().read_messages(session_id)
-            remote = recovery.match_remote_turn(result, attempt)
-        except Exception:  # noqa: BLE001 - the session history is evidence, not authority
-            remote = recovery.RemoteMatch(
-                recovery.REMOTE_GAP,
-                gap_reason="the bounded session-history read failed",
-            )
-        return scan, remote
 
     def _route_drift(self, run: OrchestrationRun) -> str:
         """Report-only drift check (never blocks, never rewrites the snapshot)."""
@@ -569,23 +569,31 @@ class OrchestrationService:
         return ""
 
     def reconcile_run(self, run_id: object) -> dict[str, object]:
-        """Read-only recovery evidence.  Never writes, submits, retries or resumes."""
+        """Read-only recovery evidence.  Never writes, submits, retries or resumes.
+
+        Legal for any non-terminal v2 document (a v1 document gets the frozen
+        v0.3-D report of ``V03E_SPEC.md`` §10); a terminal run is refused locally,
+        because there is nothing left to recover and a report could only invite a
+        retry the fail-closed contract forbids.  The action is strictly local: it
+        performs no provider call, so the durable surface stays byte-identical.
+        """
         run = self.store.load(run_id)
         if run.schema_version < 2:
             return recovery.reconcile_report(run, v1_frozen=True)
+        if run.terminal:
+            raise OrchestrationRecoveryUnsupportedError(
+                f"run {run.run_id} is terminal ({run.state.value}): reconcile is "
+                "legal only for non-terminal v2 documents; a terminal run is never "
+                "reopened or recovered"
+            )
         attempt = run.in_flight_turn or (
             run.recovery.attempt if run.recovery is not None else None
         )
         scan: ledger_reader.LedgerScan | None = None
-        remote: recovery.RemoteMatch | None = None
-        if attempt is not None and run.state in (
-            RunState.READY_IMPLEMENTER,
-            RunState.READY_REVIEWER,
-            RunState.RECOVERY_REQUIRED,
-        ):
-            scan, remote = self._collect_recovery_evidence(run, attempt)
+        if attempt is not None:
+            scan = self._local_evidence(run, attempt)
         return recovery.reconcile_report(
-            run, ledger_scan=scan, remote=remote, route_drift=self._route_drift(run)
+            run, ledger_scan=scan, route_drift=self._route_drift(run)
         )
 
     def resolve_recovery(self, run_id: object, resolution: object) -> OrchestrationOutcome:
@@ -647,14 +655,17 @@ class OrchestrationService:
             raise OrchestrationInvalidTransitionError("no interrupted turn to materialize")
         entry_state = run.state
         reason = recovery.infer_recovery_reason(attempt)
-        scan, remote = self._collect_recovery_evidence(run, attempt)
+        scan = self._local_evidence(run, attempt)
         evidence, frozen = recovery.build_record(
             run,
             attempt,
             entry_state=entry_state,
             reason=reason,
             ledger_scan=scan,
-            remote=remote,
+            remote=recovery.RemoteMatch(
+                recovery.REMOTE_GAP,
+                gap_reason=recovery.REMOTE_NOT_READ_REASON,
+            ),
         )
         run.in_flight_turn = None
         run.recovery = RecoveryRecord(

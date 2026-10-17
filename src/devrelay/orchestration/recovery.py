@@ -53,6 +53,17 @@ REMOTE_EXACTLY_ONE = "exactly_one_match"
 REMOTE_NO_MATCH_IN_WINDOW = "no_match_in_window"
 REMOTE_GAP = "evidence_gap"
 
+#: The mandatory fail-closed core is **local-only**: it never reads session
+#: history, because every OpenCode HTTP call on this bridge is ledger-accounted
+#: and a "read-only" reconciliation must leave the eligible surface byte-identical.
+#: Remote correlation belongs to the gated adoption capability (still disabled) and
+#: requires its own authorization before it is wired in.
+REMOTE_NOT_READ_REASON = (
+    "the local recovery surface reads no session history (it performs no provider "
+    "call and leaves the durable surface untouched); remote correlation belongs to "
+    "the gated adoption capability, which is disabled"
+)
+
 
 @dataclass(frozen=True)
 class RemoteMatch:
@@ -84,7 +95,7 @@ def infer_recovery_reason(attempt: TurnRecord) -> str:
 def frozen_attempt(attempt: TurnRecord, reason: str) -> TurnRecord:
     """Freeze an interrupted intent as a finished, failed turn record."""
     if reason not in RECOVERY_REASONS:
-        reason = "turn_interrupted"
+        raise ValueError(f"unknown recovery reason {reason!r}")
     return attempt.model_copy(
         update={
             "outcome": TurnOutcomeState.BLOCKED.value,
@@ -103,7 +114,7 @@ def previous_floor(run: OrchestrationRun) -> str:
     call_ids = [
         call_id for turn in run.turns for call_id in (turn.call_ids or [])
     ]
-    return ledger_reader.newest_call_id(call_ids)
+    return ledger_reader.newest_call_id(*call_ids)
 
 
 def attempt_identity(run: OrchestrationRun, attempt: TurnRecord) -> LedgerIdentity:
@@ -268,6 +279,119 @@ def build_record(
     return evidence, frozen_attempt(attempt, reason)
 
 
+def _adoption_checklist(
+    run: OrchestrationRun,
+    attempt: TurnRecord | None,
+    ledger_part: dict[str, object],
+    route_drift: str,
+    *,
+    v1_frozen: bool,
+    resolved: bool,
+) -> tuple[list[dict[str, str]], list[str]]:
+    """The per-item adoption checklist (``V03E_SPEC.md`` §11/§21) and blockers.
+
+    Statuses are exactly ``pass`` / ``fail`` / ``unknown``: no partial credit and no
+    "likely" verdict.  Nothing here enables adoption - ``ADOPTION_CAPABILITY_ENABLED``
+    is ``False`` and the resolve action refuses it before any write - but the report
+    must state *why*, item by item, instead of leaving the operator to guess.
+    """
+    checklist: list[dict[str, str]] = []
+
+    def item(name: str, status: str, detail: str) -> None:
+        checklist.append({"item": name, "status": status, "detail": detail})
+
+    item(
+        "document",
+        "unknown" if v1_frozen else "pass",
+        (
+            "frozen v0.3-D (v1) document: the recovery protocol does not apply"
+            if v1_frozen
+            else f"v{run.schema_version} document passed the strict reader"
+        ),
+    )
+    item(
+        "attempt identity",
+        "pass" if attempt is not None and attempt.prompt_sha256 else "unknown",
+        (
+            "the interrupted attempt captured a prompt digest and length"
+            if attempt is not None and attempt.prompt_sha256
+            else "no interrupted or materialized attempt to identify"
+        ),
+    )
+
+    outcome = str(ledger_part["outcome"])
+    if outcome == ledger_reader.OUTCOME_EXACTLY_ONE:
+        attribution = ("pass", f"exactly one ledger record ({ledger_part['call_id']})")
+    elif outcome == ledger_reader.OUTCOME_MULTIPLE:
+        attribution = (
+            "fail",
+            f"{ledger_part['candidate_count']} ledger records match: the submission "
+            "cannot be attributed to one",
+        )
+    else:
+        attribution = (
+            "unknown",
+            str(ledger_part["gap_reason"]) or "no proven interval for the attempt",
+        )
+    item("ledger attribution", *attribution)
+
+    settled = (
+        str(ledger_part["state"]) == "COMPLETED"
+        and ledger_part["http_status"] is not None
+        and 200 <= int(ledger_part["http_status"]) < 300
+        and str(ledger_part["response_media_type"]).startswith("application/json")
+        and not bool(ledger_part["submission_uncertain"])
+    )
+    item(
+        "ledger settlement",
+        "pass" if settled else ("fail" if outcome == ledger_reader.OUTCOME_EXACTLY_ONE else "unknown"),
+        (
+            "the one matching record is settled COMPLETED with a 2xx JSON reply"
+            if settled
+            else "no settled COMPLETED/2xx/JSON record for this attempt"
+        ),
+    )
+    item("remote correlation", "unknown", REMOTE_NOT_READ_REASON)
+    item(
+        "route stability",
+        "fail" if route_drift else "pass",
+        route_drift or "both role routes still match the captured snapshot",
+    )
+    item(
+        "resolution state",
+        "fail" if resolved else "pass",
+        "the recovery record is already resolved"
+        if resolved
+        else "no resolution has been applied yet",
+    )
+    item(
+        "adoption capability",
+        "fail" if not ADOPTION_CAPABILITY_ENABLED else "pass",
+        ADOPTION_DISABLED_REASON
+        if not ADOPTION_CAPABILITY_ENABLED
+        else "the capability is enabled in this build",
+    )
+    item(
+        "platform proofs",
+        "unknown",
+        "the adoption-enabling platform proofs (G0.5/P6, G1/G2 with P1/P2/P3/P8) "
+        "have not passed; G0.4 is an authoritative FAIL / P4 UNPROVEN",
+    )
+
+    blockers: list[str] = []
+    if not ADOPTION_CAPABILITY_ENABLED:
+        blockers.append(f"adoption is disabled: {ADOPTION_DISABLED_REASON}")
+    for entry in checklist:
+        if entry["status"] != "pass":
+            blockers.append(f"{entry['item']}: {entry['detail']}")
+    if v1_frozen:
+        blockers.append(
+            "this is a frozen v1 document: the only recovery action is the next "
+            "mutating phase action failing it closed as BLOCKED/turn_interrupted"
+        )
+    return checklist, blockers
+
+
 def reconcile_report(
     run: OrchestrationRun,
     *,
@@ -332,13 +456,18 @@ def reconcile_report(
             "v1 (frozen v0.3-D) documents have no recovery protocol; no recovery "
             "evidence is collected or acted upon for them"
         )
+    elif ledger_scan is None:
+        ledger_part["gap_reason"] = (
+            "no turn to attribute: the run has no interrupted or materialized "
+            "attempt, so no ledger interval is claimed"
+        )
     if remote is None:
         remote_part: dict[str, object] = {
             "outcome": REMOTE_GAP,
             "message_id": "",
             "role": "",
             "created_at": "",
-            "gap_reason": "the session history was not read",
+            "gap_reason": REMOTE_NOT_READ_REASON,
         }
     else:
         remote_part = {
@@ -349,6 +478,15 @@ def reconcile_report(
             "gap_reason": remote.gap_reason,
         }
     summary = run.summary()
+    resolved = recovery is not None and bool(recovery.resolution)
+    checklist, blockers = _adoption_checklist(
+        run,
+        attempt,
+        ledger_part,
+        route_drift,
+        v1_frozen=v1_frozen,
+        resolved=resolved,
+    )
     return {
         "run_id": run.run_id,
         "schema_version": run.schema_version,
@@ -386,6 +524,8 @@ def reconcile_report(
         },
         "legal_next_actions": summary.get("legal_next_actions", []),
         "submission": {"submitted_by_recovery": False},
+        "checklist": checklist,
+        "blockers": blockers,
         "note": (
             "v1 document: the frozen v0.3-D contract applies; the next mutating "
             "action fails the run closed as BLOCKED/turn_interrupted and the "

@@ -8,7 +8,9 @@ Status: **DESIGN FROZEN / NOT ACCEPTED / UNRELEASED**
 > acceptance authority's document: **no row below is marked COVERED** by that
 > implementation, `adopt_completed_turn` stays **DISABLED**, and the platform
 > proof gate is unchanged (G0.4 authoritative FAIL / P4 UNPROVEN; G0.5, G1, G2 not
-> run).  No independent review and no real recovery smoke have occurred.
+> run).  No independent *acceptance* review and no real recovery smoke have
+> occurred; the adversarial review of the unauthorized draft (findings remediated)
+> is recorded in `docs/v0.3/V03E_REVIEW.md` and is **not** an acceptance review.
 
 Independent design-freeze review of candidate
 `9f4a01804b9affe8938a272553df345b5a60aeed`: **P0 = 0, P1 = 0, P2 = 0**, F1–F12

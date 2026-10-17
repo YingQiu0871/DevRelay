@@ -7,6 +7,7 @@ being recovered is exactly the one the service durably committed.
 
 from __future__ import annotations
 
+import hashlib
 from pathlib import Path
 
 import pytest
@@ -59,6 +60,22 @@ def crashed_run(tmp_path: Path, *, on_post: int = 1, max_cycles: int = 1):
 
 def document_bytes(ws: Path, run_id: str) -> bytes:
     return state_path(ws, run_id).read_bytes()
+
+
+def tree_snapshot(ws: Path) -> dict[str, str]:
+    """Every durable file under ``.devrelay`` with its SHA-256.
+
+    A "read-only" tool must leave this *exactly* equal - including the accounting
+    ledger and its call sequence, which a session-history read would otherwise
+    append to.
+    """
+    base = ws / ".devrelay"
+    snapshot: dict[str, str] = {}
+    for path in sorted(base.rglob("*")):
+        if path.is_file():
+            digest = hashlib.sha256(path.read_bytes()).hexdigest()
+            snapshot[str(path.relative_to(base))] = digest
+    return snapshot
 
 
 def resolve(server, run_id: str, resolution: str):
@@ -122,6 +139,7 @@ def test_reconcile_is_read_only_and_reports_the_honest_evidence(
     harness, run_id = crashed_run(tmp_path)
     before = document_bytes(harness.ws, run_id)
     posts = prompt_posts(harness.stub)
+    durable_before = tree_snapshot(harness.ws)
 
     envelope = reconcile(harness.server, run_id)
     assert envelope["ok"] is True, envelope
@@ -143,13 +161,30 @@ def test_reconcile_is_read_only_and_reports_the_honest_evidence(
         "evidence_gap",
         "multiple_matches",
     }
+    # The mandatory core is local-only: no session history is read, because an
+    # OpenCode read is ledger-accounted and would mutate the surface below.
+    assert data["remote"]["outcome"] == "evidence_gap"
+    assert data["remote"]["gap_reason"] == recovery.REMOTE_NOT_READ_REASON
     assert data["budget"]["turn_attempts"] == 1
     assert data["budget"]["model_turns_used"] == 1
     assert data["submission"]["submitted_by_recovery"] is False
     assert data["legal_next_actions"] == ["devrelay_resolve_recovery"]
     assert "never" in data["note"] or "read-only" in data["note"]
+    checklist = data["checklist"]
+    assert checklist, "the report carries the per-item adoption checklist"
+    assert {(entry["item"], entry["status"]) for entry in checklist} >= {
+        ("ledger attribution", "pass"),
+        ("adoption capability", "fail"),
+        ("remote correlation", "unknown"),
+    }
+    assert all(entry["status"] in {"pass", "fail", "unknown"} for entry in checklist)
+    assert data["blockers"], "a disabled capability must be reported as a blocker"
+    assert any("adoption is disabled" in line for line in data["blockers"])
 
     assert document_bytes(harness.ws, run_id) == before, "reconcile never writes"
+    assert tree_snapshot(harness.ws) == durable_before, (
+        "reconcile is byte-identical: no ledger append, no sequence rewrite, no record"
+    )
     assert prompt_posts(harness.stub) == posts, "reconcile never submits"
 
     # what the durable document says is what the report says
@@ -182,6 +217,11 @@ def test_mark_unrecoverable_materializes_exactly_one_blocked_turn(tmp_path: Path
     harness, run_id = crashed_run(tmp_path)
     posts = prompt_posts(harness.stub)
     before = raw_payload(harness.ws, run_id)
+    accounting_before = {
+        key: value
+        for key, value in tree_snapshot(harness.ws).items()
+        if key.startswith("opencode/")
+    }
 
     envelope = resolve(harness.server, run_id, "mark_unrecoverable")
     assert envelope["ok"] is True, envelope
@@ -221,6 +261,15 @@ def test_mark_unrecoverable_materializes_exactly_one_blocked_turn(tmp_path: Path
     assert transition["role"] == "implementer"
 
     assert prompt_posts(harness.stub) == posts, "recovery never submits a model turn"
+    accounting_after = {
+        key: value
+        for key, value in tree_snapshot(harness.ws).items()
+        if key.startswith("opencode/")
+    }
+    assert accounting_after == accounting_before, (
+        "resolve never reads session history: a provider call would append ledger "
+        "records and rewrite the call sequence"
+    )
 
     persisted = raw_payload(harness.ws, run_id)
     assert persisted["state"] == "BLOCKED"
@@ -284,11 +333,11 @@ def test_terminal_runs_are_never_reopened(tmp_path: Path) -> None:
     refusal(envelope, "orchestration_invalid_transition")
     assert document_bytes(harness.ws, run_id) == before
 
-    report = reconcile(harness.server, run_id)
-    assert report["ok"] is True
-    assert report["data"]["terminal"] is True
-    assert report["data"]["recoverable"] is False
-    assert report["data"]["legal_next_actions"] == []
+    # A terminal run has nothing left to reconcile: reconcile refuses locally
+    # instead of presenting a "recoverable" report (V03E_SPEC.md §21), and the
+    # refusal itself is byte-neutral.
+    refusal(reconcile(harness.server, run_id), "orchestration_recovery_unsupported")
+    assert document_bytes(harness.ws, run_id) == before
 
 
 # ---------------------------------------------------------------------------

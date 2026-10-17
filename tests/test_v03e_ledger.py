@@ -160,6 +160,56 @@ def test_a_torn_record_is_a_gap(tmp_path: Path) -> None:
     assert call_id in scan.gap_reason
 
 
+def test_an_absent_calls_directory_with_a_live_sequence_is_still_a_gap(tmp_path: Path) -> None:
+    ledger = ledger_for(tmp_path)
+    write(ledger)
+    write(ledger)
+    for path in ledger.calls_dir.glob("*.json"):
+        path.unlink()
+    # The durable sequence still allocates OC-0001..OC-0002, so deleting the whole
+    # directory cannot turn "the records are gone" into "the submission never
+    # happened": completeness is checked independently of the directory's presence.
+    scan = scan_ledger(tmp_path / ".devrelay", identity(), floor="")
+    assert scan.outcome == "evidence_gap"
+    assert "no accounting record" in scan.gap_reason
+    assert scan.interval_proven is False
+
+
+def test_a_floor_newer_than_the_ceiling_is_an_inverted_gap(tmp_path: Path) -> None:
+    ledger = ledger_for(tmp_path)
+    write(ledger)
+    scan = scan_ledger(tmp_path / ".devrelay", identity(), floor="OC-0005")
+    assert scan.outcome == "evidence_gap"
+    assert "inverted" in scan.gap_reason
+    assert scan.interval_proven is False
+
+
+def test_two_files_claiming_one_call_id_are_ambiguous(tmp_path: Path) -> None:
+    ledger = ledger_for(tmp_path)
+    call_id = write(ledger)
+    source = ledger.calls_dir / f"{call_id}.json"
+    (ledger.calls_dir / "OC-00001.json").write_text(
+        source.read_text(encoding="utf-8"), encoding="utf-8"
+    )
+    scan = scan_ledger(tmp_path / ".devrelay", identity())
+    assert scan.outcome == "evidence_gap"
+    assert "two ledger files claim" in scan.gap_reason
+    assert scan.record is None
+
+
+def test_a_record_whose_call_id_disagrees_with_its_filename_is_a_gap(tmp_path: Path) -> None:
+    ledger = ledger_for(tmp_path)
+    call_id = write(ledger)
+    path = ledger.calls_dir / f"{call_id}.json"
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    payload["call_id"] = "OC-0009"
+    path.write_text(json.dumps(payload), encoding="utf-8")
+    scan = scan_ledger(tmp_path / ".devrelay", identity())
+    assert scan.outcome == "evidence_gap"
+    assert "declares call_id" in scan.gap_reason
+    assert scan.record is None
+
+
 def test_route_disagreement_is_reported_not_hidden(tmp_path: Path) -> None:
     ledger = ledger_for(tmp_path)
     write(ledger, model="other-model")

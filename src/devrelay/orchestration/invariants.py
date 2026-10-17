@@ -746,6 +746,20 @@ def _require_recovery_record(run: Any, recovery: Any, snapshot: Any, bad: Any) -
         bad("recovery evidence call ids disagree with the frozen attempt")
     if recovery.recovery_reason not in RECOVERY_REASONS:
         bad(f"recovery reason {recovery.recovery_reason!r} is not a known reason")
+    if evidence.coverage not in ("proven_interval", "evidence_gap"):
+        bad(
+            f"recovery evidence coverage {evidence.coverage!r} is not a legal "
+            "coverage class"
+        )
+    if attempt.outcome == TurnOutcomeState.BLOCKED.value:
+        if attempt.blocked_reason != recovery.recovery_reason:
+            bad(
+                f"the frozen recovery attempt is blocked for "
+                f"{attempt.blocked_reason!r}, not the recorded recovery reason "
+                f"{recovery.recovery_reason!r}"
+            )
+    elif attempt.outcome == TurnOutcomeState.COMPLETED.value and attempt.blocked_reason:
+        bad("a completed frozen recovery attempt must not carry a blocked_reason")
     _require_prompt_evidence(attempt, "recovery attempt", bad)
     _require_route_agreement(attempt, attempt.role, snapshot, bad, label="recovery attempt")
 

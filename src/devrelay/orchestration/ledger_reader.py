@@ -128,47 +128,90 @@ def scan_ledger(
         )
 
     records: list[OpenCodeCallRecord] = []
+    present: dict[int, Path] = {}
     if calls_dir.is_dir():
-        present: dict[int, Path] = {}
         for path in calls_dir.glob("OC-*.json"):
             number = _call_number(path.stem)
-            if number is not None:
-                present[number] = path
-        # Every allocated identity must have an accounting record: a missing one
-        # is a torn/refused request in a crash window, never "not submitted".
-        for number in range(1, allocated + 1):
-            if number not in present:
-                return LedgerScan(
-                    outcome=OUTCOME_GAP,
-                    floor=floor,
-                    ceiling=ceiling,
-                    gap_reason=(
-                        f"allocated call OC-{number:04d} has no accounting record "
-                        "(crash window or torn ledger; absence unproven)"
-                    ),
-                )
-        for number in sorted(present):
-            if number > allocated:
-                return LedgerScan(
-                    outcome=OUTCOME_GAP,
-                    floor=floor,
-                    ceiling=ceiling,
-                    gap_reason=(
-                        f"call record OC-{number:04d} is newer than the durable "
-                        "sequence (ceiling unproven)"
-                    ),
-                )
-            if floor_number is not None and number <= floor_number:
+            if number is None:
                 continue
-            record, reason = _read_call(present[number])
-            if record is None:
+            previous = present.get(number)
+            if previous is not None:
+                # Two files whose names parse to one id (``OC-0002.json`` and
+                # ``OC-00002.json``) are two durable submissions that cannot be
+                # told apart: identity is ambiguous, never "exactly one".
                 return LedgerScan(
                     outcome=OUTCOME_GAP,
                     floor=floor,
                     ceiling=ceiling,
-                    gap_reason=reason,
+                    gap_reason=(
+                        f"two ledger files claim call OC-{number:04d} "
+                        f"({previous.name!r} and {path.name!r}); the submission "
+                        "identity is ambiguous"
+                    ),
                 )
-            records.append(record)
+            present[number] = path
+
+    # Every allocated identity must have an accounting record: a missing one is a
+    # torn/refused request in a crash window, never "not submitted".  The check is
+    # deliberately outside ``is_dir()``: an absent calls directory is the strongest
+    # form of the same gap, not a reason to skip the check.
+    for number in range(1, allocated + 1):
+        if number not in present:
+            return LedgerScan(
+                outcome=OUTCOME_GAP,
+                floor=floor,
+                ceiling=ceiling,
+                gap_reason=(
+                    f"allocated call OC-{number:04d} has no accounting record "
+                    "(crash window or torn ledger; absence unproven)"
+                ),
+            )
+
+    if floor_proven and floor_number > allocated:
+        return LedgerScan(
+            outcome=OUTCOME_GAP,
+            floor=floor,
+            ceiling=ceiling,
+            gap_reason=(
+                f"floor {floor} is newer than the durable ceiling {ceiling} "
+                "(the interval is inverted, so nothing inside it is proven)"
+            ),
+        )
+
+    for number in sorted(present):
+        if number > allocated:
+            return LedgerScan(
+                outcome=OUTCOME_GAP,
+                floor=floor,
+                ceiling=ceiling,
+                gap_reason=(
+                    f"call record OC-{number:04d} is newer than the durable "
+                    "sequence (ceiling unproven)"
+                ),
+            )
+        if floor_number is not None and number <= floor_number:
+            continue
+        path = present[number]
+        record, reason = _read_call(path)
+        if record is None:
+            return LedgerScan(
+                outcome=OUTCOME_GAP,
+                floor=floor,
+                ceiling=ceiling,
+                gap_reason=reason,
+            )
+        expected = f"OC-{number:04d}"
+        if record.call_id != expected:
+            return LedgerScan(
+                outcome=OUTCOME_GAP,
+                floor=floor,
+                ceiling=ceiling,
+                gap_reason=(
+                    f"call record {path.name!r} declares call_id "
+                    f"{record.call_id!r}; it cannot be attributed to {expected}"
+                ),
+            )
+        records.append(record)
 
     candidates = [
         record
@@ -240,7 +283,7 @@ def scan_ledger(
     )
 
 
-def newest_call_id(*call_ids: list[str]) -> str:
+def newest_call_id(*call_ids: str) -> str:
     """The highest durable call id of the given durable evidence, or ``""``."""
     numbers = [number for number in map(_call_number, call_ids) if number is not None]
     return f"OC-{max(numbers):04d}" if numbers else ""

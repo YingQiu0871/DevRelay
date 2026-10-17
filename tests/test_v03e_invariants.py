@@ -237,6 +237,23 @@ def test_a_recovery_record_cannot_hide_a_live_outcome() -> None:
         OrchestrationRun.model_validate(payload)
 
 
+def test_the_frozen_attempt_must_carry_the_recorded_reason() -> None:
+    payload = recovery_required_payload()
+    payload["recovery"]["attempt"]["blocked_reason"] = "cycle_limit"
+    with pytest.raises(Exception, match="not the recorded recovery reason"):
+        OrchestrationRun.model_validate(payload)
+
+
+def test_the_evidence_coverage_must_be_a_legal_class() -> None:
+    # `coverage` is deliberately outside the 27-field digest (it is the reader's
+    # verdict about the interval, not a fact about the attempt), so only the shape
+    # invariant can refuse a hand-edited value.
+    payload = recovery_required_payload()
+    payload["recovery"]["evidence"]["coverage"] = "PWNED"
+    with pytest.raises(Exception, match="coverage"):
+        OrchestrationRun.model_validate(payload)
+
+
 def rehashed(evidence: dict[str, Any], **overrides: Any) -> dict[str, Any]:
     """Change an evidence field *and* its digest, so only cross-checks can fail."""
     payload = {**evidence, **overrides}
