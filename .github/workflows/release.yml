@@ -1,17 +1,20 @@
 # PyPI publication for DevRelay (Trusted Publishing / OIDC).
 #
 # No PyPI API token is stored in this repository. PyPI matches the publisher by
-# repository + workflow filename + environment:
+# repository + workflow filename + environment, so all three are load-bearing:
 #   repository: YingQiu0871/DevRelay
-#   workflow:   release.yml
+#   workflow:   release.yml   (renaming this file breaks the trusted publisher)
 #   environment: pypi
 #
-# v0.1 bootstrap: this workflow does NOT rebuild the package. It downloads the
-# already published and verified GitHub Release assets, verifies their sha256
-# against pinned digests, and uploads exactly those files to PyPI.
+# This workflow builds the distributions from source at the requested tag; it
+# never downloads pre-built assets and pins no digests. Publication can only be
+# started manually with confirm=PUBLISH, and only for a semver tag whose commit
+# is already reachable from origin/main and whose GitHub Release is published.
 #
-# Publication can only be started manually with confirm=PUBLISH; no push or
-# pull_request event ever triggers an upload.
+# Inputs reach the shell only through `env:`, never interpolated into `run:`
+# text. The embedded Python lives in single-quoted shell variables (PYCODE='
+# ... ') assigned by `python -c "$PYCODE"`, which keeps the code readable inside
+# the YAML block scalar without any heredoc-terminator or escaping pitfalls.
 
 name: release
 
@@ -19,9 +22,9 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: "Release tag to publish (v0.1 bootstrap: must be v0.1.0)"
+        description: "Release tag to publish (e.g. v0.3.0)"
         required: true
-        default: "v0.1.0"
+        default: "v0.3.0"
         type: string
       confirm:
         description: "Type exactly PUBLISH to confirm the PyPI upload"
@@ -40,16 +43,46 @@ jobs:
     environment:
       name: pypi
     permissions:
-      contents: read
+      contents: write
       id-token: write
     steps:
-      - name: Validate tag (v0.1 bootstrap safety guard)
+      - name: Check out the release tag
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag }}
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Validate the tag shape and its version
         env:
           TAG: ${{ inputs.tag }}
         run: |
           set -euo pipefail
-          if [ "$TAG" != "v0.1.0" ]; then
-            echo "::error::v0.1 bootstrap safety guard: this workflow only publishes tag v0.1.0 (got '$TAG'). Generalize in v0.2."
+          if [[ ! "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::tag '$TAG' is not of the form vMAJOR.MINOR.PATCH."
+            exit 1
+          fi
+          PYCODE='
+          import os, pathlib, tomllib
+          version = tomllib.loads(pathlib.Path("pyproject.toml").read_text(encoding="utf-8"))["project"]["version"]
+          tag = os.environ["TAG"]
+          assert tag == f"v{version}", f"tag {tag} does not match pyproject version {version}"
+          print(f"tag {tag} matches pyproject version {version}")
+          '
+          python -c "$PYCODE"
+
+      - name: Verify the tag is reachable from origin/main
+        env:
+          TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin main
+          if ! git merge-base --is-ancestor "$TAG^{commit}" FETCH_HEAD; then
+            echo "::error::$TAG is not reachable from origin/main; refusing to publish an unmerged tag."
             exit 1
           fi
 
@@ -66,58 +99,54 @@ jobs:
             exit 1
           fi
 
-      - name: Download release artifacts (no rebuild)
-        env:
-          GH_TOKEN: ${{ github.token }}
-          TAG: ${{ inputs.tag }}
+      - name: Build the distributions from source
         run: |
           set -euo pipefail
-          mkdir -p dist
-          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" \
-            --pattern 'devrelay-*.whl' --pattern 'devrelay-*.tar.gz' --dir dist
-          ls -l dist
+          python -m pip install --upgrade --quiet build twine
+          rm -rf dist build
+          python -m build --outdir dist
 
-      - name: Verify artifact set, version and v0.1.0 integrity pins
+      - name: Check the artifact set and its contents
         run: |
           set -euo pipefail
-          python3 - <<'PY'
-          import hashlib
-          import pathlib
-          import sys
-
+          PYCODE='
+          import hashlib, pathlib, sys, tarfile, zipfile
           dist = pathlib.Path("dist")
           wheels = sorted(dist.glob("*.whl"))
           sdists = sorted(dist.glob("*.tar.gz"))
           if len(wheels) != 1 or len(sdists) != 1:
               sys.exit(f"expected exactly one wheel and one sdist, got {wheels} / {sdists}")
-          if wheels[0].name != "devrelay-0.1.0-py3-none-any.whl":
-              sys.exit(f"unexpected wheel name: {wheels[0].name}")
-          if sdists[0].name != "devrelay-0.1.0.tar.gz":
-              sys.exit(f"unexpected sdist name: {sdists[0].name}")
-
-          # v0.1.0 bootstrap integrity pin: sha256 of the GitHub Release assets
-          # that already passed fresh-install verification. A future release
-          # should replace this with a general provenance check.
-          pins = {
-              "devrelay-0.1.0-py3-none-any.whl": "8c9b3261455758a60eb95fa51c77100530e759eb688fc2ecd11447791e03a7c5",
-              "devrelay-0.1.0.tar.gz": "aea142a7975d2d9f651b94db252547be23d91742a862df0aef9848d9409da005",
-          }
-          for name, expected in pins.items():
-              actual = hashlib.sha256((dist / name).read_bytes()).hexdigest()
-              print(f"{name}: {actual}")
-              if actual != expected:
-                  sys.exit(f"sha256 mismatch for {name}: {actual} != {expected}")
-          print("artifact verification OK: exactly one wheel, one sdist, digests match the released assets")
-          PY
+          wheel_names = zipfile.ZipFile(wheels[0]).namelist()
+          sdist_names = tarfile.open(sdists[0]).getnames()
+          for label, names in (("wheel", wheel_names), ("sdist", sdist_names)):
+              if not any(n.endswith("devrelay/profiles/default.yaml") for n in names):
+                  sys.exit(f"{label} is missing devrelay/profiles/default.yaml")
+          digests = {p.name: hashlib.sha256(p.read_bytes()).hexdigest() for p in wheels + sdists}
+          for name, digest in digests.items():
+              print(f"{digest}  {name}")
+          (dist / "SHA256SUMS").write_text(
+              "".join(f"{digest}  {name}" + chr(10) for name, digest in digests.items()),
+              encoding="utf-8",
+          )
+          print("artifact verification OK: one wheel, one sdist, profiles/default.yaml packaged")
+          '
+          python -c "$PYCODE"
 
       - name: twine check
         run: |
           set -euo pipefail
-          python3 -m pip install --upgrade --quiet twine
-          python3 -m twine check dist/*
+          python -m twine check dist/*
 
       - name: Publish to PyPI (Trusted Publishing / OIDC)
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
           packages-dir: dist/
-          attestations: false
+          attestations: true
+
+      - name: Attach the built distributions and checksums to the GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          gh release upload "$TAG" dist/* --clobber --repo "$GITHUB_REPOSITORY"
