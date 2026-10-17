@@ -83,3 +83,12 @@ records the run id, the evidence path and hashes, and the verdict.
 4. committed cleanly, and the independent acceptance review requested (not
    performed) next.
 
+All four criteria were met by the smoke round itself (result commit `9cf8f14`); no
+acceptance was marked at that point. Criterion 2 governed the smoke round only —
+the acceptance decision is the *separate* independent review requested in `m02306`,
+which was performed afterwards and is recorded in `docs/v0.3/V03E_ACCEPTANCE.md` §0
+(verdict *APPROVE V0.3-E MANDATORY FAIL-CLOSED CORE ACCEPTANCE*, P0 = 0, P1 = 0,
+P2 = 2; scope: local read-only reconciliation + one-shot `mark_unrecoverable`;
+`adopt_completed_turn` remains DISABLED; no platform gate claimed). That review, not
+this authorization, owns the COVERED markings.
+

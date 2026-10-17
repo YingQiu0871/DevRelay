@@ -2,9 +2,27 @@
 
 Status: **IMPLEMENTED / OFFLINE TESTS PASS / ADVERSARIALLY REVIEWED (findings
 remediated) / AUTHORIZED / REAL SMOKE EXECUTED (R1 FAIL per oracle, R2 PASS under
-the corrective oracle) / NOT ACCEPTED**.
+the corrective oracle) / MANDATORY CORE ACCEPTED BY INDEPENDENT ACCEPTANCE REVIEW
+(P0 = 0, P1 = 0, P2 = 2) / ADOPTION DISABLED / UNRELEASED**.
 
-> **Authorization status — read this first.** Work authorization exists:
+> **Acceptance status — read this first.** The independently conducted
+> acceptance review (read-only, separate from the implementer, HEAD `9cf8f14`)
+> returned **ACCEPT** for the scope "mandatory local fail-closed core only":
+> read-only `devrelay_reconcile_run`, one-shot `devrelay_resolve_recovery`
+> accepting only `mark_unrecoverable` ending terminal `BLOCKED`, adoption refused
+> before any write, and the frozen v1 reader. Recorded verdict:
+> *APPROVE V0.3-E MANDATORY FAIL-CLOSED CORE ACCEPTANCE (P0=0, P1=0, P2=2;
+> scope: local read-only reconciliation + one-shot mark_unrecoverable;
+> adopt_completed_turn remains DISABLED; no platform gate claimed)* — see
+> `docs/v0.3/V03E_ACCEPTANCE.md` §0. **Not accepted / not claimed:** remote
+> correlation, any adoption behaviour, pending/informational capabilities, and
+> every platform proof gate. The two P2 findings: P2-1 (stale BACKLOG row,
+> fixed in the acceptance bookkeeping commit) and P2-2 (the R2 conformance
+> matcher matches labels globally rather than phase-scoped; no rule is
+> unasserted today, fix before extending the oracle — recorded in
+> `docs/BACKLOG.md` §10). The package is **unreleased**.
+>
+> **Authorization status.** Work authorization exists:
 > `V03E_IMPLEMENTATION_AUTHORIZATION.md` (owner instruction `m01693`, baseline
 > `36fe9c5`, ratifying the core as remediated in `a7fe160`), and the corrective
 > `V03E_REAL_RECOVERY_SMOKE_AUTHORIZATION_R2.md` (owner instruction `m02306`,
@@ -15,10 +33,8 @@ the corrective oracle) / NOT ACCEPTED**.
 > oracle→driver conformance table — was executed once under its own one-shot
 > authorization and recorded
 > `PASS — V0.3-E REAL CRASH-AND-RECOVERY SMOKE (R2)`
-> (`docs/v0.3/V03E_REAL_RECOVERY_SMOKE_RESULT_R2.md`). The implementation remains
-> **NOT ACCEPTED**: no acceptance row is marked COVERED, no stage status is
-> advanced, and the separately authorized independent acceptance review has not
-> yet decided.
+> (`docs/v0.3/V03E_REAL_RECOVERY_SMOKE_RESULT_R2.md`). Both authorizations are
+> spent; no further run is authorized.
 
 This report records what the v0.3-E implementation actually is, on branch
 `v0.3-e-recovery-reconciliation`, against the design freeze in
@@ -29,10 +45,12 @@ pass and found one P0, three P1 and four P2 defects (all reproduced, all fixed);
 the review record and its dispositions are in `docs/v0.3/V03E_REVIEW.md`. That
 review is a review of the *unauthorized draft*, not an acceptance review.
 
-It is **not** an acceptance record. Acceptance of v0.3-E requires the
-independent review and the real-execution evidence that this round did not
-produce (see §7). Nothing here may be read as a claim that v0.3-E is accepted,
-released or independently reviewed.
+It is **not** an acceptance record for the project as a whole: the independent
+acceptance review accepted the **mandatory fail-closed core only** (see the banner
+above and `docs/v0.3/V03E_ACCEPTANCE.md` §0); remote correlation, adoption and the
+platform gates remain unproven, and nothing here authorizes enabling adoption.
+Coverage rows the reviewer withheld (E2, E18, E19, E22, E26–E51) remain not
+covered.
 
 The design freeze is unchanged: this round implements the **mandatory
 fail-closed core** and keeps the optional `adopt_completed_turn` capability
@@ -205,9 +223,13 @@ proofs P1/P2/P3/P8. G0.1/P7, G0.2 and G0.3 passed; G0.4 remains an authoritative
 FAIL with P4 UNPROVEN. The implementation therefore ships the option **off**:
 the model, the record shape and the transition edges exist and are tested, but
 `ADOPTION_CAPABILITY_ENABLED` is `False`, the MCP surface refuses the resolution
-before writing, and no code path can adopt a completed turn. This is the
-fail-closed outcome the design freeze mandates; enabling it requires new proofs
-and a new authorization, not a code flip.
+before writing, and while the flag is off the adoption branch is unreachable — no
+code path can adopt a completed turn. (The adoption branch exists in
+`src/devrelay/orchestration/service.py` `_apply_resolution` and is reachable only
+if the capability flag were flipped *and* the corresponding proofs were satisfied;
+the validator additionally refuses an adopted blocked attempt, and tests confirm
+both refusals.) This is the fail-closed outcome the design freeze mandates;
+enabling it requires new proofs and a new authorization, not a code flip.
 
 ## 5. Tests
 
@@ -282,17 +304,19 @@ Real execution (authorized, one shot each, executed 2026-10-17):
   ended in a formal **FAIL** (measurement defect in the oracle and in the driver's
   assertion coverage, not a product defect); revision 2 was executed once and
   printed **PASS** under the corrective oracle. No further run is authorized.
-- No independent *acceptance* review. An adversarial review of the draft was
-  performed and its findings were remediated (`docs/v0.3/V03E_REVIEW.md`), but it
-  was performed by a review-only subagent on the same tree — it is not the
-  separately authorized review that acceptance would require, and it marks no
-  acceptance row. The acceptance review is requested next, not yet performed.
+- No broad *acceptance*. The independent acceptance review accepted the
+  **mandatory local fail-closed core only** (`docs/v0.3/V03E_ACCEPTANCE.md` §0,
+  verdict *APPROVE V0.3-E MANDATORY FAIL-CLOSED CORE ACCEPTANCE*, P0 = 0,
+  P1 = 0, P2 = 2). It withheld E2, E18, E19 and E22, kept E26–E40 at their recorded
+  gate statuses and left E41–E51 FUTURE / NOT RUN. It is not an acceptance of
+  adoption, remote correlation or any platform gate.
 - A **passing** real crash-and-recover execution now exists (revision 2, evidence
-  cited above), but it is reported as **evidence**, not as acceptance; it covers
-  the mandatory local core only and says nothing about adoption, remote
-  correlation or the unsatisfied platform gates.
-- No acceptance row of `docs/v0.3/V03E_ACCEPTANCE.md` is marked COVERED by this
-  report; that matrix remains the acceptance authority's document.
+  cited above), and it underpins the accepted core; it covers the mandatory local
+  core only and says nothing about adoption, remote correlation or the unsatisfied
+  platform gates.
+- Only the rows named in `docs/v0.3/V03E_ACCEPTANCE.md` §0 are marked COVERED; all
+  other rows keep their design/gate/future status, and that matrix remains the
+  acceptance authority's document.
 - No tag, release, push or merge; package version stays `0.1.0` and the
   supported public release stays `v0.1.0`.
 

@@ -131,7 +131,11 @@ records 14/14 rules PASS; the mapping is reproduced here:
 ```
 
 The driver's console log is untracked (`build/smoke-r2-console.log`); the
-authoritative driver output is the evidence `driver.log` above.
+authoritative driver output is the evidence `driver.log` above. The directory also
+contains two benign driver stream files not part of the documented set —
+`crash-child.err` (`f332100a…1ef843`) and an empty `crash-child.out`
+(`e3b0c44…b855`, the SHA-256 of empty bytes); they carry no measured criterion and
+are noted so the file list is exact.
 
 ## 7. What this PASS proves, and what it does not
 
@@ -150,11 +154,14 @@ Proven as observed (not inferred):
 6. the harness now measures what its oracle says: the count rule and all 14
    normative rules are asserted and mapped.
 
-Not proven: acceptance. No acceptance row is COVERED. Adoption,
-`adopt_completed_turn`, remote correlation, the adoption gates (G0.4/G0.5/G1/G2,
-P1/P2/P3/P4/P6/P8) and release remain out of scope and untouched. The
-independently authorized acceptance review decides whether these results support
-any acceptance claim.
+Not proven by this run itself: acceptance. No acceptance row is COVERED *by this
+document*. Adoption, `adopt_completed_turn`, remote correlation, the adoption gates
+(G0.4/G0.5/G1/G2, P1/P2/P3/P4/P6/P8) and release remain out of scope and untouched.
+The independently authorized acceptance review decides whether these results support
+any acceptance claim — it has since done so for the **mandatory fail-closed core
+only** (`docs/v0.3/V03E_ACCEPTANCE.md` §0, *APPROVE V0.3-E MANDATORY FAIL-CLOSED
+CORE ACCEPTANCE*, P0 = 0, P1 = 0, P2 = 2), with adoption still DISABLED and no
+platform gate claimed.
 
 ## 8. Relation to revision 1
 
@@ -166,5 +173,11 @@ evidence for the real-smoke round, and does not alter that FAIL record.
 
 ## 9. Next step
 
-The independent acceptance review requested in `m02306` is the next action. This
-document marks no acceptance row COVERED and claims no independent approval.
+The independent acceptance review requested in `m02306` was the next action; it has
+since been performed and returned **ACCEPT** for the mandatory fail-closed core only
+(`docs/v0.3/V03E_ACCEPTANCE.md` §0, P0 = 0, P1 = 0, P2 = 2; two P2 findings recorded:
+a stale BACKLOG row, fixed in bookkeeping, and the R2 conformance matcher being
+label-global rather than phase-scoped, recorded as a limitation to fix before the
+oracle is extended). This document itself still marks no acceptance row COVERED and
+claims no independent approval; the acceptance record lives in `V03E_ACCEPTANCE.md`
+§0.
