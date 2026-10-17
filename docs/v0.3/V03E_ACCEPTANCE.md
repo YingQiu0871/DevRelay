@@ -1,6 +1,14 @@
 # DevRelay v0.3-E acceptance matrix — recovery & reconciliation (design phase)
 
-Status: **DESIGN FROZEN / NOT IMPLEMENTED / NOT ACCEPTED / UNRELEASED**
+Status: **DESIGN FROZEN / NOT ACCEPTED / UNRELEASED**
+
+> **Implementation status (branch `v0.3-e-recovery-reconciliation`):** the
+> mandatory fail-closed core has since been implemented and is covered by offline
+> tests — see `docs/v0.3/V03E_IMPLEMENTATION.md`.  This matrix remains the
+> acceptance authority's document: **no row below is marked COVERED** by that
+> implementation, `adopt_completed_turn` stays **DISABLED**, and the platform
+> proof gate is unchanged (G0.4 authoritative FAIL / P4 UNPROVEN; G0.5, G1, G2 not
+> run).  No independent review and no real recovery smoke have occurred.
 
 Independent design-freeze review of candidate
 `9f4a01804b9affe8938a272553df345b5a60aeed`: **P0 = 0, P1 = 0, P2 = 0**, F1–F12

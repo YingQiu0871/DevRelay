@@ -242,3 +242,13 @@ DevRelay defect and not a backlog item.
 | Evidence | the independent review demonstrated shared `%TEMP%` residue and that an isolated temporary directory restores the full suite to green (the suite is run with fresh `TEMP`/`TMP`/`TMPDIR` for every reported result) |
 | Impact | environment-dependent test flake only; no production behaviour involved |
 | Scope note | unrelated to the OpenCode bridge; must be handled as its own hygiene task (unique per-run temp roots or a tolerant assertion) |
+
+## 10. v0.3-E `adopt_completed_turn` — blocked on the platform proof gate
+
+| Field | Value |
+| --- | --- |
+| Status | **BLOCKED (by design)** — the mandatory fail-closed core is implemented (offline tests only); the optional adoption capability is not |
+| Implemented | read-only reconciliation and one-shot `mark_unrecoverable` (see `docs/v0.3/V03E_IMPLEMENTATION.md`), with `ADOPTION_CAPABILITY_ENABLED = False` and the MCP surface refusing `adopt_completed_turn` before any write |
+| Why adoption is blocked | the design freeze requires the identity/ownership veto bound (G0.5 / P6) together with the remote enabling proofs P1/P2/P3/P8 before adoption may ever be authorized; G0.4 is an authoritative FAIL / P4 UNPROVEN and G0.5, G1, G2 were not run |
+| Not done | independent review of the implementation, real crash-and-recover execution, any acceptance bookkeeping; no v0.3-E row of `V03E_ACCEPTANCE.md` is marked COVERED |
+| Next step | an authorized real-recovery round plus the outstanding platform proofs; enabling adoption requires new proofs and a new authorization, not a code flip |
