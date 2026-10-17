@@ -177,10 +177,26 @@ python -m pytest -q
 
 Result: **all tests pass** — 1222 collected, 0 failed (pytest exit 0).
 
+Two environment notes for reproducing that result (neither is a v0.3-E
+regression; both were observed on this machine):
+
+- Run the suite with a fresh `TEMP`/`TMP`/`TMPDIR` outside the repository.
+  `tests/test_baseline_ignored_self.py::test_real_index_bytes_unchanged_and_temp_index_cleaned`
+  asserts that no `devrelay-index-*` directory is left in `%TEMP%`, so a shared
+  temp root that another concurrent run is using at that instant can fail it
+  (`docs/BACKLOG.md` §9, pre-existing hygiene item). A temp root *inside*
+  `D:\DevRelay` additionally breaks
+  `tests/test_git_workspace.py::test_non_repo_directory_errors`, because a
+  "non-repo directory" then sits inside a git work tree.
+- With an isolated temp root outside the repository the suite is green
+  (measured: 66 files / 1222 tests, pytest exit 0).
+
 ## 6. Recorded verification
 
 - `python -m pytest -q tests/test_v03e_*.py` — 56 passed.
 - `python -m pytest -q` (full suite) — 1222 tests, 0 failed, exit code 0.
+- Full suite re-run on the committed tree with an isolated `TEMP`/`TMP`/`TMPDIR`
+  outside the repository — 66 files / 1222 tests, exit code 0 (467 s).
 
 ## 7. What this report does not claim
 
