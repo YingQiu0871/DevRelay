@@ -48,6 +48,26 @@ def fixed_run_ids(*ids: str):
     return factory
 
 
+def freeze_v03d(ws: Path, run_id: str) -> None:
+    """Re-label a freshly started run as a frozen v0.3-D document.
+
+    v0.3-E started writing ``schema_version`` 2.  The frozen v0.3-D behaviour
+    (materializing an interrupted turn as BLOCKED/turn_interrupted, an empty
+    ``legal_next_actions`` while a turn is in flight) still exists exactly for
+    v1 documents, and that is what the v0.3-D reachability suite certifies.  The
+    v0.3-D writer produced this identical document with ``schema_version`` 1;
+    this helper (and only this helper) reproduces that one field so the frozen
+    contract stays under test.  Nothing else about the document is touched, and
+    the store validates it with the frozen v1 rules on save.
+    """
+    from devrelay.orchestration import OrchestrationStore
+    from devrelay.orchestration.models import LEGACY_SCHEMA_VERSION
+
+    store = OrchestrationStore(ws / ".devrelay")
+    run = store.load(run_id)
+    store.save(run.model_copy(update={"schema_version": LEGACY_SCHEMA_VERSION}))
+
+
 def honest_run(
     state: Any = None,
     *,

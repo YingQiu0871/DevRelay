@@ -52,7 +52,7 @@ def test_inventory_is_the_accepted_nine_plus_exactly_three(tmp_path):
     harness = build_roles_server(tmp_path)
     names = [tool.name for tool in asyncio.run(harness.server.list_tools())]
     assert names == list(TOOL_NAMES)
-    assert len(names) == 17
+    assert len(names) == 19
     assert names[:9] == [
         "devrelay_status",
         "opencode_health",
@@ -65,13 +65,15 @@ def test_inventory_is_the_accepted_nine_plus_exactly_three(tmp_path):
         "opencode_interrupt",
     ]
     assert names[9:12] == ["devrelay_list_roles", "devrelay_get_role", ROLE_TOOL]
-    assert names[12:] == [
+    assert names[12:17] == [
         "devrelay_start_run",
         "devrelay_get_run",
         "devrelay_run_implementer",
         "devrelay_run_reviewer",
         "devrelay_decide_run",
     ]
+    # v0.3-E appends exactly two fail-closed recovery tools.
+    assert names[17:] == ["devrelay_reconcile_run", "devrelay_resolve_recovery"]
     assert set(READ_ONLY_TOOLS) | set(SIDE_EFFECTING_TOOLS) == set(TOOL_NAMES)
 
 

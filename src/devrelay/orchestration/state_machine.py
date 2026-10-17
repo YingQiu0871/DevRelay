@@ -68,7 +68,8 @@ def require_no_in_flight_turn(run: OrchestrationRun) -> None:
         raise OrchestrationInvalidTransitionError(
             f"run {run.run_id} has an unfinished model turn "
             f"(role={run.in_flight_turn.role}); it is failed closed and never replayed "
-            "(recovery is out of scope for v0.3-D)"
+            "(v0.3-E resolves an interrupted turn only through reconcile/recovery, "
+            "never by running it again)"
         )
 
 
@@ -118,6 +119,53 @@ def after_role_turn(run: OrchestrationRun, role: str, outcome: TurnOutcome) -> T
             completed_cycles=run.completed_cycles,
         )
     # A completed reviewer turn closes the cycle and stops for the Planner.
+    return Transition(
+        state=RunState.AWAITING_DECISION,
+        current_cycle=run.current_cycle,
+        completed_cycles=run.completed_cycles + 1,
+    )
+
+
+# ---------------------------------------------------------------------------
+# v0.3-E: fail-closed recovery of an interrupted turn
+#
+# Recovery is *not* a new attempt: it materializes the interrupted reservation
+# into exactly one record and then applies exactly one resolution.  The only
+# resolution this build can apply is ``mark_unrecoverable`` (BLOCKED); adoption
+# is disabled until its platform proofs pass.
+# ---------------------------------------------------------------------------
+
+
+def after_enter_recovery(run: OrchestrationRun) -> Transition:
+    """Enter RECOVERY_REQUIRED: state frozen, nothing replayed, nothing refunded."""
+    return Transition(
+        state=RunState.RECOVERY_REQUIRED,
+        current_cycle=run.current_cycle,
+        completed_cycles=run.completed_cycles,
+        blocked_reason="",
+    )
+
+
+def after_mark_unrecoverable(run: OrchestrationRun, reason: str) -> Transition:
+    """Fail closed: the interrupted attempt becomes exactly one blocked turn."""
+    return Transition(
+        state=RunState.BLOCKED,
+        current_cycle=run.current_cycle,
+        completed_cycles=run.completed_cycles,
+        blocked_reason=reason,
+    )
+
+
+def after_adoption(run: OrchestrationRun, role: str) -> Transition:
+    """Adopt a completed interrupted turn (disabled in this build)."""
+    if role == "implementer":
+        return Transition(
+            state=RunState.READY_REVIEWER,
+            current_cycle=run.current_cycle,
+            completed_cycles=run.completed_cycles,
+        )
+    if role != "reviewer":
+        raise OrchestrationInvalidTransitionError(f"unknown orchestration role {role!r}")
     return Transition(
         state=RunState.AWAITING_DECISION,
         current_cycle=run.current_cycle,
@@ -181,7 +229,10 @@ def transition_record(
 __all__ = [
     "Transition",
     "TurnOutcome",
+    "after_adoption",
     "after_decision",
+    "after_enter_recovery",
+    "after_mark_unrecoverable",
     "after_role_turn",
     "require_cycle_budget",
     "require_no_in_flight_turn",

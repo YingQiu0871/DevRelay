@@ -150,6 +150,9 @@ def test_tool_inventory_annotations_and_descriptions(tmp_path):
         "devrelay_run_implementer",
         "devrelay_run_reviewer",
         "devrelay_decide_run",
+        # ... and v0.3-E exactly two fail-closed recovery tools.
+        "devrelay_reconcile_run",
+        "devrelay_resolve_recovery",
     ]
     by_name = {tool.name: tool for tool in tools}
     for name in (

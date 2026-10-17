@@ -42,10 +42,13 @@ from devrelay.errors import OrchestrationStateCorruptError, RoleRoutingError
 from devrelay.orchestration.models import (
     HARD_MAX_CYCLES,
     MIN_MAX_CYCLES,
-    ORCHESTRATION_SCHEMA_VERSION,
-    TERMINAL_STATES,
+    RECOVERY_ACTION,
+    RECOVERY_REASONS,
     SUPPORTED_RUN_ROLES,
+    SUPPORTED_SCHEMA_VERSIONS,
+    TERMINAL_STATES,
     Decision,
+    RecoveryResolution,
     RunState,
     TurnOutcomeState,
 )
@@ -64,7 +67,12 @@ _CYCLE_CLOSED_STATES = frozenset(
 #: States in which a model-bearing phase of the *current* cycle has not yet
 #: completed (so ``current_cycle == completed_cycles + 1``).
 _CYCLE_OPEN_STATES = frozenset(
-    {RunState.READY_IMPLEMENTER, RunState.READY_REVIEWER, RunState.BLOCKED}
+    {
+        RunState.READY_IMPLEMENTER,
+        RunState.READY_REVIEWER,
+        RunState.BLOCKED,
+        RunState.RECOVERY_REQUIRED,
+    }
 )
 
 _EXPECTED_IN_FLIGHT_STATE = {
@@ -81,9 +89,18 @@ _PROMPT_DIGEST_RE = re.compile(r"^[0-9a-f]{64}$")
 _LAST_EDGE_RULES: dict[RunState, frozenset[tuple[str, str, str | None]]] = {
     RunState.READY_IMPLEMENTER: frozenset({("decide", "AWAITING_DECISION", "")}),
     RunState.READY_REVIEWER: frozenset(
-        {("run_implementer", "READY_IMPLEMENTER", "implementer")}
+        {
+            ("run_implementer", "READY_IMPLEMENTER", "implementer"),
+            # v0.3-E (adoption only): a resolved interrupted implementer turn.
+            (RECOVERY_ACTION, RunState.RECOVERY_REQUIRED.value, "implementer"),
+        }
     ),
-    RunState.AWAITING_DECISION: frozenset({("run_reviewer", "READY_REVIEWER", "reviewer")}),
+    RunState.AWAITING_DECISION: frozenset(
+        {
+            ("run_reviewer", "READY_REVIEWER", "reviewer"),
+            (RECOVERY_ACTION, RunState.RECOVERY_REQUIRED.value, "reviewer"),
+        }
+    ),
     RunState.COMPLETED: frozenset({("decide", "AWAITING_DECISION", "")}),
     RunState.STOPPED: frozenset({("decide", "AWAITING_DECISION", "")}),
     RunState.LIMIT_REACHED: frozenset({("decide", "AWAITING_DECISION", "")}),
@@ -95,6 +112,19 @@ _LAST_EDGE_RULES: dict[RunState, frozenset[tuple[str, str, str | None]]] = {
             # fail-closed administratively (route invalidation, ownership loss)
             ("block", "READY_IMPLEMENTER", None),
             ("block", "READY_REVIEWER", None),
+            # v0.3-E fail-closed recovery exit: the materialized interrupted
+            # attempt is (possibly in the same atomic write) marked
+            # unrecoverable, and that single resolution is the last edge.
+            (RECOVERY_ACTION, "READY_IMPLEMENTER", "implementer"),
+            (RECOVERY_ACTION, "READY_REVIEWER", "reviewer"),
+            (RECOVERY_ACTION, RunState.RECOVERY_REQUIRED.value, None),
+        }
+    ),
+    RunState.RECOVERY_REQUIRED: frozenset(
+        {
+            # the entry edge only: an interrupted live intent of the current cycle
+            (RECOVERY_ACTION, "READY_IMPLEMENTER", "implementer"),
+            (RECOVERY_ACTION, "READY_REVIEWER", "reviewer"),
         }
     ),
 }
@@ -115,11 +145,23 @@ def validate_run_semantics(run: Any) -> None:
         )
 
     # -- §3 fixed schema version --------------------------------------
-    if run.schema_version != ORCHESTRATION_SCHEMA_VERSION:
+    if run.schema_version not in SUPPORTED_SCHEMA_VERSIONS:
         bad(
-            f"schema_version {run.schema_version!r} is not the supported "
-            f"v{ORCHESTRATION_SCHEMA_VERSION} (no migration is attempted)"
+            f"schema_version {run.schema_version!r} is not one of the supported "
+            f"versions {list(SUPPORTED_SCHEMA_VERSIONS)} (no migration is attempted)"
         )
+    # A frozen v0.3-D document keeps the exact v0.3-D contract: it has no
+    # recovery record, no recovery reason and never enters RECOVERY_REQUIRED.
+    if run.schema_version == 1:
+        if run.recovery is not None:
+            bad("a v1 (frozen v0.3-D) document must not carry a recovery record")
+        if run.recovery_reason:
+            bad(
+                f"a v1 (frozen v0.3-D) document must not carry recovery_reason "
+                f"{run.recovery_reason!r}"
+            )
+        if run.state is RunState.RECOVERY_REQUIRED:
+            bad("a v1 (frozen v0.3-D) document can never be in RECOVERY_REQUIRED")
 
     # -- §4/§5 hard cycle bound and budget ----------------------------
     if not isinstance(run.max_cycles, int) or isinstance(run.max_cycles, bool):
@@ -156,15 +198,26 @@ def validate_run_semantics(run: Any) -> None:
             f"turn_attempts {run.turn_attempts} disagrees with model_turns_used "
             f"{run.model_turns_used} (both are incremented once per reserved turn)"
         )
-    # Each reserved turn is either recorded in its role history (finished) or
-    # still held by the in-flight intent (crash boundary).
+    # Each reserved turn is either recorded in its role history (finished),
+    # still held by the in-flight intent (crash boundary), or - in v0.3-E
+    # RECOVERY_REQUIRED - held by the single recovery record.
+    in_recovery = (
+        run.schema_version >= 2
+        and run.state is RunState.RECOVERY_REQUIRED
+        and run.recovery is not None
+    )
     recorded = len(run.implementer_turns) + len(run.reviewer_turns)
-    expected_recorded = run.model_turns_used - (1 if run.in_flight_turn is not None else 0)
+    expected_recorded = (
+        run.model_turns_used
+        - (1 if run.in_flight_turn is not None else 0)
+        - (1 if in_recovery else 0)
+    )
     if recorded != expected_recorded:
         bad(
             f"{recorded} turn record(s) do not account for "
             f"{run.model_turns_used} reserved turn(s)"
             + (" with an in-flight intent" if run.in_flight_turn is not None else "")
+            + (" with a materialized recovery attempt" if in_recovery else "")
         )
     # The budget is spend-only: the turns a run claims to have spent can never
     # exceed what its cycle structure could ever have allowed.
@@ -322,9 +375,16 @@ def validate_run_semantics(run: Any) -> None:
         )
 
     # A reviewer phase is only reachable after this cycle's implementer phase
-    # completed - with or without a live in-flight reviewer intent.
-    reviewer_phase_is_current = state is RunState.READY_REVIEWER or (
-        run.in_flight_turn is not None and run.in_flight_turn.role == "reviewer"
+    # completed - with or without a live in-flight reviewer intent, and with or
+    # without a materialized interrupted reviewer attempt.
+    reviewer_phase_is_current = (
+        state is RunState.READY_REVIEWER
+        or (run.in_flight_turn is not None and run.in_flight_turn.role == "reviewer")
+        or (
+            state is RunState.RECOVERY_REQUIRED
+            and run.recovery is not None
+            and run.recovery.attempt.role == "reviewer"
+        )
     )
     if reviewer_phase_is_current and len(completed_turns("implementer", run.current_cycle)) != 1:
         bad(
@@ -455,6 +515,9 @@ def validate_run_semantics(run: Any) -> None:
                 f"is not {expected_next_state!r} for state {state.value}"
             )
 
+    # -- v0.3-E recovery shape (v2 only) -------------------------------
+    _require_recovery_shape(run, state, snapshot, bad)
+
     # -- transition provenance: the last edge must end at this state --
     # ``last_transition is None`` is legal for an in-memory run under
     # construction; requiring provenance for *persisted* documents is enforced by
@@ -515,6 +578,178 @@ def _require_finished_audit(turn: Any, label: str, bad: Any) -> None:
         bad(f"{label} is blocked but carries no blocked_reason")
 
 
+def _require_recovery_shape(run: Any, state: RunState, snapshot: Any, bad: Any) -> None:
+    """The v0.3-E recovery shape: exactly one record, one resolution, no refunds.
+
+    ``RECOVERY_REQUIRED`` holds the *unresolved* record (accounted instead of a
+    history turn); every other state may only carry a *resolved* one, and
+    ``mark_unrecoverable`` must have converted the same attempt into exactly one
+    blocked history turn whose reason is the recovery reason.
+    """
+    recovery = run.recovery
+    if run.schema_version < 2:
+        return
+
+    if state is RunState.RECOVERY_REQUIRED:
+        if recovery is None:
+            bad("state RECOVERY_REQUIRED requires exactly one materialized recovery record")
+        if run.in_flight_turn is not None:
+            bad(
+                "state RECOVERY_REQUIRED must not carry a live in-flight intent "
+                "(the interrupted attempt is materialized into the recovery record)"
+            )
+        if not run.recovery_reason:
+            bad("state RECOVERY_REQUIRED requires a recovery_reason")
+        if run.blocked_reason:
+            bad(
+                f"state RECOVERY_REQUIRED must not carry blocked_reason "
+                f"{run.blocked_reason!r} (the run is not blocked before resolution)"
+            )
+        if recovery.resolution:
+            bad(
+                f"state RECOVERY_REQUIRED requires an unresolved recovery record, "
+                f"found resolution {recovery.resolution!r}"
+            )
+        if run.recovery_reason != recovery.recovery_reason:
+            bad(
+                f"recovery_reason {run.recovery_reason!r} disagrees with the recovery "
+                f"record's {recovery.recovery_reason!r}"
+            )
+        _require_recovery_record(run, recovery, snapshot, bad)
+        attempt = recovery.attempt
+        if attempt.cycle != run.current_cycle:
+            bad(
+                f"the recovery attempt cycle {attempt.cycle} is not the current "
+                f"cycle {run.current_cycle}"
+            )
+        if any(turn.model_dump() == attempt.model_dump() for turn in run.turns):
+            bad(
+                "the materialized recovery attempt must not also appear in a role "
+                "history before it is resolved (no double count, no refund)"
+            )
+        return
+
+    if recovery is None:
+        if run.recovery_reason:
+            bad(
+                f"state {state.value} must not carry recovery_reason "
+                f"{run.recovery_reason!r}"
+            )
+        return
+
+    # A resolved recovery record: only recovery states may carry one, and only
+    # with a resolution recorded.
+    if not recovery.resolution:
+        bad(
+            f"state {state.value} carries an unresolved recovery record "
+            "(only RECOVERY_REQUIRED may)"
+        )
+    if not recovery.resolved_at or not _is_iso(recovery.resolved_at):
+        bad("a resolved recovery record requires a valid resolved_at timestamp")
+    if run.recovery_reason != recovery.recovery_reason:
+        bad(
+            f"recovery_reason {run.recovery_reason!r} disagrees with the recovery "
+            f"record's {recovery.recovery_reason!r}"
+        )
+    _require_recovery_record(run, recovery, snapshot, bad)
+    attempt = recovery.attempt
+    history = (
+        run.implementer_turns if attempt.role == "implementer" else run.reviewer_turns
+    )
+    if not any(turn.model_dump() == attempt.model_dump() for turn in history):
+        bad(
+            "the resolved recovery attempt is not recorded in its role history "
+            "(a resolution converts the same attempt exactly once)"
+        )
+    if recovery.resolution == RecoveryResolution.MARK_UNRECOVERABLE.value:
+        if state is not RunState.BLOCKED:
+            bad(
+                f"resolution mark_unrecoverable requires state BLOCKED, not "
+                f"{state.value}"
+            )
+        if run.blocked_reason != recovery.recovery_reason:
+            bad(
+                f"a failed-closed recovery requires blocked_reason == recovery_reason "
+                f"({recovery.recovery_reason!r}), found {run.blocked_reason!r}"
+            )
+        return
+    if recovery.resolution == RecoveryResolution.ADOPT_COMPLETED_TURN.value:
+        # Adoption is disabled in this build; a document carrying it can only
+        # come from a build where the platform proofs enabled it.  It is still
+        # validated structurally so such state is never misread.
+        if attempt.outcome != TurnOutcomeState.COMPLETED.value:
+            bad("an adopted recovery attempt must be recorded as completed")
+        if state is RunState.READY_REVIEWER:
+            if attempt.role != "implementer" or attempt.cycle != run.current_cycle:
+                bad(
+                    "an adopted implementer attempt must be this cycle's implementer "
+                    "turn in READY_REVIEWER"
+                )
+        elif state is RunState.AWAITING_DECISION:
+            if attempt.role != "reviewer" or attempt.cycle != run.completed_cycles:
+                bad(
+                    "an adopted reviewer attempt must be the completed reviewer turn "
+                    f"of cycle {run.completed_cycles}"
+                )
+        else:
+            bad(f"an adopted turn cannot land in state {state.value}")
+        return
+    bad(f"unknown recovery resolution {recovery.resolution!r}")
+
+
+def _require_recovery_record(run: Any, recovery: Any, snapshot: Any, bad: Any) -> None:
+    """The frozen attempt and its evidence digest must describe this run."""
+    attempt = recovery.attempt
+    evidence = recovery.evidence
+    if evidence.run_id != run.run_id:
+        bad(f"recovery evidence belongs to run {evidence.run_id!r}, not {run.run_id!r}")
+    if evidence.schema_version != run.schema_version:
+        bad("recovery evidence schema_version disagrees with the document")
+    if evidence.state not in (
+        RunState.READY_IMPLEMENTER.value,
+        RunState.READY_REVIEWER.value,
+    ):
+        bad(
+            f"recovery evidence state {evidence.state!r} is not an interruptible "
+            "live-intent state"
+        )
+    last = run.last_transition
+    if last is not None and last.previous_state != RunState.RECOVERY_REQUIRED.value:
+        if evidence.state != last.previous_state:
+            bad(
+                f"recovery evidence state {evidence.state!r} disagrees with the "
+                f"recorded entry state {last.previous_state!r}"
+            )
+    if evidence.current_cycle != run.current_cycle:
+        bad("recovery evidence current_cycle disagrees with the document")
+    if evidence.completed_cycles != run.completed_cycles:
+        bad("recovery evidence completed_cycles disagrees with the document")
+    if evidence.model_turns_used != run.model_turns_used:
+        bad("recovery evidence model_turns_used disagrees with the document")
+    if evidence.turn_attempts != run.turn_attempts:
+        bad("recovery evidence turn_attempts disagrees with the document")
+    if evidence.attempt_role != attempt.role or evidence.attempt_cycle != attempt.cycle:
+        bad("recovery evidence attempt identity disagrees with the frozen attempt")
+    if evidence.attempt_prompt_sha256 != attempt.prompt_sha256:
+        bad("recovery evidence prompt digest disagrees with the frozen attempt")
+    if evidence.attempt_prompt_chars != attempt.prompt_chars:
+        bad("recovery evidence prompt length disagrees with the frozen attempt")
+    if (
+        evidence.attempt_resolved_model != attempt.resolved_model
+        or evidence.attempt_resolved_agent != attempt.resolved_agent
+        or evidence.attempt_route_source != attempt.route_source
+        or evidence.attempt_started_at != attempt.started_at
+    ):
+        bad("recovery evidence route/start evidence disagrees with the frozen attempt")
+    recorded_calls = [item for item in evidence.attempt_call_ids.split(",") if item]
+    if recorded_calls != list(attempt.call_ids):
+        bad("recovery evidence call ids disagree with the frozen attempt")
+    if recovery.recovery_reason not in RECOVERY_REASONS:
+        bad(f"recovery reason {recovery.recovery_reason!r} is not a known reason")
+    _require_prompt_evidence(attempt, "recovery attempt", bad)
+    _require_route_agreement(attempt, attempt.role, snapshot, bad, label="recovery attempt")
+
+
 def _require_last_transition(run: Any, state: RunState, bad: Any) -> None:
     """The recorded transition must be a real edge that ends at *state*."""
     record = run.last_transition
@@ -537,6 +772,11 @@ def _require_last_transition(run: Any, state: RunState, bad: Any) -> None:
                 "READY_IMPLEMENTER run (no previous state)"
             )
         return
+    if run.schema_version < 2 and record.action == RECOVERY_ACTION:
+        bad(
+            f"action {RECOVERY_ACTION!r} does not exist for schema_version "
+            f"{run.schema_version} (the recovery edges are a v2 addition)"
+        )
     if not record.previous_state:
         bad("a non-start transition must record its previous state")
     allowed = _LAST_EDGE_RULES.get(state, frozenset())

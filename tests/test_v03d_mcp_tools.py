@@ -8,6 +8,7 @@ import json
 import pytest
 
 from devrelay.mcp.tools import READ_ONLY_TOOLS, SIDE_EFFECTING_TOOLS, TOOL_NAMES
+from devrelay.orchestration.recovery import ADOPTION_DISABLED_REASON
 
 from v03d_helpers import (
     IMPLEMENTER_SESSION,
@@ -31,6 +32,8 @@ ORCHESTRATION_TOOLS = [
     "devrelay_run_reviewer",
     "devrelay_decide_run",
 ]
+#: v0.3-E appends exactly two fail-closed recovery tools.
+RECOVERY_TOOLS = ["devrelay_reconcile_run", "devrelay_resolve_recovery"]
 
 
 def tools_of(server) -> dict:
@@ -44,8 +47,9 @@ def test_inventory_is_sixteen_plus_exactly_five_seventeen(tmp_path):
     harness = build(tmp_path, run_id_factory=fixed_run_ids(RUN_ID))
     names = [tool.name for tool in asyncio.run(harness.server.list_tools())]
     assert names == list(TOOL_NAMES)
-    assert len(names) == 17
-    assert names[12:] == ORCHESTRATION_TOOLS
+    assert len(names) == 19
+    assert names[12:17] == ORCHESTRATION_TOOLS
+    assert names[17:] == RECOVERY_TOOLS
     assert names[:12] == [
         "devrelay_status",
         "opencode_health",
@@ -241,7 +245,16 @@ def test_status_exposes_the_orchestration_capability_block(tmp_path):
         "automatic_decisions": False,
         "durable_state": True,
         "state_location": "orchestration/runs",
-        "recovery": "out of scope (v0.3-E)",
+        "recovery": {
+            "available": True,
+            "resolutions": ["mark_unrecoverable", "adopt_completed_turn"],
+            "adoption_enabled": False,
+            "adoption_reason": ADOPTION_DISABLED_REASON,
+            "submits_model_requests": False,
+            "retries": False,
+            "resumes": False,
+            "max_recovery_attempts": 1,
+        },
     }
     assert "run_id" not in block and "state" not in block, "status never inlines a run"
 

@@ -98,9 +98,11 @@ def test_stdio_advertises_seventeen_tools(fake_opencode, tmp_path):
         return [tool.name for tool in (await session.list_tools()).tools]
 
     names = run_over_stdio(ws, script)
-    assert len(EXACT_TOOLS) == 17
+    assert len(EXACT_TOOLS) == 19
     assert names == EXACT_TOOLS
-    assert names[12:] == ORCHESTRATION_TOOLS
+    assert names[12:17] == ORCHESTRATION_TOOLS
+    # v0.3-E appends exactly two fail-closed recovery tools.
+    assert names[17:] == ["devrelay_reconcile_run", "devrelay_resolve_recovery"]
 
 
 def test_stdio_one_cycle_keeps_awaiting_decision_until_the_planner_decides(

@@ -32,6 +32,7 @@ from v03d_helpers import (
     build,
     decide,
     fixed_run_ids,
+    freeze_v03d,
     get_run,
     phase,
     raw_payload,
@@ -183,6 +184,9 @@ def test_a_crash_at_submission_leaves_a_loadable_in_flight_intent(tmp_path: Path
     stub = dying_stub(tmp_path / "ws")
     harness = build(tmp_path, stub=stub, run_id_factory=fixed_run_ids(RUN_ID))
     run_id = run_id_of(harness.server, max_cycles=1)
+    # The frozen v0.3-D (v1) crash contract is certified here; v0.3-E's v2
+    # refusal + recovery contract is certified in tests/test_v03e_*.py.
+    freeze_v03d(harness.ws, run_id)
 
     with pytest.raises(SystemExit):
         phase(harness.server, "devrelay_run_implementer", run_id, PROMPT)
@@ -232,6 +236,7 @@ def test_a_crash_during_the_reviewer_turn_blocks_without_closing_a_cycle(
     stub = dying_stub(tmp_path / "ws", on_post=2)
     harness = build(tmp_path, stub=stub, run_id_factory=fixed_run_ids(RUN_ID))
     run_id = run_id_of(harness.server, max_cycles=1)
+    freeze_v03d(harness.ws, run_id)
     assert phase(harness.server, "devrelay_run_implementer", run_id, PROMPT)["ok"] is True
 
     with pytest.raises(SystemExit):

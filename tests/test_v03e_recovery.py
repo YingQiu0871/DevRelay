@@ -1,0 +1,471 @@
+"""v0.3-E fail-closed recovery: the mandatory core, end to end.
+
+Every crash boundary here is produced by a real ``SystemExit`` inside the stub
+transport (never by hand-writing a "busy" document), so the interrupted intent
+being recovered is exactly the one the service durably committed.
+"""
+
+from __future__ import annotations
+
+from pathlib import Path
+
+import pytest
+
+from devrelay.orchestration import recovery
+from devrelay.orchestration.models import (
+    LEGACY_SCHEMA_VERSION,
+    ORCHESTRATION_SCHEMA_VERSION,
+    OrchestrationAction,
+    RecoveryRecord,
+    RunState,
+    TransitionRecord,
+)
+from devrelay.orchestration.state_machine import after_enter_recovery, transition_record
+from v03d_helpers import (
+    RUN_ID,
+    build,
+    call,
+    decide,
+    dying_stub,
+    fixed_run_ids,
+    freeze_v03d,
+    get_run,
+    phase,
+    prompt_posts,
+    raw_payload,
+    restart_surface,
+    run_id_of,
+    state_path,
+)
+
+
+# ---------------------------------------------------------------------------
+# helpers
+# ---------------------------------------------------------------------------
+def crashed_run(tmp_path: Path, *, on_post: int = 1, max_cycles: int = 1):
+    """A real crash at the *on_post*-th submission leaves a live v2 intent."""
+    stub = dying_stub(tmp_path / "ws", on_post=on_post)
+    harness = build(tmp_path, stub=stub, run_id_factory=fixed_run_ids(RUN_ID))
+    run_id = run_id_of(harness.server, max_cycles=max_cycles)
+    if on_post == 2:
+        assert phase(harness.server, "devrelay_run_implementer", run_id, "i")["ok"] is True
+        tool = "devrelay_run_reviewer"
+    else:
+        tool = "devrelay_run_implementer"
+    with pytest.raises(SystemExit):
+        phase(harness.server, tool, run_id, "crashed prompt")
+    return harness, run_id
+
+
+def document_bytes(ws: Path, run_id: str) -> bytes:
+    return state_path(ws, run_id).read_bytes()
+
+
+def resolve(server, run_id: str, resolution: str):
+    return call(
+        server,
+        "devrelay_resolve_recovery",
+        {"run_id": run_id, "resolution": resolution},
+    )
+
+
+def reconcile(server, run_id: str):
+    return call(server, "devrelay_reconcile_run", {"run_id": run_id})
+
+
+def refusal(envelope, code: str) -> None:
+    assert envelope["ok"] is False, envelope
+    assert envelope["error"]["type"] == code, envelope["error"]
+
+
+# ---------------------------------------------------------------------------
+# entry: a v2 live intent freezes every mutating phase action
+# ---------------------------------------------------------------------------
+def test_a_live_v2_intent_refuses_every_mutating_phase_action(tmp_path: Path) -> None:
+    harness, run_id = crashed_run(tmp_path)
+    before = document_bytes(harness.ws, run_id)
+
+    for tool, prompt in (
+        ("devrelay_run_implementer", "i"),
+        ("devrelay_run_reviewer", "r"),
+    ):
+        envelope = phase(harness.server, tool, run_id, prompt)
+        refusal(envelope, "orchestration_recovery_required")
+        assert envelope["data"]["state"] == "READY_IMPLEMENTER"
+        assert envelope["data"]["in_flight"] is True
+        assert document_bytes(harness.ws, run_id) == before, "a refusal must not write"
+
+    refusal(decide(harness.server, run_id, "complete"), "orchestration_recovery_required")
+    assert document_bytes(harness.ws, run_id) == before
+    assert prompt_posts(harness.stub) == [], (
+        "the refusal must not submit anything (the dying POST is never recorded)"
+    )
+
+
+def test_get_run_reports_the_frozen_v2_intent(tmp_path: Path) -> None:
+    harness, run_id = crashed_run(tmp_path)
+    envelope = get_run(harness.server, run_id)
+    assert envelope["ok"] is True
+    data = envelope["data"]
+    assert data["schema_version"] == ORCHESTRATION_SCHEMA_VERSION == 2
+    assert data["in_flight"] is True
+    assert data["state"] == "READY_IMPLEMENTER"
+    assert data["legal_next_actions"] == ["devrelay_resolve_recovery"]
+
+
+# ---------------------------------------------------------------------------
+# reconcile: read-only, honest, and explicit about what it cannot prove
+# ---------------------------------------------------------------------------
+def test_reconcile_is_read_only_and_reports_the_honest_evidence(
+    tmp_path: Path,
+) -> None:
+    harness, run_id = crashed_run(tmp_path)
+    before = document_bytes(harness.ws, run_id)
+    posts = prompt_posts(harness.stub)
+
+    envelope = reconcile(harness.server, run_id)
+    assert envelope["ok"] is True, envelope
+    data = envelope["data"]
+    assert data["run_id"] == run_id
+    assert data["state"] == "READY_IMPLEMENTER"
+    assert data["terminal"] is False
+    assert data["recoverable"] is True
+    assert data["v1_frozen"] is False
+    assert data["recovery_reason"] == "turn_interrupted"
+    assert data["recovery"] is None, "nothing is materialized by a read"
+    assert data["attempt"]["role"] == "implementer"
+    assert data["adoption"]["available"] is False
+    assert data["adoption"]["reason"] == recovery.ADOPTION_DISABLED_REASON
+    assert data["adoption"]["candidate"] is None
+    assert data["ledger"]["outcome"] in {
+        "exactly_one_match",
+        "no_record_in_proven_interval",
+        "evidence_gap",
+        "multiple_matches",
+    }
+    assert data["budget"]["turn_attempts"] == 1
+    assert data["budget"]["model_turns_used"] == 1
+    assert data["submission"]["submitted_by_recovery"] is False
+    assert data["legal_next_actions"] == ["devrelay_resolve_recovery"]
+    assert "never" in data["note"] or "read-only" in data["note"]
+
+    assert document_bytes(harness.ws, run_id) == before, "reconcile never writes"
+    assert prompt_posts(harness.stub) == posts, "reconcile never submits"
+
+    # what the durable document says is what the report says
+    persisted = raw_payload(harness.ws, run_id)
+    assert persisted["schema_version"] == 2
+    assert persisted["in_flight_turn"]["role"] == "implementer"
+    assert persisted["in_flight_turn"]["prompt_sha256"] == data["attempt"]["prompt_sha256"]
+
+
+def test_reconcile_on_a_quiet_run_reports_nothing_to_recover(tmp_path: Path) -> None:
+    harness = build(tmp_path)
+    run_id = run_id_of(harness.server, max_cycles=1)
+    envelope = reconcile(harness.server, run_id)
+    assert envelope["ok"] is True, envelope
+    data = envelope["data"]
+    assert data["state"] == "READY_IMPLEMENTER"
+    assert data["budget"]["in_flight"] is False
+    assert data["recoverable"] is False
+    assert data["attempt"] is None
+    assert data["recovery"] is None
+    assert data["ledger"]["interval_proven"] is False
+    assert data["legal_next_actions"] == ["devrelay_run_implementer"]
+    assert prompt_posts(harness.stub) == []
+
+
+# ---------------------------------------------------------------------------
+# resolve: exactly one blocked turn, exactly one write
+# ---------------------------------------------------------------------------
+def test_mark_unrecoverable_materializes_exactly_one_blocked_turn(tmp_path: Path) -> None:
+    harness, run_id = crashed_run(tmp_path)
+    posts = prompt_posts(harness.stub)
+    before = raw_payload(harness.ws, run_id)
+
+    envelope = resolve(harness.server, run_id, "mark_unrecoverable")
+    assert envelope["ok"] is True, envelope
+    data = envelope["data"]
+    assert data["state"] == "BLOCKED"
+    assert data["terminal"] is True
+    assert data["in_flight"] is False
+    assert data["blocked_reason"] == "turn_interrupted"
+    assert data["recovery_reason"] == "turn_interrupted"
+    assert data["legal_next_actions"] == []
+    assert data["model_turns_used"] == before["model_turns_used"] == 1
+    assert data["turn_attempts"] == before["turn_attempts"] == 1
+    assert len(data["implementer_turns"]) == 1
+    turn = data["implementer_turns"][0]
+    assert turn["role"] == "implementer"
+    assert turn["outcome"] == "blocked"
+    assert turn["blocked_reason"] == "turn_interrupted"
+    assert turn["completed_at"]
+    assert turn["prompt_sha256"] == before["in_flight_turn"]["prompt_sha256"]
+    assert data["reviewer_turns"] == []
+
+    record = data["recovery"]
+    assert record["resolution"] == "mark_unrecoverable"
+    assert record["resolved_at"]
+    assert record["recovery_reason"] == "turn_interrupted"
+    assert record["attempt"]["outcome"] == "blocked"
+    assert record["evidence"]["evidence_sha256"] == record["evidence"]["evidence_sha256"]
+    assert record["evidence"]["attempt_call_ids"] == ",".join(
+        before["in_flight_turn"]["call_ids"]
+    )
+
+    transition = data["last_transition"]
+    assert transition["action"] == "recover"
+    assert transition["source"] == "external_planner"
+    assert transition["previous_state"] == "RECOVERY_REQUIRED"
+    assert transition["next_state"] == "BLOCKED"
+    assert transition["role"] == "implementer"
+
+    assert prompt_posts(harness.stub) == posts, "recovery never submits a model turn"
+
+    persisted = raw_payload(harness.ws, run_id)
+    assert persisted["state"] == "BLOCKED"
+    assert persisted["in_flight_turn"] is None
+    assert persisted["recovery"]["resolution"] == "mark_unrecoverable"
+
+
+def test_recovery_is_write_once(tmp_path: Path) -> None:
+    harness, run_id = crashed_run(tmp_path)
+    first = resolve(harness.server, run_id, "mark_unrecoverable")
+    assert first["ok"] is True, first
+    after = document_bytes(harness.ws, run_id)
+
+    second = resolve(harness.server, run_id, "mark_unrecoverable")
+    refusal(second, "orchestration_recovery_already_resolved")
+    assert "mark_unrecoverable" in second["error"]["message"]
+    assert second["data"]["state"] == "BLOCKED"
+    assert document_bytes(harness.ws, run_id) == after, "no second resolution is applied"
+
+    third = resolve(harness.server, run_id, "adopt_completed_turn")
+    refusal(third, "orchestration_recovery_already_resolved")
+    assert document_bytes(harness.ws, run_id) == after
+
+
+def test_adoption_is_refused_before_any_write(tmp_path: Path) -> None:
+    harness, run_id = crashed_run(tmp_path)
+    before = document_bytes(harness.ws, run_id)
+
+    envelope = resolve(harness.server, run_id, "adopt_completed_turn")
+    refusal(envelope, "orchestration_adoption_disabled")
+    assert envelope["data"]["in_flight"] is True
+    assert document_bytes(harness.ws, run_id) == before, "a disabled adoption writes nothing"
+    assert prompt_posts(harness.stub) == [], "the dying POST is never recorded as served"
+
+    # the mandatory core still has its one legal exit after the refusal
+    assert resolve(harness.server, run_id, "mark_unrecoverable")["ok"] is True
+
+
+def test_unknown_resolutions_are_argument_errors(tmp_path: Path) -> None:
+    harness, run_id = crashed_run(tmp_path)
+    before = document_bytes(harness.ws, run_id)
+    for value in ("adopt", "", "MARK_UNRECOVERABLE", None):
+        envelope = call(
+            harness.server,
+            "devrelay_resolve_recovery",
+            {"run_id": run_id, "resolution": value},
+        )
+        refusal(envelope, "mcp_invalid_argument")
+        assert document_bytes(harness.ws, run_id) == before
+
+
+def test_terminal_runs_are_never_reopened(tmp_path: Path) -> None:
+    harness = build(tmp_path)
+    run_id = run_id_of(harness.server, max_cycles=1)
+    assert phase(harness.server, "devrelay_run_implementer", run_id, "i")["ok"] is True
+    assert phase(harness.server, "devrelay_run_reviewer", run_id, "r")["ok"] is True
+    assert decide(harness.server, run_id, "complete")["ok"] is True
+    before = document_bytes(harness.ws, run_id)
+
+    envelope = resolve(harness.server, run_id, "mark_unrecoverable")
+    refusal(envelope, "orchestration_invalid_transition")
+    assert document_bytes(harness.ws, run_id) == before
+
+    report = reconcile(harness.server, run_id)
+    assert report["ok"] is True
+    assert report["data"]["terminal"] is True
+    assert report["data"]["recoverable"] is False
+    assert report["data"]["legal_next_actions"] == []
+
+
+# ---------------------------------------------------------------------------
+# frozen v1 documents keep the exact v0.3-D contract
+# ---------------------------------------------------------------------------
+def test_a_frozen_v1_document_refuses_recovery_and_fails_closed(tmp_path: Path) -> None:
+    harness, run_id = crashed_run(tmp_path)
+    freeze_v03d(harness.ws, run_id)
+    before = document_bytes(harness.ws, run_id)
+
+    report = reconcile(harness.server, run_id)
+    assert report["ok"] is True, report
+    assert report["data"]["schema_version"] == LEGACY_SCHEMA_VERSION == 1
+    assert report["data"]["v1_frozen"] is True
+    assert report["data"]["recoverable"] is False
+    assert "v1" in report["data"]["note"]
+    refusal(resolve(harness.server, run_id, "mark_unrecoverable"), "orchestration_recovery_unsupported")
+    assert document_bytes(harness.ws, run_id) == before, "v1 is never migrated"
+
+    # ... and the frozen v0.3-D materialization still happens exactly once
+    envelope = phase(harness.server, "devrelay_run_implementer", run_id, "i")
+    assert envelope["ok"] is False
+    assert envelope["data"]["state"] == "BLOCKED"
+    assert envelope["data"]["blocked_reason"] == "turn_interrupted"
+    refusal(
+        resolve(harness.server, run_id, "mark_unrecoverable"),
+        "orchestration_recovery_unsupported",
+    )
+
+
+# ---------------------------------------------------------------------------
+# entry from a READY_REVIEWER live intent
+# ---------------------------------------------------------------------------
+def test_a_crashed_reviewer_turn_resolves_as_a_blocked_reviewer_turn(
+    tmp_path: Path,
+) -> None:
+    harness, run_id = crashed_run(tmp_path, on_post=2)
+    report = reconcile(harness.server, run_id)
+    assert report["ok"] is True, report
+    assert report["data"]["state"] == "READY_REVIEWER"
+    assert report["data"]["attempt"]["role"] == "reviewer"
+    assert report["data"]["recovery_reason"] == "turn_interrupted"
+
+    envelope = resolve(harness.server, run_id, "mark_unrecoverable")
+    assert envelope["ok"] is True, envelope
+    data = envelope["data"]
+    assert data["state"] == "BLOCKED"
+    assert data["blocked_reason"] == "turn_interrupted"
+    assert [turn["outcome"] for turn in data["implementer_turns"]] == ["completed"]
+    assert [turn["outcome"] for turn in data["reviewer_turns"]] == ["blocked"]
+    assert data["recovery"]["attempt"]["role"] == "reviewer"
+    assert data["last_transition"]["role"] == "reviewer"
+    assert prompt_posts(harness.stub) == ["/session/ses_impl/message"], (
+        "only the completed implementer submission was served; the reviewer POST died"
+    )
+
+
+# ---------------------------------------------------------------------------
+# restart matrix: the durable document is the only truth
+# ---------------------------------------------------------------------------
+def test_a_restart_reads_the_same_live_intent_and_resolves_it(tmp_path: Path) -> None:
+    harness, run_id = crashed_run(tmp_path)
+    restarted = restart_surface(harness)
+
+    read = get_run(restarted.server, run_id)
+    assert read["ok"] is True
+    assert read["data"]["in_flight"] is True
+    assert read["data"]["state"] == "READY_IMPLEMENTER"
+    assert read["data"]["legal_next_actions"] == ["devrelay_resolve_recovery"]
+    assert prompt_posts(restarted.stub) == [], "a restart never replays the intent"
+
+    envelope = resolve(restarted.server, run_id, "mark_unrecoverable")
+    assert envelope["ok"] is True, envelope
+    assert envelope["data"]["state"] == "BLOCKED"
+    assert prompt_posts(restarted.stub) == []
+    assert raw_payload(restarted.ws, run_id)["recovery"]["resolution"] == "mark_unrecoverable"
+
+
+def test_a_restart_after_resolution_sees_a_settled_blocked_run(tmp_path: Path) -> None:
+    harness, run_id = crashed_run(tmp_path)
+    assert resolve(harness.server, run_id, "mark_unrecoverable")["ok"] is True
+    restarted = restart_surface(harness)
+
+    read = get_run(restarted.server, run_id)
+    assert read["ok"] is True
+    assert read["data"]["state"] == "BLOCKED"
+    assert read["data"]["in_flight"] is False
+    assert read["data"]["recovery"]["resolution"] == "mark_unrecoverable"
+    assert read["data"]["legal_next_actions"] == []
+    refusal(
+        resolve(restarted.server, run_id, "mark_unrecoverable"),
+        "orchestration_recovery_already_resolved",
+    )
+
+
+# ---------------------------------------------------------------------------
+# the RECOVERY_REQUIRED document shape (a persisted, unresolved record)
+# ---------------------------------------------------------------------------
+def _persist_recovery_required(harness, run_id: str) -> None:
+    """Materialize the crash intent into a persisted, unresolved record."""
+    store = harness.service.store
+    run = store.load(run_id)
+    attempt = run.in_flight_turn
+    assert attempt is not None
+    reason = recovery.infer_recovery_reason(attempt)
+    evidence, frozen = recovery.build_record(
+        run,
+        attempt,
+        entry_state=run.state,
+        reason=reason,
+        ledger_scan=None,
+        remote=recovery.RemoteMatch(recovery.REMOTE_GAP),
+    )
+    run.in_flight_turn = None
+    run.recovery = RecoveryRecord(attempt=frozen, recovery_reason=reason, evidence=evidence)
+    run.recovery_reason = reason
+    transition = after_enter_recovery(run)
+    record = transition_record(
+        action=OrchestrationAction.RECOVER,
+        source="external_planner",
+        run=run,
+        next_state=transition.state,
+        role=attempt.role,
+    )
+    transition.apply(run, record)
+    store.save(run)
+
+
+def test_a_persisted_recovery_required_document_resolves_in_place(tmp_path: Path) -> None:
+    harness, run_id = crashed_run(tmp_path)
+    _persist_recovery_required(harness, run_id)
+
+    persisted = raw_payload(harness.ws, run_id)
+    assert persisted["state"] == "RECOVERY_REQUIRED"
+    assert persisted["in_flight_turn"] is None
+    assert persisted["recovery"]["resolution"] == ""
+
+    before = document_bytes(harness.ws, run_id)
+    report = reconcile(harness.server, run_id)
+    assert report["ok"] is True, report
+    assert report["data"]["state"] == "RECOVERY_REQUIRED"
+    assert report["data"]["recoverable"] is True
+    assert report["data"]["recovery_reason"] == "turn_interrupted"
+    assert report["data"]["legal_next_actions"] == [
+        "devrelay_reconcile_run",
+        "devrelay_resolve_recovery(mark_unrecoverable)",
+    ]
+    assert document_bytes(harness.ws, run_id) == before
+
+    refusal(decide(harness.server, run_id, "complete"), "orchestration_recovery_required")
+    refusal(
+        phase(harness.server, "devrelay_run_implementer", run_id, "i"),
+        "orchestration_recovery_required",
+    )
+    assert document_bytes(harness.ws, run_id) == before
+
+    envelope = resolve(harness.server, run_id, "mark_unrecoverable")
+    assert envelope["ok"] is True, envelope
+    assert envelope["data"]["state"] == "BLOCKED"
+    assert envelope["data"]["blocked_reason"] == "turn_interrupted"
+    assert len(envelope["data"]["implementer_turns"]) == 1
+
+
+def test_a_persisted_recovery_required_document_survives_a_restart(tmp_path: Path) -> None:
+    harness, run_id = crashed_run(tmp_path)
+    _persist_recovery_required(harness, run_id)
+    restarted = restart_surface(harness)
+
+    read = get_run(restarted.server, run_id)
+    assert read["ok"] is True, read
+    assert read["data"]["state"] == "RECOVERY_REQUIRED"
+    assert read["data"]["in_flight"] is False
+    assert read["data"]["legal_next_actions"] == [
+        "devrelay_reconcile_run",
+        "devrelay_resolve_recovery(mark_unrecoverable)",
+    ]
+
+    envelope = resolve(restarted.server, run_id, "mark_unrecoverable")
+    assert envelope["ok"] is True, envelope
+    assert envelope["data"]["state"] == "BLOCKED"

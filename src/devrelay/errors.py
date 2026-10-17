@@ -362,3 +362,44 @@ class OrchestrationStateCorruptError(OrchestrationError):
     """The persisted run document is unreadable or malformed (never reset)."""
 
     code = "orchestration_state_corrupt"
+
+
+# ---------------------------------------------------------------------------
+# v0.3-E: fail-closed recovery of interrupted turns
+#
+# Recovery never reports a provider/role outcome: the only accepted resolution
+# recorded by this build is ``mark_unrecoverable`` (fail closed), and adoption
+# stays disabled until its platform proofs pass.
+# ---------------------------------------------------------------------------
+
+
+class OrchestrationRecoveryRequiredError(OrchestrationError):
+    """A live role turn is interrupted; only recovery may touch this run."""
+
+    code = "orchestration_recovery_required"
+
+
+class OrchestrationRecoveryUnsupportedError(OrchestrationError):
+    """A frozen v0.3-D (v1) run has no recovery protocol; it fails closed."""
+
+    code = "orchestration_recovery_unsupported"
+
+
+class OrchestrationRecoveryAlreadyResolvedError(OrchestrationError):
+    """A recovery resolution is write-once; the recorded one is reported back."""
+
+    code = "orchestration_recovery_already_resolved"
+
+    def __init__(self, resolution: str, resolved_at: str) -> None:
+        self.resolution = resolution
+        self.resolved_at = resolved_at
+        super().__init__(
+            f"recovery already resolved as {resolution!r} at {resolved_at!r}; a "
+            "resolution is write-once and no second resolution is applied"
+        )
+
+
+class OrchestrationAdoptionDisabledError(OrchestrationError):
+    """adopt_completed_turn is disabled until its platform proofs pass."""
+
+    code = "orchestration_adoption_disabled"

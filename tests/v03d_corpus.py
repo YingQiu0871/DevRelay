@@ -24,6 +24,7 @@ from v03d_helpers import (
     dying_stub,
     failing_post_stub,
     fixed_run_ids,
+    freeze_v03d,
     phase,
     raw_payload,
     restart_surface,
@@ -81,7 +82,9 @@ def _run_id() -> str:
 
 def _started(root: Path, *, max_cycles: int = 2, **kwargs: Any) -> tuple[Harness, str]:
     harness = _harness(root, **kwargs)
-    return harness, run_id_of(harness.server, max_cycles=max_cycles)
+    run_id = run_id_of(harness.server, max_cycles=max_cycles)
+    freeze_v03d(harness.ws, run_id)
+    return harness, run_id
 
 
 def _implementer(harness: Harness, run_id: str, prompt: str = "implementer turn") -> dict[str, Any]:
@@ -107,6 +110,7 @@ def _crash_at(root: Path, *, on_post: int, max_cycles: int = 2) -> tuple[Harness
     stub = dying_stub(root / "ws", on_post=on_post)
     harness = build(root, stub=stub, run_id_factory=fixed_run_ids(_run_id()))
     run_id = run_id_of(harness.server, max_cycles=max_cycles)
+    freeze_v03d(harness.ws, run_id)
     prompts = ["implementer turn", "reviewer turn", "implementer turn 2", "reviewer turn 2"]
     for index in range(on_post - 1):
         tool = (
@@ -134,6 +138,7 @@ def _blocked_by_failure(root: Path, *, on_post: int, max_cycles: int = 2) -> tup
     stub = failing_post_stub(root / "ws", on_post=on_post)
     harness = build(root, stub=stub, run_id_factory=fixed_run_ids(_run_id()))
     run_id = run_id_of(harness.server, max_cycles=max_cycles)
+    freeze_v03d(harness.ws, run_id)
     if on_post == 1:
         envelope = phase(harness.server, "devrelay_run_implementer", run_id, "implementer turn")
     else:

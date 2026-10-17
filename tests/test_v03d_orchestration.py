@@ -688,6 +688,11 @@ def test_a_persisted_in_flight_turn_is_never_replayed(tmp_path):
     stub = dying_stub(tmp_path / "ws", on_post=1)
     harness = build(tmp_path, stub=stub, run_id_factory=fixed_run_ids(RUN_ID))
     run_id = run_id_of(harness.server, max_cycles=1)
+    # Certify the frozen v0.3-D (v1) contract here; the v0.3-E v2 contract
+    # (refuse without mutating, then recover) lives in tests/test_v03e_*.py.
+    from v03d_helpers import freeze_v03d
+
+    freeze_v03d(harness.ws, run_id)
     with pytest.raises(SystemExit):
         phase(harness.server, "devrelay_run_implementer", run_id, "i")
 

@@ -20,13 +20,18 @@ from typing import Any, Callable
 from devrelay.errors import (
     DevRelayError,
     RoleRoutingError,
+    OrchestrationAdoptionDisabledError,
     OrchestrationCycleLimitError,
     OrchestrationInvalidTransitionError,
+    OrchestrationRecoveryAlreadyResolvedError,
+    OrchestrationRecoveryRequiredError,
+    OrchestrationRecoveryUnsupportedError,
     OrchestrationRouteChangedError,
     OrchestrationSessionConflictError,
 )
 from devrelay.models import utcnow_iso
 from devrelay.opencode.models import prompt_digest
+from devrelay.orchestration import ledger_reader, recovery
 from devrelay.orchestration import state_machine as policy
 from devrelay.orchestration.models import (
     DECISION_SOURCE,
@@ -38,6 +43,8 @@ from devrelay.orchestration.models import (
     DecisionRecord,
     OrchestrationAction,
     OrchestrationRun,
+    RecoveryRecord,
+    RecoveryResolution,
     RoleRouteSnapshot,
     RunState,
     TurnOutcomeState,
@@ -242,7 +249,26 @@ class OrchestrationService:
 
     def _load_for_action(self, run_id: object) -> OrchestrationRun:
         run = self.store.load(run_id)
-        self._materialize_interrupted_turn(run)
+        if run.schema_version < 2:
+            # The frozen v0.3-D contract (V03E_SPEC §10): a v1 document keeps
+            # exactly its old behaviour, is never migrated, and the next mutating
+            # action materializes the interrupted turn as blocked/turn_interrupted.
+            self._materialize_interrupted_turn(run)
+            return run
+        if run.state is RunState.RECOVERY_REQUIRED:
+            raise OrchestrationRecoveryRequiredError(
+                f"run {run.run_id} is in RECOVERY_REQUIRED "
+                f"(recovery_reason={run.recovery_reason}); the only legal write is "
+                "devrelay_resolve_recovery(mark_unrecoverable) - no model turn, "
+                "decision, retry or resume may run"
+            )
+        if run.in_flight_turn is not None:
+            raise OrchestrationRecoveryRequiredError(
+                f"run {run.run_id} has an interrupted model turn "
+                f"(role={run.in_flight_turn.role}); it is never replayed - call "
+                "devrelay_reconcile_run and then "
+                "devrelay_resolve_recovery(mark_unrecoverable)"
+            )
         return run
 
     # ------------------------------------------------------------------
@@ -493,6 +519,204 @@ class OrchestrationService:
                 next_state=record.next_state,
             )
         )
+        run.updated_at = utcnow_iso()
+        self.store.save(run)
+        return OrchestrationOutcome(run=run, ok=True)
+
+    # ------------------------------------------------------------------
+    # v0.3-E: fail-closed recovery (read-only reconcile, single resolution)
+    # ------------------------------------------------------------------
+    def _collect_recovery_evidence(
+        self, run: OrchestrationRun, attempt: TurnRecord
+    ) -> tuple[ledger_reader.LedgerScan | None, recovery.RemoteMatch]:
+        """Best-effort, read-only evidence: gaps are reported, never papered over."""
+        scan: ledger_reader.LedgerScan | None = None
+        try:
+            identity = recovery.attempt_identity(run, attempt)
+            scan = ledger_reader.scan_ledger(
+                self.store.devrelay_dir, identity, floor=recovery.previous_floor(run)
+            )
+        except Exception:  # noqa: BLE001 - evidence collection never decides a resolution
+            scan = None
+        try:
+            session_id = (
+                run.implementer_session_id
+                if attempt.role == "implementer"
+                else run.reviewer_session_id
+            )
+            result = self._bridge().read_messages(session_id)
+            remote = recovery.match_remote_turn(result, attempt)
+        except Exception:  # noqa: BLE001 - the session history is evidence, not authority
+            remote = recovery.RemoteMatch(
+                recovery.REMOTE_GAP,
+                gap_reason="the bounded session-history read failed",
+            )
+        return scan, remote
+
+    def _route_drift(self, run: OrchestrationRun) -> str:
+        """Report-only drift check (never blocks, never rewrites the snapshot)."""
+        for role in ("implementer", "reviewer"):
+            snapshot = run.route_snapshot.get(role)
+            try:
+                current = RoleRouteSnapshot.from_route(self._router.resolve(role))
+            except RoleRoutingError as exc:
+                return (
+                    f"{role} route no longer resolves "
+                    f"({getattr(exc, 'code', type(exc).__name__)})"
+                )
+            if snapshot is None or snapshot.model_dump() != current.model_dump():
+                return f"{role} route differs from the captured snapshot"
+        return ""
+
+    def reconcile_run(self, run_id: object) -> dict[str, object]:
+        """Read-only recovery evidence.  Never writes, submits, retries or resumes."""
+        run = self.store.load(run_id)
+        if run.schema_version < 2:
+            return recovery.reconcile_report(run, v1_frozen=True)
+        attempt = run.in_flight_turn or (
+            run.recovery.attempt if run.recovery is not None else None
+        )
+        scan: ledger_reader.LedgerScan | None = None
+        remote: recovery.RemoteMatch | None = None
+        if attempt is not None and run.state in (
+            RunState.READY_IMPLEMENTER,
+            RunState.READY_REVIEWER,
+            RunState.RECOVERY_REQUIRED,
+        ):
+            scan, remote = self._collect_recovery_evidence(run, attempt)
+        return recovery.reconcile_report(
+            run, ledger_scan=scan, remote=remote, route_drift=self._route_drift(run)
+        )
+
+    def resolve_recovery(self, run_id: object, resolution: object) -> OrchestrationOutcome:
+        """Apply exactly one resolution to the materialized interrupted attempt.
+
+        Only ``mark_unrecoverable`` is available in this build: exactly one blocked
+        turn is recorded and the run ends BLOCKED.  Nothing is submitted, retried,
+        resumed or adopted, and a resolution is write-once.
+        """
+        names = ", ".join(recovery.resolution_names())
+        if not isinstance(resolution, str):
+            raise OrchestrationInvalidTransitionError(
+                f"resolution must be one of {names} (got {type(resolution).__name__})"
+            )
+        try:
+            value = RecoveryResolution(resolution)
+        except ValueError as exc:
+            raise OrchestrationInvalidTransitionError(
+                f"unknown recovery resolution {resolution!r}; this build supports {names}"
+            ) from exc
+        run = self.store.load(run_id)
+        if run.schema_version < 2:
+            raise OrchestrationRecoveryUnsupportedError(
+                f"run {run.run_id} is a frozen v0.3-D (v1) document: it has no "
+                "recovery protocol, so no resolution is applied; the next mutating "
+                "action fails it closed as BLOCKED/turn_interrupted (never migrated)"
+            )
+        existing = run.recovery
+        if existing is not None and existing.resolution:
+            raise OrchestrationRecoveryAlreadyResolvedError(
+                existing.resolution, existing.resolved_at
+            )
+        if (
+            value is RecoveryResolution.ADOPT_COMPLETED_TURN
+            and not recovery.ADOPTION_CAPABILITY_ENABLED
+        ):
+            raise OrchestrationAdoptionDisabledError(recovery.ADOPTION_DISABLED_REASON)
+        if run.terminal:
+            raise OrchestrationInvalidTransitionError(
+                f"run {run.run_id} is terminal ({run.state.value}); a terminal run is "
+                "never reopened or recovered"
+            )
+        if run.state is RunState.RECOVERY_REQUIRED:
+            return self._apply_resolution(run, value)
+        if run.in_flight_turn is not None:
+            return self._enter_and_resolve(run, value)
+        raise OrchestrationInvalidTransitionError(
+            f"run {run.run_id} has no interrupted turn to recover (state "
+            f"{run.state.value}, nothing in flight); resolve_recovery applies only to "
+            "a v2 live-intent document or a RECOVERY_REQUIRED one"
+        )
+
+    def _enter_and_resolve(
+        self, run: OrchestrationRun, value: RecoveryResolution
+    ) -> OrchestrationOutcome:
+        """Materialize the interrupted intent, enter RECOVERY_REQUIRED, resolve."""
+        attempt = run.in_flight_turn
+        if attempt is None:  # pragma: no cover - caller guarantees a live intent
+            raise OrchestrationInvalidTransitionError("no interrupted turn to materialize")
+        entry_state = run.state
+        reason = recovery.infer_recovery_reason(attempt)
+        scan, remote = self._collect_recovery_evidence(run, attempt)
+        evidence, frozen = recovery.build_record(
+            run,
+            attempt,
+            entry_state=entry_state,
+            reason=reason,
+            ledger_scan=scan,
+            remote=remote,
+        )
+        run.in_flight_turn = None
+        run.recovery = RecoveryRecord(
+            attempt=frozen, recovery_reason=reason, evidence=evidence
+        )
+        run.recovery_reason = reason
+        transition = policy.after_enter_recovery(run)
+        record = policy.transition_record(
+            action=OrchestrationAction.RECOVER,
+            source=SOURCE_EXTERNAL,
+            run=run,
+            next_state=transition.state,
+            role=attempt.role,
+            note=(
+                "materialized interrupted turn (never replayed, never refunded); "
+                f"captured reason={reason}"
+            ),
+        )
+        transition.apply(run, record)
+        return self._apply_resolution(run, value)
+
+    def _apply_resolution(
+        self, run: OrchestrationRun, value: RecoveryResolution
+    ) -> OrchestrationOutcome:
+        """Resolve the (materialized) record exactly once and persist atomically."""
+        record = run.recovery
+        if record is None:  # pragma: no cover - invariants guarantee a record
+            raise OrchestrationInvalidTransitionError(
+                "RECOVERY_REQUIRED requires a materialized recovery record"
+            )
+        attempt = record.attempt
+        if value is RecoveryResolution.MARK_UNRECOVERABLE:
+            if attempt.role == "implementer":
+                run.implementer_turns.append(attempt)
+            else:
+                run.reviewer_turns.append(attempt)
+            run.recovery = record.model_copy(
+                update={
+                    "resolution": value.value,
+                    "resolved_at": utcnow_iso(),
+                }
+            )
+            transition = policy.after_mark_unrecoverable(run, record.recovery_reason)
+            note = (
+                "materialized interrupted turn marked unrecoverable: exactly one "
+                "blocked turn, no retry, no resume, no adoption"
+            )
+        else:  # ADOPT_COMPLETED_TURN is disabled in this build
+            run.recovery = record.model_copy(
+                update={"resolution": value.value, "resolved_at": utcnow_iso()}
+            )
+            transition = policy.after_adoption(run, attempt.role)
+            note = "adopted a completed interrupted turn (proof-gated)"
+        record_out = policy.transition_record(
+            action=OrchestrationAction.RECOVER,
+            source=SOURCE_EXTERNAL,
+            run=run,
+            next_state=transition.state,
+            role=attempt.role,
+            note=note,
+        )
+        transition.apply(run, record_out)
         run.updated_at = utcnow_iso()
         self.store.save(run)
         return OrchestrationOutcome(run=run, ok=True)

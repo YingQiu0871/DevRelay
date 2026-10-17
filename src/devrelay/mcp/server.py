@@ -47,7 +47,7 @@ from devrelay.mcp.tools import McpToolSurface
 #: unreleased package version).  ``0.3.0-d`` advertises the v0.3-D surface: the
 #: nine v0.3-B tools and the three v0.3-C role tools unchanged, plus exactly five
 #: bounded-orchestration tools (17 in total).
-MCP_SERVER_VERSION = "0.3.0-d"
+MCP_SERVER_VERSION = "0.3.0-e"
 
 #: Marker key the dispatcher uses to carry a prepared envelope through the
 #: SDK's result conversion.
@@ -169,14 +169,15 @@ _RUN_IMPLEMENTER_DESCRIPTION = (
     "Run exactly ONE implementer role turn for an orchestration run, legal only "
     "in READY_IMPLEMENTER. A duplicate attempt that is simply illegal for the "
     "current state fails locally without submitting another model turn; if a "
-    "previously interrupted phase is still persisted as in-flight, a mutating "
-    "operation first fails the run closed (that attempt is materialized into the "
-    "durable history as blocked/turn_interrupted) and then refuses. The prompt is "
-    "supplied by you; the model and agent come from the workspace role "
-    "configuration and cannot be overridden. On a confirmed completion the run "
-    "moves to READY_REVIEWER. On uncertainty, a pending reply or any failure the "
-    "run is BLOCKED: it is never retried, the reviewer is never invoked "
-    "automatically, and no further model-turn slot is consumed."
+    "previously interrupted phase is still persisted as in-flight, this tool "
+    "REFUSES without mutating (orchestration_recovery_required): the interrupted "
+    "turn is never replayed - call devrelay_reconcile_run and then "
+    "devrelay_resolve_recovery(mark_unrecoverable). The prompt is supplied by "
+    "you; the model and agent come from the workspace role configuration and "
+    "cannot be overridden. On a confirmed completion the run moves to "
+    "READY_REVIEWER. On uncertainty, a pending reply or any failure the run is "
+    "BLOCKED: it is never retried, the reviewer is never invoked automatically, "
+    "and no further model-turn slot is consumed."
 )
 
 _RUN_REVIEWER_DESCRIPTION = (
@@ -186,7 +187,9 @@ _RUN_REVIEWER_DESCRIPTION = (
     "reviewer's text (APPROVE / REQUEST_CHANGES / any prose): a confirmed "
     "completion always stops at AWAITING_DECISION and only your explicit "
     "devrelay_decide_run may advance the run. Uncertainty or failure blocks the "
-    "run without retry."
+    "run without retry. An interrupted in-flight reviewer turn is refused, not "
+    "replayed: reconcile it and resolve it via devrelay_reconcile_run / "
+    "devrelay_resolve_recovery(mark_unrecoverable)."
 )
 
 _DECIDE_RUN_DESCRIPTION = (
@@ -195,7 +198,30 @@ _DECIDE_RUN_DESCRIPTION = (
     "request_changes (allow one more bounded implementer/reviewer cycle if cycle "
     "budget remains, otherwise LIMIT_REACHED - it never starts the cycle for you) "
     "and stop (administrative terminal stop). The decision source is recorded as "
-    "external_planner; reviewer message text is never a decision input."
+    "external_planner; reviewer message text is never a decision input. A run "
+    "holding an interrupted turn or sitting in RECOVERY_REQUIRED refuses this "
+    "tool without mutating."
+)
+
+_RECONCILE_RUN_DESCRIPTION = (
+    "Read-only recovery evidence for ONE run: whether it holds a live interrupted "
+    "turn, its frozen recovery record, and the join between that attempt, the "
+    "strict OpenCode call ledger and the bounded session-history window. Ledger "
+    "gaps, torn records, multiple digest matches and unreadable history are "
+    "reported as evidence_gap/evidence_conflict - absence of a record is never "
+    "proof of non-submission, and nothing here is inferred from silence. Adoption "
+    "is reported as unavailable in this build. This tool writes nothing, submits "
+    "no model request and never resumes a run."
+)
+
+_RESOLVE_RECOVERY_DESCRIPTION = (
+    "Apply exactly ONE fail-closed recovery resolution to a run that holds an "
+    "interrupted turn (or is already in RECOVERY_REQUIRED): materialize that "
+    "interrupted attempt as exactly one blocked turn and end the run BLOCKED "
+    "(mark_unrecoverable). Nothing is resubmitted, retried, resumed or adopted, "
+    "no budget is refunded, and a resolved run refuses every later resolution. "
+    "adopt_completed_turn is disabled in this build and is refused locally. "
+    "Unknown resolutions and terminal runs are refused without writing."
 )
 
 _LIST_ROLES_DESCRIPTION = (
@@ -343,7 +369,11 @@ def create_server(
             "AWAITING_DECISION, reviewer text is never interpreted, uncertainty "
             "blocks the run instead of retrying, and only your explicit decision "
             "(complete / request_changes / stop) advances it - all within a hard "
-            "cycle bound."
+            "cycle bound. v0.3-E adds fail-closed recovery: an interrupted turn is "
+            "never replayed, devrelay_reconcile_run reports bounded evidence "
+            "read-only, and devrelay_resolve_recovery(mark_unrecoverable) records "
+            "exactly one blocked turn and ends the run BLOCKED. Adoption is "
+            "disabled in this build."
         ),
         version=MCP_SERVER_VERSION,
     )
@@ -552,6 +582,26 @@ def create_server(
         run_id: str | None = None, decision: str | None = None
     ) -> McpEnvelope:
         return _envelope_result(surface.devrelay_decide_run(run_id, decision))
+
+    @server.tool(
+        name="devrelay_reconcile_run",
+        title="Read recovery evidence for a run",
+        description=_RECONCILE_RUN_DESCRIPTION,
+        annotations=local_read_only,
+    )
+    def devrelay_reconcile_run(run_id: str | None = None) -> McpEnvelope:
+        return _envelope_result(surface.devrelay_reconcile_run(run_id))
+
+    @server.tool(
+        name="devrelay_resolve_recovery",
+        title="Resolve an interrupted run fail-closed",
+        description=_RESOLVE_RECOVERY_DESCRIPTION,
+        annotations=side_effecting,
+    )
+    def devrelay_resolve_recovery(
+        run_id: str | None = None, resolution: str | None = None
+    ) -> McpEnvelope:
+        return _envelope_result(surface.devrelay_resolve_recovery(run_id, resolution))
 
     return server
 

@@ -64,6 +64,11 @@ from devrelay.orchestration import (
     OrchestrationService,
     valid_run_id,
 )
+from devrelay.orchestration.recovery import (
+    ADOPTION_CAPABILITY_ENABLED,
+    ADOPTION_DISABLED_REASON,
+    resolution_names,
+)
 from devrelay.roles.service import RoleRouter
 
 #: Bridge operations this adapter exposes (status reporting only).
@@ -414,6 +419,17 @@ class McpToolSurface:
             )
         return decision
 
+    @staticmethod
+    def _require_resolution(resolution: object) -> str:
+        allowed = resolution_names()
+        if not isinstance(resolution, str) or resolution not in allowed:
+            raise McpArgumentError(
+                "resolution must be exactly one of "
+                f"{', '.join(allowed)}; this build refuses adopt_completed_turn "
+                "(its platform proofs never passed)"
+            )
+        return resolution
+
     def _orchestration_failure(
         self, tool: str, exc: OrchestrationError, run_id: object
     ) -> McpEnvelope:
@@ -535,6 +551,41 @@ class McpToolSurface:
         return self._execute("devrelay_decide_run", call)
 
     # ------------------------------------------------------------------
+    # v0.3-E recovery: read-only reconcile, exactly one resolution
+    # ------------------------------------------------------------------
+    def devrelay_reconcile_run(self, run_id: object = None) -> McpEnvelope:
+        """Report recovery evidence for one run.  Read-only: never writes a run."""
+
+        def call() -> McpEnvelope:
+            rid = self._require_run_id(run_id)
+            try:
+                report = self.orchestration.reconcile_run(rid)
+            except OrchestrationError as exc:
+                return self._orchestration_failure("devrelay_reconcile_run", exc, rid)
+            return ok_envelope("devrelay_reconcile_run", report)
+
+        return self._execute("devrelay_reconcile_run", call)
+
+    def devrelay_resolve_recovery(
+        self, run_id: object = None, resolution: object = None
+    ) -> McpEnvelope:
+        """Apply exactly one recovery resolution.  No submission, retry or resume."""
+
+        def call() -> McpEnvelope:
+            rid = self._require_run_id(run_id)
+            try:
+                value = self._require_resolution(resolution)
+            except McpArgumentError as exc:
+                return self._orchestration_failure("devrelay_resolve_recovery", exc, rid)
+            try:
+                outcome = self.orchestration.resolve_recovery(rid, value)
+            except OrchestrationError as exc:
+                return self._orchestration_failure("devrelay_resolve_recovery", exc, rid)
+            return self._orchestration_outcome("devrelay_resolve_recovery", outcome)
+
+        return self._execute("devrelay_resolve_recovery", call)
+
+    # ------------------------------------------------------------------
     # read-only tools
     # ------------------------------------------------------------------
     def devrelay_status(self) -> McpEnvelope:
@@ -565,7 +616,19 @@ class McpToolSurface:
                     "automatic_decisions": False,
                     "durable_state": True,
                     "state_location": "orchestration/runs",
-                    "recovery": "out of scope (v0.3-E)",
+                    # v0.3-E: fail-closed recovery only.  Adoption stays disabled
+                    # until its platform proofs pass; nothing here can submit,
+                    # retry, resume or decide a turn.
+                    "recovery": {
+                        "available": True,
+                        "resolutions": list(resolution_names()),
+                        "adoption_enabled": bool(ADOPTION_CAPABILITY_ENABLED),
+                        "adoption_reason": ADOPTION_DISABLED_REASON,
+                        "submits_model_requests": False,
+                        "retries": False,
+                        "resumes": False,
+                        "max_recovery_attempts": 1,
+                    },
                 },
                 "ledger": {
                     "directory": "opencode/calls",
@@ -953,11 +1016,15 @@ TOOL_NAMES: tuple[str, ...] = (
     "devrelay_run_implementer",
     "devrelay_run_reviewer",
     "devrelay_decide_run",
+    # v0.3-E appends exactly two fail-closed recovery tools.
+    "devrelay_reconcile_run",
+    "devrelay_resolve_recovery",
 )
 
 READ_ONLY_TOOLS: tuple[str, ...] = (
     "devrelay_status",
     "devrelay_get_run",
+    "devrelay_reconcile_run",
     "devrelay_list_roles",
     "devrelay_get_role",
     "opencode_health",
@@ -976,6 +1043,7 @@ SIDE_EFFECTING_TOOLS: tuple[str, ...] = (
     "devrelay_run_implementer",
     "devrelay_run_reviewer",
     "devrelay_decide_run",
+    "devrelay_resolve_recovery",
 )
 
 

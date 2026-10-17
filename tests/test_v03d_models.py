@@ -37,6 +37,8 @@ def test_state_enum_is_explicit_and_complete():
         "STOPPED",
         "BLOCKED",
         "LIMIT_REACHED",
+        # v0.3-E adds exactly one execution-frozen, non-terminal state.
+        "RECOVERY_REQUIRED",
     ]
 
 
@@ -50,6 +52,9 @@ def test_terminal_states_are_exactly_the_four_documented_ones():
     assert RunState.READY_IMPLEMENTER not in TERMINAL_STATES
     assert RunState.READY_REVIEWER not in TERMINAL_STATES
     assert RunState.AWAITING_DECISION not in TERMINAL_STATES
+    assert RunState.RECOVERY_REQUIRED not in TERMINAL_STATES, (
+        "recovery is still resolvable, so it is frozen but not terminal"
+    )
 
 
 def test_legal_next_actions_are_deterministic():

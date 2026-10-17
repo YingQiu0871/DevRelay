@@ -22,7 +22,11 @@ import pytest
 from devrelay.errors import OrchestrationStateCorruptError
 from devrelay.orchestration import OrchestrationRun, OrchestrationStore, TurnRecord
 from devrelay.orchestration.invariants import validate_run_semantics
-from devrelay.orchestration.models import RunState, TurnOutcomeState
+from devrelay.orchestration.models import (
+    LEGACY_SCHEMA_VERSION,
+    RunState,
+    TurnOutcomeState,
+)
 
 from test_v03b_mcp_tools import real_reply
 from v03d_helpers import (
@@ -192,10 +196,10 @@ def _reject(harness: Harness, run_id: str, needle: str, posts_before: int) -> No
 #: ``(case id, honest base, tamper, expected invariant message)``
 TAMPER_MATRIX: list[tuple[str, str, Callable[[dict[str, Any]], None], str]] = [
     (
-        "T01_schema_version_2",
+        "T01_schema_version_3",
         "fresh",
-        lambda p: p.update(schema_version=2),
-        "schema_version 2 is not the supported",
+        lambda p: p.update(schema_version=3),
+        "schema_version 3 is not one of the supported",
     ),
     (
         "T02_max_cycles_99_budget_198",
@@ -1034,19 +1038,25 @@ def test_a_blocked_route_run_stays_terminal(tmp_path: Path) -> None:
 # ---------------------------------------------------------------------------
 # §17 / §19 - in-flight guidance and the outcome vocabulary
 # ---------------------------------------------------------------------------
-def test_legal_next_actions_is_empty_while_a_turn_is_in_flight() -> None:
+def test_legal_next_actions_while_a_turn_is_in_flight() -> None:
     idle = honest_run(RunState.READY_IMPLEMENTER)
     assert isinstance(idle, OrchestrationRun)
     assert idle.summary()["legal_next_actions"] == ["devrelay_run_implementer"]
     assert idle.summary()["in_flight"] is False
 
+    # v0.3-E: a v2 live intent is never replayed; the only advertised write is
+    # the recovery resolution (v1 documents keep the frozen empty list).
     busy = with_in_flight(honest_run(RunState.READY_IMPLEMENTER), "implementer")
     assert busy.summary()["in_flight"] is True
-    assert busy.summary()["legal_next_actions"] == []
+    assert busy.summary()["legal_next_actions"] == ["devrelay_resolve_recovery"]
     assert busy.summary()["state"] == "READY_IMPLEMENTER"
 
     reviewer = with_in_flight(honest_run(RunState.READY_REVIEWER), "reviewer")
-    assert reviewer.summary()["legal_next_actions"] == []
+    assert reviewer.summary()["legal_next_actions"] == ["devrelay_resolve_recovery"]
+
+    frozen = with_in_flight(honest_run(RunState.READY_IMPLEMENTER), "implementer")
+    frozen = frozen.model_copy(update={"schema_version": LEGACY_SCHEMA_VERSION})
+    assert frozen.summary()["legal_next_actions"] == []
 
 
 def test_turn_outcome_vocabulary_is_constrained() -> None:
