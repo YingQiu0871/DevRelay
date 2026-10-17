@@ -13,7 +13,7 @@ Status: **REVIEW PERFORMED / FINDINGS RAISED / REMEDIATED / NOT ACCEPTANCE**.
 
 | Item | Value |
 | --- | --- |
-| Reviewed tree | branch `v0.3-e-recovery-reconciliation`, commits `b10fcea` (implementation), `d035d03` (environment notes), plus the disclosure commit `54ec97f` |
+| Reviewed tree | branch `v0.3-e-recovery-reconciliation`, commits `b10fcea` (implementation), `d035d03` (environment notes), plus the disclosure commit `54ec97f`; the remediation is commit `a7fe160` |
 | Review artifacts | `docs/v0.3/V03E_SPEC.md`, `docs/v0.3/V03E_ACCEPTANCE.md`, `docs/v0.3/V03E_IMPLEMENTATION.md` |
 | Reviewer | an independent subagent given the code, the spec and the acceptance matrix, with a **review-only** brief (no edits to the repository) |
 | Method | adversarial reading plus executable reproductions from `D:\DevRelay`: crash-window harnesses from `tests/v03d_helpers.py`, byte-level diffs of `.devrelay`, ledger tampering, digest tampering, error-code and annotation inspection |
@@ -91,6 +91,7 @@ python -m pytest -q            # isolated TEMP outside the repository
 Numbers are recorded by the implementing session, not independently re-measured
 by the reviewer (the reviewer ran the 56-test v0.3-E snapshot that existed at
 review time and confirmed it green — which is exactly why F1–F8 survived it).
+
 ## 5. Residual risks and open items
 
 1. **Remote correlation is not wired.** The mandatory core never reads session
