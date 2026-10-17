@@ -1,7 +1,8 @@
 # V03-E Real Crash-and-Recovery Smoke — Result
 
 **Status:** EXECUTED ONCE / AUTHORIZATION SPENT / **VERDICT: FAIL** (per the
-precommitted oracle) / PRODUCT CRITERIA OBSERVED PASS / NOT ACCEPTANCE
+precommitted oracle) / DRIVER'S OWN PASS VOID (harness nonconformance, §4.1) /
+PRODUCT CRITERIA OBSERVED PASS / NOT ACCEPTANCE / SUPERSEDED BY REVISION 2
 
 **Executed:** 2026-10-17, ~17:56:42–17:59 UTC, by the implementing agent, via
 `docs/v0.3/V03E_REAL_RECOVERY_SMOKE_DRIVER.py` (precommitted, unmodified).
@@ -116,6 +117,34 @@ the smoke is a FAIL if the defect is material"
 (`V03E_REAL_RECOVERY_SMOKE_ORACLE.md:6-10`). The defect is material to the
 verdict rule, therefore this smoke is recorded as **FAIL**. No rerun was
 performed, the oracle was not edited, and nothing here is converted into a PASS.
+
+### 4.1 The harness, not only the oracle, was nonconformant
+
+The precommitted driver's own printed verdict was **PASS**
+(`smoke.json`: `"verdict": "PASS — V0.3-E REAL CRASH-AND-RECOVERY SMOKE"`,
+`first_failure: null`, exit 0). That PASS is **void**, because the driver never
+asserted the §3 equality rule this document relies on:
+
+| driver v1 location | what it does | what is missing |
+| --- | --- | --- |
+| `docs/v0.3/V03E_REAL_RECOVERY_SMOKE_DRIVER.py:267-273` | `send_prompt_records()` filters `operation == "send_prompt"` and the session | no `method == "POST"` distinction; probe GETs are included |
+| `:275-292` | `submission_count()` records `ledger_send_prompt`, `log_message_process`, `agree` | `agree` is computed and stored, **never checked** (grep `agree` finds only the assignment at `:291`) |
+| `:506` | S2 checks "exactly one send_prompt record for the identity", filtered by `prompt_sha256` | passes trivially, because only the POST carries a digest |
+| `:954-958` | verdict is derived purely from the check list | a rule with no check can never fail the run |
+
+So the revision-1 round has two independent harness defects, both recorded here
+and neither patched into the frozen artifacts:
+
+1. **oracle defect** — the count definition includes the non-submitting probe GET
+   (§4 above);
+2. **driver defect** — the equality rule was never implemented as a criterion, so
+   the driver's PASS is not faithful evidence of the oracle.
+
+The revision-1 authorization is spent and the run is not repeated. The corrective
+instruments are `docs/v0.3/V03E_REAL_RECOVERY_SMOKE_ORACLE_R2.md` and
+`docs/v0.3/V03E_REAL_RECOVERY_SMOKE_DRIVER_R2.py`, executed under
+`docs/v0.3/V03E_REAL_RECOVERY_SMOKE_AUTHORIZATION_R2.md`; their result is recorded
+separately and does not alter this document's FAIL.
 
 ## 5. What the run nevertheless observed (evidence, not acceptance)
 
