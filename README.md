@@ -3,38 +3,47 @@
 > Plan with one model, build with Codex, review with another - without
 > copy-pasting between agents.
 
-**Supported release: v0.1.0** (see [CHANGELOG.md](CHANGELOG.md); the CLI
-reports the same version via `devrelay version`).
+**Version: v0.3.0 (unreleased)** — this working tree packages `0.3.0`, and the
+CLI reports the same version via `devrelay version` (see
+[CHANGELOG.md](CHANGELOG.md)).
 Source: <https://github.com/YingQiu0871/DevRelay> -
 [Issues](https://github.com/YingQiu0871/DevRelay/issues)
 
-### Public release
+### Release status
 
-**`v0.1.0`** — the only supported release; the CLI reports it via
-`devrelay version`.
+**`v0.1.0` is the only published release** (PyPI).  **`v0.3.0` is packaged in
+this tree but not published yet**: it ships when the `v0.3.0` tag is created on
+`main` and the release workflow completes; until then `pip install devrelay`
+still resolves to `0.1.0`.
 
 ### Internal development status (unreleased)
 
-| Stage | Status |
-| --- | --- |
-| v0.3-A OpenCode Session Bridge | **accepted / unreleased** — closed at candidate `bcf9627e92ef839abb756810e3c615e6d01b6576`; real OpenCode `1.18.11` smoke passed (one prompt → `DEVRELAY_A33_OK`) |
-| v0.3-B ChatGPT/MCP tool surface | **accepted / unreleased** — closed at accepted candidate `d058d62341a173414bdba88fe357b08c236c8bb4`; final real MCP smoke `PASS — V0.3-B LOCAL REAL MCP SMOKE` |
-| v0.3-C Agent Role Routing | **accepted / unreleased** — closed at accepted candidate `eabb667d1bd9e379d3b7105d72b6a2751bc2a32b`; real routing verified for both roles (implementer `opencode-go/deepseek-v4.1-flash`, reviewer `opencode-go/glm-5.3-flash`), routing only, no orchestration |
-| v0.3-E Recovery & Reconciliation | **implemented / authorized (one real smoke) / smoke R1 executed → FAIL per precommitted oracle (oracle measurement defect) / corrective R2 oracle + driver + authorization → SMOKE R2 PASS / MANDATORY CORE ACCEPTED BY INDEPENDENT ACCEPTANCE REVIEW (P0 = 0, P1 = 0, P2 = 2) / adoption disabled / unreleased** — the design is frozen; the mandatory fail-closed core is implemented and is recorded in `docs/v0.3/V03E_IMPLEMENTATION.md`; it was then ratified by `docs/v0.3/V03E_IMPLEMENTATION_AUTHORIZATION.md` (owner-issued; spent) (adversarially reviewed after remediation — `docs/v0.3/V03E_REVIEW.md`, one P0 / three P1 / four P2, all fixed; not an acceptance review), which explicitly does not advance the design or acceptance documents; independent design-freeze review of candidate `9f4a01804b9affe8938a272553df345b5a60aeed` returned **P0 = 0, P1 = 0, P2 = 0** with F1–F12 **CLOSED** and decision *APPROVE V0.3-E FAIL-CLOSED CORE DESIGN; PLATFORM PROOF GATE REQUIRED BEFORE IMPLEMENTATION* (`docs/v0.3/V03E_SPEC.md` + `V03E_ACCEPTANCE.md`); implementation authorized by `V03E_IMPLEMENTATION_AUTHORIZATION.md` (draft ratification + exactly one real crash-and-recovery smoke; that smoke was executed 2026-10-17 and is **FAIL per the precommitted oracle** — the oracle's submission-count rule counted the non-submitting ownership-probe GET next to the single `send_prompt` POST (2 vs 1), while every product criterion was observed to pass; the authorization is spent, the defect is recorded in `docs/v0.3/V03E_REAL_RECOVERY_SMOKE_RESULT.md`; a corrective oracle and driver (`V03E_REAL_RECOVERY_SMOKE_ORACLE_R2.md`, `V03E_REAL_RECOVERY_SMOKE_DRIVER_R2.py`, with a 14-rule oracle→driver conformance table) and a fresh one-shot authorization (`V03E_REAL_RECOVERY_SMOKE_AUTHORIZATION_R2.md`, owner-issued, spent) were then produced, and the corrective smoke was executed once on 2026-10-17 recording `PASS — V0.3-E REAL CRASH-AND-RECOVERY SMOKE (R2)` in `docs/v0.3/V03E_REAL_RECOVERY_SMOKE_RESULT_R2.md`; that evidence was then independently accepted for the mandatory fail-closed core — `docs/v0.3/V03E_ACCEPTANCE.md` §0, *APPROVE V0.3-E MANDATORY FAIL-CLOSED CORE ACCEPTANCE (P0 = 0, P1 = 0, P2 = 2)*, adoption disabled and no platform gate claimed), platform proof gate **partially executed / NOT complete** (G0.1/P7 = PASS; **G0.2 = PASS** — authoritative and independently approved (*APPROVE V0.3-E G0.2 FALSE-CORRELATION PROOF*, P0 = 0, P1 = 0, P2 = 0) via the clean re-run under the oracle precommitted in commit `12ea1b7`: ten fixed cases A-J fail-closed, 0 provider/model calls - `docs/v0.3/V03E_G0_2_CLEAN_RERUN_PROOF.md`; the original round's candidate pass is history in `docs/v0.3/V03E_G0_2_FALSE_CORRELATION_PROOF.md`; the original G0.3 round failed as **CANDIDATE FAIL** (case G0.3-J surfaced `remote_protocol_error` instead of the precommitted `write_error` class), was independently reviewed as a **TYPE 1 PROOF-PLAN FAILURE** (P0 = 0, P1 = 0, P2 = 0; no classifier-safety failure, no runtime remediation required) and was then corrected and cleanly re-run under the oracle precommitted in `e328ec5`, with the corrected proof then independently approved (**APPROVE V0.3-E G0.3 / P5 TRANSPORT PROOF** with **P0 = 0, P1 = 0, P2 = 0**): **G0.3 / P5 = PASS** — authoritative and independently approved (**APPROVE V0.3-E G0.3 / P5 TRANSPORT PROOF** with **P0 = 0, P1 = 0, P2 = 0**; this PASS comes from the independent review of the corrected clean proof, never from executor self-approval) (manifest SHA-256 `9e4c7de6…`): the accepted safe buckets (connect_timeout, pool_timeout, connect_error, unsupported_protocol, and the pre-send-only local_protocol_error mapping) are class-wide pre-send; proxy_error is UNREACHABLE_CURRENT_CONFIGURATION; every uncertain class (read_timeout, write_timeout, read_error, remote_protocol_error, close_error) stayed submission-uncertain with retry_safe false; the corrected case J surfaced `remote_protocol_error` exactly as precommitted; HTTP rejection and success are never non-delivery; 0 provider/model calls, 0 network requests - `docs/v0.3/V03E_G0_3_CLEAN_RERUN_PROOF.md` (original failed round preserved: `docs/v0.3/V03E_G0_3_TRANSPORT_PROOF.md`; corrected oracle: `docs/v0.3/V03E_G0_3_RERUN_ORACLE.md`); G0.4, G0.5, G1, G2 not run at that point in the record, and G0.4 was executed once under its approved immutable revision-3 oracle and has been independently approved as a **FAILED PROOF** (*APPROVE V0.3-E G0.4 FAILED PROOF*, P0 = 0, P1 = 0, P2 = 0, failure type **TYPE 3 — SEMANTIC ENVIRONMENT / CONFIGURATION RESULT**), so **G0.4/P4 = AUTHORITATIVE FAIL / P4 UNPROVEN** (the accepted workspace had no OpenCode base endpoint, so no target instance could be bound and 0 `GET /doc` were issued; P4 remains formally unproven - `docs/v0.3/V03E_G0_4_API_INSPECTION_PROOF.md`; oracle `docs/v0.3/V03E_G0_4_API_INSPECTION_ORACLE.md`)), `adopt_completed_turn` DISABLED; the mandatory-core gate **G0.1/P7 PASS first** is **satisfied** (authoritative, independently approved - `docs/v0.3/V03E_G0_1_P7_PROOF.md`), adoption needs **both** the local P6 identity/ownership **veto bound** (G0.5 / P6 — NOT RUN; definition accepted; oracle not freezable due the local reachability gap; P6 unproven / unsatisfied) and the remote/platform *enabling* proofs P1/P2/P3/P8 (+P9 if timestamps), plus a separate authorization |
-| v0.3-D Bounded Orchestration | **accepted / closed / unreleased** — closed at candidate `8b70610a5cdda600ef57cf8378c4f69cd33d5be4` after two remediations and one authorized bounded real orchestration smoke `PASS — V0.3-D REAL BOUNDED ORCHESTRATION SMOKE` (4 real model turns / 4 POSTs, 0 retries, 0 fallbacks); durable run state, legal transitions and a hard cycle bound (at most six reserved/consumed model-turn budget slots per run) over the accepted role path, untrusted persisted state validated for **reachability**, no automatic sequencing |
+| Stage | Status | Acceptance |
+| --- | --- | --- |
+| v0.2-A Automatic review loop | candidate under independent review | [V02_ACCEPTANCE.md](docs/v0.2/V02_ACCEPTANCE.md) |
+| v0.2-B Project profiles, frozen-policy integrity | candidate under independent review | [V02B_ACCEPTANCE.md](docs/v0.2/V02B_ACCEPTANCE.md) |
+| v0.2-C Structured Codex runtime | candidate (offline criteria matrix) | [V02C_ACCEPTANCE.md](docs/v0.2/V02C_ACCEPTANCE.md) |
+| v0.3-A OpenCode session bridge | accepted / closed / unreleased | [V03A_ACCEPTANCE.md](docs/v0.3/V03A_ACCEPTANCE.md) |
+| v0.3-B ChatGPT/MCP tool surface | accepted / closed / unreleased | [V03B_ACCEPTANCE.md](docs/v0.3/V03B_ACCEPTANCE.md) |
+| v0.3-C Agent role routing | accepted / closed / unreleased | [V03C_ACCEPTANCE.md](docs/v0.3/V03C_ACCEPTANCE.md) |
+| v0.3-D Bounded orchestration | accepted / closed / unreleased | [V03D_ACCEPTANCE.md](docs/v0.3/V03D_ACCEPTANCE.md) |
+| v0.3-E Recovery & reconciliation | mandatory fail-closed core accepted by independent acceptance review (P0 = 0, P1 = 0, P2 = 2; 2026-10-17) / adoption disabled / platform gates open / unreleased | [V03E_ACCEPTANCE.md](docs/v0.3/V03E_ACCEPTANCE.md) |
 
-No `v0.3` stage is part of the `v0.1.0` release, the package version stays
-`0.1.0`, and nothing is pushed, tagged or published (there is no `v0.3-D` tag).  Spec/acceptance for v0.3-B:
-[docs/v0.3/V03B_SPEC.md](docs/v0.3/V03B_SPEC.md),
-[docs/v0.3/V03B_ACCEPTANCE.md](docs/v0.3/V03B_ACCEPTANCE.md); for v0.3-A:
-[docs/v0.3/V03A_SPEC.md](docs/v0.3/V03A_SPEC.md),
-[docs/v0.3/V03A_ACCEPTANCE.md](docs/v0.3/V03A_ACCEPTANCE.md).
+No `v0.3` stage is in a published release, and nothing is pushed, tagged or
+published yet (there is no `v0.3-D` tag and no `v0.3.0` tag).  Specs live next to
+the matrices: [V03A_SPEC.md](docs/v0.3/V03A_SPEC.md),
+[V03B_SPEC.md](docs/v0.3/V03B_SPEC.md),
+[V03C_SPEC.md](docs/v0.3/V03C_SPEC.md),
+[V03D_SPEC.md](docs/v0.3/V03D_SPEC.md),
+[V03E_SPEC.md](docs/v0.3/V03E_SPEC.md).
 
 ### Verified v0.3-B capability
 
 A local MCP-capable client can invoke DevRelay's bounded OpenCode bridge through
-stdio tools: `devrelay mcp serve --workspace <project>` exposes exactly nine
-tools over the official MCP Python SDK (`mcp 2.2.0`), verified end-to-end once
+stdio tools: `devrelay mcp serve --workspace <project>` exposed exactly nine
+tools at v0.3-B over the official MCP Python SDK (`mcp 2.2.0`; v0.3-C added
+three, v0.3-D five and v0.3-E two, so the current surface is **19 tools**),
+verified end-to-end once
 against real OpenCode `1.18.11` with one explicit `opencode-go/deepseek-v4.1-flash`
 turn (exactly one `POST /session/{id}/message`, reply `DEVRELAY_V03B_MCP_OK`).
 There is **no** HTTP/SSE MCP transport, **no** WebUI, **no** multi-workspace
@@ -90,58 +99,45 @@ uncertainty or failure (no retry, no fallback, no role switch), reviewer text is
 never interpreted, and run state/audit lives in
 `.devrelay/orchestration/runs/<run_id>.json` with no prompts, replies or
 credentials persisted.  The MCP surface grows from twelve to exactly seventeen
-tools.  Spec and matrix: `docs/v0.3/V03D_SPEC.md`,
+tools (v0.3-E adds the two recovery tools, so the current surface is nineteen).
+Spec and matrix: `docs/v0.3/V03D_SPEC.md`,
 `docs/v0.3/V03D_ACCEPTANCE.md`.
 
 ### Next stage
 
-`v0.3-D Bounded Orchestration` — **accepted internally, closed and unreleased**
-at candidate `8b70610a5cdda600ef57cf8378c4f69cd33d5be4` (no `v0.3-D` tag, package
-still `0.1.0`).  The first gate's blocking P1 (persisted state trusted as input) was
-fixed at the model/store load boundary, the second gate's three P1s were fixed by
-proving that the current state is reachable from the persisted history
-(`READY_REVIEWER` needs this cycle's completed implementer turn, a blocked turn
-implies `BLOCKED`, an exhausted run cannot be rolled back into spending again),
-and the single authorized bounded real smoke passed: four real model turns, exactly
-four `POST /session/{id}/message` submissions, zero retries, zero fallbacks, two
-real authority probes (provider `REQUEST_CHANGES` and provider `APPROVE` both left
-the run at `AWAITING_DECISION`), and the terminal guard proved without spending a
-fifth turn.  Evidence: `docs/v0.3/V03D_ACCEPTANCE.md` §J, §K and §L.
+**v0.4 is not started.**  v0.3-E is the last implemented stage, and its accepted
+scope is the mandatory fail-closed core only; adoption and the platform proof
+gate are still open.
 
-`v0.3-E Orchestration Recovery` — **MANDATORY FAIL-CLOSED CORE ACCEPTED BY INDEPENDENT ACCEPTANCE REVIEW (P0 = 0, P1 = 0, P2 = 2; adoption disabled, platform gates open); unreleased**: the independent design-freeze review approved candidate
-`9f4a01804b9affe8938a272553df345b5a60aeed` (**P0 = 0, P1 = 0, P2 = 0**, F1–F12
-**CLOSED**) with the decision *APPROVE V0.3-E FAIL-CLOSED CORE DESIGN; PLATFORM
-PROOF GATE REQUIRED BEFORE IMPLEMENTATION*.  The frozen contract in
-`docs/v0.3/V03E_SPEC.md` splits a mandatory fail-closed core (reconcile/report +
-`mark_unrecoverable`; no submission, no retry, no auto-resume, no adoption) from an
-optional, gated `adopt_completed_turn` and a report-only pending capability, with
-`docs/v0.3/V03E_ACCEPTANCE.md` as the design-phase matrix (design branch
-`v0.3-e-recovery-reconciliation`, parent `56e7842`).  Implementation was then authorized by `docs/v0.3/V03E_IMPLEMENTATION_AUTHORIZATION.md` (owner-issued, now spent) and the one authorized real smoke, executed 2026-10-17, ended **FAIL per the precommitted oracle** — its submission-count rule counted the non-submitting ownership-probe GET next to the single `send_prompt` POST (2 vs 1) while every product criterion was observed to pass, recorded in `docs/v0.3/V03E_REAL_RECOVERY_SMOKE_RESULT.md`; a corrective revision (oracle R2 + driver R2 with a 14-rule conformance table, authorized one-shot by `V03E_REAL_RECOVERY_SMOKE_AUTHORIZATION_R2.md`, now spent) was executed once on 2026-10-17 and recorded **`PASS — V0.3-E REAL CRASH-AND-RECOVERY SMOKE (R2)`** (`docs/v0.3/V03E_REAL_RECOVERY_SMOKE_RESULT_R2.md`; that evidence was then independently accepted for the mandatory fail-closed core — `docs/v0.3/V03E_ACCEPTANCE.md` §0, *APPROVE V0.3-E MANDATORY FAIL-CLOSED CORE ACCEPTANCE (P0 = 0, P1 = 0, P2 = 2)*, adoption disabled and no platform gate claimed) — and the platform proof gate is **not complete** (G0.1/P7 was executed
-once and is now an **authoritative PASS** after the independent proof review
-approved it — *APPROVE V0.3-E G0.1 / P7 PLATFORM PROOF*, P0 = 0, P1 = 0, P2 = 0).
-**G0.2** (offline run<->call false-correlation) was then executed, and after the first
-independent review returned `REQUEST_CHANGES` (P0 = 0, P1 = 0, P2 = 2) a separately
-authorized **clean re-run** was performed under an oracle precommitted in commit
-`12ea1b7`, which the independent clean-rerun review then approved (*APPROVE V0.3-E
-G0.2 FALSE-CORRELATION PROOF*, P0 = 0, P1 = 0, P2 = 0), so **G0.2 = PASS**
-(authoritative, independently approved; ten fixed cases A-J fail-closed, no false
-correlation, no timestamp tie-break - `docs/v0.3/V03E_G0_2_CLEAN_RERUN_PROOF.md`, with
-the original record preserved in `docs/v0.3/V03E_G0_2_FALSE_CORRELATION_PROOF.md` );
-G0.3 was executed, failed its original oracle on case J, was independently reviewed as a TYPE-1 proof-plan failure and then cleanly re-run under a corrected precommitted oracle, and the corrected proof was independently approved (all accepted safe buckets class-wide pre-send; proxy_error unreachable in the current configuration; every uncertain class fail-closed; corrected case J surfaced `remote_protocol_error` exactly as precommitted), while G0.4 was executed once under its approved immutable revision-3 oracle and has since been independently approved as a **FAILED PROOF** (*APPROVE V0.3-E G0.4 FAILED PROOF*, P0 = 0, P1 = 0, P2 = 0; **TYPE 3 — SEMANTIC ENVIRONMENT / CONFIGURATION RESULT**): **G0.4/P4 = AUTHORITATIVE FAIL / P4 UNPROVEN** (no OpenCode base endpoint was configured, so no target instance could be bound and 0 `GET /doc` were issued - `docs/v0.3/V03E_G0_4_API_INSPECTION_PROOF.md`), and G0.5/G1/G2 have not run, so the platform proof gate stays partially executed / not complete): the core required **G0.1/P7 PASS first**, and that gate is now
-**satisfied** (authoritative, independently approved; no degraded-implementation
-path) although implementation itself still requires a separately issued
-authorization; adoption requires **both** the independently satisfied local **P6
-identity/ownership veto bound** (G0.5, SPEC §25.1) **and** the independently satisfied
-remote/platform *enabling* proofs P1/P2/P3/P8 (plus P9 if timestamp/order correlation is
-used); a design that cannot
-prove an already-completed turn ships as "reconcile and report, never adopt, always
-fail closed".  DevRelay still never decides when to invoke a role, keeps no implicit
-retry, fallback or automatic resume, and no automatic DeepSeek/GLM routing exists.
+Status of the v0.3-E gate (evidence in `docs/v0.3/V03E_ACCEPTANCE.md` §0 and the
+proof records it links):
+
+* mandatory fail-closed core — **independently accepted** (P0 = 0, P1 = 0, P2 = 2;
+  2026-10-17): read-only `devrelay_reconcile_run` plus the one-shot
+  `devrelay_resolve_recovery` (`mark_unrecoverable` only, terminal `BLOCKED`).
+* two real crash-and-recovery smoke rounds: R1 **FAIL per its precommitted
+  oracle** (measurement defect, every product criterion observed to pass),
+  corrective R2 **PASS** — `docs/v0.3/V03E_REAL_RECOVERY_SMOKE_RESULT.md`,
+  `docs/v0.3/V03E_REAL_RECOVERY_SMOKE_RESULT_R2.md`.
+* platform proof gate **partially executed / not complete**: G0.1/P7 = PASS,
+  G0.2 = PASS (clean re-run under a precommitted oracle), G0.3/P5 = PASS,
+  **G0.4/P4 = authoritative FAIL / P4 UNPROVEN** (the accepted workspace had no
+  OpenCode base endpoint, so 0 `GET /doc` were issued), **G0.5/P6 = NOT RUN**
+  (definition accepted, no complete four-case oracle could be frozen because no
+  sound original-session provenance anchor exists today — see
+  `docs/v0.3/V03E_G0_5_PRE_SESSION_INCARNATION_FINDING.md`), G1/G2 not run.
+* `adopt_completed_turn` stays **DISABLED**: adoption needs the local P6
+  identity/ownership veto bound **and** the remote/platform *enabling* proofs
+  P1/P2/P3/P8 (plus P9 if timestamps are used), each independently satisfied,
+  plus a separate authorization.
+
+DevRelay still never decides when to invoke a role, keeps no implicit retry,
+fallback or automatic resume, and no automatic DeepSeek/GLM routing exists.
 
 > **v0.2-A candidate (unreleased)**: the automatic review loop described under
 > [Automatic review loop (v0.2-A)](#automatic-review-loop-v02-a) is implemented
-> in this working branch as a candidate for independent review. It is not part
-> of the v0.1.0 release, the version number is unchanged, and its behaviour was
+> in this working branch as a candidate for independent review. It is part of no
+> published release (the published `0.1.0` predates it), and its behaviour was
 > validated with fake providers only. Specification and acceptance matrix:
 > [docs/v0.2/V02_SPEC.md](docs/v0.2/V02_SPEC.md),
 > [docs/v0.2/V02_ACCEPTANCE.md](docs/v0.2/V02_ACCEPTANCE.md).
@@ -240,8 +236,25 @@ src/devrelay/
 │   ├── base.py            # ImplementerProvider / ReviewerProvider
 │   ├── evidence.py        # CallSink protocol + ReviewCallPolicy (v0.2-A)
 │   ├── codex_cli.py       # official Codex CLI adapter (stdin transport)
+│   ├── codex_runtime.py   # v0.2-C structured runtime (schema/result files)
 │   ├── manual.py          # manual reviewer handoff (markdown)
 │   └── openai_compatible.py  # DeepSeek-style HTTP reviewer
+├── opencode/              # v0.3-A session bridge
+│   ├── transport.py       # explicit-endpoint HTTP, bounded reads
+│   ├── bridge.py          # single-session operations + ownership verdict
+│   └── accounting.py      # durable call ledger
+├── roles/                 # v0.3-C semantic role routing (resolver + service)
+├── orchestration/         # v0.3-D bounded runs + v0.3-E recovery
+│   ├── state_machine.py   # legal transitions, cycle bound
+│   ├── store.py           # durable run store (atomic, single writer)
+│   ├── invariants.py      # untrusted-state reachability validation
+│   └── recovery.py        # read-only reconciliation + mark_unrecoverable
+├── mcp/                   # v0.3-B stdio MCP surface (19 tools)
+│   ├── server.py          # `devrelay mcp serve` entry point
+│   ├── tools.py           # tool registry, annotations, result envelope
+│   └── ledger.py          # tool-surface execution lock
+├── profiles/
+│   └── default.yaml       # packaged policy defaults (sdist + wheel data)
 ├── workspace/
 │   ├── runner.py          # subprocess runner (shell=False, UTF-8, timeouts)
 │   ├── git.py             # GitWorkspace (read-only git access)
@@ -496,7 +509,10 @@ Requirements: Python >= 3.11, git, and a repository with **at least one
 commit** (baselines snapshot `HEAD`; DevRelay reports a clear error instead of
 a Git error when the repository has no commits yet).
 
-DevRelay v0.1.0 is distributed from source (a PyPI release is planned):
+`0.1.0` is the release currently published on PyPI.  The `0.3.0` sources in this
+tree are **not published yet**: they become installable from PyPI once the
+`v0.3.0` tag is created and the release workflow completes.  From a checkout or
+an unpacked sdist/wheel:
 
 ```bash
 # from a checkout or an unpacked sdist/wheel
@@ -878,6 +894,14 @@ Spec: `docs/v0.3/V03B_SPEC.md`; acceptance matrix:
 `docs/v0.3/V03B_ACCEPTANCE.md`.  Requires the optional extra
 `pip install -e ".[mcp]"`.
 
+Later stages extend the same surface to **19 tools** (eleven `devrelay_*` and
+eight `opencode_*`): the v0.3-C role tools (`devrelay_list_roles`,
+`devrelay_get_role`, `devrelay_send_role_prompt`), the v0.3-D run tools
+(`devrelay_start_run`, `devrelay_run_implementer`, `devrelay_run_reviewer`,
+`devrelay_decide_run`, `devrelay_get_run`) and the v0.3-E recovery tools
+(`devrelay_reconcile_run`, `devrelay_resolve_recovery`).  The `devrelay_*` tools
+are the higher-level surface; the `opencode_*` tools stay the raw bridge.
+
 ## Policy (default profile)
 
 The YAML below is the packaged default **policy**
@@ -1062,16 +1086,37 @@ not downgrade the binary inside a workspace that v0.2-B has already written.
 - **Provider limits are stated, not hidden**: push prohibition is
   BEST-EFFORT/PROVIDER-LIMITED and documented as such.
 
-## Current limitations (v0.1 core + v0.2-A/v0.2-B candidates)
+## Current limitations (v0.1 core + v0.2/v0.3 candidates and accepted stages)
 
 - The automatic review loop (v0.2-A) is a **candidate under independent
-  review**: it is merged into no release, the version stays `0.1.0`, and the
-  reviewed behaviour is exercised with fake providers only (no real Codex run
-  and no real reviewer endpoint were used to validate it).
+  review**: it is in no published release, and the reviewed behaviour is
+  exercised with fake providers only (no real Codex run and no real reviewer
+  endpoint were used to validate it).
 - Project profiles and frozen-policy integrity (v0.2-B) are a **candidate under
   independent review** as well. `state_schema_version` is now 5 and the
   migration is one-way (see "State schema 5"): keep the pre-upgrade
   `state.v<old>.json.bak` if you may need to read a task with v0.2-A again.
+- The structured Codex runtime (v0.2-C) is a **candidate**: criteria are recorded
+  as COVERED/PARTIAL/DEFERRED in `docs/v0.2/V02C_ACCEPTANCE.md`.
+- v0.3-A to v0.3-D are **accepted internally, closed and unreleased**; each was
+  validated with one or more bounded real smokes, and their accepted scope is
+  what the acceptance matrices record - nothing more.
+- v0.3-E is scoped to the **mandatory fail-closed core** only: read-only
+  reconciliation plus a one-shot `mark_unrecoverable`.  `adopt_completed_turn`
+  stays **DISABLED**, there is no automatic resume, and remote correlation (the
+  case where the provider submission status cannot be established locally) was
+  never exercised.
+- The orchestration/recovery ledger is **single-writer and issues no `fsync`**:
+  writes are atomic (unique temp file + `os.replace`), but durability against
+  power loss or a second writer is not claimed.
+- The v0.3-E platform proof gate is **partially executed / not complete**:
+  G0.1/P7 = PASS, G0.2 = PASS, G0.3/P5 = PASS, **G0.4/P4 = authoritative FAIL /
+  P4 UNPROVEN** (no OpenCode base endpoint in the accepted workspace, 0
+  `GET /doc` issued), **G0.5/P6 = NOT RUN** (no complete oracle could be frozen),
+  G1/G2 not run.  No platform gate is claimed by the mandatory-core acceptance.
+- The MCP surfaces (v0.3-B, v0.3-D, v0.3-E) are local stdio only: **no**
+  HTTP/SSE transport, **no** multi-workspace serving, no ChatGPT product-native
+  distribution.
 - Snapshot integrity protects against corruption and accidental drift, not
   against a local actor who edits both the snapshot and `state.json`.
 - The execution budget counts *invocations*, not tokens, cost, plan quota or
@@ -1079,9 +1124,10 @@ not downgrade the binary inside a workspace that v0.2-B has already written.
 - One implementer: official Codex CLI (stdin transport). Codex argv/sandbox
   behavior must be validated on your machine (DevRelay rejects flags the
   installed CLI does not document).
-- Codex structured event output (`--json` / `--output-schema`) is **not**
-  parsed in v0.1 - recorded on the v0.2 roadmap. Exit codes and full stdout
-  are captured today.
+- Codex structured event output (`--json` events) is observational only; the
+  v0.2-C runtime parses and persists the schema-validated
+  `--output-schema` / `--output-last-message` result instead.  Exit codes and
+  full stdout are always captured.
 - One active task at a time; no concurrency.
 - Repositories with unresolved merge conflicts are refused by the policy guard
   (fail closed) until the index is resolvable again; baseline capture itself
@@ -1095,7 +1141,8 @@ not downgrade the binary inside a workspace that v0.2-B has already written.
 - OpenAI-compatible reviewer requires a JSON-object-capable endpoint.
 - Push prohibition cannot be mathematically enforced with the current Codex
   CLI (no network-disable flag) - see the policy-guard section.
-- No ChatGPT plugin / MCP / web UI / GitHub app yet - see Roadmap.
+- No ChatGPT plugin, web UI or GitHub app yet; the MCP surface is local stdio
+  only (`devrelay mcp serve`, 19 tools) - see Roadmap.
 
 ## Roadmap
 
@@ -1139,42 +1186,25 @@ not downgrade the binary inside a workspace that v0.2-B has already written.
   closed, an interrupted turn is materialized with its audit trail, and the
   durable in-flight intent is proven to precede submission.  The Planner still
   decides every phase and every decision
-- **v0.3-E** - Orchestration recovery (crash/uncertain-call reconciliation,
-  resume) - **design frozen / mandatory core implemented, authorized and smoked once → FAIL per precommitted oracle / not accepted / unreleased**: the
-  independent design-freeze review approved candidate
-  `9f4a01804b9affe8938a272553df345b5a60aeed` (**P0 = 0, P1 = 0, P2 = 0**, F1–F12
-  **CLOSED**, *APPROVE V0.3-E FAIL-CLOSED CORE DESIGN; PLATFORM PROOF GATE REQUIRED
-  BEFORE IMPLEMENTATION*) and the contract in `docs/v0.3/V03E_SPEC.md` is frozen,
-  with the matrix in `docs/v0.3/V03E_ACCEPTANCE.md`.  The mandatory fail-closed core
-  is reconcile/report plus an explicit `mark_unrecoverable` exit and needs
-  **G0.1/P7 PASS first**, and that gate is now **satisfied** (authoritative,
-  independently approved) although implementation itself still requires a separately
-  issued authorization (no degraded-implementation path); `adopt_completed_turn`
-  stays disabled until **both** the independently satisfied local **P6 identity/ownership
-  veto bound** (G0.5, SPEC §25.1) **and** the independently satisfied remote/platform
-  *enabling* proofs P1/P2/P3/P8 (plus P9 if timestamp/order correlation is used) hold;
-  pending results are report-only.  Recovery code exists (mandatory fail-closed core), which was **independently accepted** (`docs/v0.3/V03E_ACCEPTANCE.md` §0, P0 = 0, P1 = 0, P2 = 2); **G0.1/P7 = PASS** and **G0.2 = PASS** (both authoritative and independently
-  approved; G0.2 through the clean re-run under the precommitted oracle, cases A-J
-  fail-closed); **G0.3/P5 = PASS/CLOSED**; **G0.4/P4 was executed once and is AUTHORITATIVE
-  FAIL / P4 UNPROVEN** (the accepted workspace had no configured OpenCode base endpoint and
-  0 `GET /doc` were issued); **G0.5 = NOT RUN / DEFINITION ACCEPTED / ORACLE NOT FREEZABLE /
-  LOCAL REACHABILITY GAP** (under the accepted definition the missing, foreign and copied
-  cases bind to existing local enforcement, but the recreated/originality-unprovable case has
-  no existing local original-session/provenance enforcement path, so no complete four-case
-  oracle can be frozen; **0 semantic cases executed — no G0.5 PASS/FAIL, P6 unproven**; the approved Case-C prerequisite design block confirmed **no sound
-  original-session provenance anchor** exists today, so a new read-only prerequisite information
-  finding — **G0.5-PRE / SIC (session-incarnation capability finding)** — is defined
-  (`docs/v0.3/V03E_G0_5_PRE_SESSION_INCARNATION_FINDING.md`, definition accepted) and has now been
-  executed once under its accepted/frozen Mode-A oracle: the **authoritative Mode-A finding is
-  `SIC_NOT_EXPOSED_IN_INSPECTED_CONTRACT`** (*APPROVE V0.3-E SIC MODE-A RESULT*, result
-  `docs/v0.3/V03E_G0_5_PRE_SIC_RESULT.md`), strictly scoped to the exact inspected OpenCode 1.18.11
-  installed static package surface and frozen artifacts — it does not establish that OpenCode
-  globally has no session-incarnation metadata, does not establish P6 (neither PASS nor FAIL), does
-  not enable adoption, the single authorized attempt is consumed with **no rerun** authorized, and
-  no Mode B/C is authorized; implementation authorized by `docs/v0.3/V03E_IMPLEMENTATION_AUTHORIZATION.md` and smoked once → FAIL per precommitted oracle; corrective oracle/driver/authorization R2 then smoked once → PASS (R2)), and
-  **G1 and G2 have not run**, so the platform proof gate
-  stays partially executed / not complete; the mandatory core is authorized and was smoked twice — R1 FAIL per its precommitted oracle (`docs/v0.3/V03E_REAL_RECOVERY_SMOKE_RESULT.md`), corrective R2 PASS (`docs/v0.3/V03E_REAL_RECOVERY_SMOKE_RESULT_R2.md`) — and is now **independently accepted** (`docs/v0.3/V03E_ACCEPTANCE.md` §0); adoption is not accepted, and no automatic resume is designed in
-- **later** - optional release automation with explicit approvals
+- **v0.3-E** - Orchestration recovery (crash/uncertain-call reconciliation) -
+  **mandatory fail-closed core implemented, smoked twice and independently
+  accepted (P0 = 0, P1 = 0, P2 = 2; 2026-10-17); adoption disabled; platform gate
+  open; unreleased**: the frozen contract in `docs/v0.3/V03E_SPEC.md` splits the
+  mandatory core (read-only `devrelay_reconcile_run` plus the one-shot
+  `devrelay_resolve_recovery` with `mark_unrecoverable`, terminal `BLOCKED`; no
+  submission, no retry, no auto-resume, no adoption) from the gated
+  `adopt_completed_turn` and a report-only pending capability - two new MCP tools,
+  19 in total.  Two real smoke rounds were executed (R1 FAIL per its precommitted
+  oracle, corrective R2 PASS - `docs/v0.3/V03E_REAL_RECOVERY_SMOKE_RESULT.md`,
+  `docs/v0.3/V03E_REAL_RECOVERY_SMOKE_RESULT_R2.md`), and the platform proof gate
+  stays partially executed / not complete: **G0.1/P7 = PASS**, **G0.2 = PASS**,
+  **G0.3/P5 = PASS**, **G0.4/P4 = authoritative FAIL / P4 UNPROVEN**, **G0.5/P6 =
+  NOT RUN** (no complete four-case oracle could be frozen; the G0.5-PRE/SIC Mode-A
+  finding is `SIC_NOT_EXPOSED_IN_INSPECTED_CONTRACT`, strictly scoped to the
+  inspected OpenCode 1.18.11 contract), **G1/G2 not run**.  Adoption is not
+  accepted, and no automatic resume is designed in.
+- **v0.4** - not started.
+- **later** - further release automation with explicit approvals
 
 ## Development
 
@@ -1183,10 +1213,10 @@ python -m pip install -e ".[dev]"
 python -m pytest
 ```
 
-The full test suite runs offline with mocked subprocesses/HTTP where needed, an
-offline Codex stub spawned as a real child process, and real (tiny) git
-repositories for baseline/guard/recovery coverage - no real Codex, OpenCode,
-DeepSeek or network required. Coverage includes: state transitions and
+The full suite is **1260 tests** and runs offline with mocked subprocesses/HTTP
+where needed, an offline Codex stub spawned as a real child process, and real
+(tiny) git repositories for baseline/guard/recovery coverage - no real Codex,
+OpenCode, DeepSeek or network required. Coverage includes: state transitions and
 rejected invalid transitions; max-iteration blocking; P0/P1/P2 ->
 FIX_REQUIRED; P3-only pass policy; Codex missing/success/failure/timeout;
 stdin transport (long/Unicode/shell-metacharacter prompts stay on stdin, and
