@@ -1,7 +1,7 @@
 # Test CI for DevRelay.
 #
-# Runs the offline suite on every push to main and the v0.3-* release lines,
-# plus every pull request.  The suite is fully offline (Codex and HTTP
+# Runs the offline suite on every push to main, the v0.3-* release lines and the
+# release/* preparation branches, plus every pull request.  The suite is fully offline (Codex and HTTP
 # reviewers are mocked, Git tests use temporary repositories), so no secrets
 # and no network model access are involved.
 #
@@ -14,6 +14,7 @@ on:
     branches:
       - main
       - "v0.3-*"
+      - "release/*"
   pull_request:
 
 permissions:
