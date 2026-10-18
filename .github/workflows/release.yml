@@ -34,6 +34,10 @@
 # text. The embedded Python lives in single-quoted shell variables (PYCODE='
 # ... ') assigned by `python -c "$PYCODE"`, which keeps the code readable inside
 # the YAML block scalar without any heredoc-terminator or escaping pitfalls.
+#
+# The checkout, setup-python and pypa publish actions still ride their
+# major/release tags; pinning all three to commit SHAs is on the hardening
+# backlog.
 
 name: release
 
@@ -58,6 +62,12 @@ jobs:
   publish:
     name: Publish to PyPI (OIDC)
     if: ${{ inputs.confirm == 'PUBLISH' }}
+    # Two dispatches for the same tag must not interleave: the second one has to
+    # see the first one's result (PyPI state, draft assets) rather than race it.
+    # This is job-level because `inputs` is only reliably in scope there.
+    concurrency:
+      group: release-${{ inputs.tag }}
+      cancel-in-progress: false
     runs-on: ubuntu-latest
     environment:
       name: pypi
@@ -135,18 +145,56 @@ jobs:
         id: pypi
         env:
           VERSION: ${{ steps.version.outputs.version }}
+          PYPI_JSON: ${{ runner.temp }}/pypi-devrelay-${{ steps.version.outputs.version }}.json
         run: |
           set -euo pipefail
-          status=$(curl -sS --retry 3 -o /dev/null -w '%{http_code}' "https://pypi.org/pypi/devrelay/${VERSION}/json")
+          status=$(curl -sS --retry 3 -o "$PYPI_JSON" -w '%{http_code}' "https://pypi.org/pypi/devrelay/${VERSION}/json")
           case "$status" in
-            200) exists=true ;;
-            404) exists=false ;;
+            200) ;;
+            404)
+              echo "devrelay ${VERSION} is not on PyPI yet; the distributions will be built and uploaded."
+              echo "exists=false" >> "$GITHUB_OUTPUT"
+              exit 0
+              ;;
             *)
               echo "::error::unexpected PyPI status $status for devrelay ${VERSION}; refusing to continue."
               exit 1
               ;;
           esac
-          echo "devrelay ${VERSION} already on PyPI: $exists"
+          PYCODE='
+          import json, os, pathlib, sys
+
+          version = os.environ["VERSION"]
+          try:
+              payload = json.loads(pathlib.Path(os.environ["PYPI_JSON"]).read_text(encoding="utf-8"))
+          except (OSError, json.JSONDecodeError) as exc:
+              sys.exit(f"::error::cannot read the PyPI JSON response at {os.environ['PYPI_JSON']}: {exc}")
+          names = [str(entry.get("filename", "")) for entry in payload.get("urls", [])]
+          wheels = sorted(name for name in names if name.endswith(".whl"))
+          sdists = sorted(name for name in names if name.endswith(".tar.gz"))
+          if not wheels and not sdists:
+              print("false")
+              sys.exit(0)
+          wheel_ok = len(wheels) == 1 and f"devrelay-{version}" in wheels[0]
+          sdist_ok = len(sdists) == 1 and f"devrelay-{version}" in sdists[0]
+          if wheel_ok and sdist_ok:
+              print("true")
+              sys.exit(0)
+          missing = []
+          if not wheel_ok:
+              missing.append(f"devrelay-{version}-py3-none-any.whl")
+          if not sdist_ok:
+              missing.append(f"devrelay-{version}.tar.gz")
+          print(f"::error::partial PyPI upload detected for devrelay {version}: PyPI lists {names}; missing {missing}.", file=sys.stderr)
+          print("::error::PyPI files are immutable: do not rebuild and re-upload the version. Upload the missing file(s) to PyPI by hand, then rerun this workflow - never bypass this probe.", file=sys.stderr)
+          sys.exit(1)
+          '
+          exists=$(python -c "$PYCODE")
+          if [ "$exists" != "true" ]; then
+            echo "::error::PyPI answers 200 for devrelay ${VERSION} but lists no release files; refusing to continue."
+            exit 1
+          fi
+          echo "devrelay ${VERSION} is already on PyPI with one wheel and one sdist; the build and upload steps will be skipped."
           echo "exists=$exists" >> "$GITHUB_OUTPUT"
 
       - name: Build the distributions from source
@@ -213,13 +261,23 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ inputs.tag }}
           VERSION: ${{ steps.version.outputs.version }}
+          PYPI_EXISTS: ${{ steps.pypi.outputs.exists }}
         run: |
           set -euo pipefail
           present=$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name')
+          missing=()
           for asset in "devrelay-${VERSION}-py3-none-any.whl" "devrelay-${VERSION}.tar.gz" "SHA256SUMS"; do
             if ! printf '%s\n' "$present" | grep -Fxq "$asset"; then
               echo "::error::draft release $TAG has no asset named $asset; refusing to publish it."
-              exit 1
+              missing+=("$asset")
             fi
           done
+          if [ "${#missing[@]}" -gt 0 ]; then
+            if [ "${PYPI_EXISTS:-}" = "true" ]; then
+              echo "::error::devrelay ${VERSION} is already on PyPI, so this run skipped the rebuild by design: do not rebuild the distributions. Restore the missing draft assets from the release you already published, then rerun this workflow: gh release upload \"$TAG\" ${missing[*]} --clobber --repo \"$GITHUB_REPOSITORY\""
+            else
+              echo "::error::rerun this workflow with tag $TAG so the build and attach steps run again."
+            fi
+            exit 1
+          fi
           gh release edit "$TAG" --draft=false --repo "$GITHUB_REPOSITORY"

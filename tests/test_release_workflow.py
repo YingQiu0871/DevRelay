@@ -8,14 +8,19 @@ and only then flips the draft to a published Release.
 These tests read the real workflow files and fail if that contract erodes: if
 the draft gate turns back into a "must already be published" gate, if a checksum
 file is written into dist/ where ``twine check`` would trip over it, if a rerun
-rebuilds a version PyPI already has, or if the Release can become visible before
-its assets exist.  They also keep the test CI running the suite on both
+rebuilds a version PyPI already has, if the PyPI probe reads only the HTTP
+status instead of the release file list, or if the Release can become visible
+before its assets exist.  They also keep the test CI running the suite on both
 supported operating systems.
 """
 
 from __future__ import annotations
 
+import json
+import os
 import re
+import subprocess
+import sys
 from pathlib import Path
 
 import yaml
@@ -80,6 +85,50 @@ def _extract_pycode(run_text: str) -> str:
             break
         body.append(line[base:])
     return "\n".join(body)
+
+
+def _command_lines(run_text: str) -> list[str]:
+    """The shell lines of a step that would actually run (no blanks/comments)."""
+    return [
+        line.strip()
+        for line in run_text.splitlines()
+        if line.strip() and not line.strip().startswith("#")
+    ]
+
+
+def _probe_step() -> dict:
+    """The step that asks PyPI whether this version is already published."""
+    return _steps()[_step_index("curl -sS --retry 3")]
+
+
+def _probe_code() -> str:
+    return _extract_pycode(_probe_step()["run"])
+
+
+def _run_probe(
+    tmp_path: Path, payload: object, *, raw: bool = False
+) -> subprocess.CompletedProcess:
+    """Run the workflow's PyPI probe code against a canned JSON response."""
+    json_path = tmp_path / "pypi.json"
+    json_path.write_text(
+        payload if raw else json.dumps(payload),  # type: ignore[arg-type]
+        encoding="utf-8",
+    )
+    env = dict(os.environ)
+    env.update(
+        {
+            "VERSION": "0.3.0",
+            "PYPI_JSON": str(json_path),
+            "GITHUB_OUTPUT": str(tmp_path / "github_output"),
+        }
+    )
+    return subprocess.run(
+        [sys.executable, "-c", _probe_code()],
+        capture_output=True,
+        text=True,
+        env=env,
+        check=False,
+    )
 
 
 def test_workflow_filename_is_release_yml():
@@ -196,18 +245,90 @@ def test_requires_a_draft_release_not_a_published_one():
 
 
 def test_pypi_existence_probe_is_fail_closed():
-    probe = _steps()[_step_index("curl -sS --retry 3")]
+    probe = _probe_step()
     run = probe["run"]
     assert probe["id"] == "pypi"
     assert probe["env"]["VERSION"] == "${{ steps.version.outputs.version }}"
+    assert probe["env"]["PYPI_JSON"].startswith("${{ runner.temp }}/pypi-devrelay-")
+    assert probe["env"]["PYPI_JSON"].endswith(".json")
     assert 'https://pypi.org/pypi/devrelay/${VERSION}/json' in run
     assert "%{http_code}" in run
     assert "200)" in run and "404)" in run
-    assert "exists=true" in run and "exists=false" in run
+    assert "exists=false" in run
+    # The status code alone never proves the release is complete: only the
+    # file list may set exists=true.
+    assert "exists=true" not in run
     assert 'echo "exists=$exists" >> "$GITHUB_OUTPUT"' in run
     # Any other answer (network failure, 5xx, a proxy error page) must stop the
-    # run rather than be read as "not published yet".
-    assert run.count("exit 1") >= 1
+    # run rather than be read as "not published yet", and a 200 that lists no
+    # files must not send the run off to build them either.
+    assert run.count("exit 1") >= 2
+
+
+def test_pypi_probe_reads_the_release_file_list():
+    run = _probe_step()["run"]
+    assert "-o /dev/null" not in run
+    assert '-o "$PYPI_JSON"' in run
+    code = _probe_code()
+    assert '"urls"' in code
+    assert "filename" in code
+    assert 'print("true")' in code and 'print("false")' in code
+    # The body has to be read before the answer is written.
+    assert run.index('"$PYPI_JSON"') < run.index('echo "exists=$exists"')
+    # A 200 with an empty file list is an anomaly, not a reason to build.
+    assert "lists no release files" in run
+
+
+def test_pypi_probe_accepts_only_a_complete_release(tmp_path):
+    result = _run_probe(
+        tmp_path,
+        {
+            "urls": [
+                {"filename": "devrelay-0.3.0-py3-none-any.whl"},
+                {"filename": "devrelay-0.3.0.tar.gz"},
+            ]
+        },
+    )
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == "true"
+
+
+def test_pypi_probe_reports_an_absent_release_as_not_published(tmp_path):
+    result = _run_probe(tmp_path, {"urls": []})
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == "false"
+
+
+def test_pypi_probe_refuses_a_partial_upload(tmp_path):
+    result = _run_probe(
+        tmp_path,
+        {"urls": [{"filename": "devrelay-0.3.0-py3-none-any.whl"}]},
+    )
+    assert result.returncode != 0
+    assert "::error::" in result.stderr
+    assert "partial PyPI upload detected" in result.stderr
+    # The message has to name what is missing so the operator can fix it up.
+    assert "devrelay-0.3.0.tar.gz" in result.stderr
+    assert "do not rebuild" in result.stderr
+
+    # Two wheels and no sdist is just as partial as one wheel.
+    duplicated = _run_probe(
+        tmp_path,
+        {
+            "urls": [
+                {"filename": "devrelay-0.3.0-py3-none-any.whl"},
+                {"filename": "devrelay-0.3.0-py3-none-any.whl"},
+            ]
+        },
+    )
+    assert duplicated.returncode != 0
+    assert "devrelay-0.3.0.tar.gz" in duplicated.stderr
+
+
+def test_pypi_probe_refuses_a_response_it_cannot_parse(tmp_path):
+    result = _run_probe(tmp_path, "<html>gateway error</html>", raw=True)
+    assert result.returncode != 0
+    assert "::error::" in result.stderr
 
 
 def test_build_and_publish_steps_are_skipped_when_the_version_is_on_pypi():
@@ -258,8 +379,21 @@ def test_assets_are_attached_to_the_draft_before_the_pypi_upload():
     assert "release-assets/SHA256SUMS" in run
     assert "--clobber" in run
     assert steps[publish_index]["with"]["packages-dir"] == "dist/"
-    # `--clobber` belongs to the asset upload only.
-    assert sum("--clobber" in (step.get("run") or "") for step in steps) == 1
+    # `--clobber` belongs to the asset upload only. The final step may mention
+    # the recovery command in an error message, but that line must be an echo:
+    # there is exactly one line in the workflow that runs `gh release upload`.
+    upload_lines = [
+        line
+        for step in steps
+        for line in _command_lines(step.get("run") or "")
+        if line.startswith("gh release upload")
+    ]
+    assert len(upload_lines) == 1
+    assert upload_lines[0].count("--clobber") == 1
+    for step in steps:
+        for line in _command_lines(step.get("run") or ""):
+            if "--clobber" in line:
+                assert line.startswith("gh release upload") or line.startswith("echo"), line
 
 
 def test_builds_from_source_instead_of_downloading_artifacts():
@@ -299,7 +433,7 @@ def test_embedded_python_blocks_are_syntactically_valid():
     # The workflow ships Python inside shell variables; a syntax error there
     # would only surface in a real publication run.
     code_steps = [step for step in _steps() if "PYCODE='" in (step.get("run") or "")]
-    assert len(code_steps) == 2
+    assert len(code_steps) == 3
     for step in code_steps:
         compile(_extract_pycode(step["run"]), step["name"], "exec")
         assert 'python -c "$PYCODE"' in step["run"]
@@ -333,8 +467,42 @@ def test_the_final_step_publishes_the_release_only_after_checking_its_assets():
     assert "exit 1" in run
     assert run.index("--json assets") < run.index("gh release edit")
     assert "--draft=false" in run
-    assert "--clobber" not in run
+    # Only the error message may mention a recovery upload; the step itself
+    # never runs one.
+    for line in _command_lines(run):
+        if "--clobber" in line:
+            assert line.startswith("echo"), line
     assert sum("gh release edit" in (step.get("run") or "") for step in steps) == 1
+
+
+def test_the_final_step_explains_how_to_recover_a_skipped_rerun():
+    final = _steps()[-1]
+    run = final["run"]
+    assert final["env"]["PYPI_EXISTS"] == "${{ steps.pypi.outputs.exists }}"
+    assert "PYPI_EXISTS" in run
+    assert "${{ steps.pypi" not in run
+    # When PyPI already has the version the rebuild was skipped on purpose, so
+    # the missing draft assets have to be restored by hand - never rebuilt.
+    assert "do not rebuild" in run
+    assert "gh release upload" in run
+    assert '--clobber' in run
+    assert "${missing[*]}" in run
+
+
+def test_the_release_job_serialises_runs_on_the_same_tag():
+    job = _publish_job()
+    concurrency = job["concurrency"]
+    assert concurrency["group"] == "release-${{ inputs.tag }}"
+    assert concurrency["cancel-in-progress"] is False
+    # Job level, not workflow level: `inputs` is only reliably in scope there.
+    data, _ = _load()
+    assert "concurrency" not in data
+
+
+def test_github_cli_steps_authenticate_with_the_workflow_token():
+    for needle in ("--json isDraft,isPrerelease", "gh release upload", "gh release edit"):
+        step = _steps()[_step_index(needle)]
+        assert step["env"]["GH_TOKEN"] == "${{ github.token }}", step.get("name")
 
 
 def test_the_guarded_stage_order_is_fixed():
