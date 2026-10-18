@@ -75,7 +75,9 @@ approved one bounded real smoke, the smoke passed, and v0.3-D was accepted - see
 `be4dce7` (documentation only).
 
 v0.3-E (recovery: crash-during-submission reconciliation, uncertain-call
-recovery, resume) is **design-only and FROZEN**: after the independent design review's
+recovery, resume) entered its design stage and was **FROZEN** there (it is now
+implemented, with its mandatory fail-closed core independently accepted on
+2026-10-17 — see below and `docs/v0.3/V03E_ACCEPTANCE.md`): after the independent design review's
 first `REQUEST_CHANGES` (P0 = 1, P1 = 6, P2 = 5), two narrow re-reviews and their
 fixes (`f67bf9e`, `5b7c65a`, `9f4a018`), the final independent design-freeze review
 approved the contract at candidate `9f4a018` (**P0 = 0, P1 = 0, P2 = 0**, F1–F12
@@ -89,7 +91,9 @@ capability; the core needs no remote platform proof, while adoption requires **b
 local P6 identity/ownership **veto bound** (G0.5, SPEC §25.1) **and** the remote/platform
 *enabling* proofs of the proof gate (P1, P2, P3, P8, plus P9 if timestamps are used);
 neither class enables adoption alone.
-**No recovery code exists** and the accepted v0.3-D runtime candidate
+**No recovery code existed at that design stage** (the mandatory fail-closed core
+was implemented afterwards and independently accepted on 2026-10-17; adoption
+remains DISABLED) and the accepted v0.3-D runtime candidate
 `8b70610a5cdda600ef57cf8378c4f69cd33d5be4` is untouched.  The design re-review
 **has passed** and the v0.3-E design is **frozen** (candidate `9f4a018`, P0 = 0,
 P1 = 0, P2 = 0); mandatory-core implementation nonetheless must not start until

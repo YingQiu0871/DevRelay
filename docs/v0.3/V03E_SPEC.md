@@ -1,12 +1,15 @@
 # DevRelay v0.3-E — recovery and reconciliation (design, FROZEN)
 
-Status: **DESIGN FROZEN / NOT IMPLEMENTED / NOT ACCEPTED / UNRELEASED**
+Status: **DESIGN FROZEN / MANDATORY FAIL-CLOSED CORE IMPLEMENTED AND ACCEPTED BY INDEPENDENT ACCEPTANCE REVIEW (P0 = 0, P1 = 0, P2 = 2; 2026-10-17) / ADOPTION DISABLED / PLATFORM GATES OPEN / UNRELEASED**
 
 Independent design-freeze review of candidate
 `9f4a01804b9affe8938a272553df345b5a60aeed`: **P0 = 0, P1 = 0, P2 = 0**, F1–F12
 **CLOSED**, decision **APPROVE V0.3-E FAIL-CLOSED CORE DESIGN; PLATFORM PROOF GATE
 REQUIRED BEFORE IMPLEMENTATION**.  The design is therefore **frozen**; the
-implementation is **NOT authorized**, the pre-implementation platform proof gate is
+implementation was subsequently **authorized** (owner-issued authorization, since
+spent) and the mandatory fail-closed core is **implemented and independently
+accepted** (`docs/v0.3/V03E_ACCEPTANCE.md`; P0 = 0, P1 = 0, P2 = 2; 2026-10-17);
+adoption remains **DISABLED** and the platform proof gate is
 **NOT complete** (**G0.1 / P7 = PASS — AUTHORITATIVE PASS / INDEPENDENTLY APPROVED**
 by the final proof review *APPROVE V0.3-E G0.1 / P7 PLATFORM PROOF* (P0 = 0, P1 = 0,
 P2 = 0) — `V03E_G0_1_P7_PROOF.md`; **G0.2 = PASS — AUTHORITATIVE PASS /

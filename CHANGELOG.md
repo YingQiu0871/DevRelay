@@ -4,13 +4,79 @@ All notable changes to DevRelay are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## Unreleased - v0.3-E design FROZEN (recovery & reconciliation)
+## 0.3.0 - unreleased
 
-**Design frozen.  Not implemented, not accepted, unreleased.**  The independent
+Version `0.3.0` is single-sourced in `pyproject.toml` and in the
+`src/devrelay/__init__.py` fallback constant, and is what `devrelay version`
+reports.  Nothing is published yet: PyPI serves `0.1.0` only, and a `0.3.0`
+release is created by the tag-driven workflow in `.github/workflows/release.yml`
+once the `v0.3.0` tag exists on `main` with a published GitHub Release.
+
+### Added
+
+- The v0.3 stage series is in the package: the OpenCode session bridge (v0.3-A),
+  the ChatGPT/MCP stdio tool surface (v0.3-B), semantic agent role routing
+  (v0.3-C), bounded orchestration (v0.3-D) and the v0.3-E mandatory fail-closed
+  recovery core (local read-only reconciliation plus a one-shot
+  `mark_unrecoverable`).
+- `devrelay mcp serve --workspace <project>` exposes **19 MCP tools** over the
+  official MCP Python SDK: eleven `devrelay_*` tools (including
+  `devrelay_reconcile_run` and `devrelay_resolve_recovery`) and eight
+  `opencode_*` tools.
+- Offline CI (`.github/workflows/test.yml`, Python 3.11-3.14 on Linux and
+  Windows) and a tag-driven release workflow
+  (`.github/workflows/release.yml`).
+
+### Changed
+
+- Package version `0.1.0` -> `0.3.0` (`pyproject.toml`,
+  `src/devrelay/__init__.py`); `tests/test_version.py` pins the release version
+  to the packaged one.  The MCP server banner keeps its own `0.3.0-e`
+  identifier.
+- The sdist ships the packaged policy profiles
+  (`recursive-include src/devrelay/profiles *.yaml` in `MANIFEST.in`).
+
+### Security
+
+- Publishing uses PyPI trusted publishing (GitHub OIDC, `pypi` environment, no
+  stored credentials, attestations enabled).  The workflow validates the tag
+  shape, pins the tag to the packaged version, requires the tag to be reachable
+  from `origin/main`, requires a published GitHub Release with the built
+  artifacts attached, and passes `workflow_dispatch` inputs to the shell only
+  through environment variables.
+- The Codex child keeps its explicit credential denylist (reviewer credentials,
+  `DEVRELAY_OPENCODE_TOKEN` and common provider keys) - an explicit denylist,
+  not general secret isolation.
+
+### Known limitations
+
+- v0.2-A (automatic review loop), v0.2-B (project profiles / frozen-policy
+  integrity) and v0.2-C (structured Codex runtime) remain **candidates under
+  independent review**; they were validated offline with fake providers only.
+- v0.3-A to v0.3-D are accepted internally and closed, but no v0.3 release
+  exists yet.
+- v0.3-E is scoped to the mandatory fail-closed core: `adopt_completed_turn`
+  stays **DISABLED**, there is no automatic resume, and remote correlation was
+  never exercised.  The orchestration/recovery ledger assumes a single writer
+  and issues no `fsync`, so durability against power loss is not claimed.
+- The platform proof gate stays **partially executed / not complete**:
+  G0.1/P7 = PASS, G0.2 = PASS, G0.3/P5 = PASS, G0.4/P4 = authoritative FAIL /
+  P4 UNPROVEN (no OpenCode base endpoint in the accepted workspace, 0 `GET /doc`
+  issued), G0.5/P6 = NOT RUN, and G1/G2 not run.
+- The offline test suite is 1260 tests (`python -m pytest -q`); it needs no
+  model, no network and no installed Codex CLI.
+
+## v0.3-E (2026-10-17) - mandatory fail-closed core accepted
+
+**Design frozen.  Mandatory fail-closed core implemented and independently accepted (P0 = 0, P1 = 0, P2 = 2; 2026-10-17); adoption disabled; platform gates open; unreleased.**  The independent
 design-freeze review approved candidate
 `9f4a01804b9affe8938a272553df345b5a60aeed` with **P0 = 0, P1 = 0, P2 = 0** and
 F1-F12 **CLOSED**, decision *APPROVE V0.3-E FAIL-CLOSED CORE DESIGN; PLATFORM PROOF
-GATE REQUIRED BEFORE IMPLEMENTATION*.  Implementation is **not authorized**, the
+GATE REQUIRED BEFORE IMPLEMENTATION*.  Implementation was subsequently authorized
+(`docs/v0.3/V03E_IMPLEMENTATION_AUTHORIZATION.md`, owner-issued and spent) and the
+mandatory fail-closed core is implemented - `docs/v0.3/V03E_IMPLEMENTATION.md` - and
+was independently accepted for that scope (`docs/v0.3/V03E_ACCEPTANCE.md` §0,
+P0 = 0, P1 = 0, P2 = 2; adoption disabled, no platform gate claimed).  The
 platform proof gate is **not complete** (**G0.1 / P7 = PASS** — authoritative,
 independently approved by *APPROVE V0.3-E G0.1 / P7 PLATFORM PROOF* with
 P0 = 0, P1 = 0, P2 = 0; G0.3 failed its original oracle, was independently reviewed as a TYPE-1 proof-plan failure and then independently approved after the corrected clean rerun - **G0.3 / P5 = PASS** - (see below); G0.4-G0.5, G1, G2 not run at freeze time (G0.4 has since been executed once and is an authoritative `FAIL / P4 UNPROVEN` - see below); G0.2 ran and, after one `REQUEST_CHANGES` review, was cleanly re-run under a precommitted oracle and then independently approved - `G0.2 = PASS` - see below), `adopt_completed_turn`

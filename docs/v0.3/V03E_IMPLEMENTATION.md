@@ -74,7 +74,7 @@ disabled behind its unsatisfied platform proofs.
 | Real crash-and-recovery smoke, revision 1 | **executed once → FAIL per the precommitted oracle** — the count rule includes the ownership-probe GET; product criteria observed pass; `docs/v0.3/V03E_REAL_RECOVERY_SMOKE_RESULT.md` |
 | Corrective oracle + driver + fresh authorization (revision 2) | **done** — `V03E_REAL_RECOVERY_SMOKE_ORACLE_R2.md`, `V03E_REAL_RECOVERY_SMOKE_DRIVER_R2.py`, `V03E_REAL_RECOVERY_SMOKE_AUTHORIZATION_R2.md` |
 | Real crash-and-recovery smoke, revision 2 | **executed once → PASS** under the corrective oracle (`PASS — V0.3-E REAL CRASH-AND-RECOVERY SMOKE (R2)`); 14/14 oracle→driver conformance rules asserted and passing; `docs/v0.3/V03E_REAL_RECOVERY_SMOKE_RESULT_R2.md` |
-| Acceptance review, acceptance bookkeeping | **not done** — requested next; no row COVERED |
+| Acceptance review, acceptance bookkeeping | **done** — independent acceptance review `APPROVE V0.3-E MANDATORY FAIL-CLOSED CORE ACCEPTANCE` (P0 = 0, P1 = 0, P2 = 2; 2026-10-17); rows COVERED: E1, E3–E17, E20, E21, E23–E25 (E2/E18/E19/E22 withheld); adoption remains DISABLED; `docs/v0.3/V03E_ACCEPTANCE.md` |
 
 ## 2. Source changes
 

@@ -118,9 +118,13 @@ review time and confirmed it green — which is exactly why F1–F8 survived it)
 
 ## 6. Governance outcome
 
-- No acceptance row is marked COVERED; `V03E_ACCEPTANCE.md` remains
-  "DESIGN FROZEN / NOT ACCEPTED / UNRELEASED" and the proof gate for adoption is
-  unchanged.
+- No acceptance row is marked COVERED by this design-freeze review; the status
+  line it examined read "DESIGN FROZEN / NOT ACCEPTED / UNRELEASED" and the proof
+  gate for adoption was then unchanged.  **Later status:** the implementation was
+  subsequently authorized, the mandatory fail-closed core was independently
+  accepted (2026-10-17; P0 = 0, P1 = 0, P2 = 2 — `V03E_ACCEPTANCE.md`), adoption
+  remains **DISABLED**, the platform gates are open and the package is
+  **unreleased**.
 - The findings were remediated in the unauthorized draft so the recorded draft is
   internally coherent; that is the entire status change.
 - An implementation authorization, the independent acceptance review and the real
