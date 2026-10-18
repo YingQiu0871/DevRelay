@@ -6,10 +6,29 @@
 #   workflow:   release.yml   (renaming this file breaks the trusted publisher)
 #   environment: pypi
 #
-# This workflow builds the distributions from source at the requested tag; it
-# never downloads pre-built assets and pins no digests. Publication can only be
-# started manually with confirm=PUBLISH, and only for a semver tag whose commit
-# is already reachable from origin/main and whose GitHub Release is published.
+# Flow: the release is prepared by hand as a DRAFT Release, and this workflow
+# finishes it. It validates the dispatch tag, builds the distributions from that
+# tag's own source, attaches the wheel, the sdist and SHA256SUMS to the draft,
+# uploads the distributions to PyPI, and only then flips the draft to a
+# published Release. A Release that is already published, or that is marked as a
+# prerelease, is refused: the draft state is what makes "assets are attached
+# before anyone can see it" checkable, and it is how the same release can be
+# fixed by a rerun without ever showing a half-populated Release.
+#
+# Rerun semantics: the version is looked up on PyPI before anything is built.
+# When it is already there, the build, checksum, twine, asset-upload and PyPI
+# steps are all skipped and only the final step runs - which still requires all
+# three release assets to be present before it publishes the Release. A rerun
+# after a partial failure therefore never rebuilds a version PyPI already has,
+# and never publishes a Release whose assets are missing.
+#
+# SHA256SUMS lives in release-assets/, never in dist/: a checksum file inside
+# dist/ makes `twine check dist/*` fail, so the twine step names the
+# distribution globs explicitly (`dist/*.whl dist/*.tar.gz`).
+#
+# build and twine are pinned to exact versions so a release cannot change
+# behaviour because a tool released: build==1.6.1 and twine==7.0.0 (latest
+# stable, queried 2026-10-18).
 #
 # Inputs reach the shell only through `env:`, never interpolated into `run:`
 # text. The embedded Python lives in single-quoted shell variables (PYCODE='
@@ -46,6 +65,17 @@ jobs:
       contents: write
       id-token: write
     steps:
+      - name: Validate the tag shape
+        env:
+          TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          if [[ ! "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::tag '$TAG' is not of the form vMAJOR.MINOR.PATCH."
+            exit 1
+          fi
+          echo "tag $TAG has the expected vMAJOR.MINOR.PATCH shape"
+
       - name: Check out the release tag
         uses: actions/checkout@v4
         with:
@@ -57,23 +87,22 @@ jobs:
         with:
           python-version: "3.13"
 
-      - name: Validate the tag shape and its version
+      - name: Validate the tag against pyproject
+        id: version
         env:
           TAG: ${{ inputs.tag }}
         run: |
           set -euo pipefail
-          if [[ ! "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-            echo "::error::tag '$TAG' is not of the form vMAJOR.MINOR.PATCH."
-            exit 1
-          fi
           PYCODE='
           import os, pathlib, tomllib
           version = tomllib.loads(pathlib.Path("pyproject.toml").read_text(encoding="utf-8"))["project"]["version"]
           tag = os.environ["TAG"]
           assert tag == f"v{version}", f"tag {tag} does not match pyproject version {version}"
-          print(f"tag {tag} matches pyproject version {version}")
+          print(version)
           '
-          python -c "$PYCODE"
+          version=$(python -c "$PYCODE")
+          echo "tag $TAG matches pyproject version $version"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
 
       - name: Verify the tag is reachable from origin/main
         env:
@@ -86,32 +115,57 @@ jobs:
             exit 1
           fi
 
-      - name: Verify the GitHub Release is published (not draft, not prerelease)
+      - name: Verify the GitHub Release is a draft
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ inputs.tag }}
         run: |
           set -euo pipefail
           state=$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" \
-            --json isDraft,isPrerelease --jq 'if (.isDraft or .isPrerelease) then "bad" else "ok" end')
-          if [ "$state" != "ok" ]; then
-            echo "::error::release $TAG is a draft or a prerelease; refusing to publish."
+            --json isDraft,isPrerelease \
+            --jq 'if .isDraft then (if .isPrerelease then "prerelease" else "draft" end) else "not-a-draft" end')
+          if [ "$state" != "draft" ]; then
+            echo "::error::release $TAG is $state; this workflow only publishes a draft Release."
+            echo "::error::create the draft Release first: gh release create \"$TAG\" --draft --title \"devrelay $TAG\" --notes-file <notes>"
             exit 1
           fi
+          echo "release $TAG is an unpublished draft and is not marked prerelease"
+
+      - name: Check whether this version is already on PyPI
+        id: pypi
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          set -euo pipefail
+          status=$(curl -sS --retry 3 -o /dev/null -w '%{http_code}' "https://pypi.org/pypi/devrelay/${VERSION}/json")
+          case "$status" in
+            200) exists=true ;;
+            404) exists=false ;;
+            *)
+              echo "::error::unexpected PyPI status $status for devrelay ${VERSION}; refusing to continue."
+              exit 1
+              ;;
+          esac
+          echo "devrelay ${VERSION} already on PyPI: $exists"
+          echo "exists=$exists" >> "$GITHUB_OUTPUT"
 
       - name: Build the distributions from source
+        if: steps.pypi.outputs.exists != 'true'
         run: |
           set -euo pipefail
-          python -m pip install --upgrade --quiet build twine
-          rm -rf dist build
+          python -m pip install --quiet "build==1.6.1" "twine==7.0.0"
+          rm -rf dist build release-assets
           python -m build --outdir dist
 
-      - name: Check the artifact set and its contents
+      - name: Check the artifact set and write checksums
+        if: steps.pypi.outputs.exists != 'true'
         run: |
           set -euo pipefail
+          mkdir -p release-assets
           PYCODE='
           import hashlib, pathlib, sys, tarfile, zipfile
           dist = pathlib.Path("dist")
+          assets = pathlib.Path("release-assets")
           wheels = sorted(dist.glob("*.whl"))
           sdists = sorted(dist.glob("*.tar.gz"))
           if len(wheels) != 1 or len(sdists) != 1:
@@ -124,7 +178,7 @@ jobs:
           digests = {p.name: hashlib.sha256(p.read_bytes()).hexdigest() for p in wheels + sdists}
           for name, digest in digests.items():
               print(f"{digest}  {name}")
-          (dist / "SHA256SUMS").write_text(
+          (assets / "SHA256SUMS").write_text(
               "".join(f"{digest}  {name}" + chr(10) for name, digest in digests.items()),
               encoding="utf-8",
           )
@@ -133,20 +187,39 @@ jobs:
           python -c "$PYCODE"
 
       - name: twine check
+        if: steps.pypi.outputs.exists != 'true'
         run: |
           set -euo pipefail
-          python -m twine check dist/*
+          python -m twine check dist/*.whl dist/*.tar.gz
 
-      - name: Publish to PyPI (Trusted Publishing / OIDC)
-        uses: pypa/gh-action-pypi-publish@release/v1
-        with:
-          packages-dir: dist/
-          attestations: true
-
-      - name: Attach the built distributions and checksums to the GitHub Release
+      - name: Attach the distributions and checksums to the draft release
+        if: steps.pypi.outputs.exists != 'true'
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ inputs.tag }}
         run: |
           set -euo pipefail
-          gh release upload "$TAG" dist/* --clobber --repo "$GITHUB_REPOSITORY"
+          gh release upload "$TAG" dist/*.whl dist/*.tar.gz release-assets/SHA256SUMS --clobber --repo "$GITHUB_REPOSITORY"
+
+      - name: Publish to PyPI (Trusted Publishing / OIDC)
+        if: steps.pypi.outputs.exists != 'true'
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: dist/
+          attestations: true
+
+      - name: Publish the GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.tag }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          set -euo pipefail
+          present=$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name')
+          for asset in "devrelay-${VERSION}-py3-none-any.whl" "devrelay-${VERSION}.tar.gz" "SHA256SUMS"; do
+            if ! printf '%s\n' "$present" | grep -Fxq "$asset"; then
+              echo "::error::draft release $TAG has no asset named $asset; refusing to publish it."
+              exit 1
+            fi
+          done
+          gh release edit "$TAG" --draft=false --repo "$GITHUB_REPOSITORY"
