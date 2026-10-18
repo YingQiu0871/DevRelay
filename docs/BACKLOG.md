@@ -252,3 +252,17 @@ DevRelay defect and not a backlog item.
 | Why adoption is blocked | the design freeze requires the identity/ownership veto bound (G0.5 / P6) together with the remote enabling proofs P1/P2/P3/P8 before adoption may ever be authorized; G0.4 is an authoritative FAIL / P4 UNPROVEN and G0.5, G1, G2 were not run |
 | Not done | remote correlation / adoption, and the platform proofs; the mandatory core's acceptance covers only E1, E3–E17, E20, E21, E23–E25 (E2/E18/E19/E22 withheld; E26–E51 unchanged). Known harness limitation to fix before extending the oracle: the R2 conformance matcher matches required labels globally rather than phase-scoped (no rule unasserted today; noted as P2-2 in the acceptance review) |
 | Next step | the mandatory core is accepted (see above); remaining work is the outstanding platform proofs — enabling adoption requires new proofs and a new authorization, not a code flip |
+
+## 11. Release-engineering hardening (recorded; not scheduled)
+
+Recorded after the third independent engineering review and the 0.3.0 release-preparation pass. None of these items blocks the release and none is started.
+
+| Item | Value |
+| --- | --- |
+| GitHub Actions are pinned by mutable tags | `.github/workflows/test.yml` and `.github/workflows/release.yml` reference `actions/checkout@v4`, `actions/setup-python@v5` and `pypa/gh-action-pypi-publish@release/v1` (the `release.yml` header records this). Hardening: pin every action to a full commit SHA (Dependabot or `pinact`), leaving the workflow names, the `pypi` environment and the trusted-publisher binding untouched |
+| Untested runtime version fallback | `src/devrelay/__init__.py:17` falls back to `__version__ = "0.3.0"` when the distribution metadata is unavailable (`PackageNotFoundError`); `tests/test_version.py` exercises the pyproject path, the installed-metadata path and the CLI, never the fallback. Hardening: force `PackageNotFoundError` and assert the constant still equals `pyproject.toml` |
+| review 3 P3-1 — the PyPI probe matches file names by substring | `release.yml:178-179` treats a file as present when `f"devrelay-{version}" in wheels[0]`; a differently-suffixed file (e.g. `devrelay-0.3.0rc1-…`) would satisfy it. Hardening: match the exact expected file names already computed for the `missing` list |
+| review 3 P3-3 — the PyPI probe assumes a JSON object | `release.yml:172` calls `payload.get("urls", [])`; a valid non-object JSON body fails with `AttributeError` instead of the explicit fail-closed `::error::` text. Hardening: type-check the payload and fail with that message |
+| review 3 P3-4 — no sdist-only probe fixture | `tests/test_release_workflow.py` covers both files, no files, wheel-only (partial) and malformed JSON, but not the symmetric sdist-only case. Hardening: add that fixture |
+| review 3 P3-2 — `concurrency` queues instead of cancelling | `release.yml:68-70` uses a job-level `concurrency: group: release-${{ inputs.tag }}` with `cancel-in-progress: false`, so a second dispatch waits rather than replacing the first. That is intended (two publishers must not race); hardening: state the intent in a comment so a future reader does not "fix" it |
+| review 3 P3-9 | carried by identifier only: review 3's report is not tracked in this repository, so its content is not restated here. Re-read the review before acting on this item |
