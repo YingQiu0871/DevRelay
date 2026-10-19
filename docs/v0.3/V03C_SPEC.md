@@ -9,6 +9,8 @@ role-routing runs (implementer → `opencode-go/deepseek-v4.1-flash`, reviewer �
 OpenCode session bridge (`bcf9627…`) and v0.3-B MCP tool surface (`d058d62…`,
 documentation closeout `c883bab…`).  Branch: `v0.3-c-agent-role-routing`.
 
+> Later status (2026-10-18): the package is now 0.3.0; v0.3-D and the v0.3-E mandatory fail-closed core were subsequently accepted; v0.3-E adoption remains DISABLED.
+
 ## 1. Objective and boundary
 
 An MCP caller (for example a ChatGPT planner) selects a **semantic role**;
