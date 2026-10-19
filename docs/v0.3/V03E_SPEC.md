@@ -697,7 +697,7 @@ control plane · release/version bump · automatic resume without explicit plann
 action · parsing model output · repairing corruption · reconstructing lost prompts
 or replies · heuristic or probabilistic attribution.
 
-## 24. Test strategy (implemented; see tests/test_v03e_*.py)
+## 24. Test strategy (implemented for the accepted scope; see tests/test_v03e_*.py)
 
 * deterministic offline crash-window kills W0–W7 with the real service/router/bridge
   against the stub, asserting the §8 shape after each entry;
@@ -721,6 +721,11 @@ or replies · heuristic or probabilistic attribution.
 * a production-generated honest recovery corpus (cases A–H plus fake remote
   evidence variants) with a per-mutation differential battery;
 * zero real provider/model calls during unit/integration testing.
+
+> Later status (2026-10-19): the W0–W7 crash-window matrix (E18), the §11
+> adoption-gate matrix (E45), the mutation back-checks (E49) and the production
+> A–H corpus (E50) remain FUTURE / NOT RUN; the accepted scope is covered by
+> `tests/test_v03e_*.py`.
 
 ## 25. Platform proof gate (partially executed — not complete)
 
@@ -818,8 +823,9 @@ G0.1 / P7 proves the *local persistence/ledger assumptions* the future
 implementation is allowed to rely on (hard kills around `ISSUED`/settle
 boundaries, valid records distinguishable from torn/corrupt/incomplete state,
 fail-closed `evidence_gap`/corruption processing, no silent skipping treated as
-authoritative).  It does **not** prove the future production implementation itself:
-that implementation still needs its own tests.
+authoritative).  At design-freeze time it did **not** prove the then-future production
+implementation itself; the accepted mandatory fail-closed core now has its own tests
+(`tests/test_v03e_*.py`).
 
 **G0.5-PRE / SIC — session-incarnation capability finding (new prerequisite information
 finding, outside the P1–P9 ladder).**  The independently approved Case-C prerequisite design
