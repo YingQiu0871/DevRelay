@@ -25,7 +25,11 @@ import hashlib
 from dataclasses import dataclass
 
 from devrelay.models import utcnow_iso
-from devrelay.opencode.models import MAX_TEXT_CHARS, prompt_digest
+from devrelay.opencode.models import (
+    MAX_TEXT_CHARS,
+    OpenCodeCallRecord,
+    prompt_digest,
+)
 from devrelay.orchestration import ledger_reader
 from devrelay.orchestration.ledger_reader import LedgerIdentity, LedgerScan
 from devrelay.orchestration.models import (
@@ -77,18 +81,61 @@ class RemoteMatch:
     gap_reason: str = ""
 
 
-def infer_recovery_reason(attempt: TurnRecord) -> str:
+def infer_recovery_reason(
+    attempt: TurnRecord, ledger_scan: LedgerScan | None = None
+) -> str:
     """The most conservative true reason for the materialized attempt.
 
-    Only the structured bridge evidence is used: a submission flagged uncertain
-    is ``submission_uncertain``, an accepted submission whose reply was never
-    correlated is ``reply_pending``, and everything else (including an intent
-    persisted before the request left the machine) is ``turn_interrupted``.
+    The reason is derived from the durable local ledger, never from the shape
+    of the crash alone (SPEC §16 W1-W7):
+
+    * ``submission_uncertain`` - the submission may have reached the provider:
+      the attempt itself is flagged uncertain, the settled record carries
+      ``submission_uncertain``, the durable record is still ``ISSUED`` (W3: the
+      request may have been delivered and the response header was never seen;
+      W4: the response arrived but the settle never became durable - both
+      leave the same ``ISSUED`` evidence behind), or the response was
+      malformed (the provider did answer, so this is not a clean
+      interruption).
+    * ``reply_pending`` - the provider accepted the call (a settled
+      ``COMPLETED`` record with a 2xx status) but the local result was never
+      correlated: W5 (the assistant identity was not captured) and W6 (the
+      result is known but the completed turn was not persisted).
+    * ``turn_interrupted`` - nothing durable proves that the provider ever saw
+      the request: W1 (the intent was persisted before the request left the
+      machine and the proven interval holds no record) and W2 (the connection
+      was established but the call never settled).  A settled record with a
+      non-2xx status lands here too: the provider answered with an error, so
+      no submission is claimed and no reply is pending.
+
+    Without a scan - or with a scan that proves nothing - the reason stays
+    ``turn_interrupted``: the absence of evidence is never evidence of a
+    submission.
     """
     if attempt.submission_uncertain:
         return "submission_uncertain"
     if attempt.reply_pending:
         return "reply_pending"
+    record: OpenCodeCallRecord | None = None
+    if (
+        ledger_scan is not None
+        and ledger_scan.outcome == ledger_reader.OUTCOME_EXACTLY_ONE
+    ):
+        record = ledger_scan.record
+    if record is None:
+        return "turn_interrupted"
+    if record.submission_uncertain:
+        return "submission_uncertain"
+    state = record.state.value if hasattr(record.state, "value") else str(record.state)
+    if state == "ISSUED":
+        return "submission_uncertain"
+    if state == "COMPLETED":
+        status = record.http_status
+        if status is not None and 200 <= int(status) < 300:
+            return "reply_pending"
+        return "turn_interrupted"
+    if state == "MALFORMED_RESPONSE":
+        return "submission_uncertain"
     return "turn_interrupted"
 
 
@@ -409,7 +456,7 @@ def reconcile_report(
         recoverable = True
     elif intent is not None:
         attempt = intent
-        reason = infer_recovery_reason(intent)
+        reason = infer_recovery_reason(intent, ledger_scan)
         recoverable = not v1_frozen
     else:
         attempt = None

@@ -654,8 +654,8 @@ class OrchestrationService:
         if attempt is None:  # pragma: no cover - caller guarantees a live intent
             raise OrchestrationInvalidTransitionError("no interrupted turn to materialize")
         entry_state = run.state
-        reason = recovery.infer_recovery_reason(attempt)
         scan = self._local_evidence(run, attempt)
+        reason = recovery.infer_recovery_reason(attempt, scan)
         evidence, frozen = recovery.build_record(
             run,
             attempt,

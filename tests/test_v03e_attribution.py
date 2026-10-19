@@ -200,7 +200,9 @@ def test_evidence_records_the_attributed_call_id(tmp_path: Path) -> None:
     assert envelope["ok"] is True, envelope
     data = envelope["data"]
     assert data["state"] == "BLOCKED"
-    assert data["blocked_reason"] == "turn_interrupted"
+    # W3: the reviewer submission died with its durable ledger record still
+    # ISSUED, so the honest reason is an uncertain submission.
+    assert data["blocked_reason"] == "submission_uncertain"
     evidence = data["recovery"]["evidence"]
     assert evidence["ledger_call_id"].startswith("OC-")
     assert evidence["ledger_state"]

@@ -149,7 +149,11 @@ def test_reconcile_is_read_only_and_reports_the_honest_evidence(
     assert data["terminal"] is False
     assert data["recoverable"] is True
     assert data["v1_frozen"] is False
-    assert data["recovery_reason"] == "turn_interrupted"
+    # W3: the request may already have left the machine - the durable ledger
+    # record is still ISSUED, so the submission is uncertain, not interrupted.
+    assert data["recovery_reason"] == "submission_uncertain"
+    assert data["ledger"]["outcome"] == "exactly_one_match"
+    assert data["ledger"]["state"] == "ISSUED"
     assert data["recovery"] is None, "nothing is materialized by a read"
     assert data["attempt"]["role"] == "implementer"
     assert data["adoption"]["available"] is False
@@ -229,8 +233,8 @@ def test_mark_unrecoverable_materializes_exactly_one_blocked_turn(tmp_path: Path
     assert data["state"] == "BLOCKED"
     assert data["terminal"] is True
     assert data["in_flight"] is False
-    assert data["blocked_reason"] == "turn_interrupted"
-    assert data["recovery_reason"] == "turn_interrupted"
+    assert data["blocked_reason"] == "submission_uncertain"
+    assert data["recovery_reason"] == "submission_uncertain"
     assert data["legal_next_actions"] == []
     assert data["model_turns_used"] == before["model_turns_used"] == 1
     assert data["turn_attempts"] == before["turn_attempts"] == 1
@@ -238,7 +242,7 @@ def test_mark_unrecoverable_materializes_exactly_one_blocked_turn(tmp_path: Path
     turn = data["implementer_turns"][0]
     assert turn["role"] == "implementer"
     assert turn["outcome"] == "blocked"
-    assert turn["blocked_reason"] == "turn_interrupted"
+    assert turn["blocked_reason"] == "submission_uncertain"
     assert turn["completed_at"]
     assert turn["prompt_sha256"] == before["in_flight_turn"]["prompt_sha256"]
     assert data["reviewer_turns"] == []
@@ -246,7 +250,7 @@ def test_mark_unrecoverable_materializes_exactly_one_blocked_turn(tmp_path: Path
     record = data["recovery"]
     assert record["resolution"] == "mark_unrecoverable"
     assert record["resolved_at"]
-    assert record["recovery_reason"] == "turn_interrupted"
+    assert record["recovery_reason"] == "submission_uncertain"
     assert record["attempt"]["outcome"] == "blocked"
     assert record["evidence"]["evidence_sha256"] == record["evidence"]["evidence_sha256"]
     assert record["evidence"]["attempt_call_ids"] == ",".join(
@@ -409,13 +413,13 @@ def test_a_crashed_reviewer_turn_resolves_as_a_blocked_reviewer_turn(
     assert report["ok"] is True, report
     assert report["data"]["state"] == "READY_REVIEWER"
     assert report["data"]["attempt"]["role"] == "reviewer"
-    assert report["data"]["recovery_reason"] == "turn_interrupted"
+    assert report["data"]["recovery_reason"] == "submission_uncertain"
 
     envelope = resolve(harness.server, run_id, "mark_unrecoverable")
     assert envelope["ok"] is True, envelope
     data = envelope["data"]
     assert data["state"] == "BLOCKED"
-    assert data["blocked_reason"] == "turn_interrupted"
+    assert data["blocked_reason"] == "submission_uncertain"
     assert [turn["outcome"] for turn in data["implementer_turns"]] == ["completed"]
     assert [turn["outcome"] for turn in data["reviewer_turns"]] == ["blocked"]
     assert data["recovery"]["attempt"]["role"] == "reviewer"
@@ -472,13 +476,14 @@ def _persist_recovery_required(harness, run_id: str) -> None:
     run = store.load(run_id)
     attempt = run.in_flight_turn
     assert attempt is not None
-    reason = recovery.infer_recovery_reason(attempt)
+    scan = harness.service._local_evidence(run, attempt)
+    reason = recovery.infer_recovery_reason(attempt, scan)
     evidence, frozen = recovery.build_record(
         run,
         attempt,
         entry_state=run.state,
         reason=reason,
-        ledger_scan=None,
+        ledger_scan=scan,
         remote=recovery.RemoteMatch(recovery.REMOTE_GAP),
     )
     run.in_flight_turn = None
@@ -510,7 +515,7 @@ def test_a_persisted_recovery_required_document_resolves_in_place(tmp_path: Path
     assert report["ok"] is True, report
     assert report["data"]["state"] == "RECOVERY_REQUIRED"
     assert report["data"]["recoverable"] is True
-    assert report["data"]["recovery_reason"] == "turn_interrupted"
+    assert report["data"]["recovery_reason"] == "submission_uncertain"
     assert report["data"]["legal_next_actions"] == [
         "devrelay_reconcile_run",
         "devrelay_resolve_recovery(mark_unrecoverable)",
@@ -527,7 +532,7 @@ def test_a_persisted_recovery_required_document_resolves_in_place(tmp_path: Path
     envelope = resolve(harness.server, run_id, "mark_unrecoverable")
     assert envelope["ok"] is True, envelope
     assert envelope["data"]["state"] == "BLOCKED"
-    assert envelope["data"]["blocked_reason"] == "turn_interrupted"
+    assert envelope["data"]["blocked_reason"] == "submission_uncertain"
     assert len(envelope["data"]["implementer_turns"]) == 1
 
 
@@ -548,3 +553,111 @@ def test_a_persisted_recovery_required_document_survives_a_restart(tmp_path: Pat
     envelope = resolve(restarted.server, run_id, "mark_unrecoverable")
     assert envelope["ok"] is True, envelope
     assert envelope["data"]["state"] == "BLOCKED"
+
+
+# ---------------------------------------------------------------------------
+# §16 crash-window matrix: the reason follows the durable ledger, not the crash
+# ---------------------------------------------------------------------------
+def test_w1_a_crash_before_the_request_left_the_machine_is_just_interrupted(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """W1: no HTTP call happened, so nothing may claim a submission."""
+    from devrelay.roles.service import RoleRouter
+
+    def exploding_send(*args: object, **kwargs: object) -> None:
+        raise SystemExit("simulated process death before the request left the machine")
+
+    monkeypatch.setattr(RoleRouter, "send_role_prompt", exploding_send)
+    harness = build(tmp_path, run_id_factory=fixed_run_ids(RUN_ID))
+    run_id = run_id_of(harness.server, max_cycles=1)
+
+    with pytest.raises(SystemExit):
+        phase(harness.server, "devrelay_run_implementer", run_id, "w1 prompt")
+
+    report = reconcile(harness.server, run_id)
+    assert report["ok"] is True, report
+    data = report["data"]
+    assert data["recoverable"] is True
+    assert data["recovery_reason"] == "turn_interrupted"
+    # nothing was submitted, so no ledger record can attribute a submission
+    assert data["ledger"]["state"] == ""
+    assert data["ledger"]["outcome"] in {"evidence_gap", "no_record_in_proven_interval"}
+    assert prompt_posts(harness.stub) == []
+
+
+def test_w4_a_settle_that_never_became_durable_is_still_an_uncertain_submission(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """W4: the response arrived, but the settle never became durable."""
+    from devrelay.opencode.accounting import FilesystemOpenCodeLedger
+    from devrelay.opencode.models import OpenCodeCallState
+    from devrelay.orchestration.ledger_reader import SUBMISSION_OPERATION
+
+    original_finish = FilesystemOpenCodeLedger.finish
+
+    def exploding_finish(self, record):
+        if (
+            record.operation == SUBMISSION_OPERATION
+            and record.method == "POST"
+            and record.state is OpenCodeCallState.COMPLETED
+        ):
+            raise SystemExit("simulated process death before the settle became durable")
+        return original_finish(self, record)
+
+    monkeypatch.setattr(FilesystemOpenCodeLedger, "finish", exploding_finish)
+    harness = build(tmp_path, run_id_factory=fixed_run_ids(RUN_ID))
+    run_id = run_id_of(harness.server, max_cycles=1)
+
+    with pytest.raises(SystemExit):
+        phase(harness.server, "devrelay_run_implementer", run_id, "w4 prompt")
+
+    report = reconcile(harness.server, run_id)
+    assert report["ok"] is True, report
+    data = report["data"]
+    assert data["recovery_reason"] == "submission_uncertain"
+    assert data["ledger"]["outcome"] == "exactly_one_match"
+    assert data["ledger"]["state"] == "ISSUED", (
+        "the durable record never settled: the submission may have been delivered"
+    )
+    assert prompt_posts(harness.stub) == ["/session/ses_impl/message"]
+
+
+def test_w5_an_accepted_call_whose_turn_was_never_persisted_is_reply_pending(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """W5/W6: the provider accepted the call, the local result did not survive."""
+    harness = build(tmp_path, run_id_factory=fixed_run_ids(RUN_ID))
+    run_id = run_id_of(harness.server, max_cycles=1)
+
+    original_save = harness.service.store.save
+
+    def exploding_save(run):
+        if run.in_flight_turn is None and run.turn_attempts >= 1:
+            raise SystemExit("simulated process death before the finished turn was persisted")
+        return original_save(run)
+
+    monkeypatch.setattr(harness.service.store, "save", exploding_save)
+
+    with pytest.raises(SystemExit):
+        phase(harness.server, "devrelay_run_implementer", run_id, "w5 prompt")
+
+    # the crash window is over: the recovery write itself must succeed
+    monkeypatch.setattr(harness.service.store, "save", original_save)
+
+    # the document still shows the interrupted intent, the ledger shows acceptance
+    persisted = raw_payload(harness.ws, run_id)
+    assert persisted["in_flight_turn"] is not None
+    assert persisted["implementer_turns"] == []
+
+    report = reconcile(harness.server, run_id)
+    assert report["ok"] is True, report
+    data = report["data"]
+    assert data["recovery_reason"] == "reply_pending"
+    assert data["ledger"]["outcome"] == "exactly_one_match"
+    assert data["ledger"]["state"] == "COMPLETED"
+    assert 200 <= data["ledger"]["http_status"] < 300
+
+    envelope = resolve(harness.server, run_id, "mark_unrecoverable")
+    assert envelope["ok"] is True, envelope
+    assert envelope["data"]["state"] == "BLOCKED"
+    assert envelope["data"]["blocked_reason"] == "reply_pending"
