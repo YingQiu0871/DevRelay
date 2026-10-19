@@ -356,7 +356,7 @@ transition into or out of `RECOVERY_REQUIRED` exists.
 
 The earlier claim "no ledger record ⇒ never issued" is **removed**: absence of
 visible evidence is not proof of absence.  v0.3-E therefore defines a dedicated
-**strict recovery evidence reader** (design; not implemented) with these normative
+**strict recovery evidence reader** (implemented in the accepted mandatory fail-closed core; see src/devrelay/orchestration/ledger_reader.py) with these normative
 properties:
 
 1. **identity-scoped scan** — scan the workspace ledger for records matching the
@@ -654,7 +654,7 @@ A wording rule for this design and its future implementation:
 | Restart | persisted; reconciliation idempotent; no work on restart |
 | `legal_next_actions` | `["devrelay_reconcile_run", "devrelay_resolve_recovery(mark_unrecoverable)"]` (+ `adopt_completed_turn` when the capability is enabled) |
 
-## 21. MCP tool surface (minimum, not implemented)
+## 21. MCP tool surface (minimum; implemented in the accepted core: devrelay_reconcile_run, devrelay_resolve_recovery)
 
 1. `devrelay_reconcile_run(run_id)` — **read-only** report: legal for any
    non-terminal v2 document (including a live-intent document) and for
@@ -697,7 +697,7 @@ control plane · release/version bump · automatic resume without explicit plann
 action · parsing model output · repairing corruption · reconstructing lost prompts
 or replies · heuristic or probabilistic attribution.
 
-## 24. Test strategy (designed, not implemented)
+## 24. Test strategy (implemented; see tests/test_v03e_*.py)
 
 * deterministic offline crash-window kills W0–W7 with the real service/router/bridge
   against the stub, asserting the §8 shape after each entry;
@@ -789,7 +789,7 @@ Harness-invalid attempts (a case that never reached its assertion point because 
 harness defect) are recorded separately and excluded; a case is never re-run to search
 for a passing configuration.
 
-> Later status (2026-10-19): the mandatory fail-closed core was implemented and accepted (P0 = 0, P1 = 0, P2 = 2); the implementation rows in `docs/v0.3/V03E_ACCEPTANCE.md` are no longer FUTURE / NOT RUN.
+> Later status (2026-10-19): the accepted rows (E1, E3–E17, E20, E21, E23–E25) are marked COVERED / FROZEN; rows outside the accepted scope keep their recorded statuses — E2/E18/E19/E22 remain NOT COVERED, and E41–E51 remain FUTURE / NOT RUN.
 
 **G0.1 / P7 was the hard gate on the mandatory core, and the only such gate.**
 Implementation ordering is: **design frozen → G0.1 / P7 PASS → mandatory-core
@@ -1095,7 +1095,7 @@ degraded-implementation path).  Until P1-P3 and P8 pass,
 `adopt_completed_turn` stays **disabled** and the core provides report +
 `mark_unrecoverable` only.
 
-## 29. Minimal local setup (future)
+## 29. Minimal local setup (implemented; see README installation/local setup)
 
 ```text
 devrelay mcp serve --workspace <ws>   # 17 accepted tools + exactly two v0.3-E tools:

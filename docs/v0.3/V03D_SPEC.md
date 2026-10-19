@@ -13,7 +13,7 @@ v0.3-C agent role routing (`eabb667…`, closeout `e0a06fa…`).  Branch:
 `v0.3-d-bounded-orchestration`; implementation commit `78d4e5d…` (unchanged by the
 remediation, which is additive).
 
-> Later status (2026-10-19): this stage was subsequently accepted and is part of the 0.3.0 release; the package version is now 0.3.0 and v0.3-E is implemented with adoption DISABLED.
+> Later status (2026-10-19): this stage was subsequently accepted and is part of the 0.3.0 tree (unreleased); the package version is now 0.3.0 and v0.3-E is implemented with adoption DISABLED.
 
 ## 1. Objective and boundary
 
