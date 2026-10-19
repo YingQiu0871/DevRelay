@@ -626,16 +626,16 @@ class OrchestrationService:
             raise OrchestrationRecoveryAlreadyResolvedError(
                 existing.resolution, existing.resolved_at
             )
-        if (
-            value is RecoveryResolution.ADOPT_COMPLETED_TURN
-            and not recovery.ADOPTION_CAPABILITY_ENABLED
-        ):
-            raise OrchestrationAdoptionDisabledError(recovery.ADOPTION_DISABLED_REASON)
         if run.terminal:
             raise OrchestrationInvalidTransitionError(
                 f"run {run.run_id} is terminal ({run.state.value}); a terminal run is "
                 "never reopened or recovered"
             )
+        if (
+            value is RecoveryResolution.ADOPT_COMPLETED_TURN
+            and not recovery.ADOPTION_CAPABILITY_ENABLED
+        ):
+            raise OrchestrationAdoptionDisabledError(recovery.ADOPTION_DISABLED_REASON)
         if run.state is RunState.RECOVERY_REQUIRED:
             return self._apply_resolution(run, value)
         if run.in_flight_turn is not None:
@@ -697,26 +697,40 @@ class OrchestrationService:
                 "RECOVERY_REQUIRED requires a materialized recovery record"
             )
         attempt = record.attempt
+        if value is RecoveryResolution.ADOPT_COMPLETED_TURN:
+            # Defence in depth: the capability flag is a build-time constant, so
+            # the adoption path stays closed even if the flag were ever flipped.
+            if not recovery.ADOPTION_CAPABILITY_ENABLED:
+                raise OrchestrationAdoptionDisabledError(
+                    recovery.ADOPTION_DISABLED_REASON
+                )
+            if attempt.outcome != TurnOutcomeState.COMPLETED.value:
+                raise OrchestrationInvalidTransitionError(
+                    "adopt_completed_turn requires a completed attempt; the "
+                    f"materialized attempt outcome is {attempt.outcome!r}"
+                )
+        # The resolved record is built -- and therefore validated -- *before* the
+        # run is touched, so an inconsistent record can never reach the disk.
+        new_record = RecoveryRecord(
+            attempt=attempt,
+            recovery_reason=record.recovery_reason,
+            resolution=value.value,
+            resolved_at=utcnow_iso(),
+            evidence=record.evidence,
+        )
         if value is RecoveryResolution.MARK_UNRECOVERABLE:
             if attempt.role == "implementer":
                 run.implementer_turns.append(attempt)
             else:
                 run.reviewer_turns.append(attempt)
-            run.recovery = record.model_copy(
-                update={
-                    "resolution": value.value,
-                    "resolved_at": utcnow_iso(),
-                }
-            )
+            run.recovery = new_record
             transition = policy.after_mark_unrecoverable(run, record.recovery_reason)
             note = (
                 "materialized interrupted turn marked unrecoverable: exactly one "
                 "blocked turn, no retry, no resume, no adoption"
             )
         else:  # ADOPT_COMPLETED_TURN is disabled in this build
-            run.recovery = record.model_copy(
-                update={"resolution": value.value, "resolved_at": utcnow_iso()}
-            )
+            run.recovery = new_record
             transition = policy.after_adoption(run, attempt.role)
             note = "adopted a completed interrupted turn (proof-gated)"
         record_out = policy.transition_record(

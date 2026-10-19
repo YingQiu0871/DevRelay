@@ -308,6 +308,27 @@ def test_adoption_is_refused_before_any_write(tmp_path: Path) -> None:
     assert resolve(harness.server, run_id, "mark_unrecoverable")["ok"] is True
 
 
+def test_adoption_flag_flip_is_refused_before_any_write(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A flipped capability flag still refuses adoption before any write.
+
+    The flag is a build-time constant, so this exercises the defence in depth
+    inside the resolution path: even with adoption enabled, a materialized
+    attempt that is not ``completed`` is refused as an invalid transition, and
+    neither the run document nor the provider ledger is touched.
+    """
+    harness, run_id = crashed_run(tmp_path)
+    before = document_bytes(harness.ws, run_id)
+    posts = prompt_posts(harness.stub)
+    monkeypatch.setattr(recovery, "ADOPTION_CAPABILITY_ENABLED", True)
+    envelope = resolve(harness.server, run_id, "adopt_completed_turn")
+    refusal(envelope, "orchestration_invalid_transition")
+    assert "completed" in envelope["error"]["message"]
+    assert document_bytes(harness.ws, run_id) == before
+    assert prompt_posts(harness.stub) == posts
+
+
 def test_unknown_resolutions_are_argument_errors(tmp_path: Path) -> None:
     harness, run_id = crashed_run(tmp_path)
     before = document_bytes(harness.ws, run_id)
@@ -337,6 +358,15 @@ def test_terminal_runs_are_never_reopened(tmp_path: Path) -> None:
     # instead of presenting a "recoverable" report (V03E_SPEC.md §21), and the
     # refusal itself is byte-neutral.
     refusal(reconcile(harness.server, run_id), "orchestration_recovery_unsupported")
+    assert document_bytes(harness.ws, run_id) == before
+
+    # A terminal run is never reopened, not even through the disabled adoption
+    # capability: the terminal check comes first, so the refusal is an invalid
+    # transition rather than the adoption-disabled refusal.
+    refusal(
+        resolve(harness.server, run_id, "adopt_completed_turn"),
+        "orchestration_invalid_transition",
+    )
     assert document_bytes(harness.ws, run_id) == before
 
 
