@@ -2,6 +2,8 @@
 
 Status: **DESIGN FROZEN / MANDATORY FAIL-CLOSED CORE IMPLEMENTED AND ACCEPTED BY INDEPENDENT ACCEPTANCE REVIEW (P0 = 0, P1 = 0, P2 = 2; 2026-10-17) / ADOPTION DISABLED / PLATFORM GATES OPEN / UNRELEASED**
 
+> Later status (2026-10-19): the mandatory fail-closed core was implemented and accepted (P0 = 0, P1 = 0, P2 = 2); adoption remains DISABLED.
+
 Independent design-freeze review of candidate
 `9f4a01804b9affe8938a272553df345b5a60aeed`: **P0 = 0, P1 = 0, P2 = 0**, F1–F12
 **CLOSED**, decision **APPROVE V0.3-E FAIL-CLOSED CORE DESIGN; PLATFORM PROOF GATE
@@ -755,10 +757,11 @@ round is preserved as **CANDIDATE FAIL** with its independent TYPE-1 review outc
 **G0.4/P4 = AUTHORITATIVE FAIL / P4 UNPROVEN** (executed once under the approved immutable revision-3 oracle; independently approved failed proof — *APPROVE V0.3-E G0.4 FAILED PROOF*, P0 = 0, P1 = 0, P2 = 0, TYPE 3 — SEMANTIC ENVIRONMENT / CONFIGURATION RESULT; Case A could not bind a target instance — no OpenCode base endpoint configured, so 0 loopback HTTP requests / 0 `GET /doc` and cases B–H were not executed — `V03E_G0_4_API_INSPECTION_PROOF.md`), **G0.5 = NOT RUN**,
 **G1 = NOT RUN**, **G2 = NOT RUN**.  The design's local hard prerequisite is
 therefore **satisfied**: G0.1/P7 **no longer blocks mandatory-core implementation
-eligibility**, but implementation remains **NOT AUTHORIZED** until a separately
-issued implementation authorization.  `adopt_completed_turn` = **DISABLED**.  G0.1/P7
-and G0.2 are authoritative PASS and mandatory-core implementation remains **NOT
-AUTHORIZED** pending a separate authorization; neither PASS, alone or together,
+eligibility**.  At the time of this design freeze, implementation remained **NOT
+AUTHORIZED** pending a separately issued implementation authorization.  That
+authorization was subsequently issued and spent; the mandatory fail-closed core was
+implemented and accepted on 2026-10-17 (adoption remains DISABLED).  `adopt_completed_turn`
+= **DISABLED**.  G0.1/P7 and G0.2 are authoritative PASS; neither PASS, alone or together,
 authorizes implementation, and the executing agent did not self-approve either.  The
 platform proof gate is **PARTIALLY EXECUTED** — **not** passed and **not** complete
 (G0.3/P5 = PASS/CLOSED; G0.4/P4 was executed once and is **AUTHORITATIVE FAIL / P4
@@ -781,10 +784,12 @@ OpenAI-compatible provider may be used in G2; nothing runs in this design round)
 
 Rules: **no probe shopping** — one planned probe per case; a failed proof *removes*
 the gated capability instead of triggering another probe; results are recorded in
-`V03E_ACCEPTANCE.md`, whose implementation rows stay FUTURE / NOT RUN until then.
+`V03E_ACCEPTANCE.md`, whose implementation rows stayed FUTURE / NOT RUN until then.
 Harness-invalid attempts (a case that never reached its assertion point because of a
 harness defect) are recorded separately and excluded; a case is never re-run to search
 for a passing configuration.
+
+> Later status (2026-10-19): the mandatory fail-closed core was implemented and accepted (P0 = 0, P1 = 0, P2 = 2); the implementation rows in `docs/v0.3/V03E_ACCEPTANCE.md` are no longer FUTURE / NOT RUN.
 
 **G0.1 / P7 was the hard gate on the mandatory core, and the only such gate.**
 Implementation ordering is: **design frozen → G0.1 / P7 PASS → mandatory-core
@@ -841,7 +846,7 @@ that a live/local API exposes no additional contract surface, does **not** estab
 ESTABLISHED BY MODE-A STATIC SURFACE**, and any Mode B/C investigation is a separate owner
 sequencing decision that is **not authorized**.  SIC is **not** G0.5, G1, G2 or G0.4, is
 **not** a new P-number, is **not** a proof of P6, is **not** an adoption-enabling proof and is
-**not** an implementation authorization; implementation remains **NOT AUTHORIZED**.
+**not** an implementation authorization; implementation remained **NOT AUTHORIZED** at the time of that result.
 
 ### 25.1 G0.5 / P6 — frozen local identity/ownership veto-bound definition (definition only; not executed)
 
@@ -1080,10 +1085,10 @@ proofs, **no real adoption smoke is required**: the reduced core (report +
 * These observations stay recorded; `P3` is **not** claimed to be zero.
 
 **G0.1 / P7 has passed** (authoritative, independently approved), so it no longer
-blocks mandatory-core implementation *eligibility*; implementation nonetheless
-remains **NOT AUTHORIZED** until a separately issued authorization: no recovery
-runtime is implemented, the design remains frozen but pre-implementation, and
-`evidence_gap` stays part of the *future runtime* fail-closed semantics rather than a
+blocks mandatory-core implementation *eligibility*.  At design-freeze time no recovery
+runtime was implemented.  The mandatory fail-closed core was subsequently implemented and
+accepted on 2026-10-17 (adoption remains DISABLED).  The design remains frozen, and
+`evidence_gap` stays part of the *implemented runtime* fail-closed semantics rather than a
 waiver of the proof gate.  Had G0.1 / P7 failed, mandatory-core implementation would
 have remained **blocked** pending a new reviewed design decision (there is no
 degraded-implementation path).  Until P1-P3 and P8 pass,

@@ -1097,7 +1097,8 @@ not downgrade the binary inside a workspace that v0.2-B has already written.
   migration is one-way (see "State schema 5"): keep the pre-upgrade
   `state.v<old>.json.bak` if you may need to read a task with v0.2-A again.
 - The structured Codex runtime (v0.2-C) is a **candidate**: criteria are recorded
-  as COVERED/PARTIAL/DEFERRED in `docs/v0.2/V02C_ACCEPTANCE.md`.
+  as COVERED/PARTIAL/DEFERRED in `docs/v0.2/V02C_ACCEPTANCE.md`.  The structured path
+  was exercised only with fake providers offline; no real Codex smoke has been run yet.
 - v0.3-A to v0.3-D are **accepted internally, closed and unreleased**; each was
   validated with one or more bounded real smokes, and their accepted scope is
   what the acceptance matrices record - nothing more.

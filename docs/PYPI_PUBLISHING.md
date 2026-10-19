@@ -46,8 +46,8 @@ Publishing is **manual**: the `release` workflow runs only on `workflow_dispatch
 
 The workflow **finishes** a GitHub Release that already exists as a **draft** and
 is not marked prerelease; an already published Release or a prerelease is
-refused. Create the draft first (its tag must be on `main` - the workflow checks
-that too):
+refused. Create the draft first (its tag must be reachable from `origin/main`; the
+workflow checks that with `git merge-base --is-ancestor`):
 
 ```bash
 gh release create v0.3.0 --draft --title "devrelay v0.3.0" --notes-file <notes>

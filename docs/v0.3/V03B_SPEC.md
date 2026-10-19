@@ -10,6 +10,8 @@ plus the concurrency remediation that followed the second re-gate.  Accepted
 v0.3-A baseline: `bcf9627…` (documentation closeout `f4c92f3…`).  Branch:
 `v0.3-b-mcp-tool-surface`.  Next stage: `v0.3-C` (role routing) — not started.
 
+> Later status (2026-10-19): this stage was subsequently accepted and is part of the 0.3.0 release; the package version is now 0.3.0 and v0.3-C and later stages are no longer "not started".
+
 ## 1. Objective and boundary
 
 Expose the **already accepted** v0.3-A OpenCode session bridge over the Model
