@@ -175,23 +175,27 @@ budget counters, `legal_next_actions`, and
 ledger record is appended and `opencode/sequence.json` is not rewritten. A
 terminal run is refused locally (`orchestration_recovery_unsupported`) because
 there is nothing left to recover; a frozen v1 document gets the report-only form
-of `V03E_SPEC.md` §10.
+of `V03E_SPEC.md` §10.  The reported reason is derived by
+`recovery.infer_recovery_reason` from the strict local ledger scan
+(`V03E_SPEC.md` §16 W1–W7), not from bridge flags alone.
 
 ### 3.5 Resolution (one-shot write)
 
 `devrelay_resolve_recovery` accepts exactly `mark_unrecoverable`; any other
-string is `mcp_invalid_argument`. `adopt_completed_turn` is refused with
-`orchestration_adoption_disabled` **before any write**. The action performs no
+string is `mcp_invalid_argument`. `adopt_completed_turn` is refused before any
+write: a terminal run is refused **earlier** as
+`orchestration_invalid_transition` (a terminal run is never reopened), and a
+non-terminal run gets `orchestration_adoption_disabled`. The action performs no
 provider call either: the evidence it freezes is the local ledger scan, and the
 remote fields are frozen as an explicit gap (`REMOTE_NOT_READ_REASON`) — which is
 exactly why `mark_unrecoverable` can never depend on the remote surface. On a
-live v2 intent the service materializes the frozen attempt, the recovery reason,
-the evidence and the resolution in **one** atomic save, with two transition
-records written in that same save: `entry state -> RECOVERY_REQUIRED` and
-`RECOVERY_REQUIRED -> BLOCKED` (`last_transition` is therefore the second one,
-with `action: recover`, `source: external_planner` and the role of the frozen
-attempt). The result is `BLOCKED` with `blocked_reason` equal to the recovery
-reason
+live v2 intent the service materializes the frozen attempt, the ledger-derived
+recovery reason, the evidence and the resolution in **one** atomic save, with
+two transition records written in that same save
+(`entry state -> RECOVERY_REQUIRED`, then `RECOVERY_REQUIRED -> BLOCKED`;
+`last_transition` is therefore the second one, with `action: recover`,
+`source: external_planner` and the role of the frozen attempt). The result is
+`BLOCKED` with `blocked_reason` equal to the recovery reason
 (`submission_uncertain`, `reply_pending` or `turn_interrupted`), the attempt
 booked once in its role history, and no further action legal. A second resolution
 is `orchestration_recovery_already_resolved`. A v1 run is
@@ -237,7 +241,7 @@ New offline suites (no real model call, deterministic OpenCode stub):
 
 | File | Tests | Covers |
 | --- | --- | --- |
-| `tests/test_v03e_recovery.py` | 15 | end-to-end crash → refusal → reconcile → resolve → restart matrix, write-once, adoption refusal, frozen v1 behavior, reviewer-role crash; **byte-identical `.devrelay` tree** around read-only reconcile and the accounting subtree around resolve; terminal-run local refusal |
+| `tests/test_v03e_recovery.py` | 19 | end-to-end crash → refusal → reconcile → resolve → restart matrix, write-once, adoption refusal, frozen v1 behavior, reviewer-role crash, the W1/W4/W5 crash windows; **byte-identical `.devrelay` tree** around read-only reconcile and the accounting subtree around resolve; terminal-run local refusal |
 | `tests/test_v03e_attribution.py` | 8 | honest-report rules (gap ⇒ reasoned `gap_reason`, `interval_proven` ⇒ floor and ceiling, `call_id` ⇒ `exactly_one_match`), first-turn unproven floor, reviewer-crash proven interval, unreadable ledger surface, quiet run |
 | `tests/test_v03e_models.py` | 13 | 27-field canonical set, digest construction and sensitivity, coverage exclusion, record shape rules, legal actions |
 | `tests/test_v03e_ledger.py` | 17 | exactly-one attribution, floor/ceiling proofs, missing sequence, allocated-but-absent record (also with the calls directory absent), newer-than-sequence record, torn record, route disagreement, multiple matches, duplicate numeric claim, record/file call-id disagreement, inverted floor |

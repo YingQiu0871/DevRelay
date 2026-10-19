@@ -722,9 +722,12 @@ or replies · heuristic or probabilistic attribution.
   evidence variants) with a per-mutation differential battery;
 * zero real provider/model calls during unit/integration testing.
 
-> Later status (2026-10-19): the W0–W7 crash-window matrix (E18), the §11
+> Later status (2026-10-19; revised 2026-10-20): the W0–W7 crash-window matrix
+> (E18) remains **FROZEN / NOT COVERED** - §16 specifies the windows and some of
+> them are produced by real crashes in `tests/test_v03e_recovery.py`, but E18 was
+> never enumerated or exercised as its own labelled matrix.  The §11
 > adoption-gate matrix (E45), the mutation back-checks (E49) and the production
-> A–H corpus (E50) remain FUTURE / NOT RUN; the accepted scope is covered by
+> A–H corpus (E50) remain **FUTURE / NOT RUN**.  The accepted scope is covered by
 > `tests/test_v03e_*.py`.
 
 ## 25. Platform proof gate (partially executed — not complete)

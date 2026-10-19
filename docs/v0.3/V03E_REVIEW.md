@@ -105,6 +105,9 @@ review time and confirmed it green — which is exactly why F1–F8 survived it)
    flag-flip probe shows the record validator refuses the state rather than an
    explicit check. That is acceptable only while adoption is disabled; enabling
    the capability requires a dedicated review of that path.
+   > Later status (2026-10-20): `_apply_resolution` now refuses adoption with an
+   > explicit guard before any mutation; the flag-flip test covers it
+   > (`test_adoption_flag_flip_is_refused_before_any_write`).
 3. **Whole-ledger completeness is deliberately stricter than interval proof.**
    The reader requires every allocated call id from `OC-0001` to the durable
    ceiling to have a record. A deletion below the floor therefore degrades

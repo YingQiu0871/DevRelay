@@ -1214,7 +1214,7 @@ python -m pip install -e ".[dev]"
 python -m pytest
 ```
 
-The full suite is **1260 tests** and runs offline with mocked subprocesses/HTTP
+The full suite is **1,260+ tests** and runs offline with mocked subprocesses/HTTP
 where needed, an offline Codex stub spawned as a real child process, and real
 (tiny) git repositories for baseline/guard/recovery coverage - no real Codex,
 OpenCode, DeepSeek or network required. Coverage includes: state transitions and

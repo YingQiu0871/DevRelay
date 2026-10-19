@@ -1,8 +1,9 @@
 """v0.3-E fail-closed recovery: the mandatory core, end to end.
 
-Every crash boundary here is produced by a real ``SystemExit`` inside the stub
-transport (never by hand-writing a "busy" document), so the interrupted intent
-being recovered is exactly the one the service durably committed.
+Every crash boundary here is produced by a real ``SystemExit`` inside a
+production call path (stub transport, ledger settlement, or ``store.save``),
+never by hand-writing a "busy" document, so the interrupted intent being
+recovered is exactly the one the service durably committed.
 """
 
 from __future__ import annotations

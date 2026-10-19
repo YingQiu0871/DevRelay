@@ -35,6 +35,12 @@ once the `v0.3.0` tag exists on `main` with a published GitHub Release.
   identifier.
 - The sdist ships the packaged policy profiles
   (`recursive-include src/devrelay/profiles *.yaml` in `MANIFEST.in`).
+- Recovery: adoption is refused structurally before any run mutation; a terminal
+  run is refused as `orchestration_invalid_transition` before the
+  adoption-disabled check.
+- Recovery: the recovery reason is derived from the strict local ledger scan
+  (W3/W4 `submission_uncertain`, W5/W6 `reply_pending`) rather than from bridge
+  flags alone.
 
 ### Security
 
@@ -63,7 +69,7 @@ once the `v0.3.0` tag exists on `main` with a published GitHub Release.
   G0.1/P7 = PASS, G0.2 = PASS, G0.3/P5 = PASS, G0.4/P4 = authoritative FAIL /
   P4 UNPROVEN (no OpenCode base endpoint in the accepted workspace, 0 `GET /doc`
   issued), G0.5/P6 = NOT RUN, and G1/G2 not run.
-- The offline test suite is 1260 tests (`python -m pytest -q`); it needs no
+- The offline test suite is 1,260+ tests (`python -m pytest -q`); it needs no
   model, no network and no installed Codex CLI.
 
 ## v0.3-E (2026-10-17) - mandatory fail-closed core accepted
