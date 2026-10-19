@@ -1107,9 +1107,12 @@ not downgrade the binary inside a workspace that v0.2-B has already written.
   stays **DISABLED**, there is no automatic resume, and remote correlation (the
   case where the provider submission status cannot be established locally) was
   never exercised.
-- The orchestration/recovery ledger is **single-writer and issues no `fsync`**:
-  writes are atomic (unique temp file + `os.replace`), but durability against
-  power loss or a second writer is not claimed.
+- The orchestration store is **single-writer**: a run document is written to a
+  unique temp file that is fsynced before `os.replace`, and on POSIX the parent
+  directory is fsynced as well; Windows has no directory fsync, so durability of
+  the final rename across a power cut is not claimed there.  The OpenCode call
+  ledger still issues no `fsync`, and durability against a second writer is not
+  claimed.
 - The v0.3-E platform proof gate is **partially executed / not complete**:
   G0.1/P7 = PASS, G0.2 = PASS, G0.3/P5 = PASS, **G0.4/P4 = authoritative FAIL /
   P4 UNPROVEN** (no OpenCode base endpoint in the accepted workspace, 0

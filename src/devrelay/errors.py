@@ -364,6 +364,12 @@ class OrchestrationStateCorruptError(OrchestrationError):
     code = "orchestration_state_corrupt"
 
 
+class OrchestrationPersistenceError(OrchestrationError):
+    """The run document could not be durably written."""
+
+    code = "orchestration_persistence_error"
+
+
 # ---------------------------------------------------------------------------
 # v0.3-E: fail-closed recovery of interrupted turns
 #

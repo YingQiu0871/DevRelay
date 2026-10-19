@@ -165,6 +165,11 @@ uncertain runs is explicitly out of scope (v0.3-E).
   (only `DR-<32 hex>.json` is read, and a run is only ever loaded by its valid id),
   and normal saves leave no residue.  Durability against power loss is **not**
   claimed - no `fsync` is issued;
+  > Later status (2026-10-20): v0.3-E added `fsync` to the orchestration store -
+  > the temp file is fsynced before `os.replace` and the parent directory is
+  > fsynced on POSIX; Windows cannot fsync a directory, so rename durability
+  > across a power cut is not claimed there.  The paragraph above is the v0.3-D
+  > record as accepted and is kept as history.
 * **persisted state is untrusted input.**  A run document found on disk is
   re-validated before it is believed: the strict schema, then a semantic
   invariant pass that re-derives everything the state machine guarantees (fixed

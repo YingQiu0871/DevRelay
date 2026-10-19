@@ -9,10 +9,14 @@ Layout::
   never become a traversal primitive;
 * the final document is replaced atomically (unique temp file + ``os.replace``)
   under the documented process/filesystem assumptions, so a reader ever sees
-  either the complete previous document or the complete new one.  Scope is honest:
-  a hard kill *can* leave an inert ``.*.tmp`` file behind (it is never listed as a
-  run and never honoured, because only ``DR-*.json`` is read), and durability
-  against power loss is **not** claimed - no ``fsync`` is issued;
+  either the complete previous document or the complete new one.  The temp file
+  is fsynced before the replace, and on POSIX the parent directory is fsynced
+  after it, so the rename itself survives a power cut where the platform allows
+  it; Windows cannot fsync a directory, so durability of the final rename across
+  a power cut is **not** claimed there.  Process-crash atomicity is unchanged: a
+  hard kill *can* leave an inert ``.*.tmp`` file behind (it is never listed as a
+  run and never honoured, because only ``DR-*.json`` is read) and normal saves
+  leave no residue;
 * a missing run is ``orchestration_run_not_found``; an unreadable/corrupt run is
   ``orchestration_state_corrupt`` - the store never silently recreates or resets
   a run.
@@ -34,7 +38,11 @@ from pathlib import Path
 from typing import Any, Callable
 from uuid import uuid4
 
-from devrelay.errors import OrchestrationRunNotFoundError, OrchestrationStateCorruptError
+from devrelay.errors import (
+    OrchestrationPersistenceError,
+    OrchestrationRunNotFoundError,
+    OrchestrationStateCorruptError,
+)
 from devrelay.orchestration.invariants import validate_run_semantics
 from devrelay.orchestration.models import OrchestrationRun
 
@@ -151,27 +159,66 @@ class OrchestrationStore:
             )
 
     def save(self, run: OrchestrationRun) -> None:
-        """Atomically persist *run* (unique temp file + replace).
+        """Atomically and durably persist *run* (fsync, then replace).
 
         The semantic invariants are re-checked here as well as on load, so an
         internally inconsistent run can never reach the disk in the first place.
+        A failure before ``os.replace`` leaves the previous document untouched;
+        a failure to fsync the parent directory *after* the replace means the new
+        document is already published but its durability is not confirmed - the
+        error says exactly that, and retrying the same save is idempotent.
         """
         validate_run_semantics(run)
         self._require_provenance(run)
         self._require_bound_workspace(run)
         path = self.path_for(run.run_id)
-        path.parent.mkdir(parents=True, exist_ok=True)
         payload = json.dumps(run.model_dump(mode="json"), indent=2, sort_keys=False)
         tmp = path.with_name(f".{path.name}.{uuid4().hex}.tmp")
         try:
-            tmp.write_text(payload + "\n", encoding="utf-8")
+            path.parent.mkdir(parents=True, exist_ok=True)
+            with open(tmp, "w", encoding="utf-8") as handle:
+                handle.write(payload + "\n")
+                handle.flush()
+                os.fsync(handle.fileno())
             os.replace(tmp, path)
+        except OSError as exc:
+            raise OrchestrationPersistenceError(
+                f"could not persist orchestration run {run.run_id} "
+                f"({type(exc).__name__}); the previous document was left in place"
+            ) from exc
         finally:
+            # Covers every failure path, including one before the replace: a
+            # partially written temp file is never left behind.
             if tmp.exists():
                 try:
                     tmp.unlink()
                 except OSError:  # pragma: no cover - best effort cleanup
                     pass
+        try:
+            self._fsync_directory(path.parent)
+        except OSError as exc:
+            raise OrchestrationPersistenceError(
+                f"orchestration run {run.run_id} was replaced but the parent "
+                f"directory could not be fsynced ({type(exc).__name__}); the new "
+                "document is on disk, but its durability is not confirmed and a "
+                "retry of the same save is idempotent"
+            ) from exc
+
+    def _fsync_directory(self, directory: Path) -> None:
+        """Make the rename itself durable where the platform allows it.
+
+        POSIX can fsync the parent directory, so the entry created by
+        ``os.replace`` is durable once this returns.  Windows has no directory
+        fsync, so the final rename is not claimed to survive a power cut there;
+        process-crash atomicity never depends on this call.
+        """
+        if os.name == "nt":
+            return
+        fd = os.open(directory, os.O_RDONLY)
+        try:
+            os.fsync(fd)
+        finally:
+            os.close(fd)
 
     def create(self, run: OrchestrationRun) -> OrchestrationRun:
         self.save(run)

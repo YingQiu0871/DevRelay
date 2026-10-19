@@ -41,6 +41,10 @@ once the `v0.3.0` tag exists on `main` with a published GitHub Release.
 - Recovery: the recovery reason is derived from the strict local ledger scan
   (W3/W4 `submission_uncertain`, W5/W6 `reply_pending`) rather than from bridge
   flags alone.
+- The orchestration store now fsyncs a run document's temp file before
+  `os.replace` (and the parent directory on POSIX); Windows cannot fsync a
+  directory, so cross-power-loss rename durability is not claimed there, and the
+  OpenCode call ledger still does not fsync.
 
 ### Security
 
