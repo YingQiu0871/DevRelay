@@ -1,5 +1,7 @@
 # DevRelay v0.3-A acceptance matrix
 
+> Later status (2026-10-20): released as part of DevRelay 0.3.0.
+
 ## Final decision
 
 **`ACCEPT — V0.3-A OPENCODE SESSION BRIDGE`**

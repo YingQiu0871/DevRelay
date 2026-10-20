@@ -1,5 +1,7 @@
 # DevRelay v0.2-C acceptance matrix
 
+> Later status (2026-10-20): included in DevRelay 0.3.0; independent acceptance is not complete; evidence remains offline/fake-provider only.
+
 Evidence column names the test that proves the criterion. All tests are offline
 (stub Codex CLI, fake providers, real tiny git repositories); no model call and no
 network request is involved.

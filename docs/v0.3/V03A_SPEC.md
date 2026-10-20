@@ -3,7 +3,7 @@
 Status: **CURRENT — candidate for independent review** (stage A of v0.3 only;
 v0.3-B and later are NOT STARTED).
 
-> Later status (2026-10-19): this stage was subsequently accepted and is part of the 0.3.0 tree (unreleased); v0.3-B and later are no longer "not started".
+> Later status (2026-10-19; release 2026-10-20): this stage was subsequently accepted and released in 0.3.0; v0.3-B and later are no longer "not started".
 
 ## Objective (and its hard boundary)
 

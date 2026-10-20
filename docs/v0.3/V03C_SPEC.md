@@ -1,6 +1,6 @@
 # DevRelay v0.3-C — agent role routing
 
-Status: **ACCEPTED / CLOSED / UNRELEASED** — `ACCEPT — DEVRELAY v0.3-C AGENT
+Status: **ACCEPTED / CLOSED / RELEASED IN 0.3.0** — `ACCEPT — DEVRELAY v0.3-C AGENT
 ROLE ROUTING` (accepted internally; package version stays `0.1.0`; public release
 remains `v0.1.0`; next stage `v0.3-D` not started).  Accepted functional
 candidate: `eabb667d1bd9e379d3b7105d72b6a2751bc2a32b`, verified by two bounded real

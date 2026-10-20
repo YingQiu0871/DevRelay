@@ -1,5 +1,7 @@
 # DevRelay v0.2-A acceptance criteria
 
+> Later status (2026-10-20): included in DevRelay 0.3.0; independent acceptance is not complete; evidence remains offline/fake-provider only.
+
 Stage A is accepted only when **all** of the following hold. Evidence column
 names the test/artifact that proves it.
 

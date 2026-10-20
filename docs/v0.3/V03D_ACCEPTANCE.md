@@ -1,5 +1,7 @@
 # DevRelay v0.3-D acceptance matrix — bounded orchestration
 
+> Later status (2026-10-20): released as part of DevRelay 0.3.0.
+
 Status: **ACCEPTED / CLOSED / UNRELEASED** (subject to one final independent
 closeout review of this bookkeeping change) - real bounded orchestration smoke
 **`PASS — V0.3-D REAL BOUNDED ORCHESTRATION SMOKE`** at candidate

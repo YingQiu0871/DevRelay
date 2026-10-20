@@ -1,5 +1,7 @@
 # DevRelay v0.3-C acceptance matrix — agent role routing
 
+> Later status (2026-10-20): released as part of DevRelay 0.3.0.
+
 Status: **ACCEPT — DEVRELAY v0.3-C AGENT ROLE ROUTING** — functional development
 **CLOSED** (accepted internally; **UNRELEASED**).
 

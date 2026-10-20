@@ -3,7 +3,7 @@
 > Plan with one model, build with Codex, review with another - without
 > copy-pasting between agents.
 
-**Version: v0.3.0 (unreleased)** — this working tree packages `0.3.0`, and the
+**Version: v0.3.0** — released 2026-10-20.  The tree packages `0.3.0`, and the
 CLI reports the same version via `devrelay version` (see
 [CHANGELOG.md](CHANGELOG.md)).
 Source: <https://github.com/YingQiu0871/DevRelay> -
@@ -11,27 +11,27 @@ Source: <https://github.com/YingQiu0871/DevRelay> -
 
 ### Release status
 
-**`v0.1.0` is the only published release** (PyPI).  **`v0.3.0` is packaged in
-this tree but not published yet**: it ships when the `v0.3.0` tag is created on
-`main` and the release workflow completes; until then `pip install devrelay`
-still resolves to `0.1.0`.
+**`v0.3.0` is the current release**, published on 2026-10-20 (PyPI and GitHub
+Releases) by the tag-driven workflow in `.github/workflows/release.yml`.  It
+replaces `v0.1.0`, so `pip install devrelay` resolves to `0.3.0`.
 
-### Internal development status (unreleased)
+### Internal development status
 
 | Stage | Status | Acceptance |
 | --- | --- | --- |
-| v0.2-A Automatic review loop | candidate under independent review | [V02_ACCEPTANCE.md](docs/v0.2/V02_ACCEPTANCE.md) |
-| v0.2-B Project profiles, frozen-policy integrity | candidate under independent review | [V02B_ACCEPTANCE.md](docs/v0.2/V02B_ACCEPTANCE.md) |
-| v0.2-C Structured Codex runtime | candidate (offline criteria matrix) | [V02C_ACCEPTANCE.md](docs/v0.2/V02C_ACCEPTANCE.md) |
-| v0.3-A OpenCode session bridge | accepted / closed / unreleased | [V03A_ACCEPTANCE.md](docs/v0.3/V03A_ACCEPTANCE.md) |
-| v0.3-B ChatGPT/MCP tool surface | accepted / closed / unreleased | [V03B_ACCEPTANCE.md](docs/v0.3/V03B_ACCEPTANCE.md) |
-| v0.3-C Agent role routing | accepted / closed / unreleased | [V03C_ACCEPTANCE.md](docs/v0.3/V03C_ACCEPTANCE.md) |
-| v0.3-D Bounded orchestration | accepted / closed / unreleased | [V03D_ACCEPTANCE.md](docs/v0.3/V03D_ACCEPTANCE.md) |
-| v0.3-E Recovery & reconciliation | mandatory fail-closed core accepted by independent acceptance review (P0 = 0, P1 = 0, P2 = 2; 2026-10-17) / adoption disabled / platform gates open / unreleased | [V03E_ACCEPTANCE.md](docs/v0.3/V03E_ACCEPTANCE.md) |
+| v0.2-A Automatic review loop | included in 0.3.0 / independent acceptance not completed (offline, fake-provider evidence only) | [V02_ACCEPTANCE.md](docs/v0.2/V02_ACCEPTANCE.md) |
+| v0.2-B Project profiles, frozen-policy integrity | included in 0.3.0 / independent acceptance not completed (offline, fake-provider evidence only) | [V02B_ACCEPTANCE.md](docs/v0.2/V02B_ACCEPTANCE.md) |
+| v0.2-C Structured Codex runtime | included in 0.3.0 / independent acceptance not completed (offline, fake-provider evidence only) | [V02C_ACCEPTANCE.md](docs/v0.2/V02C_ACCEPTANCE.md) |
+| v0.3-A OpenCode session bridge | accepted / closed / shipped in 0.3.0 | [V03A_ACCEPTANCE.md](docs/v0.3/V03A_ACCEPTANCE.md) |
+| v0.3-B ChatGPT/MCP tool surface | accepted / closed / shipped in 0.3.0 | [V03B_ACCEPTANCE.md](docs/v0.3/V03B_ACCEPTANCE.md) |
+| v0.3-C Agent role routing | accepted / closed / shipped in 0.3.0 | [V03C_ACCEPTANCE.md](docs/v0.3/V03C_ACCEPTANCE.md) |
+| v0.3-D Bounded orchestration | accepted / closed / shipped in 0.3.0 | [V03D_ACCEPTANCE.md](docs/v0.3/V03D_ACCEPTANCE.md) |
+| v0.3-E Recovery & reconciliation | mandatory fail-closed core accepted by independent acceptance review (P0 = 0, P1 = 0, P2 = 2; 2026-10-17) / adoption disabled / platform gates open / shipped in 0.3.0 | [V03E_ACCEPTANCE.md](docs/v0.3/V03E_ACCEPTANCE.md) |
 
-No `v0.3` stage is in a published release, and nothing is pushed, tagged or
-published yet (there is no `v0.3-D` tag and no `v0.3.0` tag).  Specs live next to
-the matrices: [V03A_SPEC.md](docs/v0.3/V03A_SPEC.md),
+A stage acceptance record keeps the status it had on the day it was accepted:
+0.3.0 ships the v0.3-A to v0.3-E stages together with the v0.2-A/v0.2-B/v0.2-C
+candidate features, whose independent acceptance is not complete.  Specs live
+next to the matrices: [V03A_SPEC.md](docs/v0.3/V03A_SPEC.md),
 [V03B_SPEC.md](docs/v0.3/V03B_SPEC.md),
 [V03C_SPEC.md](docs/v0.3/V03C_SPEC.md),
 [V03D_SPEC.md](docs/v0.3/V03D_SPEC.md),
@@ -49,7 +49,7 @@ turn (exactly one `POST /session/{id}/message`, reply `DEVRELAY_V03B_MCP_OK`).
 There is **no** HTTP/SSE MCP transport, **no** WebUI, **no** multi-workspace
 serving, and ChatGPT product-native distribution/installation is **not** released.
 
-### Role routing (v0.3-C, accepted internally, unreleased)
+### Role routing (v0.3-C, accepted internally, shipped in 0.3.0)
 
 v0.3-C lets an MCP caller select a **semantic role** instead of a model.  The
 workspace decides which provider/model plays each role, and the caller cannot
@@ -84,7 +84,7 @@ as `APPROVE`/`REQUEST_CHANGES` is provider text, never an automatic acceptance,
 rejection or repair.  Spec and matrix: `docs/v0.3/V03C_SPEC.md`,
 `docs/v0.3/V03C_ACCEPTANCE.md`.
 
-### Bounded orchestration (v0.3-D accepted / closed / unreleased)
+### Bounded orchestration (v0.3-D accepted / closed / shipped in 0.3.0)
 
 v0.3-D adds durable **bounded** run state over the accepted role path: an MCP
 Planner creates a run with two existing, different role sessions
@@ -134,11 +134,11 @@ proof records it links):
 DevRelay still never decides when to invoke a role, keeps no implicit retry,
 fallback or automatic resume, and no automatic DeepSeek/GLM routing exists.
 
-> **v0.2-A candidate (unreleased)**: the automatic review loop described under
-> [Automatic review loop (v0.2-A)](#automatic-review-loop-v02-a) is implemented
-> in this working branch as a candidate for independent review. It is part of no
-> published release (the published `0.1.0` predates it), and its behaviour was
-> validated with fake providers only. Specification and acceptance matrix:
+> **v0.2-A candidate (included in 0.3.0)**: the automatic review loop described
+> under [Automatic review loop (v0.2-A)](#automatic-review-loop-v02-a) is
+> implemented and ships in 0.3.0, but independent acceptance is not complete — it
+> is not a separately released v0.2 stage, and its behaviour was validated with
+> fake providers only. Specification and acceptance matrix:
 > [docs/v0.2/V02_SPEC.md](docs/v0.2/V02_SPEC.md),
 > [docs/v0.2/V02_ACCEPTANCE.md](docs/v0.2/V02_ACCEPTANCE.md).
 
@@ -509,10 +509,8 @@ Requirements: Python >= 3.11, git, and a repository with **at least one
 commit** (baselines snapshot `HEAD`; DevRelay reports a clear error instead of
 a Git error when the repository has no commits yet).
 
-`0.1.0` is the release currently published on PyPI.  The `0.3.0` sources in this
-tree are **not published yet**: they become installable from PyPI once the
-`v0.3.0` tag is created and the release workflow completes.  From a checkout or
-an unpacked sdist/wheel:
+`0.3.0` is the release currently published on PyPI (2026-10-20); it replaced
+`0.1.0`.  From a checkout or an unpacked sdist/wheel:
 
 ```bash
 # from a checkout or an unpacked sdist/wheel
@@ -850,7 +848,7 @@ v0.3-A deliberately does **not** perform role routing (DeepSeek → GLM), review
 loops, approval decisions or ChatGPT/MCP exposure; see
 `docs/v0.3/V03A_SPEC.md`.
 
-### MCP tool surface (v0.3-B, accepted internally, unreleased)
+### MCP tool surface (v0.3-B, accepted internally, shipped in 0.3.0)
 
 DevRelay can expose the OpenCode bridge above as **MCP tools** over a local
 stdio transport, so an MCP-capable client (for example a ChatGPT planner) can
@@ -1099,9 +1097,9 @@ not downgrade the binary inside a workspace that v0.2-B has already written.
 - The structured Codex runtime (v0.2-C) is a **candidate**: criteria are recorded
   as COVERED/PARTIAL/DEFERRED in `docs/v0.2/V02C_ACCEPTANCE.md`.  The structured path
   was exercised only with fake providers offline; no real Codex smoke has been run yet.
-- v0.3-A to v0.3-D are **accepted internally, closed and unreleased**; each was
-  validated with one or more bounded real smokes, and their accepted scope is
-  what the acceptance matrices record - nothing more.
+- v0.3-A to v0.3-D are **accepted internally, closed and shipped in 0.3.0**;
+  each was validated with one or more bounded real smokes, and their accepted
+  scope is what the acceptance matrices record - nothing more.
 - v0.3-E is scoped to the **mandatory fail-closed core** only: read-only
   reconciliation plus a one-shot `mark_unrecoverable`.  `adopt_completed_turn`
   stays **DISABLED**, there is no automatic resume, and remote correlation (the
@@ -1162,24 +1160,24 @@ not downgrade the binary inside a workspace that v0.2-B has already written.
   improved provider adapters / state-driven UI
 - **v0.3-A** - OpenCode session bridge: one explicitly configured, already
   running OpenCode server (select/read one session, one prompt, bounded wait,
-  interrupt, durable call accounting) - **accepted internally** after a real
-  OpenCode `1.18.11` smoke passed; unreleased
-- **v0.3-B** - ChatGPT/MCP tool surface - **accepted internally (unreleased)**
-  at candidate `d058d62…` after the final real MCP smoke passed: a local stdio
-  MCP adapter over the accepted v0.3-A bridge, with nine high-level tools, a
+  interrupt, durable call accounting) - **accepted internally and shipped in
+  0.3.0** after a real OpenCode `1.18.11` smoke passed
+- **v0.3-B** - ChatGPT/MCP tool surface - **accepted internally, shipped in
+  0.3.0** at candidate `d058d62…` after the final real MCP smoke passed: a local
+  stdio MCP adapter over the accepted v0.3-A bridge, with nine high-level tools, a
   stable result envelope, honest read-only / side-effecting annotations and one
   execution lock per tool surface (the shipped stdio server builds exactly one
   surface) over the accepted single-writer filesystem ledger.
   Still no HTTP/SSE MCP transport, no multi-workspace serving
-- **v0.3-C** - Agent Role Routing - **accepted internally (unreleased)** at
+- **v0.3-C** - Agent Role Routing - **accepted internally, shipped in 0.3.0** at
   candidate `eabb667…` after two bounded real runs verified both routes
   (implementer `opencode-go/deepseek-v4.1-flash`, reviewer
   `opencode-go/glm-5.3-flash`): semantic role routing over the accepted v0.3-B
   surface (three new tools, 12 in total), where the workspace pins which
   model/agent plays `implementer`/`reviewer`.  Routing only - the planner still
   sequences the work
-- **v0.3-D** - Bounded Orchestration - **accepted internally (unreleased)** at
-  candidate `8b70610a5cdda600ef57cf8378c4f69cd33d5be4` after two independent
+- **v0.3-D** - Bounded Orchestration - **accepted internally, shipped in 0.3.0**
+  at candidate `8b70610a5cdda600ef57cf8378c4f69cd33d5be4` after two independent
   remediations and one authorized bounded real smoke (`PASS — V0.3-D REAL BOUNDED
   ORCHESTRATION SMOKE`: 4 real model turns, 4 POSTs, 0 retries, 0 fallbacks):
   durable run state, legal transitions, a hard cycle bound (at most six
@@ -1193,7 +1191,7 @@ not downgrade the binary inside a workspace that v0.2-B has already written.
 - **v0.3-E** - Orchestration recovery (crash/uncertain-call reconciliation) -
   **mandatory fail-closed core implemented, smoked twice and independently
   accepted (P0 = 0, P1 = 0, P2 = 2; 2026-10-17); adoption disabled; platform gate
-  open; unreleased**: the frozen contract in `docs/v0.3/V03E_SPEC.md` splits the
+  open; shipped in 0.3.0**: the frozen contract in `docs/v0.3/V03E_SPEC.md` splits the
   mandatory core (read-only `devrelay_reconcile_run` plus the one-shot
   `devrelay_resolve_recovery` with `mark_unrecoverable`, terminal `BLOCKED`; no
   submission, no retry, no auto-resume, no adoption) from the gated
@@ -1217,7 +1215,9 @@ python -m pip install -e ".[dev]"
 python -m pytest
 ```
 
-The full suite is **1,260+ tests** and runs offline with mocked subprocesses/HTTP
+The full suite is **1,271 tests** (1,270 pass and one POSIX-only test is skipped
+on Windows; the Linux CI run passes all 1,271) and runs offline with mocked
+subprocesses/HTTP
 where needed, an offline Codex stub spawned as a real child process, and real
 (tiny) git repositories for baseline/guard/recovery coverage - no real Codex,
 OpenCode, DeepSeek or network required. Coverage includes: state transitions and

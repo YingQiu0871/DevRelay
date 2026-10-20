@@ -1,6 +1,6 @@
 # DevRelay v0.3-D — bounded orchestration
 
-Status: **ACCEPTED / CLOSED / UNRELEASED** (closeout bookkeeping change pending
+Status: **ACCEPTED / CLOSED / RELEASED IN 0.3.0** (closeout bookkeeping change pending
 one final independent closeout review) - real bounded orchestration smoke
 **`PASS — V0.3-D REAL BOUNDED ORCHESTRATION SMOKE`** at candidate
 `8b70610a5cdda600ef57cf8378c4f69cd33d5be4`; see
@@ -13,7 +13,7 @@ v0.3-C agent role routing (`eabb667…`, closeout `e0a06fa…`).  Branch:
 `v0.3-d-bounded-orchestration`; implementation commit `78d4e5d…` (unchanged by the
 remediation, which is additive).
 
-> Later status (2026-10-19): this stage was subsequently accepted and is part of the 0.3.0 tree (unreleased); the package version is now 0.3.0 and v0.3-E is implemented with adoption DISABLED.
+> Later status (2026-10-19; release 2026-10-20): this stage was subsequently accepted and released in 0.3.0; the package version is now 0.3.0 and v0.3-E is implemented with adoption DISABLED.
 
 ## 1. Objective and boundary
 
@@ -338,7 +338,7 @@ run - real model turns were 0 in those rounds, and all evidence was offline
 a deterministic loopback fake.  A bounded real smoke required independent review
 first and a separate authorization at that time.
 
-**Current status (v0.3-D is accepted and closed, unreleased):** exactly one
+**Current status (v0.3-D was accepted and closed, and shipped in 0.3.0):** exactly one
 separately authorized bounded real orchestration smoke was run at candidate
 `8b70610a5cdda600ef57cf8378c4f69cd33d5be4` and the result is
 **`PASS — V0.3-D REAL BOUNDED ORCHESTRATION SMOKE`**: `max_cycles = 2`, **4 real

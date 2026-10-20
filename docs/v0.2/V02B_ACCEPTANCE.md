@@ -1,5 +1,7 @@
 # DevRelay v0.2-B acceptance criteria
 
+> Later status (2026-10-20): included in DevRelay 0.3.0; independent acceptance is not complete; evidence remains offline/fake-provider only.
+
 Project profiles, runtime-wiring/policy separation and frozen-policy snapshot
 integrity. **Candidate under independent review**: not released, package version
 stays `0.1.0`, everything below was validated offline with fake providers (no

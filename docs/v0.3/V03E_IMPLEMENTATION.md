@@ -3,7 +3,7 @@
 Status: **IMPLEMENTED / OFFLINE TESTS PASS / ADVERSARIALLY REVIEWED (findings
 remediated) / AUTHORIZED / REAL SMOKE EXECUTED (R1 FAIL per oracle, R2 PASS under
 the corrective oracle) / MANDATORY CORE ACCEPTED BY INDEPENDENT ACCEPTANCE REVIEW
-(P0 = 0, P1 = 0, P2 = 2) / ADOPTION DISABLED / UNRELEASED**.
+(P0 = 0, P1 = 0, P2 = 2) / ADOPTION DISABLED / RELEASED IN 0.3.0 (2026-10-20)**.
 
 > **Acceptance status — read this first.** The independently conducted
 > acceptance review (read-only, separate from the implementer, HEAD `9cf8f14`)
@@ -20,7 +20,7 @@ the corrective oracle) / MANDATORY CORE ACCEPTED BY INDEPENDENT ACCEPTANCE REVIE
 > fixed in the acceptance bookkeeping commit) and P2-2 (the R2 conformance
 > matcher matches labels globally rather than phase-scoped; no rule is
 > unasserted today, fix before extending the oracle — recorded in
-> `docs/BACKLOG.md` §10). The package is **unreleased**.
+> `docs/BACKLOG.md` §10). The package is **released as 0.3.0** (2026-10-20).
 >
 > **Authorization status.** Work authorization exists:
 > `V03E_IMPLEMENTATION_AUTHORIZATION.md` (owner instruction `m01693`, baseline
@@ -252,6 +252,11 @@ The v0.3-D suites were migrated to the v2 contract without changing their
 subject: the tool inventory is 19 everywhere, the version mutation anchors read
 `0.3.0-e`, and the v0.3-D corpus writes exactly the v0.3-D document via
 `freeze_v03d` so the frozen-v1 read path stays under test.
+
+Anchor (2026-10-20): the full suite collects **1,271** tests; the five original
+v0.3-E suites above hold **75** of them (recovery 20, attribution 8, models 13,
+ledger 17, invariants 17) and the durability suite adds 6 (**1 POSIX-only skip**
+on Windows), so the v0.3-E family is 81 tests in total.
 
 Later v0.3-E rounds added this suite; the figures in §5/§6 below are the
 2026-10-17 record, not the current counts.

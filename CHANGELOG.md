@@ -4,13 +4,14 @@ All notable changes to DevRelay are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## 0.3.0 - unreleased
+## 0.3.0 - 2026-10-20
+
+Earlier entries record the status at their date.
 
 Version `0.3.0` is single-sourced in `pyproject.toml` and in the
 `src/devrelay/__init__.py` fallback constant, and is what `devrelay version`
-reports.  Nothing is published yet: PyPI serves `0.1.0` only, and a `0.3.0`
-release is created by the tag-driven workflow in `.github/workflows/release.yml`
-once the `v0.3.0` tag exists on `main` with a published GitHub Release.
+reports.  It was released on 2026-10-20 by the tag-driven workflow in
+`.github/workflows/release.yml` and replaces `0.1.0` on PyPI.
 
 ### Added
 
@@ -51,8 +52,9 @@ once the `v0.3.0` tag exists on `main` with a published GitHub Release.
 - Publishing uses PyPI trusted publishing (GitHub OIDC, `pypi` environment, no
   stored credentials, attestations enabled).  The workflow validates the tag
   shape, pins the tag to the packaged version, requires the tag to be reachable
-  from `origin/main`, requires a published GitHub Release with the built
-  artifacts attached, and passes `workflow_dispatch` inputs to the shell only
+  from `origin/main`, requires a **draft** GitHub Release whose built artifacts
+  the workflow uploads (the Release is undrafted only after PyPI and the three
+  assets verify), and passes `workflow_dispatch` inputs to the shell only
   through environment variables.
 - The Codex child keeps its explicit credential denylist (reviewer credentials,
   `DEVRELAY_OPENCODE_TOKEN` and common provider keys) - an explicit denylist,
@@ -63,8 +65,7 @@ once the `v0.3.0` tag exists on `main` with a published GitHub Release.
 - v0.2-A (automatic review loop), v0.2-B (project profiles / frozen-policy
   integrity) and v0.2-C (structured Codex runtime) remain **candidates under
   independent review**; they were validated offline with fake providers only.
-- v0.3-A to v0.3-D are accepted internally and closed, but no v0.3 release
-  exists yet.
+- v0.3-A to v0.3-D are accepted internally and closed, and shipped in 0.3.0.
 - v0.3-E is scoped to the mandatory fail-closed core: `adopt_completed_turn`
   stays **DISABLED**, there is no automatic resume, and remote correlation was
   never exercised.  The **OpenCode call ledger** assumes a single writer and
@@ -74,12 +75,13 @@ once the `v0.3.0` tag exists on `main` with a published GitHub Release.
   G0.1/P7 = PASS, G0.2 = PASS, G0.3/P5 = PASS, G0.4/P4 = authoritative FAIL /
   P4 UNPROVEN (no OpenCode base endpoint in the accepted workspace, 0 `GET /doc`
   issued), G0.5/P6 = NOT RUN, and G1/G2 not run.
-- The offline test suite is 1,260+ tests (`python -m pytest -q`); it needs no
-  model, no network and no installed Codex CLI.
+- The offline test suite is 1,271 tests (`python -m pytest -q`; 1,270 pass and
+  one POSIX-only test is skipped on Windows); it needs no model, no network and
+  no installed Codex CLI.
 
 ## v0.3-E (2026-10-17) - mandatory fail-closed core accepted
 
-**Design frozen.  Mandatory fail-closed core implemented and independently accepted (P0 = 0, P1 = 0, P2 = 2; 2026-10-17); adoption disabled; platform gates open; unreleased.**  The independent
+**Design frozen.  Mandatory fail-closed core implemented and independently accepted (P0 = 0, P1 = 0, P2 = 2; 2026-10-17); adoption disabled; platform gates open; subsequently released in 0.3.0 (2026-10-20).**  The independent
 design-freeze review approved candidate
 `9f4a01804b9affe8938a272553df345b5a60aeed` with **P0 = 0, P1 = 0, P2 = 0** and
 F1-F12 **CLOSED**, decision *APPROVE V0.3-E FAIL-CLOSED CORE DESIGN; PLATFORM PROOF
