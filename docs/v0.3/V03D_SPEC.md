@@ -1,19 +1,19 @@
 # DevRelay v0.3-D — bounded orchestration
 
-Status: **ACCEPTED / CLOSED / RELEASED IN 0.3.0** (closeout bookkeeping change pending
-one final independent closeout review) - real bounded orchestration smoke
-**`PASS — V0.3-D REAL BOUNDED ORCHESTRATION SMOKE`** at candidate
+Status: **ACCEPTED / CLOSED / UNRELEASED** (as accepted 2026-09-17; package
+version then `0.1.0`; the supported public release then was `v0.1.0`; no
+`v0.3-D` tag existed and **v0.3-E had not started**) - real bounded orchestration
+smoke **`PASS — V0.3-D REAL BOUNDED ORCHESTRATION SMOKE`** at candidate
 `8b70610a5cdda600ef57cf8378c4f69cd33d5be4`; see
-`docs/v0.3/V03D_ACCEPTANCE.md` §L for the real-run evidence.  Package version stays
-`0.1.0`; the supported public release remains `v0.1.0`; no `v0.3-D` tag exists and
-**v0.3-E has not started**.  The semantics in this specification are frozen as
-accepted; this closeout does not change them.  Accepted baselines this stage builds on: v0.3-A
+`docs/v0.3/V03D_ACCEPTANCE.md` §L for the real-run evidence.  The semantics in
+this specification are frozen as accepted; this closeout does not change them.
+Accepted baselines this stage builds on: v0.3-A
 OpenCode session bridge (`bcf9627…`), v0.3-B MCP tool surface (`d058d62…`) and
 v0.3-C agent role routing (`eabb667…`, closeout `e0a06fa…`).  Branch:
 `v0.3-d-bounded-orchestration`; implementation commit `78d4e5d…` (unchanged by the
 remediation, which is additive).
 
-> Later status (2026-10-19; release 2026-10-20): this stage was subsequently accepted and released in 0.3.0; the package version is now 0.3.0 and v0.3-E is implemented with adoption DISABLED.
+> Later status (2026-10-19; release 2026-10-20): this stage was subsequently accepted and released as part of DevRelay 0.3.0; the package version is now 0.3.0 and v0.3-E is implemented with adoption DISABLED.
 
 ## 1. Objective and boundary
 

@@ -11,9 +11,10 @@ Source: <https://github.com/YingQiu0871/DevRelay> -
 
 ### Release status
 
-**`v0.3.0` is the current release**, published on 2026-10-20 (PyPI and GitHub
-Releases) by the tag-driven workflow in `.github/workflows/release.yml`.  It
-replaces `v0.1.0`, so `pip install devrelay` resolves to `0.3.0`.
+**`v0.3.0` is released by the tag-driven workflow** in
+`.github/workflows/release.yml` (2026-10-20); the publisher records the PyPI
+and GitHub Release results in
+[docs/RELEASE_CHECKLIST.md](docs/RELEASE_CHECKLIST.md).
 
 ### Internal development status
 
@@ -509,8 +510,9 @@ Requirements: Python >= 3.11, git, and a repository with **at least one
 commit** (baselines snapshot `HEAD`; DevRelay reports a clear error instead of
 a Git error when the repository has no commits yet).
 
-`0.3.0` is the release currently published on PyPI (2026-10-20); it replaced
-`0.1.0`.  From a checkout or an unpacked sdist/wheel:
+`0.3.0` (2026-10-20) supersedes `0.1.0`; see
+[docs/RELEASE_CHECKLIST.md](docs/RELEASE_CHECKLIST.md) for the publication
+record.  From a checkout or an unpacked sdist/wheel:
 
 ```bash
 # from a checkout or an unpacked sdist/wheel
@@ -1087,9 +1089,9 @@ not downgrade the binary inside a workspace that v0.2-B has already written.
 ## Current limitations (v0.1 core + v0.2/v0.3 candidates and accepted stages)
 
 - The automatic review loop (v0.2-A) is a **candidate under independent
-  review**: it is in no published release, and the reviewed behaviour is
-  exercised with fake providers only (no real Codex run and no real reviewer
-  endpoint were used to validate it).
+  review**: it ships in 0.3.0 but is not a separately released v0.2 stage, and
+  the reviewed behaviour is exercised with fake providers only (no real Codex
+  run and no real reviewer endpoint were used to validate it).
 - Project profiles and frozen-policy integrity (v0.2-B) are a **candidate under
   independent review** as well. `state_schema_version` is now 5 and the
   migration is one-way (see "State schema 5"): keep the pre-upgrade

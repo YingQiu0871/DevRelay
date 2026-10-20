@@ -16,8 +16,9 @@ it.
   `0.3.0-e` identifier; that identifier is not the release version and is
   unchanged by this release.
 - [x] Offline test suite: `python -m pytest -q` collects **1,271** tests --
-  **1,270 passed + 1 POSIX-only skip on Windows**; the Linux CI run passes all
-  1,271.
+  **1,270 pass + 1 POSIX-only skip on Windows**; on Linux the POSIX-only test
+  is not skipped, so the Linux job runs all 1,271 (the CI result is recorded
+  under the publisher steps).
 - [x] `python -m build` produces `dist/devrelay-0.3.0-py3-none-any.whl` and
   `dist/devrelay-0.3.0.tar.gz`, and `python -m twine check dist/*.whl
   dist/*.tar.gz` passes.
@@ -50,6 +51,16 @@ it.
    `confirm = PUBLISH`.
 6. Verify the outcome: PyPI serves `devrelay 0.3.0` (wheel and sdist) and the
    GitHub Release is no longer a draft and carries the three assets.
+
+### Release evidence (fill in when publishing)
+
+- Release commit:
+- Tag:
+- `test.yml` run:
+- `release.yml` run:
+- PyPI files:
+- Install verification (`devrelay version`):
+- GitHub Release (draft=false):
 
 ## v0.1.0 (historical)
 

@@ -141,7 +141,8 @@ Trusted Publishing needs none.
 
 ## History
 
-`v0.1.0` is the only published release so far. The first version of this guide
+`v0.1.0` is the only previously published release; the `v0.3.0` publication
+record is kept in `docs/RELEASE_CHECKLIST.md`. The first version of this guide
 and of the workflow belonged to a bootstrap: the workflow accepted **only** the
 `v0.1.0` tag, fetched the wheel and the sdist from an existing GitHub Release
 instead of building them, and compared them against hard-coded sha256 digests.

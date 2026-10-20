@@ -10,8 +10,9 @@ Earlier entries record the status at their date.
 
 Version `0.3.0` is single-sourced in `pyproject.toml` and in the
 `src/devrelay/__init__.py` fallback constant, and is what `devrelay version`
-reports.  It was released on 2026-10-20 by the tag-driven workflow in
-`.github/workflows/release.yml` and replaces `0.1.0` on PyPI.
+reports.  The tag-driven workflow in `.github/workflows/release.yml` publishes
+this release (2026-10-20); publication results are recorded in
+`docs/RELEASE_CHECKLIST.md`.
 
 ### Added
 

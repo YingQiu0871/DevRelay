@@ -1,15 +1,18 @@
 # DevRelay v0.3-C — agent role routing
 
-Status: **ACCEPTED / CLOSED / RELEASED IN 0.3.0** — `ACCEPT — DEVRELAY v0.3-C AGENT
-ROLE ROUTING` (accepted internally; package version stays `0.1.0`; public release
-remains `v0.1.0`; next stage `v0.3-D` not started).  Accepted functional
-candidate: `eabb667d1bd9e379d3b7105d72b6a2751bc2a32b`, verified by two bounded real
-role-routing runs (implementer → `opencode-go/deepseek-v4.1-flash`, reviewer →
-`opencode-go/glm-5.3-flash`).  Accepted baselines this stage builds on: v0.3-A
+Status: **ACCEPTED / CLOSED / UNRELEASED** (as accepted 2026-09-16; package
+version then `0.1.0`; public release then `v0.1.0`; next stage `v0.3-D` not
+started) — `ACCEPT — DEVRELAY v0.3-C AGENT ROLE ROUTING`, accepted internally.
+Accepted functional candidate: `eabb667d1bd9e379d3b7105d72b6a2751bc2a32b`,
+verified by two bounded real role-routing runs (implementer →
+`opencode-go/deepseek-v4.1-flash`, reviewer → `opencode-go/glm-5.3-flash`).
+Accepted baselines this stage builds on: v0.3-A
 OpenCode session bridge (`bcf9627…`) and v0.3-B MCP tool surface (`d058d62…`,
 documentation closeout `c883bab…`).  Branch: `v0.3-c-agent-role-routing`.
 
 > Later status (2026-10-18): the package is now 0.3.0; v0.3-D and the v0.3-E mandatory fail-closed core were subsequently accepted; v0.3-E adoption remains DISABLED.
+
+> Later status (2026-10-20): released as part of DevRelay 0.3.0.
 
 ## 1. Objective and boundary
 

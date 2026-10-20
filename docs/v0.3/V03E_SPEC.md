@@ -49,9 +49,9 @@ the reviews (the reviews were static/documentary).
   design-freeze approval (P0 = 0, P1 = 0, P2 = 0)**.  The branch parent is
   `56e7842a414777d20a3882cad641da383964bab3` (v0.3-D closeout follow-up).
 * Accepted v0.3-D runtime candidate:
-  `8b70610a5cdda600ef57cf8378c4f69cd33d5be4` (ACCEPTED / CLOSED / UNRELEASED).
-* Package version stays `0.1.0`; the only public tag is `v0.1.0`; nothing is
-  pushed, merged, tagged or released.
+  `8b70610a5cdda600ef57cf8378c4f69cd33d5be4` (ACCEPTED / CLOSED / UNRELEASED — status at the v0.3-D closeout).
+* Package version at this freeze was `0.1.0`; the only public tag was `v0.1.0`;
+  nothing was pushed, merged, tagged or released at that time.
 
 ## 1. Scope decision — the mandatory core vs the gated capability
 
