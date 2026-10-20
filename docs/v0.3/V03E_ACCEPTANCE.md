@@ -54,8 +54,9 @@ files (`crash-child.err`, empty `crash-child.out`) and one loose
 
 Open residual risk: adoption gated on P1/P2/P3/P8 and G0.5/P6 (all unproven);
 G0.4 authoritative FAIL / P4 UNPROVEN; G1/G2 not run; remote correlation never
-exercised; single-surface/single-writer limitation with no fsync durability
-guarantee; evidence lives under `%TEMP%`; the E38 row carries pre-existing ETB
+exercised; single-surface/single-writer limitation; the **OpenCode call ledger**
+still has no fsync durability guarantee (the orchestration store now fsyncs —
+see F2); evidence lives under `%TEMP%`; the E38 row carries pre-existing ETB
 prose and is malformed (out of this round's scope).
 
 > **Implementation status (branch `v0.3-e-recovery-reconciliation`):** the
@@ -242,3 +243,10 @@ ever be authorized, and neither enables adoption alone.**
 | F2 | The carried v0.3-D P3 list (MCP SDK argument normalization and JSON-shaped prompts, non-cryptographic validation bound, inert temp files, read-only `get_run`, no fsync/power-loss durability) | unchanged by v0.3-E; kept in `docs/BACKLOG.md` §5 |
 | F3 | Automatic resume / retry protocols | explicit non-goals (SPEC §18, §23) |
 | F4 | A future real acceptance smoke for `adopt_completed_turn` | only if the platform proof gate passes; if adoption stays disabled, **no real smoke is required** and the reduced core can be accepted fully locally (SPEC §26) |
+
+> **Later status (2026-10-20):** the "no fsync/power-loss durability" item in
+> F2's carried v0.3-D P3 list is resolved for the orchestration store by
+> v0.3-E: `store.save` fsyncs the temp document before `os.replace` and the
+> parent directory on POSIX; Windows rename durability is not claimed. The
+> OpenCode call ledger still issues no `fsync`; the rest of the carried list
+> is unchanged.

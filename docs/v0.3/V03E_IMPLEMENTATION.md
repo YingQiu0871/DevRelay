@@ -246,11 +246,15 @@ New offline suites (no real model call, deterministic OpenCode stub):
 | `tests/test_v03e_models.py` | 13 | 27-field canonical set, digest construction and sensitivity, coverage exclusion, record shape rules, legal actions |
 | `tests/test_v03e_ledger.py` | 17 | exactly-one attribution, floor/ceiling proofs, missing sequence, allocated-but-absent record (also with the calls directory absent), newer-than-sequence record, torn record, route disagreement, multiple matches, duplicate numeric claim, record/file call-id disagreement, inverted floor |
 | `tests/test_v03e_invariants.py` | 17 | v1 vetoes, unknown schema version, `RECOVERY_REQUIRED` shape, unresolved record outside recovery, blocked-reason agreement, slot accounting, evidence ownership and digest tamper, coverage class, attempt/recovery reason agreement |
+| `tests/test_v03e_store_durability.py` | 6 | fsync-before-replace, old-document preservation, directory-fsync failure after replace, stable persistence error code (1 POSIX-only skip) |
 
 The v0.3-D suites were migrated to the v2 contract without changing their
 subject: the tool inventory is 19 everywhere, the version mutation anchors read
 `0.3.0-e`, and the v0.3-D corpus writes exactly the v0.3-D document via
 `freeze_v03d` so the frozen-v1 read path stays under test.
+
+Later v0.3-E rounds added this suite; the figures in §5/§6 below are the
+2026-10-17 record, not the current counts.
 
 Verification command and result:
 
@@ -258,7 +262,8 @@ Verification command and result:
 python -m pytest -q
 ```
 
-Result: **all tests pass** — 1236 collected, 0 failed (pytest exit 0).
+Result (as of 2026-10-17): **all tests pass** — 1236 collected, 0 failed (pytest
+exit 0).
 
 Two environment notes for reproducing that result (neither is a v0.3-E
 regression; both were observed on this machine):
@@ -272,15 +277,16 @@ regression; both were observed on this machine):
   `tests/test_git_workspace.py::test_non_repo_directory_errors`, because a
   "non-repo directory" then sits inside a git work tree.
 - With an isolated temp root outside the repository the suite is green
-  (measured: 66 files / 1236 tests, pytest exit 0).
+  (measured 2026-10-17: 66 files / 1236 tests, pytest exit 0).
 
 ## 6. Recorded verification
 
 - `python -m pytest -q tests/test_v03e_*.py` — 70 passed (recovery 15,
-  attribution 8, models 13, ledger 17, invariants 17).
-- `python -m pytest -q` (full suite) — 1236 tests, 0 failed, exit code 0.
+  attribution 8, models 13, ledger 17, invariants 17), all as of 2026-10-17.
+- `python -m pytest -q` (full suite) — 1236 tests, 0 failed, exit code 0
+  (2026-10-17).
 - Full suite re-run on the committed tree with an isolated `TEMP`/`TMP`/`TMPDIR`
-  outside the repository — 66 files / 1236 tests, exit code 0.
+  outside the repository — 66 files / 1236 tests, exit code 0 (2026-10-17).
 
 Real execution (authorized, one shot each, executed 2026-10-17):
 

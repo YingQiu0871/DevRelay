@@ -67,8 +67,9 @@ once the `v0.3.0` tag exists on `main` with a published GitHub Release.
   exists yet.
 - v0.3-E is scoped to the mandatory fail-closed core: `adopt_completed_turn`
   stays **DISABLED**, there is no automatic resume, and remote correlation was
-  never exercised.  The orchestration/recovery ledger assumes a single writer
-  and issues no `fsync`, so durability against power loss is not claimed.
+  never exercised.  The **OpenCode call ledger** assumes a single writer and
+  issues no `fsync`, so durability against power loss is not claimed there (the
+  orchestration store now fsyncs — see *Changed* above).
 - The platform proof gate stays **partially executed / not complete**:
   G0.1/P7 = PASS, G0.2 = PASS, G0.3/P5 = PASS, G0.4/P4 = authoritative FAIL /
   P4 UNPROVEN (no OpenCode base endpoint in the accepted workspace, 0 `GET /doc`

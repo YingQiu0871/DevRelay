@@ -45,6 +45,12 @@ indirectly · **DEFERRED** = documented, not automated in this stage.
 | D5 | Writes are atomic (unique temp + replace) with no temp residue; **no** power-loss durability is claimed (no `fsync`) | COVERED | `test_writes_are_atomic_and_leave_no_temp_files`, `test_round_trip_preserves_the_run_document`; wording: `V03D_SPEC.md` section 6, `store.py` module docstring |
 | D6 | Missing runs are not-found; corrupt/malformed/unknown-field/wrong-id runs are reported and never reset; **persisted state is treated as untrusted input** (semantic invariants on load *and* save, provenance, workspace binding) | COVERED | `test_missing_run_is_reported_as_not_found`, `test_corrupt_json_is_reported_and_never_reset`, `test_malformed_document_is_reported_as_corrupt`, `test_unknown_fields_are_rejected_as_corrupt`, `test_document_with_a_different_run_id_is_corrupt`, plus the whole R-section below |
 
+> **Later status (2026-10-20):** D5's "no fsync" describes the v0.3-D store. The
+> v0.3-E orchestration store fsyncs the temp document before replacement and the
+> parent directory on POSIX; Windows directory fsync is unavailable, so rename
+> durability across power loss is not claimed. Atomic replacement and inert-temp
+> behavior are unchanged.
+
 ## B. Transition policy
 | # | Criterion | Status | Evidence (`tests/test_v03d_state_machine.py`) |
 | --- | --- | --- | --- |
@@ -182,6 +188,10 @@ ACCEPTED** (historical: it was accepted later - see §L).
 | S18 | honest bound of non-cryptographic validation | DONE (documented) | `..._p1c_a_perfectly_rewritten_history_is_the_documented_bound` plus spec §6: a fully rewritten, internally consistent history is not detectable without an external integrity anchor; no journal or chain is added |
 | S19 | mutations A-J (and K) with failure counts | DONE | recorded in the second remediation report (disposable `git archive HEAD` copies, whole v0.3-D suite, control **357 pass**): A 105, B 19, C 6, D 104, E 6, F 18, G 3, H 2, I 4, J 4, K 4 - mutation G/H/I/J exercise the new reachability rules and K exercises save-side validation |
 | S20 | route-unresolvable, crash/in-flight, interrupted-audit, accounting, authority, one-submission and concurrency regressions preserved | DONE | `tests/test_v03d_invariants.py`, `tests/test_v03d_intent_order.py`, `tests/test_v03d_orchestration.py` (255 tests) all still green; the corpus adds the five honest `BLOCKED` variants and both in-flight roles in cycles 1 and 2 |
+
+> **Later status (2026-10-20):** S16's "no fsync" wording is historical for the
+> same reason (see the note after the A table); the inert-temp guarantee and the
+> "never listed or honoured" rule are unchanged.
 
 ## L. Final acceptance — one bounded real orchestration smoke (`PASS`)
 
