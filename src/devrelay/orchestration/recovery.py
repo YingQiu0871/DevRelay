@@ -376,13 +376,13 @@ def _adoption_checklist(
             "cannot be attributed to one",
         )
     elif outcome == ledger_reader.OUTCOME_ABSENT and bool(ledger_part["interval_proven"]):
-        # Proving the interval is what turns "no record" into "never submitted":
-        # the scan saw every record the store could hold for this attempt and the
-        # floor/ceiling are both proven, so absence is evidence, not a gap.
+        # A proven interval bounds the search; per SPEC §9 / E44 it is *not*
+        # proof that the request was never submitted, and the adoption
+        # checklist cannot pass on absence alone.
         attribution = (
-            "pass",
-            "no ledger record exists inside the proven interval: the attempt was "
-            "not submitted",
+            "unknown",
+            "no DevRelay ledger record was found in the proven interval; "
+            "adoption attribution cannot be confirmed",
         )
     else:
         reason = str(ledger_part["gap_reason"])

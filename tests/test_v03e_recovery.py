@@ -664,15 +664,16 @@ def test_w5_an_accepted_call_whose_turn_was_never_persisted_is_reply_pending(
     assert envelope["data"]["blocked_reason"] == "reply_pending"
 
 
-def test_w1_proven_absence_is_reported_as_proven(
+def test_w1_proven_absence_is_reported_as_an_unconfirmed_attribution(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """W1 with a floor: absence inside a proven interval means *not submitted*.
+    """W1 with a floor: a proven interval only bounds the search.
 
     The implementer turn completes first, so the crashed reviewer attempt gets a
-    proven floor and ceiling; the process then dies before the request leaves the
-    machine.  Absence inside a proven interval is evidence, not a gap, and the
-    adoption checklist must report it as such instead of "unknown".
+    proven floor and ceiling, and the process then dies before the request leaves
+    the machine.  Per SPEC §9 / E44 that absence is *not* proof of non-delivery:
+    the checklist must report an unconfirmed attribution (not "unknown because no
+    interval is proven", and not a pass).
     """
     harness = build(tmp_path, run_id_factory=fixed_run_ids(RUN_ID))
     run_id = run_id_of(harness.server, max_cycles=1)
@@ -695,6 +696,9 @@ def test_w1_proven_absence_is_reported_as_proven(
     attribution = next(
         item for item in data["checklist"] if item["item"] == "ledger attribution"
     )
-    assert attribution["status"] == "pass"
-    assert "not submitted" in attribution["detail"]
+    assert attribution["status"] == "unknown"
+    assert "no DevRelay ledger record" in attribution["detail"]
+    assert "proven interval" in attribution["detail"]
+    assert "not submitted" not in attribution["detail"]
+    assert "never submitted" not in attribution["detail"]
     assert "no proven interval" not in attribution["detail"]
