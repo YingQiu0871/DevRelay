@@ -662,3 +662,39 @@ def test_w5_an_accepted_call_whose_turn_was_never_persisted_is_reply_pending(
     assert envelope["ok"] is True, envelope
     assert envelope["data"]["state"] == "BLOCKED"
     assert envelope["data"]["blocked_reason"] == "reply_pending"
+
+
+def test_w1_proven_absence_is_reported_as_proven(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """W1 with a floor: absence inside a proven interval means *not submitted*.
+
+    The implementer turn completes first, so the crashed reviewer attempt gets a
+    proven floor and ceiling; the process then dies before the request leaves the
+    machine.  Absence inside a proven interval is evidence, not a gap, and the
+    adoption checklist must report it as such instead of "unknown".
+    """
+    harness = build(tmp_path, run_id_factory=fixed_run_ids(RUN_ID))
+    run_id = run_id_of(harness.server, max_cycles=1)
+    assert phase(harness.server, "devrelay_run_implementer", run_id, "i")["ok"] is True
+
+    def die_before_submission(*args: object, **kwargs: object) -> None:
+        raise SystemExit("crash before submission")
+
+    monkeypatch.setattr(harness.service._router, "send_role_prompt", die_before_submission)
+    with pytest.raises(SystemExit):
+        phase(harness.server, "devrelay_run_reviewer", run_id, "r")
+
+    report = reconcile(harness.server, run_id)
+    assert report["ok"] is True, report
+    data = report["data"]
+    assert data["recovery_reason"] == "turn_interrupted"
+    assert data["ledger"]["outcome"] == "no_record_in_proven_interval"
+    assert data["ledger"]["interval_proven"] is True
+    assert data["ledger"]["gap_reason"] == ""
+    attribution = next(
+        item for item in data["checklist"] if item["item"] == "ledger attribution"
+    )
+    assert attribution["status"] == "pass"
+    assert "not submitted" in attribution["detail"]
+    assert "no proven interval" not in attribution["detail"]

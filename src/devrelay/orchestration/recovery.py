@@ -375,11 +375,20 @@ def _adoption_checklist(
             f"{ledger_part['candidate_count']} ledger records match: the submission "
             "cannot be attributed to one",
         )
-    else:
+    elif outcome == ledger_reader.OUTCOME_ABSENT and bool(ledger_part["interval_proven"]):
+        # Proving the interval is what turns "no record" into "never submitted":
+        # the scan saw every record the store could hold for this attempt and the
+        # floor/ceiling are both proven, so absence is evidence, not a gap.
         attribution = (
-            "unknown",
-            str(ledger_part["gap_reason"]) or "no proven interval for the attempt",
+            "pass",
+            "no ledger record exists inside the proven interval: the attempt was "
+            "not submitted",
         )
+    else:
+        reason = str(ledger_part["gap_reason"])
+        if outcome == ledger_reader.OUTCOME_ABSENT:
+            reason = reason or "no matching ledger record, but the interval is not proven"
+        attribution = ("unknown", reason or "no proven interval for the attempt")
     item("ledger attribution", *attribution)
 
     settled = (
