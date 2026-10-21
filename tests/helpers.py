@@ -9,6 +9,8 @@ import sys
 from pathlib import Path
 from typing import Optional
 
+import pytest
+
 from devrelay.artifacts.store import ArtifactStore
 from devrelay.config import DevRelayConfig, load_config
 from devrelay.models import (
@@ -38,6 +40,19 @@ from devrelay.providers.base import ImplementerProvider, ReviewerProvider
 from devrelay.providers.evidence import NullCallSink
 from devrelay.workspace.git import GitWorkspace
 from devrelay.workspace.runner import CommandRunner
+
+
+# The structured Codex runtime requires the Windows Job Object containment
+# backend.  POSIX hosts fail closed with codex_process_containment_unsupported
+# by design (docs/v0.2/V02C_SPEC.md); end-to-end tests that exercise it are
+# therefore Windows-only, while the refusal-path tests still run everywhere.
+requires_windows_containment = pytest.mark.skipif(
+    sys.platform != "win32",
+    reason=(
+        "the structured Codex runtime requires Windows Job Object containment "
+        "(POSIX fails closed by design)"
+    ),
+)
 
 
 # ---------------------------------------------------------------------------

@@ -35,6 +35,7 @@ from helpers import (
     build_engine,
     make_packet,
     make_review,
+    requires_windows_containment,
     structured_codex_config,
     write_codex_stub,
 )
@@ -83,6 +84,7 @@ def _start(engine, store):
 # ---------------------------------------------------------------------------
 # C1 / C34 / C43: happy path
 # ---------------------------------------------------------------------------
+@requires_windows_containment
 def test_structured_happy_path_persists_sanitized_evidence(tmp_path):
     stub = write_codex_stub(
         tmp_path / "tools",
@@ -155,6 +157,7 @@ def test_structured_happy_path_persists_sanitized_evidence(tmp_path):
         ({"result_payload": "x" * 5000, "max_result_bytes_override": 1024}, "codex_result_too_large"),
     ],
 )
+@requires_windows_containment
 def test_structured_failures_block_without_retry(tmp_path, stub_kwargs, expected_code):
     overrides = {}
     if "max_result_bytes_override" in stub_kwargs:
@@ -189,6 +192,7 @@ def test_structured_failures_block_without_retry(tmp_path, stub_kwargs, expected
     assert len(impl_calls) == 1
 
 
+@requires_windows_containment
 def test_nonzero_exit_is_a_hard_failure(tmp_path):
     stub = write_codex_stub(tmp_path / "tools", exit_code=3, result="missing")
     root, store, engine = _engine_with_stub(tmp_path, stub)
@@ -198,6 +202,7 @@ def test_nonzero_exit_is_a_hard_failure(tmp_path):
     assert task.state == S.FAILED and task.blocked_code == "implementer_failed"
 
 
+@requires_windows_containment
 def test_model_status_is_advisory(tmp_path):
     """C30: exit 0 + valid result + status=BLOCKED still goes to TESTING."""
     stub = write_codex_stub(
@@ -223,6 +228,7 @@ def test_model_status_is_advisory(tmp_path):
 # ---------------------------------------------------------------------------
 # C31 / C32 / C33 / C35: control-plane tamper matrix
 # ---------------------------------------------------------------------------
+@requires_windows_containment
 def test_control_plane_violation_on_state_tamper(tmp_path):
     state_path = None  # resolved below via the store
 
@@ -260,6 +266,7 @@ def test_control_plane_violation_on_state_tamper(tmp_path):
         engine.continue_task(STATE)
 
 
+@requires_windows_containment
 def test_control_plane_violation_on_ledger_tamper(tmp_path):
     root, store, engine = _engine_with_stub(
         tmp_path, write_codex_stub(tmp_path / "tools")
@@ -278,6 +285,7 @@ def test_control_plane_violation_on_ledger_tamper(tmp_path):
     assert holds and "calls/DR-0001-C0001.json" in " ".join(holds[0]["diverging_paths"])
 
 
+@requires_windows_containment
 def test_control_plane_violation_on_unexpected_staging_file(tmp_path):
     root, store, engine = _engine_with_stub(
         tmp_path, write_codex_stub(tmp_path / "tools", extra_staging="evil.txt")
@@ -290,6 +298,7 @@ def test_control_plane_violation_on_unexpected_staging_file(tmp_path):
     )
 
 
+@requires_windows_containment
 def test_secret_in_tampered_file_never_reaches_evidence(tmp_path):
     """C42: a model-injected secret in a tampered control file stays out of evidence."""
     root, store, engine = _engine_with_stub(

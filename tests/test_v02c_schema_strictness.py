@@ -32,6 +32,7 @@ from helpers import (
     default_config,
     make_packet,
     make_review,
+    requires_windows_containment,
     structured_codex_config,
     write_codex_stub,
 )
@@ -212,6 +213,7 @@ def _engine(tmp_path, stub, **over):
     return root, store, engine
 
 
+@requires_windows_containment
 def test_strict_stub_rejects_the_pre_fix_schema(tmp_path, monkeypatch):
     """Regression: the schema that failed the real smoke must fail offline too."""
     import devrelay.providers.codex_cli as codex_cli
@@ -239,6 +241,7 @@ def test_strict_stub_rejects_the_pre_fix_schema(tmp_path, monkeypatch):
     assert "invalid_json_schema" in stdout
 
 
+@requires_windows_containment
 def test_strict_schema_runs_end_to_end_with_one_call(tmp_path):
     stub = write_codex_stub(tmp_path / "tools", changed_files=["app.py"])
     root, store, engine = _engine(tmp_path, stub)
@@ -315,6 +318,7 @@ def _annotation_payload(kind: str) -> dict:
     return schema
 
 
+@requires_windows_containment
 def test_strict_stub_rejects_injected_annotations(tmp_path, monkeypatch):
     """C/D: the local strict validator refuses any non-allowlisted keyword."""
     import devrelay.providers.codex_cli as codex_cli

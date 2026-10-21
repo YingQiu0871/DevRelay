@@ -15,18 +15,37 @@ it.
   `devrelay version` reports `0.3.0`.  The MCP server banner keeps its own
   `0.3.0-e` identifier; that identifier is not the release version and is
   unchanged by this release.
-- [x] Offline test suite: `python -m pytest -q` collects **1,271** tests --
-  **1,270 pass + 1 POSIX-only skip on Windows**; on Linux the POSIX-only test
-  is not skipped, so the Linux job runs all 1,271 (the CI result is recorded
-  under the publisher steps).
+- [x] Offline test suite: `python -m pytest -q` collects **1,272** tests.  On
+  Windows the structured Codex runtime runs: **1,271 pass + 1 POSIX-only skip**
+  (the 8.3 regression test runs where the volume provides short names and
+  self-skips where 8.3 is disabled).  On Linux the 35 structured-runtime
+  end-to-end tests and the Windows-only 8.3 test are skipped: **1,236 pass +
+  36 skips** (the CI result is recorded under the publisher steps).
 - [x] `python -m build` produces `dist/devrelay-0.3.0-py3-none-any.whl` and
   `dist/devrelay-0.3.0.tar.gz`, and `python -m twine check dist/*.whl
   dist/*.tar.gz` passes.
 - [x] The sdist ships the packaged policy profiles (`profiles/*.yaml`).
 - [x] A fresh virtualenv installed from the built wheel reports `0.3.0` for
   `devrelay version`.
-- [x] Release-document freeze is docs-only: no change to `src/`, `tests/`,
-  `pyproject.toml` or `.github/`.
+- [x] The release-document freeze commit is docs-only: no change to `src/`,
+  `tests/`, `pyproject.toml` or `.github/`.  A separate CI-portability fix
+  (below) is the only post-freeze source/test change before the tag.
+
+### CI portability fix (2026-10-21)
+
+- [x] OpenCode workspace ownership compares canonical paths
+  (`os.path.realpath` + `os.path.normcase`), so a provider's Windows 8.3
+  spelling (`RUNNER~1`) matches DevRelay's resolved long path.  The regression
+  test uses `GetShortPathNameW` and self-skips where the volume has no short
+  names.
+- [x] Structured Codex end-to-end tests are marked
+  `requires_windows_containment` and skipped on POSIX.  The runtime is
+  unchanged: POSIX still fails closed with
+  `codex_process_containment_unsupported` and zero provider calls, exactly as
+  `docs/v0.2/V02C_SPEC.md` requires.
+- [x] The failed `test.yml` run on `9e7192b` produced no tag.  A green run on
+  the fixed `main` commit is required before the tag, as recorded under the
+  publisher steps.
 
 ### Release scope (disclosed, not claimed)
 

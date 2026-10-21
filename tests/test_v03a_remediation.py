@@ -58,7 +58,7 @@ from devrelay.opencode.transport import OpenCodeTransport
 from devrelay.profiles import resolve_policy_config
 from devrelay.providers.codex_runtime import CODEX_CHILD_ENV_DENYLIST
 
-from helpers import make_git_repo
+from helpers import make_git_repo, requires_windows_containment
 from opencode_stub import DEFAULT_WORKSPACE, StubOpenCodeServer, _message, _session
 
 WS = DEFAULT_WORKSPACE
@@ -453,6 +453,7 @@ def test_opencode_token_is_in_the_codex_child_denylist():
     )
 
 
+@requires_windows_containment
 def test_codex_child_never_receives_the_opencode_token(tmp_path, monkeypatch):
     """End-to-end through the real structured runtime + offline Codex stub."""
     from test_v02c_structured import (

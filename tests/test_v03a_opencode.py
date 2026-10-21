@@ -6,7 +6,10 @@ Every scenario runs against the deterministic in-memory stub server
 
 from __future__ import annotations
 
+import ctypes
 import json
+import os
+import sys
 from pathlib import Path
 
 import pytest
@@ -29,6 +32,32 @@ from devrelay.opencode.models import (
 from opencode_stub import FAKE_SECRET, DEFAULT_WORKSPACE, StubOpenCodeServer, _message, _session
 
 WS = DEFAULT_WORKSPACE
+
+
+def _short_path(path: Path) -> str:
+    """Return *path*'s 8.3 short spelling, or skip where the volume has none."""
+    if sys.platform != "win32":
+        pytest.skip("8.3 short names are a Windows filesystem feature")
+    from ctypes import wintypes
+
+    get_short_path_name = ctypes.windll.kernel32.GetShortPathNameW
+    get_short_path_name.argtypes = [
+        wintypes.LPCWSTR,
+        wintypes.LPWSTR,
+        wintypes.DWORD,
+    ]
+    get_short_path_name.restype = wintypes.DWORD
+    needed = get_short_path_name(str(path), None, 0)
+    if not needed:
+        pytest.skip("GetShortPathNameW could not resolve the temporary workspace")
+    buffer = ctypes.create_unicode_buffer(needed)
+    written = get_short_path_name(str(path), buffer, needed)
+    if not written:
+        pytest.skip("GetShortPathNameW could not resolve the temporary workspace")
+    short = buffer.value
+    if os.path.normcase(short) == os.path.normcase(str(path)):
+        pytest.skip("8.3 short names are disabled on this volume")
+    return short
 
 
 # ---------------------------------------------------------------------------
@@ -84,6 +113,20 @@ def test_list_sessions_filters_other_workspaces():
     all_result = stub.bridge().list_sessions(include_other_workspaces=True)
     assert [s.session_id for s in all_result.sessions] == ["ses_match", "ses_other"]
     assert all_result.sessions[1].workspace_match is False
+
+
+def test_session_workspace_matches_through_an_8dot3_short_path(tmp_path):
+    # The OpenCode provider can report the 8.3 spelling (C:\...\RUNNER~1\...)
+    # while DevRelay resolved the long form; both name the same workspace and
+    # must not be rejected as a cross-workspace reuse.
+    long_dir = tmp_path / "workspace-with-a-name-longer-than-eight-dot-three"
+    long_dir.mkdir()
+    short = _short_path(long_dir)
+    assert "~" in short
+    stub = StubOpenCodeServer(sessions=[_session("ses_short", workspace=short)])
+    result = stub.bridge(workspace_root=str(long_dir)).get_session("ses_short")
+    assert result.ok and result.session is not None
+    assert result.session.workspace_match is True
 
 
 def test_get_session_reports_state():

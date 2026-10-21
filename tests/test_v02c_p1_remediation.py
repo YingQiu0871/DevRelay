@@ -39,6 +39,7 @@ from helpers import (
     make_git_repo,
     make_packet,
     make_review,
+    requires_windows_containment,
     structured_codex_config,
     write_codex_stub,
 )
@@ -188,6 +189,7 @@ def _prepared_cli_repo(tmp_path: Path, monkeypatch, stub: Path, **codex) -> tupl
     return repo, runner
 
 
+@requires_windows_containment
 def test_cli_continue_runs_the_structured_runtime(tmp_path, monkeypatch):
     """The exact P1-A escape: a frozen task through the real CLI is structured."""
     argv_capture = tmp_path / "argv.json"
@@ -293,6 +295,7 @@ def test_cli_runtime_mode_text_is_explicit_and_stays_text(tmp_path, monkeypatch)
 # ===========================================================================
 # P1-D: a consumed call must survive the control-plane-violation path
 # ===========================================================================
+@requires_windows_containment
 def test_violation_keeps_the_consumed_call_charged(tmp_path):
     """A real invocation is charged even when the run is voided by the guard."""
     stub = write_codex_stub(tmp_path / "tools")
@@ -329,6 +332,7 @@ def test_violation_keeps_the_consumed_call_charged(tmp_path):
     assert "child wrote this" not in report_file.read_text(encoding="utf-8")
 
 
+@requires_windows_containment
 def test_state_tamper_keeps_the_consumed_call_in_the_trusted_pre(tmp_path):
     """A tampered state.json is never overwritten; the parent's copy is trusted."""
     stub = write_codex_stub(tmp_path / "tools")
@@ -362,6 +366,7 @@ def test_state_tamper_keeps_the_consumed_call_in_the_trusted_pre(tmp_path):
 # ===========================================================================
 # P1-B: the contained process tree must be dead before POST may trust anything
 # ===========================================================================
+@requires_windows_containment
 def test_detached_descendant_cannot_tamper_after_post(tmp_path):
     """The auditor's exact bypass: a deferred detached write vs. the POST check."""
     child = _tamper_child(tmp_path)
@@ -393,6 +398,7 @@ def test_detached_descendant_cannot_tamper_after_post(tmp_path):
     _assert_no_post_guard_tamper(root, marker, store)
 
 
+@requires_windows_containment
 def test_descendant_inheriting_pipes_is_contained_without_hanging(tmp_path):
     """Inherited stdout/stderr handles must not make the reader threads hang."""
     child = _tamper_child(tmp_path)
@@ -417,6 +423,7 @@ def test_descendant_inheriting_pipes_is_contained_without_hanging(tmp_path):
     _assert_no_post_guard_tamper(root, marker, store)
 
 
+@requires_windows_containment
 def test_structured_timeout_kills_the_contained_tree_and_still_checks_post(tmp_path):
     """A timed-out run kills the whole tree and is still charged and guarded."""
     child = _tamper_child(tmp_path)
@@ -459,6 +466,7 @@ def test_structured_timeout_kills_the_contained_tree_and_still_checks_post(tmp_p
     _assert_no_post_guard_tamper(root, marker, store)
 
 
+@requires_windows_containment
 def test_unverified_containment_skips_post_and_holds(tmp_path, monkeypatch):
     """If the tree cannot be confirmed dead, POST must not run at all."""
     from devrelay.workspace import containment as containment_module
@@ -555,6 +563,7 @@ def test_containment_is_required_for_structured_mode(tmp_path, monkeypatch):
 # ===========================================================================
 # C7 / C16 closure
 # ===========================================================================
+@requires_windows_containment
 def test_c7_nonzero_exit_with_a_valid_result_is_still_a_failure(tmp_path):
     """A model result never upgrades a failed process to a success."""
     stub = write_codex_stub(tmp_path / "tools")
@@ -577,6 +586,7 @@ def test_c7_nonzero_exit_with_a_valid_result_is_still_a_failure(tmp_path):
     assert logs.is_file()
 
 
+@requires_windows_containment
 def test_c16_unicode_paths_end_to_end(tmp_path):
     """A unicode workspace root + unicode claims survive the whole runtime."""
     unicode_root = tmp_path / "\u4e2d\u6587-\u00fc"

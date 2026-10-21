@@ -97,6 +97,23 @@ _ASSISTANT_ROLES = {"assistant", "ai", "model"}
 _ENVELOPE_KEYS = ("directory", "workspace", "cwd", "session_id", "worktree")
 
 
+def _canonical_workspace(path: str) -> str:
+    """Return a comparison-stable identity for an absolute workspace path.
+
+    Provider payloads can spell the same Windows directory with an 8.3 short
+    name (``RUNNER~1``) while DevRelay resolved the long form.  ``realpath``
+    expands short names and symlinks; ``normcase`` makes the comparison
+    case-insensitive on Windows.  POSIX has no 8.3 names, but ``realpath``
+    still gives both sides the same physical identity when a symlink aliases
+    the workspace.
+    """
+    try:
+        resolved = os.path.realpath(path)
+    except OSError:  # pragma: no cover - defensive
+        resolved = os.path.abspath(path)
+    return os.path.normcase(os.path.normpath(resolved))
+
+
 def _normalize_state(
     value: object, *, max_depth: int = MAX_STATE_DEPTH
 ) -> tuple[OpenCodeSessionState, bool]:
@@ -225,7 +242,7 @@ class OpenCodeBridge:
                 "windowed locally and the newest messages are kept)"
             )
         self.base_url = str(base_url).strip().rstrip("/")
-        self.workspace_root = os.path.normpath(str(Path(workspace_root).resolve()))
+        self.workspace_root = _canonical_workspace(str(Path(workspace_root).resolve()))
         self.idle_timeout_seconds = float(idle_timeout_seconds)
         self.poll_interval_seconds = max(0.05, float(poll_interval_seconds))
         self.max_messages = max(1, min(int(max_messages), HARD_MAX_MESSAGES))
@@ -1071,7 +1088,10 @@ class OpenCodeBridge:
         if isinstance(workspace_raw, dict):
             workspace_raw = _first(workspace_raw, "path", "directory", "cwd")
         workspace, workspace_known = self._normalize_workspace(workspace_raw)
-        match = bool(workspace_known and workspace == self.workspace_root)
+        match = bool(
+            workspace_known
+            and _canonical_workspace(workspace) == self.workspace_root
+        )
         state, state_overflow = _normalize_state(_first(payload, "state", "status"))
         return OpenCodeSession(
             session_id=session_id,

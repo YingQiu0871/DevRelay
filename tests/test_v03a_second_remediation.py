@@ -58,6 +58,7 @@ from helpers import (
     FakeCommandRunner,
     make_git_repo,
     make_packet,
+    requires_windows_containment,
     structured_codex_config,
     write_codex_stub,
 )
@@ -235,6 +236,7 @@ def test_denylist_names_used_by_this_suite_are_really_denylisted():
         assert name in CODEX_CHILD_ENV_DENYLIST, name
 
 
+@requires_windows_containment
 def test_every_codex_child_path_is_scrubbed(tmp_path, monkeypatch):
     """Real child processes: probes, text runtime, structured runtime, doctor."""
     for name, value in CREDENTIALS.items():

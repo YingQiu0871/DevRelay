@@ -23,9 +23,12 @@ from helpers import (
     default_config,
     make_packet,
     make_review,
+    requires_windows_containment,
     structured_codex_config,
     write_codex_stub,
 )
+
+pytestmark = requires_windows_containment
 
 STATE = "DR-0001"
 
