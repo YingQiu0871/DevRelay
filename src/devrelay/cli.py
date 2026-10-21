@@ -57,6 +57,7 @@ from devrelay.providers.base import ImplementerProvider, ReviewerProvider
 from devrelay.providers.codex_cli import CodexCLIProvider
 from devrelay.providers.manual import ManualReviewer
 from devrelay.providers.openai_compatible import OpenAICompatibleReviewer, endpoint_from_env
+from devrelay.cli_web import web_app
 from devrelay.workspace.discovery import require_root
 from devrelay.workspace.git import GitWorkspace
 from devrelay.workspace.runner import CommandRunner
@@ -70,6 +71,7 @@ app = typer.Typer(
     add_completion=False,
     no_args_is_help=True,
 )
+app.add_typer(web_app, name="web")
 
 
 def _fail(message: str) -> None:

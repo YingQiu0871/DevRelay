@@ -267,3 +267,14 @@ Recorded after the third independent engineering review and the 0.3.0 release-pr
 | review 3 P3-2 — `concurrency` queues instead of cancelling | `release.yml:68-70` uses a job-level `concurrency: group: release-${{ inputs.tag }}` with `cancel-in-progress: false`, so a second dispatch waits rather than replacing the first. That is intended (two publishers must not race); hardening: state the intent in a comment so a future reader does not "fix" it |
 | review 3 P3-9 | carried by identifier only: review 3's report is not tracked in this repository, so its content is not restated here. Re-read the review before acting on this item |
 | audit P3-4 — reproducible build timestamps | the release build sets no `SOURCE_DATE_EPOCH` and the wheel/sdist entries keep their build-time mtimes, so two builds of the same source produce different bytes and therefore different hashes: the published wheel hash is **not reproducible**. This does **not** affect the correctness of the release (the uploaded asset is exactly the artifact that was probed, hashed into `release-assets/SHA256SUMS` and published, and the probe compares file names, not hashes), but byte-for-byte reproduction is not available. Hardening: export `SOURCE_DATE_EPOCH` (e.g. from the tagged commit's date) in `release.yml` before the build and normalize the wheel/sdist entry timestamps |
+
+## 12. v0.4-A1 localhost session-cookie scope (P2; blocks A2, not A1 acceptance)
+
+| Field | Value |
+| --- | --- |
+| Status | **OPEN (recorded)** — A1 is an API-only slice; A2/browser UI must resolve this before shipping a frontend |
+| Finding | the `devrelay_web_session` cookie is host-scoped (`127.0.0.1`/`localhost`), not port-scoped. Browsers send cookies to every port on the host, so another local web service could receive or overwrite the cookie if the user visits it. `GET /api/session` would then return that session's CSRF token. |
+| Current mitigation | `HttpOnly`, `SameSite=Strict`, `Path=/api`; A1 has no frontend, and explicit API clients can use the bearer token instead |
+| Why not accepted as solved | port isolation is not available to cookies; a local malicious origin is outside the A1 API-only threat model but is real once a browser UI exists |
+| A2 gate | choose one: header-borne session (no cookie) or an unguessable per-instance loopback host; add the corresponding tests before the browser UI |
+| Evidence | independent v0.4-A1 review (2026-10-21), P2-1; verdict APPROVE WITH FINDINGS, no P0/P1 |

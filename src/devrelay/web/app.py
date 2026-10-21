@@ -1,0 +1,442 @@
+"""The v0.4-A loopback HTTP control API (Starlette ASGI app)."""
+
+from __future__ import annotations
+
+import json
+import secrets
+import sys
+from typing import Any, Awaitable, Callable
+
+from pydantic import ValidationError
+from starlette.applications import Starlette
+from starlette.datastructures import Headers
+from starlette.exceptions import HTTPException
+from starlette.requests import Request
+from starlette.responses import JSONResponse, Response
+from starlette.routing import Route
+
+from devrelay.web.auth import (
+    CSRF_HEADER,
+    SESSION_COOKIE,
+    SESSION_TTL_SECONDS,
+    AuthManager,
+    generate_token,
+    validate_host,
+    validate_origin,
+)
+from devrelay.web.errors import WebApiError
+from devrelay.web.models import (
+    MAX_BODY_BYTES,
+    ConfigValidateRequest,
+    SessionRequest,
+    failure,
+    success,
+)
+from devrelay.web.registry import ProjectRegistry
+from devrelay.web.service import WebReadService
+from devrelay.web.workspace import resolve_workspace
+
+_MUTATING_METHODS = frozenset({"POST", "PUT", "PATCH", "DELETE"})
+
+
+# ---------------------------------------------------------------------------
+# response helpers
+# ---------------------------------------------------------------------------
+def _headers(request: Request) -> dict[str, str]:
+    return {
+        "Cache-Control": "no-store",
+        "X-Content-Type-Options": "nosniff",
+        "Referrer-Policy": "no-referrer",
+        "X-Frame-Options": "DENY",
+        "Content-Security-Policy": "default-src 'none'; frame-ancestors 'none'",
+        "Cross-Origin-Resource-Policy": "same-origin",
+        "X-Request-ID": str(getattr(request.state, "request_id", "")),
+    }
+
+
+def _json(
+    request: Request,
+    data: dict[str, Any],
+    *,
+    status_code: int = 200,
+    extra_headers: dict[str, str] | None = None,
+) -> JSONResponse:
+    headers = _headers(request)
+    if extra_headers:
+        headers.update(extra_headers)
+    return JSONResponse(data, status_code=status_code, headers=headers)
+
+
+def _error_response(
+    request: Request,
+    error: WebApiError,
+) -> JSONResponse:
+    body = failure(error.code, error.message, request_id=str(getattr(request.state, "request_id", "")))
+    return _json(request, body, status_code=error.status_code, extra_headers=error.headers)
+
+
+def _request_id(scope: dict[str, Any]) -> str:
+    state = scope.setdefault("state", {})
+    value = state.get("request_id")
+    if not value:
+        value = "req_" + secrets.token_hex(8)
+        state["request_id"] = value
+    return str(value)
+
+
+# ---------------------------------------------------------------------------
+# request body parsing
+# ---------------------------------------------------------------------------
+async def _read_json(request: Request, model: type[Any]) -> Any:
+    media_type = request.headers.get("content-type", "").split(";", 1)[0].strip().lower()
+    if media_type != "application/json":
+        raise WebApiError(
+            "unsupported_media_type",
+            "Content-Type must be application/json",
+            status_code=415,
+        )
+    raw_length = request.headers.get("content-length")
+    if raw_length:
+        try:
+            length = int(raw_length)
+        except ValueError as exc:
+            raise WebApiError("invalid_content_length", "invalid Content-Length") from exc
+        if length < 0 or length > MAX_BODY_BYTES:
+            raise WebApiError("body_too_large", "request body exceeds 64 KiB", status_code=413)
+    body = b""
+    while True:
+        try:
+            message = await request.receive()
+        except Exception as exc:  # pragma: no cover - transport-level
+            raise WebApiError("invalid_body", "request body could not be read") from exc
+        if message.get("type") == "http.disconnect":
+            raise WebApiError("invalid_body", "client disconnected before the body was complete")
+        chunk = message.get("body", b"")
+        if len(chunk) > MAX_BODY_BYTES - len(body):
+            raise WebApiError("body_too_large", "request body exceeds 64 KiB", status_code=413)
+        body += chunk
+        if not message.get("more_body", False):
+            break
+    try:
+        payload = json.loads(body.decode("utf-8"))
+    except (UnicodeDecodeError, ValueError) as exc:
+        raise WebApiError("invalid_json", "request body is not valid UTF-8 JSON") from exc
+    try:
+        return model.model_validate(payload)
+    except ValidationError as exc:
+        raise WebApiError(
+            "invalid_request",
+            "request does not match the expected schema",
+            status_code=422,
+        ) from exc
+
+
+# ---------------------------------------------------------------------------
+# security middleware
+# ---------------------------------------------------------------------------
+class SecurityMiddleware:
+    """Host/Origin/auth/CSRF checks before a route can see the request."""
+
+    def __init__(self, app: Callable[..., Awaitable[None]], *, auth: AuthManager) -> None:
+        self.app = app
+        self.auth = auth
+
+    async def __call__(self, scope: dict[str, Any], receive: Any, send: Any) -> None:
+        if scope["type"] == "websocket":
+            # No WebSocket route exists in v0.4-A; fail closed rather than let a
+            # future route inherit an unauthenticated handshake.
+            await send({"type": "websocket.close", "code": 1008})
+            return
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+        request_id = _request_id(scope)
+        request = Request(scope, receive=receive)
+        try:
+            headers = Headers(scope=scope)
+            validate_host(headers.get("host", ""), self.auth.port)
+            validate_origin(headers.get("origin"), self.auth.port)
+            method = str(scope.get("method", "GET")).upper()
+            path = str(scope.get("path", ""))
+            scope["state"]["auth"] = self._authenticate(request, method, path)
+        except WebApiError as exc:
+            await _error_response(request, exc)(scope, receive, send)
+            return
+        await self.app(scope, receive, send)
+
+    def _authenticate(self, request: Request, method: str, path: str) -> dict[str, Any]:
+        if method == "OPTIONS":
+            # No CORS negotiation is offered.  Let the router answer 405 rather
+            # than turning an unauthenticated preflight into a misleading 401.
+            return {"mode": "anonymous"}
+        if path == "/healthz" and method in ("GET", "HEAD"):
+            return {"mode": "anonymous"}
+        if path == "/api/session" and method == "POST":
+            return {"mode": "exchange"}
+
+        authorization = request.headers.get("authorization")
+        if authorization is not None:
+            if not self.auth.bearer_identity(authorization):
+                raise WebApiError(
+                    "unauthorized",
+                    "invalid bearer token",
+                    status_code=401,
+                    headers={"WWW-Authenticate": "Bearer"},
+                )
+            return {"mode": "bearer"}
+
+        session = self.auth.resolve_session(request.cookies.get(SESSION_COOKIE))
+        if session is None:
+            raise WebApiError(
+                "unauthorized",
+                "authentication required",
+                status_code=401,
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+        if method in _MUTATING_METHODS:
+            supplied = request.headers.get(CSRF_HEADER)
+            if not self.auth.csrf_matches(session, supplied):
+                raise WebApiError("csrf_required", "CSRF token required", status_code=403)
+        return {"mode": "session", "session": session}
+
+
+# ---------------------------------------------------------------------------
+# API implementation
+# ---------------------------------------------------------------------------
+class LocalControlApi:
+    def __init__(
+        self,
+        *,
+        service: WebReadService,
+        registry: ProjectRegistry,
+        project_id: str,
+        auth: AuthManager,
+    ) -> None:
+        self.service = service
+        self.registry = registry
+        self.project_id = project_id
+        self.auth = auth
+
+    # -- session -----------------------------------------------------
+    async def session_create(self, request: Request) -> Response:
+        payload: SessionRequest = await _read_json(request, SessionRequest)
+        if not self.auth.matches_token(payload.token):
+            raise WebApiError(
+                "unauthorized",
+                "invalid local token",
+                status_code=401,
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+        session = self.auth.create_session()
+        response = _json(
+            request,
+            success(
+                {"csrf": session.csrf, "expires_in": SESSION_TTL_SECONDS},
+                request_id=str(request.state.request_id),
+            ),
+        )
+        response.set_cookie(
+            SESSION_COOKIE,
+            session.session_id,
+            max_age=SESSION_TTL_SECONDS,
+            httponly=True,
+            samesite="strict",
+            path="/api",
+        )
+        return response
+
+    async def session_get(self, request: Request) -> Response:
+        identity = request.state.auth
+        if identity.get("mode") == "bearer":
+            return _json(
+                request,
+                success(
+                    {"authenticated": True, "csrf": None, "mode": "bearer"},
+                    request_id=str(request.state.request_id),
+                ),
+            )
+        session = identity["session"]
+        return _json(
+            request,
+            success(
+                {"authenticated": True, "csrf": session.csrf, "mode": "session"},
+                request_id=str(request.state.request_id),
+            ),
+        )
+
+    async def session_delete(self, request: Request) -> Response:
+        identity = request.state.auth
+        if identity.get("mode") == "session":
+            self.auth.delete_session(identity["session"].session_id)
+        response = _json(
+            request,
+            success({"authenticated": False}, request_id=str(request.state.request_id)),
+        )
+        response.delete_cookie(SESSION_COOKIE, path="/api")
+        return response
+
+    # -- reads -------------------------------------------------------
+    async def healthz(self, request: Request) -> Response:
+        return _json(
+            request,
+            {"ok": True, "schema_version": 1, "request_id": str(request.state.request_id)},
+        )
+
+    async def health(self, request: Request) -> Response:
+        return _json(
+            request,
+            success(
+                self.service.health(project_id=self.project_id),
+                request_id=str(request.state.request_id),
+            ),
+        )
+
+    async def status(self, request: Request) -> Response:
+        return _json(
+            request,
+            success(self.service.status(), request_id=str(request.state.request_id)),
+        )
+
+    async def projects(self, request: Request) -> Response:
+        items = [
+            project.public(active=project.project_id == self.project_id)
+            for project in self.registry.list()
+        ]
+        return _json(
+            request,
+            success({"projects": items}, request_id=str(request.state.request_id)),
+        )
+
+    async def runs(self, request: Request) -> Response:
+        raw = request.query_params.get("limit", "20")
+        try:
+            limit = int(raw)
+        except ValueError as exc:
+            raise WebApiError("invalid_limit", "limit must be an integer") from exc
+        if limit < 1 or limit > 100:
+            raise WebApiError("invalid_limit", "limit must be between 1 and 100")
+        return _json(
+            request,
+            success(self.service.runs(limit=limit), request_id=str(request.state.request_id)),
+        )
+
+    async def run(self, request: Request) -> Response:
+        run_id = str(request.path_params.get("run_id", ""))
+        return _json(
+            request,
+            success(self.service.run(run_id), request_id=str(request.state.request_id)),
+        )
+
+    async def roles(self, request: Request) -> Response:
+        return _json(
+            request,
+            success(self.service.roles(), request_id=str(request.state.request_id)),
+        )
+
+    async def config(self, request: Request) -> Response:
+        return _json(
+            request,
+            success(self.service.config(), request_id=str(request.state.request_id)),
+        )
+
+    async def config_validate(self, request: Request) -> Response:
+        payload: ConfigValidateRequest = await _read_json(request, ConfigValidateRequest)
+        return _json(
+            request,
+            success(
+                self.service.validate_config(payload.config),
+                request_id=str(request.state.request_id),
+            ),
+        )
+
+
+# ---------------------------------------------------------------------------
+# app construction
+# ---------------------------------------------------------------------------
+def create_app(
+    workspace: str,
+    *,
+    port: int,
+    token: str | None = None,
+    registry: ProjectRegistry | None = None,
+) -> Any:
+    """Build the local API for one explicitly resolved workspace.
+
+    The CLI validates the host, workspace and token shape before binding; this
+    factory raises :class:`WebApiError` before serving any route when the
+    workspace, token, registry or read service is invalid.
+    """
+    root, wiring, devrelay_dir = resolve_workspace(workspace)
+    registry = registry or ProjectRegistry(devrelay_dir)
+    # Validate the token and construct the read service before the registry's
+    # idempotent write: a bad startup token or service must fail without touching
+    # the workspace.
+    auth = AuthManager(token or generate_token(), port=port)
+    service = WebReadService.from_workspace(root, wiring, devrelay_dir)
+    project = registry.add(root)
+    api = LocalControlApi(
+        service=service,
+        registry=registry,
+        project_id=project.project_id,
+        auth=auth,
+    )
+
+    async def web_error_handler(request: Request, exc: Exception) -> Response:
+        assert isinstance(exc, WebApiError)
+        return _error_response(request, exc)
+
+    async def http_error_handler(request: Request, exc: Exception) -> Response:
+        status_code = getattr(exc, "status_code", 500)
+        if status_code == 404:
+            error = WebApiError("not_found", "route not found", status_code=404)
+        elif status_code == 405:
+            error = WebApiError(
+                "method_not_allowed",
+                "method not allowed",
+                status_code=405,
+            )
+        else:
+            error = WebApiError(
+                "http_error",
+                "request could not be served",
+                status_code=int(status_code),
+            )
+        return _error_response(request, error)
+
+    async def unhandled_error_handler(request: Request, exc: Exception) -> Response:
+        print(
+            f"[devrelay-web] unhandled {type(exc).__name__} for "
+            f"{getattr(request.state, 'request_id', '')}",
+            file=sys.stderr,
+            flush=True,
+        )
+        return _error_response(
+            request,
+            WebApiError("internal_error", "internal server error", status_code=500),
+        )
+
+    app = Starlette(
+        routes=[
+            Route("/healthz", api.healthz, methods=["GET"]),
+            Route("/api/session", api.session_create, methods=["POST"]),
+            Route("/api/session", api.session_get, methods=["GET"]),
+            Route("/api/session", api.session_delete, methods=["DELETE"]),
+            Route("/api/health", api.health, methods=["GET"]),
+            Route("/api/status", api.status, methods=["GET"]),
+            Route("/api/projects", api.projects, methods=["GET"]),
+            Route("/api/runs", api.runs, methods=["GET"]),
+            Route("/api/runs/{run_id}", api.run, methods=["GET"]),
+            Route("/api/roles", api.roles, methods=["GET"]),
+            Route("/api/config", api.config, methods=["GET"]),
+            Route("/api/config/validate", api.config_validate, methods=["POST"]),
+        ],
+        exception_handlers={
+            WebApiError: web_error_handler,
+            HTTPException: http_error_handler,
+            Exception: unhandled_error_handler,
+        },
+    )
+    app.state.api = api
+    app.state.auth = auth
+    app.state.project_id = project.project_id
+    return SecurityMiddleware(app, auth=auth)

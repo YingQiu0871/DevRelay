@@ -4,6 +4,18 @@ All notable changes to DevRelay are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## Unreleased
+
+### Added
+
+- v0.4-A1 local HTTP control API: a loopback-only, read-only Starlette/uvicorn
+  service with bearer/session authentication, CSRF, Host/Origin validation,
+  bounded request bodies, an explicit project registry, and `devrelay web
+  serve` / `devrelay web project ...` commands.  The optional `web` extra keeps
+  the core CLI small.  A2 configuration write is not implemented.  Review and
+  the open localhost cookie-scope item are recorded in
+  `docs/v0.4/V04A_REVIEW.md` and `docs/BACKLOG.md`.
+
 ## 0.3.0 - 2026-10-21
 
 Earlier entries record the status at their date.

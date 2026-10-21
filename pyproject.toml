@@ -41,7 +41,15 @@ Changelog = "https://github.com/YingQiu0871/DevRelay/blob/main/CHANGELOG.md"
 # Constrained (not floor-only) because the 1.x -> 2.x rename of FastMCP to
 # MCPServer changes the public API this adapter is written against.
 mcp = ["mcp>=2.2,<3"]
-dev = ["pytest>=8.0", "mcp>=2.2,<3"]
+# v0.4-A: local HTTP control API.  Kept optional so the core CLI stays small;
+# `devrelay web serve` reports an actionable install hint when it is absent.
+web = ["starlette>=0.37,<2", "uvicorn>=0.30,<1"]
+dev = [
+    "pytest>=8.0",
+    "mcp>=2.2,<3",
+    "starlette>=0.37,<2",
+    "uvicorn>=0.30,<1",
+]
 
 [project.scripts]
 devrelay = "devrelay.cli:app"

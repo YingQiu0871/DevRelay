@@ -1,6 +1,8 @@
 # DevRelay v0.4-A — Local HTTP Control API
 
-Status: **CANDIDATE — design only; no v0.4-A runtime code exists yet.**
+Status: **A1 IMPLEMENTED + INDEPENDENTLY REVIEWED — APPROVE WITH FINDINGS;
+pending owner acceptance.  A2 is design only.**  The review and its dispositions
+are recorded in [V04A_REVIEW.md](V04A_REVIEW.md).
 
 This document proposes the transport and security foundation for the v0.4 local
 WebUI.  It deliberately does not implement the WebUI, live run control, or a
@@ -52,6 +54,25 @@ A1 must be reviewed and merged before A2 is implemented.  The roadmap's
 "backend-owned config mutation" is satisfied by A2; A1 establishes the security
 boundary first.
 
+### A1 implementation in this tree
+
+- `src/devrelay/web/app.py` — ASGI routes, security middleware, bounded JSON
+  parsing and the stable error envelope;
+- `src/devrelay/web/auth.py` — token/session/CSRF, Host and Origin checks;
+- `src/devrelay/web/registry.py` — explicit project registry;
+- `src/devrelay/web/service.py` — bounded read adapter over
+  `McpToolSurface`/`OrchestrationService`;
+- `src/devrelay/web/workspace.py` — fail-closed workspace resolution;
+- `src/devrelay/cli_web.py` — `devrelay web serve` and
+  `devrelay web project add/list/remove`;
+- `tests/test_v04a_web.py` — 24 offline tests covering the route matrix,
+  session/CSRF/Host/Origin/body limits, registry, redaction and CLI wiring.
+
+The live smoke on 2026-10-21 bound `127.0.0.1:0`, served `/healthz` with HTTP
+200, and returned HTTP 401 for `/api/status` without a session.  The full
+offline suite now collects **1,296** tests (1,295 pass + 1 POSIX-only skip on
+Windows).  A2 is not implemented; `/api/config/validate` is read-only.
+
 ## Architecture and dependency direction
 
 ```text
@@ -84,7 +105,9 @@ package is an adapter, never a second orchestration engine.
   bound port.
 - The workspace must be an initialized DevRelay workspace (`.devrelay/`
   directory and valid wiring), using the same resolution rules as the MCP
-  server.  It is registered automatically if absent.
+  server.  It is registered automatically if absent.  Host, workspace and token
+  shape are validated before bind; any later registry/service construction
+  failure closes the bound socket before serving.
 - Startup prints the login URL `http://127.0.0.1:<port>/#token=<one-time-token>`.
   The token is never written to logs, artifacts, config, or the registry.  A
   non-interactive caller may set `DEVRELAY_WEB_TOKEN`; the token is then not
@@ -104,7 +127,7 @@ package is an adapter, never a second orchestration engine.
 
 - `POST /api/session` body `{"token": "<token>"}`.
 - On success: set `devrelay_web_session` cookie:
-  `HttpOnly; SameSite=Strict; Path=/; Max-Age=28800` (no `Secure` because the
+  `HttpOnly; SameSite=Strict; Path=/api; Max-Age=28800` (no `Secure` because the
   service is HTTP on loopback; `Secure` would break the local flow).
 - Response: `{"ok": true, "data": {"csrf": "<token>", "expires_in": 28800}}`.
 - Sessions are held in memory (maximum 8); 8-hour absolute TTL and 30-minute
@@ -174,7 +197,8 @@ registered project, token or provider body appears.  Success responses use
 ## Read API (A1)
 
 All `/api/*` routes except `/healthz` require authentication.  `GET /healthz`
-returns only `{"ok": true}` and no workspace details.
+returns a liveness envelope (`ok`, `schema_version`, `request_id`) and no
+workspace, configuration or provider details.
 
 | Method | Route | Purpose |
 | --- | --- | --- |
@@ -192,7 +216,8 @@ returns only `{"ok": true}` and no workspace details.
 | POST | `/api/config/validate` | validate a proposed document, no write |
 
 `run_id` must match the existing `DR-<32 hex>` grammar; project ids must match
-`prj_<12 hex>`.  Invalid ids are `400 invalid_id` before any store access.
+`prj_<12 hex>`.  Invalid run ids are `400 invalid_run_id` before any store
+access.
 Responses reuse the existing accepted read surfaces; no raw provider body,
 prompt text, token, absolute path outside the registered root, or unbounded
 stdout is returned.  List limits are bounded (maximum 100) and truncation is
@@ -220,9 +245,9 @@ reported explicitly.
 ## Dependencies
 
 - Prefer the already available ASGI stack: `starlette` and `uvicorn` are
-  transitive dependencies of the optional `mcp` extra.  Add an explicit
-  `web = ["starlette>=0.37,<1", "uvicorn>=0.30,<1"]` extra and include both in
-  `dev` so the test suite is deterministic.
+  transitive dependencies of the optional `mcp` extra.  The implementation adds
+  `web = ["starlette>=0.37,<2", "uvicorn>=0.30,<1"]` and includes both in `dev`
+  so the test suite is deterministic.
 - `devrelay web serve` fails with `web_dependency_missing` and an install hint
   when the extra is absent; the core CLI remains installable without it.
 - No new frontend build chain is introduced in v0.4-A.
@@ -231,16 +256,16 @@ reported explicitly.
 
 - Unit: constant-time token compare, session expiry/idle expiry, CSRF, Host,
   Origin, content type, 64 KiB body boundary, unknown fields, id grammars.
-- ASGI tests via `httpx.AsyncClient(transport=ASGITransport(app))`; no real
-  socket for the route matrix.
+- 24 ASGI tests via Starlette `TestClient`; no real socket for the route matrix.
 - Registry tests: absolute/relative paths, missing `.devrelay`, duplicate root,
   atomic write, path traversal attempts, no directory walking.
-- Redaction tests: token, prompt, provider secret and absolute path never in
-  responses or logs.
-- Live binding test (one): uvicorn on `127.0.0.1:0`, `/healthz` reachable,
-  non-loopback host refused before bind.
-- Dependency-missing test for the CLI error path.
-- Existing 1,272 offline tests remain unchanged and green.
+- Redaction tests: token, provider secret and workspace path never appear in
+  unauthenticated responses; config view is explicitly read-only.
+- Live binding: exercised manually on `127.0.0.1:0`; the non-loopback CLI refusal
+  is automated.  A socket-level test is intentionally not in the offline suite
+  to avoid a thread/port race on the Windows CI runner.
+- Existing 1,296 offline tests (1,295 pass + 1 POSIX-only skip on Windows)
+  remain green.
 
 ## Acceptance IDs
 
@@ -253,12 +278,26 @@ reported explicitly.
 | A5 | Bearer clients work without CSRF but never receive CORS permission |
 | A6 | Wrong `Host` and wrong `Origin` are refused |
 | A7 | Non-JSON, unknown-field and oversized bodies fail closed |
-| A8 | Only registered project ids are accepted; no path/browse endpoint exists |
+| A8 | Projects are exposed by registry id; no API accepts a filesystem path or browses directories |
 | A9 | Read responses are bounded and contain no token/prompt/secret |
 | A10 | `POST /api/config/validate` never writes; A2 writes atomically with digest guard |
 | A11 | Restart invalidates sessions; token is never logged or written |
 | A12 | Missing `web` extra produces an actionable CLI error |
-| A13 | Live loopback smoke and the full existing suite pass |
+| A13 | Live loopback smoke and the full existing suite pass (manual smoke recorded above; suite green) |
+
+## Known A1 limitation (recorded before A2)
+
+The browser session cookie is **host-scoped, not port-scoped**: a cookie set for
+`127.0.0.1` or `localhost` is sent to every port on that host.  A malicious or
+compromised local web service could therefore receive it (or overwrite it) if
+the user visits that service.  A1 is an API-only slice with no frontend and the
+cookie is restricted to `Path=/api`, but this is a real local-origin limitation.
+Before the browser UI ships, A2 must choose a header-borne session or an
+unguessable per-instance loopback host.  This is recorded in
+[BACKLOG.md](../BACKLOG.md) and is **not** claimed as solved by A1.
+
+A1 also summarizes up to 500 run documents before applying the requested list
+limit; the cap fails closed, but incremental pagination belongs to v0.4-C.
 
 ## Explicit non-goals
 
@@ -269,11 +308,21 @@ reported explicitly.
 - No arbitrary shell, filesystem browser, provider proxy, or secret storage.
 - No change to the v0.3.0 pipeline, MCP surface, or release workflow.
 
-## Review questions
+## Resolved design decisions
 
-1. Is an optional `web` extra (Starlette/uvicorn) acceptable, or should A1 use
-   only the standard library?
-2. Should A1 stay read-only with A2 as a separate review gate, or must
-   configuration write ship in the same stage?
-3. Is the one-time fragment login URL acceptable for the future browser UI, or
-   should v0.4-A use a persisted token file with OS permissions?
+1. **Optional `web` extra (Starlette/uvicorn)** — accepted and implemented; the
+   core CLI still runs without it.
+2. **A1 read-only, A2 written configuration behind a separate review gate** —
+   accepted; no write endpoint exists in A1.
+3. **One-time fragment login URL, no persisted token file** — accepted; the
+   token is per-process or supplied by `DEVRELAY_WEB_TOKEN`.
+
+## Review focus for A1
+
+- Does the middleware reject every request before route handling when `Host`,
+  `Origin`, bearer token, session cookie or CSRF is invalid?
+- Can any endpoint accept a path, browse a directory, or return a token/secret?
+- Is the bounded-body path free of an unbounded buffering window?
+- Is the CLI's loopback validation performed before any socket bind?
+- A2 (`PUT /api/config`) is deliberately absent; validate that no code path
+  writes `.devrelay/config.yaml`.
