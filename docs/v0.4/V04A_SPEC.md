@@ -1,8 +1,12 @@
 # DevRelay v0.4-A — Local HTTP Control API
 
 Status: **A1 IMPLEMENTED + INDEPENDENTLY REVIEWED — APPROVE WITH FINDINGS;
-pending owner acceptance.  A2 is design only.**  The review and its dispositions
-are recorded in [V04A_REVIEW.md](V04A_REVIEW.md).
+pending owner acceptance.  A2 IMPLEMENTED — pending independent review.**
+The A1 review and its dispositions are recorded in
+[V04A_REVIEW.md](V04A_REVIEW.md); the A1 localhost cookie limitation was
+resolved by moving sessions to a header, which is the prerequisite A2 needed.
+The A2 review and its remediation are recorded in
+[V04A_A2_REVIEW.md](V04A_A2_REVIEW.md); A2 remains pending re-review.
 
 This document proposes the transport and security foundation for the v0.4 local
 WebUI.  It deliberately does not implement the WebUI, live run control, or a
@@ -33,7 +37,7 @@ human.
 ### v0.4-A1 — read-only transport foundation (first review target)
 
 - `devrelay web serve` (loopback uvicorn) and the ASGI app;
-- in-memory bearer token, browser session exchange, CSRF;
+- in-memory bearer token, header-borne browser session exchange;
 - Host/Origin/body/content-type validation;
 - project registry (`devrelay web project ...`);
 - read endpoints: health, status, projects, runs, run detail, roles, redacted
@@ -41,7 +45,7 @@ human.
 - `POST /api/config/validate` (validation only, no write);
 - no mutation endpoint.
 
-### v0.4-A2 — backend-owned configuration write (second review target)
+### v0.4-A2 — backend-owned configuration write (implemented; pending review)
 
 - `PUT /api/config` with optimistic concurrency and an explicit confirmation
   header;
@@ -50,28 +54,29 @@ human.
 - no secrets in the submitted document;
 - still no run-control endpoint.
 
-A1 must be reviewed and merged before A2 is implemented.  The roadmap's
-"backend-owned config mutation" is satisfied by A2; A1 establishes the security
-boundary first.
+A1 was reviewed before A2 was implemented.  The roadmap's "backend-owned config
+mutation" is satisfied by A2, which is implemented here and pending independent
+review; A1 established the transport boundary first.
 
 ### A1 implementation in this tree
 
 - `src/devrelay/web/app.py` — ASGI routes, security middleware, bounded JSON
   parsing and the stable error envelope;
-- `src/devrelay/web/auth.py` — token/session/CSRF, Host and Origin checks;
+- `src/devrelay/web/auth.py` — token/header-session, Host and Origin checks;
 - `src/devrelay/web/registry.py` — explicit project registry;
-- `src/devrelay/web/service.py` — bounded read adapter over
-  `McpToolSurface`/`OrchestrationService`;
+- `src/devrelay/web/config.py` — A2 validation, backup and atomic replacement;
+- `src/devrelay/web/service.py` — bounded read adapter and config-write facade;
 - `src/devrelay/web/workspace.py` — fail-closed workspace resolution;
 - `src/devrelay/cli_web.py` — `devrelay web serve` and
   `devrelay web project add/list/remove`;
-- `tests/test_v04a_web.py` — 24 offline tests covering the route matrix,
-  session/CSRF/Host/Origin/body limits, registry, redaction and CLI wiring.
+- `tests/test_v04a_web.py` — 33 offline tests covering the route matrix,
+  header-session/Host/Origin/body limits, registry, redaction, CLI wiring,
+  config validation, the editable allowlist and the atomic A2 write.
 
 The live smoke on 2026-10-21 bound `127.0.0.1:0`, served `/healthz` with HTTP
 200, and returned HTTP 401 for `/api/status` without a session.  The full
-offline suite now collects **1,296** tests (1,295 pass + 1 POSIX-only skip on
-Windows).  A2 is not implemented; `/api/config/validate` is read-only.
+offline suite now collects **1,305** tests (1,303 pass + 2 environment skips on
+this Windows host: one POSIX-only test and one symlink-privilege test).
 
 ## Architecture and dependency direction
 
@@ -81,9 +86,10 @@ browser / API client
         ▼
 devrelay.web.app        ASGI routes, request validation, error envelope
         │
-        ├── devrelay.web.auth       token/session/CSRF/Host/Origin
+        ├── devrelay.web.auth       token/header-session/Host/Origin
         ├── devrelay.web.registry   explicit project registry
-        └── devrelay.web.service    read adapter (redaction + bounds)
+        ├── devrelay.web.config     A2 validate/backup/atomic replace
+        └── devrelay.web.service    read adapter + config-write facade
                  │
                  ▼
         devrelay.mcp.tools.McpToolSurface  (accepted read/write surface)
@@ -126,25 +132,18 @@ package is an adapter, never a second orchestration engine.
 ### Session exchange
 
 - `POST /api/session` body `{"token": "<token>"}`.
-- On success: set `devrelay_web_session` cookie:
-  `HttpOnly; SameSite=Strict; Path=/api; Max-Age=28800` (no `Secure` because the
-  service is HTTP on loopback; `Secure` would break the local flow).
-- Response: `{"ok": true, "data": {"csrf": "<token>", "expires_in": 28800}}`.
+- On success it returns a **header-borne session token**:
+  `{"ok": true, "data": {"session_token": "...", "transport":
+  "X-DevRelay-Session", "expires_in": 28800}}`.  No cookie is set.
+- The client sends `X-DevRelay-Session: <session_token>` on subsequent requests.
+  A header is never attached automatically by a browser, so a cross-origin page
+  cannot make the browser replay it and **no CSRF token is needed**.
 - Sessions are held in memory (maximum 8); 8-hour absolute TTL and 30-minute
   idle TTL.  A restart invalidates all sessions.
-- `GET /api/session` returns the CSRF token for a valid cookie.
-- `DELETE /api/session` clears the cookie and server-side session.
-- `Authorization: Bearer <token>` is accepted for non-browser clients.  Bearer
-  requests with no cookie do not need CSRF (a cross-origin page cannot set the
-  header without a preflight, and no CORS is granted).
-
-### CSRF
-
-- Any state-changing request authenticated by the session cookie must carry
-  `X-DevRelay-CSRF` matching the session's CSRF token.
-- Bearer-authenticated requests may omit it.
-- An invalid/missing CSRF token is `403 csrf_required`; it never reaches the
-  service layer.
+- `GET /api/session` returns the authenticated mode; `DELETE /api/session`
+  invalidates the server-side session.
+- `Authorization: Bearer <token>` is accepted for non-browser clients; the
+  per-process root token can be used directly.
 
 ## Request validation
 
@@ -171,7 +170,7 @@ All errors use the same stable shape:
 {
   "schema_version": 1,
   "ok": false,
-  "error": {"code": "csrf_required", "message": "CSRF token required"},
+  "error": {"code": "unauthorized", "message": "authentication required"},
   "request_id": "req_..."
 }
 ```
@@ -194,7 +193,7 @@ registered project, token or provider body appears.  Success responses use
 - Registry writes use a temp file plus `os.replace`; permissions are best-effort
   owner-only.
 
-## Read API (A1)
+## API endpoints (A1 reads + A2 config write)
 
 All `/api/*` routes except `/healthz` require authentication.  `GET /healthz`
 returns a liveness envelope (`ok`, `schema_version`, `request_id`) and no
@@ -203,8 +202,8 @@ workspace, configuration or provider details.
 | Method | Route | Purpose |
 | --- | --- | --- |
 | GET | `/healthz` | unauthenticated liveness, no data |
-| POST | `/api/session` | exchange token for session + CSRF |
-| GET | `/api/session` | current session/CSRF |
+| POST | `/api/session` | exchange token for a header session |
+| GET | `/api/session` | current authenticated mode |
 | DELETE | `/api/session` | clear session |
 | GET | `/api/health` | authenticated version/workspace id |
 | GET | `/api/status` | bounded `devrelay_status` read |
@@ -212,8 +211,9 @@ workspace, configuration or provider details.
 | GET | `/api/runs?limit=20` | bounded run summaries |
 | GET | `/api/runs/{run_id}` | one run's summary/attempts |
 | GET | `/api/roles` | role/model routes, no secrets |
-| GET | `/api/config` | redacted effective config |
-| POST | `/api/config/validate` | validate a proposed document, no write |
+| GET | `/api/config` | redacted effective config + `config_sha256` |
+| PUT | `/api/config` | A2 curated patch write (see below) |
+| POST | `/api/config/validate` | validate a proposed patch, no write |
 
 `run_id` must match the existing `DR-<32 hex>` grammar; project ids must match
 `prj_<12 hex>`.  Invalid run ids are `400 invalid_run_id` before any store
@@ -223,24 +223,51 @@ prompt text, token, absolute path outside the registered root, or unbounded
 stdout is returned.  List limits are bounded (maximum 100) and truncation is
 reported explicitly.
 
-## Configuration write (A2, proposed)
+## Configuration write (A2, implemented; pending review)
 
+- `GET /api/config` includes `config_sha256`, the digest of the current
+  `.devrelay/config.yaml`.
 - `PUT /api/config` body:
   `{"expected_sha256": "<current file digest>", "config": { ...full document... },
     "confirm": "apply"}`.
-- Authenticated session + CSRF (or bearer) and
-  `X-DevRelay-Confirm: apply` are required.
+- A header-borne session or bearer token **and** `X-DevRelay-Confirm: apply` are
+  required; no CSRF token exists.
 - The document is parsed with `WorkspaceFile`/`DevRelayConfig`; unknown keys,
-  secret-looking keys (`token`, `password`, `api_key`, `secret`) and
-  provider-credential values are rejected.
-- `expected_sha256` must match the current `.devrelay/config.yaml`; otherwise
-  `409 config_changed`.
-- Write is atomic (`temp` + `os.replace`), after saving the previous file as
-  `.devrelay/config.yaml.bak-<timestamp>`; comments are not preserved and this is
-  documented in the response.
-- The write never changes a running task's frozen policy snapshot.
+  secret-looking keys (`token`, `password`, `api_key`, `secret`, `credential`)
+  and `codex.args`/`codex.launcher_args` are rejected.
+- `expected_sha256` must match the current file; otherwise `409 config_changed`.
+- Write is atomic (`temp` + fsync + `os.replace`), after saving the previous file
+  as `.devrelay/config.yaml.bak-<timestamp>`; comments are not preserved and the
+  response says so.
+- The write never changes a running task's frozen policy snapshot.  The live
+  process keeps its loaded wiring until restart; the file is the source for the
+  next start.
 - No file path is accepted in the body; the target is always the registered
   workspace's `.devrelay/config.yaml`.
+- Response: `old_sha256`, `new_sha256`, `backup_created`, `backup_name`,
+  `comments_preserved: false`, `restart_required`, and the write scope.
+
+### Editable allowlist (A2)
+
+A2 is a **curated patch**, not an unrestricted full document.  The submitted
+object is merged over the current file; omitted fields are preserved.  Editable
+fields are:
+
+- `pipeline`, `budget`, `review`, `scope`, `baseline` and `git` (the hard-false
+  git validator still applies);
+- `roles.implementer` / `roles.reviewer` identifiers;
+- `tests.full_regression` and `tests.timeout_seconds`;
+- `codex.prompt_mode`, `timeout_seconds`, `runtime_mode`, `max_result_bytes` and
+  `max_capture_bytes`;
+- `opencode.default_session`, `agent`, `model`, timeouts, response/message caps.
+
+Explicitly **not editable** through the API: `profiles`, `codex.executable`,
+`codex.args`, `codex.launcher_args`, `opencode.base_url`, `opencode.workspace`,
+`opencode.allow_unknown_workspace`, and `tests.targeted` / `tests.full` (their
+values are shell commands).  These are preserved from the current file and a
+request naming them is `422 config_field_not_editable`.  Policy fields that are
+editable affect **future** tasks only; a running task's frozen snapshot is never
+rewritten.  An empty patch is a no-op, and a symlinked config is rejected.
 
 ## Dependencies
 
@@ -254,18 +281,20 @@ reported explicitly.
 
 ## Test plan (offline)
 
-- Unit: constant-time token compare, session expiry/idle expiry, CSRF, Host,
-  Origin, content type, 64 KiB body boundary, unknown fields, id grammars.
-- 24 ASGI tests via Starlette `TestClient`; no real socket for the route matrix.
+- Unit: constant-time token compare, session expiry/idle expiry, header session,
+  Host, Origin, content type, 64 KiB body boundary, unknown fields, id grammars.
+- 33 ASGI tests via Starlette `TestClient`; no real socket for the route matrix.
+- A2: stale digest, confirmation header, secret-key rejection, atomic replace,
+  backup content, and file/response digest equality.
 - Registry tests: absolute/relative paths, missing `.devrelay`, duplicate root,
   atomic write, path traversal attempts, no directory walking.
 - Redaction tests: token, provider secret and workspace path never appear in
-  unauthenticated responses; config view is explicitly read-only.
+  unauthenticated responses; config view exposes no filesystem paths or argv.
 - Live binding: exercised manually on `127.0.0.1:0`; the non-loopback CLI refusal
   is automated.  A socket-level test is intentionally not in the offline suite
   to avoid a thread/port race on the Windows CI runner.
-- Existing 1,296 offline tests (1,295 pass + 1 POSIX-only skip on Windows)
-  remain green.
+- Existing 1,305 offline tests (1,303 pass + 2 environment skips on this
+  Windows host) remain green.
 
 ## Acceptance IDs
 
@@ -273,31 +302,30 @@ reported explicitly.
 | --- | --- |
 | A1 | Default bind is loopback; non-loopback host is refused |
 | A2 | Unauthenticated `/api/*` is `401`; `/healthz` leaks no workspace data |
-| A3 | Browser token exchange sets HttpOnly/SameSite=Strict session cookie |
-| A4 | Session cookie mutations require the matching CSRF header |
-| A5 | Bearer clients work without CSRF but never receive CORS permission |
+| A3 | Token exchange returns a header-borne session token and sets no cookie |
+| A4 | `X-DevRelay-Session` authenticates; a missing/invalid header is `401` |
+| A5 | Bearer clients work without a session and never receive CORS permission |
 | A6 | Wrong `Host` and wrong `Origin` are refused |
 | A7 | Non-JSON, unknown-field and oversized bodies fail closed |
 | A8 | Projects are exposed by registry id; no API accepts a filesystem path or browses directories |
 | A9 | Read responses are bounded and contain no token/prompt/secret |
-| A10 | `POST /api/config/validate` never writes; A2 writes atomically with digest guard |
+| A10 | `POST /api/config/validate` never writes; A2 writes atomically with digest guard and backup |
 | A11 | Restart invalidates sessions; token is never logged or written |
 | A12 | Missing `web` extra produces an actionable CLI error |
-| A13 | Live loopback smoke and the full existing suite pass (manual smoke recorded above; suite green) |
+| A13 | Live loopback smoke and the full existing suite pass (manual smoke recorded above) |
 
-## Known A1 limitation (recorded before A2)
+## Resolved limitation: localhost cookie scope
 
-The browser session cookie is **host-scoped, not port-scoped**: a cookie set for
-`127.0.0.1` or `localhost` is sent to every port on that host.  A malicious or
-compromised local web service could therefore receive it (or overwrite it) if
-the user visits that service.  A1 is an API-only slice with no frontend and the
-cookie is restricted to `Path=/api`, but this is a real local-origin limitation.
-Before the browser UI ships, A2 must choose a header-borne session or an
-unguessable per-instance loopback host.  This is recorded in
-[BACKLOG.md](../BACKLOG.md) and is **not** claimed as solved by A1.
+The original A1 design used a host-scoped session cookie.  Because cookies are
+not port-scoped, another local web service on `127.0.0.1` could receive it if
+the user visited that service.  A2's prerequisite removed cookies entirely:
+`POST /api/session` now returns a token consumed through
+`X-DevRelay-Session`, a header that a browser never attaches automatically.
+The remaining limitation is recorded as resolved in
+[BACKLOG.md](../BACKLOG.md) §12.
 
-A1 also summarizes up to 500 run documents before applying the requested list
-limit; the cap fails closed, but incremental pagination belongs to v0.4-C.
+A1/A2 still summarize up to 500 run documents before applying the requested
+list limit; the cap fails closed, but incremental pagination belongs to v0.4-C.
 
 ## Explicit non-goals
 
@@ -312,17 +340,24 @@ limit; the cap fails closed, but incremental pagination belongs to v0.4-C.
 
 1. **Optional `web` extra (Starlette/uvicorn)** — accepted and implemented; the
    core CLI still runs without it.
-2. **A1 read-only, A2 written configuration behind a separate review gate** —
-   accepted; no write endpoint exists in A1.
+2. **A1 was read-only; A2 adds written configuration behind a separate review
+   gate** — A1 shipped without a write endpoint; A2 is now implemented and
+   awaiting review.
 3. **One-time fragment login URL, no persisted token file** — accepted; the
    token is per-process or supplied by `DEVRELAY_WEB_TOKEN`.
 
-## Review focus for A1
+## Review focus for A1 + A2
 
 - Does the middleware reject every request before route handling when `Host`,
-  `Origin`, bearer token, session cookie or CSRF is invalid?
-- Can any endpoint accept a path, browse a directory, or return a token/secret?
+  `Origin`, bearer token or session header is invalid?
+- Can any read endpoint accept a path, browse a directory, or return a
+  token/secret?
 - Is the bounded-body path free of an unbounded buffering window?
 - Is the CLI's loopback validation performed before any socket bind?
-- A2 (`PUT /api/config`) is deliberately absent; validate that no code path
-  writes `.devrelay/config.yaml`.
+- Does `PUT /api/config` reject every execution/wiring field outside the
+  allowlist, and do validate/apply share the same merge and validation path?
+- Can an A2 write repoint `codex.executable`, `codex.args`, `opencode.base_url`,
+  `opencode.workspace`, `profiles`, or `tests.targeted`/`tests.full`?
+- Does the digest check plus in-process writer lock plus backup prevent a
+  silent lost update, and is a symlinked config rejected?
+- Does A2 ever rewrite a running task's frozen policy snapshot?

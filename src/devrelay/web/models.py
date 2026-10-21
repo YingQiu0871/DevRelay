@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -25,6 +25,14 @@ class ConfigValidateRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     config: dict[str, Any]
+
+
+class ConfigWriteRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    expected_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    config: dict[str, Any]
+    confirm: Literal["apply"]
 
 
 def success(data: Any, *, request_id: str = "") -> dict[str, Any]:

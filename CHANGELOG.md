@@ -8,12 +8,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- v0.4-A1 local HTTP control API: a loopback-only, read-only Starlette/uvicorn
-  service with bearer/session authentication, CSRF, Host/Origin validation,
+- v0.4-A1 local HTTP control API: a loopback-only Starlette/uvicorn service with
+  bearer and header-borne session authentication, Host/Origin validation,
   bounded request bodies, an explicit project registry, and `devrelay web
   serve` / `devrelay web project ...` commands.  The optional `web` extra keeps
-  the core CLI small.  A2 configuration write is not implemented.  Review and
-  the open localhost cookie-scope item are recorded in
+  the core CLI small.
+- v0.4-A2 backend-owned configuration write: `PUT /api/config` with a current
+  SHA-256 guard, `X-DevRelay-Confirm: apply`, full `WorkspaceFile` validation,
+  secret-key/argv rejection, an owner-only backup, and atomic replacement.
+  Comments are not preserved; the live process reloads on restart.  Review and
+  the resolved localhost cookie-scope item are recorded in
   `docs/v0.4/V04A_REVIEW.md` and `docs/BACKLOG.md`.
 
 ## 0.3.0 - 2026-10-21

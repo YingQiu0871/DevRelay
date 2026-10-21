@@ -1,19 +1,17 @@
-"""Bounded read-only adapter over the accepted MCP/orchestration surfaces."""
+"""Bounded read adapter plus the A2 configuration-write facade."""
 
 from __future__ import annotations
 
 from pathlib import Path
 from typing import Any
 
-from pydantic import ValidationError
-
 from devrelay import __version__
-from devrelay.config import WorkspaceFile
 from devrelay.errors import OrchestrationError
 from devrelay.mcp.models import McpEnvelope
 from devrelay.mcp.tools import McpToolSurface
 from devrelay.orchestration.store import valid_run_id
 from devrelay.redact import redact_text
+from devrelay.web.config import ConfigWriter
 from devrelay.web.errors import WebApiError
 from devrelay.web.models import MAX_LIST_LIMIT
 
@@ -21,11 +19,11 @@ MAX_RUN_SCAN = 500
 
 
 class WebReadService:
-    """Read-only operations exposed by v0.4-A1.
+    """Read operations plus the curated A2 config write.
 
     The service holds exactly one ``McpToolSurface`` bound to the registered
-    workspace.  It never calls a write/action tool and never constructs a second
-    orchestration engine.
+    workspace.  It never calls an orchestration action tool and never constructs
+    a second engine; the only write is the allowlisted configuration patch.
     """
 
     def __init__(
@@ -45,6 +43,7 @@ class WebReadService:
             devrelay_dir=self.devrelay_dir,
             package_version=__version__,
         )
+        self.config_writer = ConfigWriter(self.workspace_root, self.devrelay_dir)
 
     @classmethod
     def from_workspace(cls, root: Path, wiring: Any, devrelay_dir: Path) -> "WebReadService":
@@ -125,6 +124,7 @@ class WebReadService:
         opencode = self.wiring.opencode
         codex = self.wiring.codex
         return {
+            "config_sha256": self.config_writer.sha256(),
             "review_provider": self.wiring.review_provider,
             "opencode": {
                 "configured": bool(opencode.configured),
@@ -147,28 +147,15 @@ class WebReadService:
                 "timeout_seconds": float(codex.timeout_seconds),
             },
             "roles": self.surface.roles.summary(),
-            "read_only": True,
-            "write_supported": False,
+            "read_only": False,
+            "write_supported": True,
+            "write_scope": "workspace configuration only",
         }
 
     def validate_config(self, config: dict[str, Any]) -> dict[str, Any]:
         """Validate a proposed workspace document without writing it."""
-        try:
-            WorkspaceFile.model_validate(config)
-        except ValidationError as exc:
-            errors = []
-            for item in exc.errors()[:20]:
-                errors.append(
-                    {
-                        "loc": [str(part) for part in item.get("loc", ())],
-                        "type": str(item.get("type", "validation_error")),
-                        "msg": redact_text(str(item.get("msg", "invalid value")))[:300],
-                    }
-                )
-            return {"valid": False, "errors": errors}
-        except Exception:  # pragma: no cover - defensive
-            return {
-                "valid": False,
-                "errors": [{"loc": [], "type": "invalid_config", "msg": "invalid configuration"}],
-            }
-        return {"valid": True, "errors": [], "write_supported": False}
+        errors = self.config_writer.validate(config)
+        return {"valid": not errors, "errors": errors, "write_supported": True}
+
+    def apply_config(self, config: dict[str, Any], expected_sha256: str) -> dict[str, Any]:
+        return self.config_writer.apply(config, expected_sha256)

@@ -16,8 +16,7 @@ from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
 
 from devrelay.web.auth import (
-    CSRF_HEADER,
-    SESSION_COOKIE,
+    SESSION_HEADER,
     SESSION_TTL_SECONDS,
     AuthManager,
     generate_token,
@@ -28,6 +27,7 @@ from devrelay.web.errors import WebApiError
 from devrelay.web.models import (
     MAX_BODY_BYTES,
     ConfigValidateRequest,
+    ConfigWriteRequest,
     SessionRequest,
     failure,
     success,
@@ -35,8 +35,6 @@ from devrelay.web.models import (
 from devrelay.web.registry import ProjectRegistry
 from devrelay.web.service import WebReadService
 from devrelay.web.workspace import resolve_workspace
-
-_MUTATING_METHODS = frozenset({"POST", "PUT", "PATCH", "DELETE"})
 
 
 # ---------------------------------------------------------------------------
@@ -135,7 +133,7 @@ async def _read_json(request: Request, model: type[Any]) -> Any:
 # security middleware
 # ---------------------------------------------------------------------------
 class SecurityMiddleware:
-    """Host/Origin/auth/CSRF checks before a route can see the request."""
+    """Host/Origin/auth checks before a route can see the request."""
 
     def __init__(self, app: Callable[..., Awaitable[None]], *, auth: AuthManager) -> None:
         self.app = app
@@ -175,17 +173,10 @@ class SecurityMiddleware:
             return {"mode": "exchange"}
 
         authorization = request.headers.get("authorization")
-        if authorization is not None:
-            if not self.auth.bearer_identity(authorization):
-                raise WebApiError(
-                    "unauthorized",
-                    "invalid bearer token",
-                    status_code=401,
-                    headers={"WWW-Authenticate": "Bearer"},
-                )
+        if authorization and self.auth.bearer_identity(authorization):
             return {"mode": "bearer"}
 
-        session = self.auth.resolve_session(request.cookies.get(SESSION_COOKIE))
+        session = self.auth.resolve_session(request.headers.get(SESSION_HEADER))
         if session is None:
             raise WebApiError(
                 "unauthorized",
@@ -193,10 +184,6 @@ class SecurityMiddleware:
                 status_code=401,
                 headers={"WWW-Authenticate": "Bearer"},
             )
-        if method in _MUTATING_METHODS:
-            supplied = request.headers.get(CSRF_HEADER)
-            if not self.auth.csrf_matches(session, supplied):
-                raise WebApiError("csrf_required", "CSRF token required", status_code=403)
         return {"mode": "session", "session": session}
 
 
@@ -228,22 +215,17 @@ class LocalControlApi:
                 headers={"WWW-Authenticate": "Bearer"},
             )
         session = self.auth.create_session()
-        response = _json(
+        return _json(
             request,
             success(
-                {"csrf": session.csrf, "expires_in": SESSION_TTL_SECONDS},
+                {
+                    "session_token": session.session_id,
+                    "expires_in": SESSION_TTL_SECONDS,
+                    "transport": "X-DevRelay-Session",
+                },
                 request_id=str(request.state.request_id),
             ),
         )
-        response.set_cookie(
-            SESSION_COOKIE,
-            session.session_id,
-            max_age=SESSION_TTL_SECONDS,
-            httponly=True,
-            samesite="strict",
-            path="/api",
-        )
-        return response
 
     async def session_get(self, request: Request) -> Response:
         identity = request.state.auth
@@ -251,15 +233,14 @@ class LocalControlApi:
             return _json(
                 request,
                 success(
-                    {"authenticated": True, "csrf": None, "mode": "bearer"},
+                    {"authenticated": True, "mode": "bearer"},
                     request_id=str(request.state.request_id),
                 ),
             )
-        session = identity["session"]
         return _json(
             request,
             success(
-                {"authenticated": True, "csrf": session.csrf, "mode": "session"},
+                {"authenticated": True, "mode": "session"},
                 request_id=str(request.state.request_id),
             ),
         )
@@ -268,12 +249,10 @@ class LocalControlApi:
         identity = request.state.auth
         if identity.get("mode") == "session":
             self.auth.delete_session(identity["session"].session_id)
-        response = _json(
+        return _json(
             request,
             success({"authenticated": False}, request_id=str(request.state.request_id)),
         )
-        response.delete_cookie(SESSION_COOKIE, path="/api")
-        return response
 
     # -- reads -------------------------------------------------------
     async def healthz(self, request: Request) -> Response:
@@ -345,6 +324,22 @@ class LocalControlApi:
             request,
             success(
                 self.service.validate_config(payload.config),
+                request_id=str(request.state.request_id),
+            ),
+        )
+
+    async def config_apply(self, request: Request) -> Response:
+        if request.headers.get("x-devrelay-confirm") != "apply":
+            raise WebApiError(
+                "confirmation_required",
+                "X-DevRelay-Confirm: apply is required",
+                status_code=403,
+            )
+        payload: ConfigWriteRequest = await _read_json(request, ConfigWriteRequest)
+        return _json(
+            request,
+            success(
+                self.service.apply_config(payload.config, payload.expected_sha256),
                 request_id=str(request.state.request_id),
             ),
         )
@@ -428,6 +423,7 @@ def create_app(
             Route("/api/runs/{run_id}", api.run, methods=["GET"]),
             Route("/api/roles", api.roles, methods=["GET"]),
             Route("/api/config", api.config, methods=["GET"]),
+            Route("/api/config", api.config_apply, methods=["PUT"]),
             Route("/api/config/validate", api.config_validate, methods=["POST"]),
         ],
         exception_handlers={

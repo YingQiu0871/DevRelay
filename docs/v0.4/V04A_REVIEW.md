@@ -1,7 +1,8 @@
 # DevRelay v0.4-A1 — independent review record
 
-Status: **A1 reviewed; verdict APPROVE WITH FINDINGS.  A2 remains gated by the
-one open P2 localhost cookie-scope item.**
+Status: **A1 reviewed; verdict APPROVE WITH FINDINGS.  The one P2 localhost
+cookie-scope item was resolved by moving sessions to `X-DevRelay-Session`; A2 is
+implemented and awaits its own independent review.**
 
 - Review target: the v0.4-A1 read-only local HTTP control API
   (`src/devrelay/web/`, `src/devrelay/cli_web.py`,
@@ -16,7 +17,7 @@ one open P2 localhost cookie-scope item.**
 
 | ID | Severity | Finding | Disposition |
 | --- | --- | --- | --- |
-| R1 | P2 (gates A2) | Session cookie is host-scoped, not port-scoped; another local web service could receive or overwrite it, and `GET /api/session` would expose its CSRF token. | Recorded as an open limitation in `docs/BACKLOG.md` §12.  A1 keeps `HttpOnly`, `SameSite=Strict` and `Path=/api` and has no frontend; A2 must choose a header-borne session or an unguessable per-instance loopback host before the browser UI. |
+| R1 | P2 (was gating A2) | Session cookie is host-scoped, not port-scoped; another local web service could receive or overwrite it. | **Resolved:** cookies were removed; `POST /api/session` returns a token for `X-DevRelay-Session`, which no browser attaches automatically.  No CSRF token is needed.  The historical item is closed in `docs/BACKLOG.md` §12. |
 | R2 | P2 | Config view returned `opencode.workspace` and `codex.executable` verbatim, potentially disclosing paths outside the registered root or credential-bearing wrapper paths. | Fixed: config view exposes only `workspace_override` and the executable basename; arbitrary `args`/`launcher_args` remain omitted. |
 | R3 | P2 | Malformed Host/Origin (for example `[::1`) raised an uncaught `ValueError` and produced a 500 before auth. | Fixed: `urlsplit` failures are converted to `invalid_host` (400) or `origin_rejected` (403); regression tests added. |
 | R4 | P2/P3 | The body cap checked after appending a chunk; a single oversized ASGI event was buffered. | Reduced: the chunk is checked before append.  Early 413/415 responses still rely on the server to drain the unread body; documented as a server-level boundary. |
@@ -29,7 +30,7 @@ one open P2 localhost cookie-scope item.**
 
 ## Remaining gate
 
-`R1` is the only open item.  It does not block A1 acceptance as an API-only
-slice, but it **must** be resolved before A2 ships a browser-facing session.
-The A2 design must also keep the configuration write absent until its own review
-gate.
+`R1` is resolved by the header-session change.  A1's other findings remain as
+recorded above (R2–R4 and R6–R10 fixed; R5 carried to v0.4-C).  A2 is implemented
+and now needs its own independent review before acceptance; it is not covered by
+this A1 review.

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 from pathlib import Path
 
@@ -12,7 +13,7 @@ from typer.testing import CliRunner
 from devrelay.cli import app as cli_app
 from devrelay.config import install_default_config
 from devrelay.web.app import create_app
-from devrelay.web.auth import AuthManager, SESSION_COOKIE
+from devrelay.web.auth import AuthManager, SESSION_HEADER
 from devrelay.web.errors import WebApiError
 from devrelay.web.registry import ProjectRegistry
 
@@ -53,7 +54,7 @@ def client(app):
 def _session_headers(client: TestClient) -> dict[str, str]:
     response = client.post("/api/session", json={"token": TOKEN})
     assert response.status_code == 200, response.text
-    return {"X-DevRelay-CSRF": response.json()["data"]["csrf"]}
+    return {SESSION_HEADER: response.json()["data"]["session_token"]}
 
 
 def test_healthz_is_unauthenticated_and_leaks_no_workspace(client: TestClient, workspace: Path):
@@ -105,7 +106,7 @@ def test_unknown_route_and_method_return_json_envelopes(client: TestClient):
     assert bad_method.json()["error"]["code"] == "method_not_allowed"
 
 
-def test_bearer_authenticates_without_csrf(client: TestClient):
+def test_bearer_authenticates(client: TestClient):
     response = client.post(
         "/api/config/validate",
         json={"config": {}},
@@ -115,43 +116,38 @@ def test_bearer_authenticates_without_csrf(client: TestClient):
     assert response.json()["data"]["valid"] is True
 
 
-def test_session_exchange_sets_hardened_cookie_and_csrf(client: TestClient):
+def test_session_exchange_returns_header_token_without_cookie(client: TestClient):
     response = client.post("/api/session", json={"token": TOKEN})
     assert response.status_code == 200
-    cookie = response.headers["set-cookie"].lower()
-    assert SESSION_COOKIE in cookie
-    assert "httponly" in cookie
-    assert "samesite=strict" in cookie
-    assert "path=/api" in cookie
-    assert "max-age=28800" in cookie
-    assert response.json()["data"]["csrf"]
+    assert "set-cookie" not in response.headers
+    data = response.json()["data"]
+    assert data["session_token"]
+    assert data["transport"].lower() == SESSION_HEADER
+    assert data["expires_in"] == 28800
 
 
-def test_session_cookie_requires_csrf_for_mutations(client: TestClient):
-    _session_headers(client)
-    missing = client.post("/api/config/validate", json={"config": {}})
-    assert missing.status_code == 403
-    assert missing.json()["error"]["code"] == "csrf_required"
-    with_csrf = client.post(
-        "/api/config/validate",
-        json={"config": {}},
-        headers={"X-DevRelay-CSRF": _csrf(client)},
+def test_header_session_authenticates_and_delete_invalidates(client: TestClient):
+    headers = _session_headers(client)
+    assert client.get("/api/status", headers=headers).status_code == 200
+    assert (
+        client.get(
+            "/api/status",
+            headers={**headers, "Authorization": "Bearer not-a-valid-token"},
+        ).status_code
+        == 200
     )
-    assert with_csrf.status_code == 200
-    delete_without_csrf = client.delete("/api/session")
-    assert delete_without_csrf.status_code == 403
-    delete_with_csrf = client.delete(
-        "/api/session", headers={"X-DevRelay-CSRF": _csrf(client)}
-    )
-    assert delete_with_csrf.status_code == 200
-    assert "path=/api" in delete_with_csrf.headers["set-cookie"].lower()
+    deleted = client.delete("/api/session", headers=headers)
+    assert deleted.status_code == 200
+    assert "set-cookie" not in deleted.headers
+    assert client.get("/api/status", headers=headers).status_code == 401
+
+
+def test_session_header_is_required(client: TestClient):
     assert client.get("/api/status").status_code == 401
-
-
-def _csrf(client: TestClient) -> str:
-    response = client.get("/api/session")
-    assert response.status_code == 200
-    return response.json()["data"]["csrf"]
+    assert (
+        client.get("/api/status", headers={SESSION_HEADER: "x" * 43}).status_code
+        == 401
+    )
 
 
 def test_bad_host_is_rejected(client: TestClient):
@@ -181,23 +177,23 @@ def test_bad_origin_is_rejected(client: TestClient):
 
 
 def test_content_type_json_validation_and_unknown_fields(client: TestClient):
-    csrf = _session_headers(client)["X-DevRelay-CSRF"]
+    auth = _session_headers(client)
     wrong_type = client.post(
         "/api/config/validate",
         content=b"{}",
-        headers={"Content-Type": "text/plain", "X-DevRelay-CSRF": csrf},
+        headers={**auth, "Content-Type": "text/plain"},
     )
     assert wrong_type.status_code == 415
     invalid_json = client.post(
         "/api/config/validate",
         content=b"{not json",
-        headers={"Content-Type": "application/json", "X-DevRelay-CSRF": csrf},
+        headers={**auth, "Content-Type": "application/json"},
     )
     assert invalid_json.status_code == 400
     unknown = client.post(
         "/api/config/validate",
         json={"config": {}, "extra": True},
-        headers={"X-DevRelay-CSRF": csrf},
+        headers=auth,
     )
     assert unknown.status_code == 422
     assert unknown.json()["error"]["code"] == "invalid_request"
@@ -211,8 +207,8 @@ def test_body_limit_is_enforced(client: TestClient):
 
 
 def test_projects_include_the_active_workspace(client: TestClient, workspace: Path):
-    _session_headers(client)
-    response = client.get("/api/projects")
+    auth = _session_headers(client)
+    response = client.get("/api/projects", headers=auth)
     assert response.status_code == 200
     projects = response.json()["data"]["projects"]
     assert len(projects) == 1
@@ -222,12 +218,12 @@ def test_projects_include_the_active_workspace(client: TestClient, workspace: Pa
 
 
 def test_read_routes_are_bounded_and_secret_free(client: TestClient, workspace: Path):
-    _session_headers(client)
-    assert client.get("/api/status").status_code == 200
-    roles = client.get("/api/roles")
+    auth = _session_headers(client)
+    assert client.get("/api/status", headers=auth).status_code == 200
+    roles = client.get("/api/roles", headers=auth)
     assert roles.status_code == 200
     assert roles.json()["data"]["read_only"] is True
-    config = client.get("/api/config")
+    config = client.get("/api/config", headers=auth)
     assert config.status_code == 200
     assert TOKEN not in config.text
     assert str(workspace) not in config.text
@@ -237,37 +233,187 @@ def test_read_routes_are_bounded_and_secret_free(client: TestClient, workspace: 
     assert "launcher_args" not in config.json()["data"]["codex"]
     assert "args" not in config.json()["data"]["codex"]
     assert config.json()["data"]["codex"]["executable"] == "codex"
-    assert config.json()["data"]["write_supported"] is False
-    assert client.get("/api/runs").json()["data"]["runs"] == []
+    assert config.json()["data"]["write_supported"] is True
+    assert config.json()["data"]["read_only"] is False
+    assert len(config.json()["data"]["config_sha256"]) == 64
+    assert client.get("/api/runs", headers=auth).json()["data"]["runs"] == []
 
 
 def test_run_id_grammar_and_missing_run(client: TestClient):
-    _session_headers(client)
-    invalid = client.get("/api/runs/DR-" + "z" * 32)
+    auth = _session_headers(client)
+    invalid = client.get("/api/runs/DR-" + "z" * 32, headers=auth)
     assert invalid.status_code == 400
     assert invalid.json()["error"]["code"] == "invalid_run_id"
-    missing = client.get("/api/runs/DR-" + "0" * 32)
+    missing = client.get("/api/runs/DR-" + "0" * 32, headers=auth)
     assert missing.status_code == 404
     assert missing.json()["error"]["code"] == "orchestration_run_not_found"
 
 
 def test_config_validate_is_read_only(client: TestClient, workspace: Path):
-    csrf = _session_headers(client)["X-DevRelay-CSRF"]
+    auth = _session_headers(client)
     before = (workspace / ".devrelay" / "config.yaml").read_text(encoding="utf-8")
-    valid = client.post(
-        "/api/config/validate", json={"config": {}}, headers={"X-DevRelay-CSRF": csrf}
-    )
+    valid = client.post("/api/config/validate", json={"config": {}}, headers=auth)
     assert valid.status_code == 200 and valid.json()["data"]["valid"] is True
     invalid = client.post(
         "/api/config/validate",
         json={"config": {"unknown_key": True}},
-        headers={"X-DevRelay-CSRF": csrf},
+        headers=auth,
     )
     assert invalid.status_code == 200
     assert invalid.json()["data"]["valid"] is False
     assert invalid.json()["data"]["errors"][0]["loc"] == ["unknown_key"]
     after = (workspace / ".devrelay" / "config.yaml").read_text(encoding="utf-8")
     assert before == after
+
+
+def _config_digest(client: TestClient, auth: dict[str, str]) -> str:
+    response = client.get("/api/config", headers=auth)
+    assert response.status_code == 200, response.text
+    return response.json()["data"]["config_sha256"]
+
+
+def test_config_write_requires_confirmation_and_current_digest(client: TestClient):
+    auth = _session_headers(client)
+    digest = _config_digest(client, auth)
+    body = {"expected_sha256": digest, "config": {"pipeline": {"max_fix_iterations": 2}}, "confirm": "apply"}
+    no_header = client.put("/api/config", json=body, headers=auth)
+    assert no_header.status_code == 403
+    assert no_header.json()["error"]["code"] == "confirmation_required"
+    stale = client.put(
+        "/api/config",
+        json={**body, "expected_sha256": "0" * 64},
+        headers={**auth, "X-DevRelay-Confirm": "apply"},
+    )
+    assert stale.status_code == 409
+    assert stale.json()["error"]["code"] == "config_changed"
+
+
+def test_config_write_is_atomic_with_backup_and_new_digest(client: TestClient, workspace: Path):
+    auth = _session_headers(client)
+    digest = _config_digest(client, auth)
+    config_path = workspace / ".devrelay" / "config.yaml"
+    old_text = config_path.read_text(encoding="utf-8")
+    new_config = {"pipeline": {"max_fix_iterations": 2}}
+    response = client.put(
+        "/api/config",
+        json={"expected_sha256": digest, "config": new_config, "confirm": "apply"},
+        headers={**auth, "X-DevRelay-Confirm": "apply"},
+    )
+    assert response.status_code == 200, response.text
+    data = response.json()["data"]
+    assert data["applied"] is True
+    assert data["comments_preserved"] is False
+    assert data["backup_created"] is True
+    assert data["backup_name"].startswith("config.yaml.bak-")
+    assert str(workspace) not in response.text
+    new_text = config_path.read_text(encoding="utf-8")
+    assert "max_fix_iterations: 2" in new_text
+    assert "opencode:" in new_text
+    assert "profiles:" in new_text
+    assert data["new_sha256"] == hashlib.sha256(new_text.encode("utf-8")).hexdigest()
+    assert data["restart_required"] is True
+    backups = list((workspace / ".devrelay").glob("config.yaml.bak-*"))
+    assert len(backups) == 1
+    assert backups[0].read_text(encoding="utf-8") == old_text
+
+
+def test_config_write_rejects_secret_keys_and_codex_argv(client: TestClient, workspace: Path):
+    auth = _session_headers(client)
+    digest = _config_digest(client, auth)
+    before = (workspace / ".devrelay" / "config.yaml").read_bytes()
+    for config in (
+        {"opencode": {"token": "secret"}},
+        {"codex": {"args": ["exec", "--sandbox", "read-only"]}},
+        {"roles": {"reviewer": {"agent": "Bearer abcdefghijklmnop"}}},
+    ):
+        response = client.put(
+            "/api/config",
+            json={"expected_sha256": digest, "config": config, "confirm": "apply"},
+            headers={**auth, "X-DevRelay-Confirm": "apply"},
+        )
+        assert response.status_code == 422, response.text
+    assert (workspace / ".devrelay" / "config.yaml").read_bytes() == before
+
+
+def test_config_write_empty_patch_is_a_noop(client: TestClient, workspace: Path):
+    auth = _session_headers(client)
+    digest = _config_digest(client, auth)
+    before = (workspace / ".devrelay" / "config.yaml").read_bytes()
+    response = client.put(
+        "/api/config",
+        json={"expected_sha256": digest, "config": {}, "confirm": "apply"},
+        headers={**auth, "X-DevRelay-Confirm": "apply"},
+    )
+    assert response.status_code == 200
+    data = response.json()["data"]
+    assert data["applied"] is False
+    assert data["no_change"] is True
+    assert data["backup_created"] is False
+    assert (workspace / ".devrelay" / "config.yaml").read_bytes() == before
+
+
+def test_config_write_rejects_symlinked_config(client: TestClient, workspace: Path):
+    auth = _session_headers(client)
+    digest = _config_digest(client, auth)
+    config_path = workspace / ".devrelay" / "config.yaml"
+    target = workspace / ".devrelay" / "config-real.yaml"
+    config_path.rename(target)
+    try:
+        config_path.symlink_to(target)
+    except OSError as exc:  # pragma: no cover - Windows privilege-dependent
+        pytest.skip(f"symlink unavailable: {exc}")
+    response = client.put(
+        "/api/config",
+        json={"expected_sha256": digest, "config": {}, "confirm": "apply"},
+        headers={**auth, "X-DevRelay-Confirm": "apply"},
+    )
+    assert response.status_code == 409
+    assert response.json()["error"]["code"] == "config_symlink_rejected"
+
+
+def test_config_write_requires_auth(client: TestClient):
+    response = client.put(
+        "/api/config",
+        json={"expected_sha256": "0" * 64, "config": {}, "confirm": "apply"},
+        headers={"X-DevRelay-Confirm": "apply"},
+    )
+    assert response.status_code == 401
+
+
+def test_config_validate_rejects_secret_values(client: TestClient):
+    auth = _session_headers(client)
+    for value in (
+        "Bearer abcdefghijklmnop",
+        "sk-ant-api03-abcdefghijklmnop",
+        "Authorization: Basic YWxhZGRpbjpvcGVuc2VzYW1l",
+    ):
+        response = client.post(
+            "/api/config/validate",
+            json={"config": {"roles": {"reviewer": {"agent": value}}}},
+            headers=auth,
+        )
+        assert response.status_code == 200
+        assert response.json()["data"]["valid"] is False
+        assert response.json()["data"]["errors"][0]["type"] == "secret_value_rejected"
+
+
+def test_config_write_rejects_wiring_and_execution_fields(client: TestClient):
+    auth = _session_headers(client)
+    digest = _config_digest(client, auth)
+    for config in (
+        {"codex": {"executable": "C:\\tmp\\evil.exe"}},
+        {"opencode": {"base_url": "https://remote.example:4096"}},
+        {"opencode": {"workspace": "C:\\outside"}},
+        {"profiles": ["untrusted"]},
+        {"tests": {"targeted": ["cmd.exe /c whoami"]}},
+    ):
+        response = client.put(
+            "/api/config",
+            json={"expected_sha256": digest, "config": config, "confirm": "apply"},
+            headers={**auth, "X-DevRelay-Confirm": "apply"},
+        )
+        assert response.status_code == 422, response.text
+        assert response.json()["error"]["code"] == "config_field_not_editable"
 
 
 def test_registry_accepts_only_initialized_absolute_workspaces(tmp_path: Path):

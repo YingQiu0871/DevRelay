@@ -1,4 +1,4 @@
-"""Local bearer tokens, browser sessions, CSRF, Host and Origin checks."""
+"""Local bearer tokens, header-borne sessions, Host and Origin checks."""
 
 from __future__ import annotations
 
@@ -13,8 +13,7 @@ from urllib.parse import urlsplit
 from devrelay.web.errors import WebApiError
 
 TOKEN_ENV = "DEVRELAY_WEB_TOKEN"
-SESSION_COOKIE = "devrelay_web_session"
-CSRF_HEADER = "x-devrelay-csrf"
+SESSION_HEADER = "x-devrelay-session"
 SESSION_TTL_SECONDS = 8 * 60 * 60
 IDLE_TTL_SECONDS = 30 * 60
 MAX_SESSIONS = 8
@@ -118,7 +117,6 @@ def validate_origin(origin: str | None, port: int) -> None:
 @dataclass
 class WebSession:
     session_id: str
-    csrf: str
     created: float
     last_seen: float
 
@@ -190,7 +188,6 @@ class AuthManager:
                 self._sessions.pop(oldest, None)
             session = WebSession(
                 session_id=secrets.token_urlsafe(32),
-                csrf=secrets.token_urlsafe(32),
                 created=now,
                 last_seen=now,
             )
@@ -220,9 +217,6 @@ class AuthManager:
             return
         with self._lock:
             self._sessions.pop(session_id, None)
-
-    def csrf_matches(self, session: WebSession, supplied: str | None) -> bool:
-        return bool(supplied) and _safe_compare(session.csrf, supplied or "")
 
     def session_count(self) -> int:
         with self._lock:
