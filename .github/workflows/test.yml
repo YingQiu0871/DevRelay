@@ -1,0 +1,47 @@
+# Test CI for DevRelay.
+#
+# Runs the offline suite on every push to main, the v0.3-* release lines and the
+# release/* preparation branches, plus every pull request.  The suite is fully offline (Codex and HTTP
+# reviewers are mocked, Git tests use temporary repositories), so no secrets
+# and no network model access are involved.
+#
+# This workflow only reads the repository: `permissions: contents: read`.
+
+name: test
+
+on:
+  push:
+    branches:
+      - main
+      - "v0.3-*"
+      - "release/*"
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  pytest:
+    name: pytest (${{ matrix.os }}, py${{ matrix.python-version }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        python-version: ["3.11", "3.12", "3.13", "3.14"]
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+
+      - name: Install the package with dev extras
+        run: python -m pip install -e ".[dev]"
+
+      - name: Run the test suite
+        run: python -m pytest -q

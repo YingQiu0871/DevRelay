@@ -32,29 +32,97 @@ accept `Release.yml`, `.github/workflows/release.yml`, or the workflow's
 A **pending publisher does not reserve the project name** on PyPI. Create it
 and trigger the publication promptly.
 
-## Triggering the publication (after the pending publisher exists)
+This setup was made before the first release and is kept here as the record of
+how the trusted publisher is registered; it does not have to be repeated for
+later releases.
 
-From the repository's *Actions* tab, run the `release` workflow manually, or:
+## Triggering a publication
+
+Publishing is **manual**: the `release` workflow runs only on `workflow_dispatch`
+(there is no `push` or `pull_request` trigger), and its job is skipped unless the
+`confirm` input is exactly `PUBLISH`.
+
+### Before dispatching: the draft Release
+
+The workflow **finishes** a GitHub Release that already exists as a **draft** and
+is not marked prerelease; an already published Release or a prerelease is
+refused. Create the draft first (its tag must be reachable from `origin/main`; the
+workflow checks that with `git merge-base --is-ancestor`):
 
 ```bash
-gh workflow run release.yml -f tag=v0.1.0 -f confirm=PUBLISH
+gh release create v0.3.0 --draft --title "devrelay v0.3.0" --notes-file <notes>
+```
+
+The draft is what makes the ordering checkable: the wheel, the sdist and
+`SHA256SUMS` are attached to it before PyPI sees the upload, and it is flipped to
+a published Release only once all three assets are present.
+
+### Dispatch it by hand
+
+From the repository's *Actions* tab, select the `release` workflow, choose
+**Run workflow**, and fill in the tag (for example `v0.3.0`) and `confirm` set to
+`PUBLISH`. Or from a checkout:
+
+```bash
+gh workflow run release.yml -f tag=v0.3.0 -f confirm=PUBLISH
 gh run watch
 ```
 
-The workflow:
+Without `confirm=PUBLISH` nothing is executed.
 
-- runs **only** on manual dispatch with `confirm=PUBLISH` - never on `push` or
-  `pull_request`;
-- refuses any tag other than `v0.1.0` (v0.1 bootstrap safety guard);
-- refuses draft or prerelease GitHub Releases;
-- downloads the wheel and sdist from the existing GitHub Release instead of
-  rebuilding them, so PyPI receives the exact artifacts that were verified;
-- verifies that there is exactly one wheel and one sdist, checks their
-  filenames/version, and compares their sha256 against the pinned v0.1.0
-  bootstrap digests;
-- runs `twine check` before uploading;
-- uploads with `pypa/gh-action-pypi-publish` using OIDC (`id-token: write`),
-  with `attestations: false` and `packages-dir: dist/`.
+### What the workflow does, in order
+
+1. **Tag shape** - the tag must match `^v[0-9]+\.[0-9]+\.[0-9]+$`; branch names
+   or tags such as `v0.3` or `0.3.0` fail the run immediately.
+2. **Checkout** - the release tag itself is checked out, with full history.
+3. **Tag vs packaged version** - `pyproject.toml` is read at that tag and the tag
+   must be exactly `v<version>` (so `v0.3.0` for the current tree).
+4. **Ancestry** - `git merge-base --is-ancestor` must show the tag commit is
+   reachable from `origin/main`; an unmerged tag is refused.
+5. **Release state** - `gh release view` must report `isDraft=true` and
+   `isPrerelease=false`.
+6. **PyPI probe** - the workflow asks PyPI whether this version already has its
+   files; see *Idempotent reruns* below.
+7. **Build from source** - `python -m build --outdir dist` at the tag, into a
+   clean `dist/`, with `build==1.6.1` and `twine==7.0.0` installed in CI. The
+   build tools are CI-only: they are not project dependencies. The distributions
+   are built from the tag's own source, not taken from an existing Release.
+8. **Artifact set and checksums** - exactly one wheel and one sdist, and both
+   must contain `devrelay/profiles/default.yaml`. `release-assets/SHA256SUMS` is
+   written beside `dist/`, never inside it (a checksum file in `dist/` would make
+   the next step fail).
+9. **`twine check dist/*.whl dist/*.tar.gz`** - metadata validation of exactly
+   those two files.
+10. **Attach to the draft** - `gh release upload ... --clobber` for the wheel, the
+    sdist and `release-assets/SHA256SUMS`.
+11. **Upload to PyPI** - `pypa/gh-action-pypi-publish` with `packages-dir: dist/`
+    and `attestations: true`, authenticating with OIDC (`id-token: write`) in the
+    `pypi` environment; no stored credentials are involved.
+12. **Finish the Release** - the last step re-reads the draft's assets and
+    requires `devrelay-<version>-py3-none-any.whl`, `devrelay-<version>.tar.gz`
+    and `SHA256SUMS`; only then does it run
+    `gh release edit "$TAG" --draft=false`. A missing asset fails the run and
+    leaves the Release a draft.
+
+Two dispatches for the same tag are serialized by a job-level concurrency group
+(`release-<tag>`, cancellation disabled), so a second run observes the first
+one's result instead of racing it.
+
+### Idempotent reruns
+
+Before anything is built, step 6 asks PyPI for
+`https://pypi.org/pypi/devrelay/<version>/json` and decides from
+`urls[].filename` - not from the HTTP status alone:
+
+- **404** - the version is not on PyPI: build, attach and upload normally.
+- **200, one wheel and one sdist** - the version is already published: steps
+  7-11 are skipped by design and only step 12 runs. A rerun can therefore never
+  rebuild or re-upload a version PyPI already has.
+- **200, partial upload** (wheel without sdist, sdist without wheel, or
+  duplicates) - the run **fails** and reports which file names are missing, to be
+  uploaded by hand. PyPI files are immutable: the workflow never rebuilds and
+  re-uploads them.
+- **Any other status, or a 200 whose file list is empty** - the run fails closed.
 
 No secrets are configured in the `pypi` environment or in repository secrets:
 Trusted Publishing needs none.
@@ -62,6 +130,22 @@ Trusted Publishing needs none.
 ## After publication
 
 - The project page becomes <https://pypi.org/project/devrelay/>.
-- Later releases should generalize the bootstrap guard (tag validation instead
-  of the `v0.1.0` pin) and, ideally, replace the pinned digests with a general
-  provenance check.
+- Every later release goes through the same workflow: the tag shape, the packaged
+  version and the `main` ancestry are validated per release, so nothing is pinned
+  to a particular version any more.
+- Future hardening (recorded in `docs/BACKLOG.md` section 11): the `checkout`,
+  `setup-python` and `pypa/gh-action-pypi-publish` actions ride their
+  major/release tags today, and pinning them to commit SHAs is the remaining
+  step. The PyPI upload already carries attestations (`attestations: true`); the
+  GitHub Release assets do not have separate attestations.
+
+## History
+
+`v0.1.0` is the only previously published release; the `v0.3.0` publication
+record is kept in `docs/RELEASE_CHECKLIST.md`. The first version of this guide
+and of the workflow belonged to a bootstrap: the workflow accepted **only** the
+`v0.1.0` tag, fetched the wheel and the sdist from an existing GitHub Release
+instead of building them, and compared them against hard-coded sha256 digests.
+That guard no longer exists - the current workflow validates the tag and the
+packaged version and builds from source - and this section is the only part of
+this document that describes the old behaviour.

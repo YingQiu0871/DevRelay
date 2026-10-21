@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "devrelay"
-version = "0.1.0"
+version = "0.3.0"
 description = "Plan with one model, build with Codex, review with another - without copy-pasting between agents."
 readme = "README.md"
 requires-python = ">=3.11"
@@ -37,7 +37,11 @@ Issues = "https://github.com/YingQiu0871/DevRelay/issues"
 Changelog = "https://github.com/YingQiu0871/DevRelay/blob/main/CHANGELOG.md"
 
 [project.optional-dependencies]
-dev = ["pytest>=8.0"]
+# v0.3-B MCP tool surface: the official Model Context Protocol Python SDK.
+# Constrained (not floor-only) because the 1.x -> 2.x rename of FastMCP to
+# MCPServer changes the public API this adapter is written against.
+mcp = ["mcp>=2.2,<3"]
+dev = ["pytest>=8.0", "mcp>=2.2,<3"]
 
 [project.scripts]
 devrelay = "devrelay.cli:app"

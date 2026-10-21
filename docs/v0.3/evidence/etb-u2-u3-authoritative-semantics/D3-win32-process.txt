@@ -1,0 +1,22 @@
+SOURCE D3 — Win32_Process class
+canonical: https://learn.microsoft.com/en-us/windows/win32/cimwin32prov/win32-process
+retrieved final URL: https://learn.microsoft.com/en-us/windows/win32/cimwin32prov/win32-process
+retrieved: 2026-09-20T12:57:51 (local, UTC+02:00)
+retrieved body: 104616 bytes, SHA-256 22630ac5d64a70e8463582ff6678edb562837a6383ceb40b17fc14abfca357ad
+scope: closed-set retrieval for the ETB U2/U3 authoritative-semantics round.  No full page text is stored here; only the propositions and the minimal excerpts needed to prove them.
+
+SEMANTIC PROPOSITIONS (paraphrase)
+P1  `ProcessId` — data type uint32, access type Read-only — the numeric process identifier property of the class.
+P2  `ExecutablePath` — data type string, access type Read-only, qualifiers `Privileges ("SeDebugPrivilege")` and `MappingStrings ("Win32API|Tool Help Structures|MODULEENTRY32|szExePath")` — "Path to the executable file of the process."
+P3  `CreationDate` — data type datetime, access type Read-only, qualifier `Fixed` — "Date the process begins executing."
+P4  The class documentation does **not** describe `ExecutablePath` as canonical, normalized, fully-resolved or symlink-resolved; those properties are separate capabilities (see D7) and must not be read into P2.
+
+MINIMAL EXCERPTS
+"ExecutablePath  Data type: string  Access type: Read-only  Qualifiers: Privileges ("SeDebugPrivilege"), MappingStrings ("Win32API|Tool Help Structures| MODULEENTRY32 |szExePath"), DisplayName ("Executable Path")  Path to the executable file of the process. Example: "C:\Windows\System\Explorer.Exe""
+"CreationDate  Data type: datetime  Access type: Read-only  Qualifiers: Fixed , DisplayName ("CreationDate")  Date the process begins executing. This property is inherited from CIM_Process ."
+
+CLASSIFICATION (this round)
+- U3 documented ExecutablePath semantics: ESTABLISHED (P2) — path to the executable file of that process, with the recorded `SeDebugPrivilege` access qualifier as a fail-closed operational caveat.
+- U3 documented CreationDate semantics: ESTABLISHED (P3) — the date the process begins executing, with qualifier `Fixed`, which supports PID+CreationDate as a process-instance replacement discriminator (a reused PID belongs to a newly started process with a different creation date).
+- U3 canonical/final path: NOT established here (P4); it is established separately by D7.
+- Local applicability bound through probe S3 (same properties present in `ROOT/CIMV2`, all ReadOnly, `CreationDate` carrying `Fixed=True`, `ExecutablePath` carrying `Privileges=SeDebugPrivilege`).

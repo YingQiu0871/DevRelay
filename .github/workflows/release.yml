@@ -1,17 +1,43 @@
 # PyPI publication for DevRelay (Trusted Publishing / OIDC).
 #
 # No PyPI API token is stored in this repository. PyPI matches the publisher by
-# repository + workflow filename + environment:
+# repository + workflow filename + environment, so all three are load-bearing:
 #   repository: YingQiu0871/DevRelay
-#   workflow:   release.yml
+#   workflow:   release.yml   (renaming this file breaks the trusted publisher)
 #   environment: pypi
 #
-# v0.1 bootstrap: this workflow does NOT rebuild the package. It downloads the
-# already published and verified GitHub Release assets, verifies their sha256
-# against pinned digests, and uploads exactly those files to PyPI.
+# Flow: the release is prepared by hand as a DRAFT Release, and this workflow
+# finishes it. It validates the dispatch tag, builds the distributions from that
+# tag's own source, attaches the wheel, the sdist and SHA256SUMS to the draft,
+# uploads the distributions to PyPI, and only then flips the draft to a
+# published Release. A Release that is already published, or that is marked as a
+# prerelease, is refused: the draft state is what makes "assets are attached
+# before anyone can see it" checkable, and it is how the same release can be
+# fixed by a rerun without ever showing a half-populated Release.
 #
-# Publication can only be started manually with confirm=PUBLISH; no push or
-# pull_request event ever triggers an upload.
+# Rerun semantics: the version is looked up on PyPI before anything is built.
+# When it is already there, the build, checksum, twine, asset-upload and PyPI
+# steps are all skipped and only the final step runs - which still requires all
+# three release assets to be present before it publishes the Release. A rerun
+# after a partial failure therefore never rebuilds a version PyPI already has,
+# and never publishes a Release whose assets are missing.
+#
+# SHA256SUMS lives in release-assets/, never in dist/: a checksum file inside
+# dist/ makes `twine check dist/*` fail, so the twine step names the
+# distribution globs explicitly (`dist/*.whl dist/*.tar.gz`).
+#
+# build and twine are pinned to exact versions so a release cannot change
+# behaviour because a tool released: build==1.6.1 and twine==7.0.0 (latest
+# stable, queried 2026-10-18).
+#
+# Inputs reach the shell only through `env:`, never interpolated into `run:`
+# text. The embedded Python lives in single-quoted shell variables (PYCODE='
+# ... ') assigned by `python -c "$PYCODE"`, which keeps the code readable inside
+# the YAML block scalar without any heredoc-terminator or escaping pitfalls.
+#
+# The checkout, setup-python and pypa publish actions still ride their
+# major/release tags; pinning all three to commit SHAs is on the hardening
+# backlog.
 
 name: release
 
@@ -19,9 +45,9 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: "Release tag to publish (v0.1 bootstrap: must be v0.1.0)"
+        description: "Release tag to publish (e.g. v0.3.0)"
         required: true
-        default: "v0.1.0"
+        default: "v0.3.0"
         type: string
       confirm:
         description: "Type exactly PUBLISH to confirm the PyPI upload"
@@ -36,88 +62,222 @@ jobs:
   publish:
     name: Publish to PyPI (OIDC)
     if: ${{ inputs.confirm == 'PUBLISH' }}
+    # Two dispatches for the same tag must not interleave: the second one has to
+    # see the first one's result (PyPI state, draft assets) rather than race it.
+    # This is job-level because `inputs` is only reliably in scope there.
+    concurrency:
+      group: release-${{ inputs.tag }}
+      cancel-in-progress: false
     runs-on: ubuntu-latest
     environment:
       name: pypi
     permissions:
-      contents: read
+      contents: write
       id-token: write
     steps:
-      - name: Validate tag (v0.1 bootstrap safety guard)
+      - name: Validate the tag shape
         env:
           TAG: ${{ inputs.tag }}
         run: |
           set -euo pipefail
-          if [ "$TAG" != "v0.1.0" ]; then
-            echo "::error::v0.1 bootstrap safety guard: this workflow only publishes tag v0.1.0 (got '$TAG'). Generalize in v0.2."
+          if [[ ! "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::tag '$TAG' is not of the form vMAJOR.MINOR.PATCH."
+            exit 1
+          fi
+          echo "tag $TAG has the expected vMAJOR.MINOR.PATCH shape"
+
+      - name: Check out the release tag
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag }}
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Validate the tag against pyproject
+        id: version
+        env:
+          TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          PYCODE='
+          import os, pathlib, tomllib
+          version = tomllib.loads(pathlib.Path("pyproject.toml").read_text(encoding="utf-8"))["project"]["version"]
+          tag = os.environ["TAG"]
+          assert tag == f"v{version}", f"tag {tag} does not match pyproject version {version}"
+          print(version)
+          '
+          version=$(python -c "$PYCODE")
+          echo "tag $TAG matches pyproject version $version"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Verify the tag is reachable from origin/main
+        env:
+          TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin main
+          if ! git merge-base --is-ancestor "$TAG^{commit}" FETCH_HEAD; then
+            echo "::error::$TAG is not reachable from origin/main; refusing to publish an unmerged tag."
             exit 1
           fi
 
-      - name: Verify the GitHub Release is published (not draft, not prerelease)
+      - name: Verify the GitHub Release is a draft
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ inputs.tag }}
         run: |
           set -euo pipefail
           state=$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" \
-            --json isDraft,isPrerelease --jq 'if (.isDraft or .isPrerelease) then "bad" else "ok" end')
-          if [ "$state" != "ok" ]; then
-            echo "::error::release $TAG is a draft or a prerelease; refusing to publish."
+            --json isDraft,isPrerelease \
+            --jq 'if .isDraft then (if .isPrerelease then "prerelease" else "draft" end) else "not-a-draft" end')
+          if [ "$state" != "draft" ]; then
+            echo "::error::release $TAG is $state; this workflow only publishes a draft Release."
+            echo "::error::create the draft Release first: gh release create \"$TAG\" --draft --title \"devrelay $TAG\" --notes-file <notes>"
             exit 1
           fi
+          echo "release $TAG is an unpublished draft and is not marked prerelease"
 
-      - name: Download release artifacts (no rebuild)
+      - name: Check whether this version is already on PyPI
+        id: pypi
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          PYPI_JSON: ${{ runner.temp }}/pypi-devrelay-${{ steps.version.outputs.version }}.json
+        run: |
+          set -euo pipefail
+          status=$(curl -sS --retry 3 -o "$PYPI_JSON" -w '%{http_code}' "https://pypi.org/pypi/devrelay/${VERSION}/json")
+          case "$status" in
+            200) ;;
+            404)
+              echo "devrelay ${VERSION} is not on PyPI yet; the distributions will be built and uploaded."
+              echo "exists=false" >> "$GITHUB_OUTPUT"
+              exit 0
+              ;;
+            *)
+              echo "::error::unexpected PyPI status $status for devrelay ${VERSION}; refusing to continue."
+              exit 1
+              ;;
+          esac
+          PYCODE='
+          import json, os, pathlib, sys
+
+          version = os.environ["VERSION"]
+          try:
+              payload = json.loads(pathlib.Path(os.environ["PYPI_JSON"]).read_text(encoding="utf-8"))
+          except (OSError, json.JSONDecodeError) as exc:
+              sys.exit(f"::error::cannot read the PyPI JSON response at {os.environ['PYPI_JSON']}: {exc}")
+          names = [str(entry.get("filename", "")) for entry in payload.get("urls", [])]
+          wheels = sorted(name for name in names if name.endswith(".whl"))
+          sdists = sorted(name for name in names if name.endswith(".tar.gz"))
+          if not wheels and not sdists:
+              print("false")
+              sys.exit(0)
+          wheel_ok = len(wheels) == 1 and f"devrelay-{version}" in wheels[0]
+          sdist_ok = len(sdists) == 1 and f"devrelay-{version}" in sdists[0]
+          if wheel_ok and sdist_ok:
+              print("true")
+              sys.exit(0)
+          missing = []
+          if not wheel_ok:
+              missing.append(f"devrelay-{version}-py3-none-any.whl")
+          if not sdist_ok:
+              missing.append(f"devrelay-{version}.tar.gz")
+          print(f"::error::partial PyPI upload detected for devrelay {version}: PyPI lists {names}; missing {missing}.", file=sys.stderr)
+          print("::error::PyPI files are immutable: do not rebuild and re-upload the version. Upload the missing file(s) to PyPI by hand, then rerun this workflow - never bypass this probe.", file=sys.stderr)
+          sys.exit(1)
+          '
+          exists=$(python -c "$PYCODE")
+          if [ "$exists" != "true" ]; then
+            echo "::error::PyPI answers 200 for devrelay ${VERSION} but lists no release files; refusing to continue."
+            exit 1
+          fi
+          echo "devrelay ${VERSION} is already on PyPI with one wheel and one sdist; the build and upload steps will be skipped."
+          echo "exists=$exists" >> "$GITHUB_OUTPUT"
+
+      - name: Build the distributions from source
+        if: steps.pypi.outputs.exists != 'true'
+        run: |
+          set -euo pipefail
+          python -m pip install --quiet "build==1.6.1" "twine==7.0.0"
+          rm -rf dist build release-assets
+          python -m build --outdir dist
+
+      - name: Check the artifact set and write checksums
+        if: steps.pypi.outputs.exists != 'true'
+        run: |
+          set -euo pipefail
+          mkdir -p release-assets
+          PYCODE='
+          import hashlib, pathlib, sys, tarfile, zipfile
+          dist = pathlib.Path("dist")
+          assets = pathlib.Path("release-assets")
+          wheels = sorted(dist.glob("*.whl"))
+          sdists = sorted(dist.glob("*.tar.gz"))
+          if len(wheels) != 1 or len(sdists) != 1:
+              sys.exit(f"expected exactly one wheel and one sdist, got {wheels} / {sdists}")
+          wheel_names = zipfile.ZipFile(wheels[0]).namelist()
+          sdist_names = tarfile.open(sdists[0]).getnames()
+          for label, names in (("wheel", wheel_names), ("sdist", sdist_names)):
+              if not any(n.endswith("devrelay/profiles/default.yaml") for n in names):
+                  sys.exit(f"{label} is missing devrelay/profiles/default.yaml")
+          digests = {p.name: hashlib.sha256(p.read_bytes()).hexdigest() for p in wheels + sdists}
+          for name, digest in digests.items():
+              print(f"{digest}  {name}")
+          (assets / "SHA256SUMS").write_text(
+              "".join(f"{digest}  {name}" + chr(10) for name, digest in digests.items()),
+              encoding="utf-8",
+          )
+          print("artifact verification OK: one wheel, one sdist, profiles/default.yaml packaged")
+          '
+          python -c "$PYCODE"
+
+      - name: twine check
+        if: steps.pypi.outputs.exists != 'true'
+        run: |
+          set -euo pipefail
+          python -m twine check dist/*.whl dist/*.tar.gz
+
+      - name: Attach the distributions and checksums to the draft release
+        if: steps.pypi.outputs.exists != 'true'
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ inputs.tag }}
         run: |
           set -euo pipefail
-          mkdir -p dist
-          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" \
-            --pattern 'devrelay-*.whl' --pattern 'devrelay-*.tar.gz' --dir dist
-          ls -l dist
-
-      - name: Verify artifact set, version and v0.1.0 integrity pins
-        run: |
-          set -euo pipefail
-          python3 - <<'PY'
-          import hashlib
-          import pathlib
-          import sys
-
-          dist = pathlib.Path("dist")
-          wheels = sorted(dist.glob("*.whl"))
-          sdists = sorted(dist.glob("*.tar.gz"))
-          if len(wheels) != 1 or len(sdists) != 1:
-              sys.exit(f"expected exactly one wheel and one sdist, got {wheels} / {sdists}")
-          if wheels[0].name != "devrelay-0.1.0-py3-none-any.whl":
-              sys.exit(f"unexpected wheel name: {wheels[0].name}")
-          if sdists[0].name != "devrelay-0.1.0.tar.gz":
-              sys.exit(f"unexpected sdist name: {sdists[0].name}")
-
-          # v0.1.0 bootstrap integrity pin: sha256 of the GitHub Release assets
-          # that already passed fresh-install verification. A future release
-          # should replace this with a general provenance check.
-          pins = {
-              "devrelay-0.1.0-py3-none-any.whl": "8c9b3261455758a60eb95fa51c77100530e759eb688fc2ecd11447791e03a7c5",
-              "devrelay-0.1.0.tar.gz": "aea142a7975d2d9f651b94db252547be23d91742a862df0aef9848d9409da005",
-          }
-          for name, expected in pins.items():
-              actual = hashlib.sha256((dist / name).read_bytes()).hexdigest()
-              print(f"{name}: {actual}")
-              if actual != expected:
-                  sys.exit(f"sha256 mismatch for {name}: {actual} != {expected}")
-          print("artifact verification OK: exactly one wheel, one sdist, digests match the released assets")
-          PY
-
-      - name: twine check
-        run: |
-          set -euo pipefail
-          python3 -m pip install --upgrade --quiet twine
-          python3 -m twine check dist/*
+          gh release upload "$TAG" dist/*.whl dist/*.tar.gz release-assets/SHA256SUMS --clobber --repo "$GITHUB_REPOSITORY"
 
       - name: Publish to PyPI (Trusted Publishing / OIDC)
+        if: steps.pypi.outputs.exists != 'true'
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
           packages-dir: dist/
-          attestations: false
+          attestations: true
+
+      - name: Publish the GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.tag }}
+          VERSION: ${{ steps.version.outputs.version }}
+          PYPI_EXISTS: ${{ steps.pypi.outputs.exists }}
+        run: |
+          set -euo pipefail
+          present=$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name')
+          missing=()
+          for asset in "devrelay-${VERSION}-py3-none-any.whl" "devrelay-${VERSION}.tar.gz" "SHA256SUMS"; do
+            if ! printf '%s\n' "$present" | grep -Fxq "$asset"; then
+              echo "::error::draft release $TAG has no asset named $asset; refusing to publish it."
+              missing+=("$asset")
+            fi
+          done
+          if [ "${#missing[@]}" -gt 0 ]; then
+            if [ "${PYPI_EXISTS:-}" = "true" ]; then
+              echo "::error::devrelay ${VERSION} is already on PyPI, so this run skipped the rebuild by design: do not rebuild the distributions. Restore the missing draft assets from the release you already published, then rerun this workflow: gh release upload \"$TAG\" ${missing[*]} --clobber --repo \"$GITHUB_REPOSITORY\""
+            else
+              echo "::error::rerun this workflow with tag $TAG so the build and attach steps run again."
+            fi
+            exit 1
+          fi
+          gh release edit "$TAG" --draft=false --repo "$GITHUB_REPOSITORY"

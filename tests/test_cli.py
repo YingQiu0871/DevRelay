@@ -3,6 +3,7 @@
 import pytest
 from typer.testing import CliRunner
 
+from devrelay import __version__
 from devrelay.cli import app
 from devrelay.artifacts.store import ArtifactStore
 
@@ -58,7 +59,7 @@ def test_help_exits_zero():
 def test_version_command():
     result = runner.invoke(app, ["version"])
     assert result.exit_code == 0
-    assert "0.1.0" in result.output
+    assert __version__ in result.output
 
 
 def test_init_creates_config_without_clobber(tmp_path, monkeypatch):

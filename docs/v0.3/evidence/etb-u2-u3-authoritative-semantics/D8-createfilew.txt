@@ -1,0 +1,20 @@
+SOURCE D8 — CreateFileW function (fileapi.h)
+canonical: https://learn.microsoft.com/en-us/windows/win32/api/fileapi/nf-fileapi-createfilew
+retrieved final URL: https://learn.microsoft.com/en-us/windows/win32/api/fileapi/nf-fileapi-createfilew
+retrieved: 2026-09-20T12:57:53 (local, UTC+02:00)
+retrieved body: 115289 bytes, SHA-256 928be0bdc6cd702f41f4f09df6c8ddd2c46ddba45629eccb5e4b49e890081630
+scope: closed-set retrieval for the ETB U2/U3 authoritative-semantics round.  No full page text is stored here; only the propositions and the minimal excerpts needed to prove them.
+
+SEMANTIC PROPOSITIONS (paraphrase)
+P1  `dwDesiredAccess` is documented as "the requested access to the file or device, which can be summarized as read, write, both or neither (zero)", with the commonly used values `GENERIC_READ`, `GENERIC_WRITE` or both.
+P2  `dwCreationDisposition` is documented as "an action to take on a file or device that exists or does not exist" and "must be one of the following values, which cannot be combined".
+P3  `OPEN_EXISTING` (3) is documented as "Opens a file or device, only if it exists. If the specified file or device does not exist, the function fails and the last-error code is set to ERROR_FILE_NOT_FOUND (2)." — i.e. it neither creates nor truncates.
+P4  The truncating disposition is documented separately as `TRUNCATE_EXISTING` (5), confirming that `OPEN_EXISTING` is not a truncating disposition.
+
+MINIMAL EXCERPTS
+"dwDesiredAccess  The requested access to the file or device, which can be summarized as read, write, both or neither zero). The most commonly used values are GENERIC_READ , GENERIC_WRITE , or both ( GENERIC_READ | GENERIC_WRITE )."
+"OPEN_EXISTING 3 Opens a file or device, only if it exists. If the specified file or device does not exist, the function fails and the last-error code is set to ERROR_FILE_NOT_FOUND (2)."
+"TRUNCATE_EXISTING 5 Opens a file and truncates it so that its size is zero"
+
+CLASSIFICATION (this round)
+- U3 read-only handle acquisition capability: ESTABLISHED — `GENERIC_READ` + `OPEN_EXISTING` is a documented read-only, non-creating, non-truncating open that fails closed when the file does not exist.  The function was not called and the target executable was not opened in this round.

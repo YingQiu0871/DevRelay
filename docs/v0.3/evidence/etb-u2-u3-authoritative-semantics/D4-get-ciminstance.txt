@@ -1,0 +1,18 @@
+SOURCE D4 — Get-CimInstance (CimCmdlets), Windows PowerShell 5.1 view
+canonical family: https://learn.microsoft.com/en-us/powershell/module/cimcmdlets/get-ciminstance
+retrieved final URL: https://learn.microsoft.com/en-us/powershell/module/cimcmdlets/get-ciminstance?view=powershell-5.1
+retrieved: 2026-09-20T12:57:52 (local, UTC+02:00)
+retrieved body: 120192 bytes, SHA-256 72aa6ae90a0412f4bf9cad4f9e51e9b8549de654078702ec386c1a45dd914218
+scope: closed-set retrieval for the ETB U2/U3 authoritative-semantics round.  No full page text is stored here; only the propositions and the minimal excerpts needed to prove them.
+
+SEMANTIC PROPOSITIONS (paraphrase)
+P1  `-Filter` — type String, `Supports wildcards: False` — "Specifies a where clause to use as a filter. Specify the clause in either the WQL or the CQL query language. Do not include the WHERE keyword in the value of the parameter."
+P2  The parameter is available on the class-name parameter sets (including the default `ClassNameComputerSet`), i.e. it can be combined with `-ClassName`.
+P3  `-Query` is a separate parameter taking a full query string; the `-Filter` form supplies only the where clause.
+
+MINIMAL EXCERPTS
+"-Filter  Specifies a where clause to use as a filter. Specify the clause in either the WQL or the CQL query language. Do not include the WHERE keyword in the value of the parameter.  Parameter properties  Type: String  Default value: None  Supports wildcards: False"
+"Get-CimInstance [-ClassName] <String> [-ComputerName <String[]>] [-KeyOnly] [-Namespace <String>] [-OperationTimeoutSec <UInt32>] [-QueryDialect <String>] [-Shallow] [-Filter <String>] [-Property <String[]>] [<CommonParameters>]"
+
+CLASSIFICATION (this round)
+- U3 exact PID-scoped query (filter contract): ESTABLISHED in combination with D5 (WQL WHERE semantics and `=` equality).  No instance was retrieved in this round.

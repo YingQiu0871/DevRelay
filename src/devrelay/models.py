@@ -120,6 +120,9 @@ class Finding(BaseModel):
     files: list[str] = Field(default_factory=list)
     evidence: str = ""
     recommendation: str = ""
+    # Deterministic identity of the finding across review rounds (v0.2-A);
+    # excludes the per-round finding id on purpose.
+    fingerprint: str = ""
 
     @field_validator("files", mode="before")
     @classmethod
@@ -168,6 +171,16 @@ class CommandResult(BaseModel):
     duration_seconds: float = 0.0
     timed_out: bool = False
     error: str | None = None
+    # Bounded-capture evidence (v0.2-C): totals and truncation flags make a
+    # capped stream auditable instead of silently shortened.
+    stdout_bytes_total: int = 0
+    stderr_bytes_total: int = 0
+    stdout_truncated: bool = False
+    stderr_truncated: bool = False
+    # Strong process-containment evidence (structured runtime only).
+    containment: str = ""
+    containment_all_dead: bool = False
+    containment_error: str = ""
 
     @property
     def success(self) -> bool:
@@ -189,6 +202,13 @@ class BinaryCommandResult(BaseModel):
     stdout: bytes = b""
     stderr: bytes = b""
     duration_seconds: float = 0.0
+    stdout_bytes_total: int = 0
+    stderr_bytes_total: int = 0
+    stdout_truncated: bool = False
+    stderr_truncated: bool = False
+    containment: str = ""
+    containment_all_dead: bool = False
+    containment_error: str = ""
     timed_out: bool = False
     error: str | None = None
 
@@ -209,6 +229,30 @@ class ProviderExecutionResult(BaseModel):
     timed_out: bool = False
     error: str | None = None
     report: str = ""
+
+    # v0.2-C structured runtime evidence (advisory; the engine persists it).
+    runtime_mode: str = "text"
+    structured_result: ImplementationResult | None = None
+    raw_result_sha256: str = ""
+    result_bytes_total: int = 0
+    staging_path: str = ""
+    events_summary: dict | None = None
+    runtime_warnings: list[str] = Field(default_factory=list)
+    argv: list[str] = Field(default_factory=list)
+    env_removed: list[str] = Field(default_factory=list)
+    capabilities: str = ""
+    result_error_code: str = ""
+    result_error: str = ""
+    rejected_path_claims: list[str] = Field(default_factory=list)
+    unknown_result_fields: list[str] = Field(default_factory=list)
+    session_id: str = ""
+    stdout_bytes_total: int = 0
+    stderr_bytes_total: int = 0
+    stdout_truncated: bool = False
+    stderr_truncated: bool = False
+    containment: str = ""
+    containment_all_dead: bool = False
+    containment_error: str = ""
 
     @property
     def success(self) -> bool:
@@ -302,6 +346,184 @@ class AttemptStatus(str, Enum):
     POLICY_CHECK_INCOMPLETE = "POLICY_CHECK_INCOMPLETE"
 
 
+class ProviderKind(str, Enum):
+    IMPLEMENTER = "IMPLEMENTER"
+    REVIEWER = "REVIEWER"
+
+
+class ProviderCallPhase(str, Enum):
+    IMPLEMENT = "IMPLEMENT"
+    FIX = "FIX"
+    REVIEW = "REVIEW"
+    REVIEW_FORMAT_RETRY = "REVIEW_FORMAT_RETRY"
+    REVIEW_TRANSPORT_RETRY = "REVIEW_TRANSPORT_RETRY"
+    MANUAL_REVIEW = "MANUAL_REVIEW"
+
+
+class CallErrorType(str, Enum):
+    TRANSPORT = "TRANSPORT"
+    TIMEOUT = "TIMEOUT"
+    HTTP_STATUS = "HTTP_STATUS"
+    FORMAT = "FORMAT"
+    RESPONSE_TOO_LARGE = "RESPONSE_TOO_LARGE"
+    PROVIDER_UNAVAILABLE = "PROVIDER_UNAVAILABLE"
+    PROVIDER_ERROR = "PROVIDER_ERROR"
+    EXCEPTION = "EXCEPTION"
+
+
+class ReviewAttemptStatus(str, Enum):
+    IN_FLIGHT = "IN_FLIGHT"
+    COMPLETED = "COMPLETED"
+    FORMAT_FAILED = "FORMAT_FAILED"
+    TRANSPORT_FAILED = "TRANSPORT_FAILED"
+    INTERRUPTED = "INTERRUPTED"
+    BUDGET_BLOCKED = "BUDGET_BLOCKED"
+
+
+class ProviderCallRecord(BaseModel):
+    """One attempted external provider invocation (v0.2-A accounting unit).
+
+    ``external_call_count`` is 1 when a real external model call was attempted
+    (including attempts that failed after the request was started) and 0 for
+    events that never left the machine (manual review, unavailable CLI). It is
+    the single authority for budget accounting.
+
+    ``call_id`` comes from a durable task-scoped sequence (``DR-0001-C0007``),
+    allocated and persisted *before* the invocation, so identities never repeat
+    across restarts, unblocks or retries.  Never persists credentials, API keys,
+    authorization headers or full URLs.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    call_id: str
+    provider_kind: ProviderKind
+    provider_name: str
+    phase: ProviderCallPhase
+    started_at: str = Field(default_factory=utcnow_iso)
+    completed_at: str | None = None
+    success: bool = False
+    attempt_number: int = 1
+    task_iteration: int = 1
+    duration_seconds: float = 0.0
+    external_call_count: int = 0
+    error_type: CallErrorType | None = None
+    error: str | None = None
+    model: str | None = None
+    endpoint_host: str | None = None
+    # Traceability (v0.2-A remediation): which attempt/round caused this call.
+    parent_attempt_id: str | None = None
+    review_number: int | None = None
+
+
+class AppliedReviewRecord(BaseModel):
+    """Durable marker: one persisted ReviewResult was semantically applied.
+
+    ``identity`` is the fingerprint-insensitive hash of the sanitized,
+    normalized review, so a restart replay can prove whether a result already
+    reached ``review_history`` instead of guessing from list lengths.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    identity: str
+    review_number: int
+    attempt_id: str | None = None
+    review_file: str = ""
+    decision: str = ""
+    state: str = ""
+    findings: int = 0
+    applied_at: str = Field(default_factory=utcnow_iso)
+    # Progress snapshot at application time: lets a restart decide whether a
+    # missing terminal transition must be completed (nothing happened since) or
+    # whether the task legitimately moved on into a new review round.
+    fix_iterations: int = 0
+    implementation_passes: int = 0
+
+
+class PolicyRefreshRecord(BaseModel):
+    """Audited before/after evidence for one explicit policy refresh."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    refresh_id: str
+    at: str = Field(default_factory=utcnow_iso)
+    by: str = "human"
+    reason: str = ""
+    before_source: str = ""
+    after_source: str = ""
+    before_config_sha256: str = ""
+    after_config_sha256: str = ""
+    before_path: str = ""
+    after_path: str = ""
+    record_path: str = ""
+    # v0.2-B: generation-bound refresh/recovery provenance.
+    generation: int = 0
+    after_generation: int = 0
+    trigger: str = "explicit_refresh"
+    before_state: str = ""
+    before_snapshot_available: bool = True
+    before_sha256: str = ""
+    after_sha256: str = ""
+    usage_unchanged: bool = True
+    # Refresh *evidence attempt* number, deliberately distinct from
+    # ``generation``: every attempt that starts writing evidence consumes a
+    # never-reused number, so a failed attempt's artifacts survive a retry
+    # untouched.  A successful retry may therefore be attempt 02 while advancing
+    # generation 1 -> 2.
+    evidence_attempt: int = 0
+
+
+class ReviewAttempt(BaseModel):
+    """Lifecycle of one automatic (or imported manual) review round.
+
+    ``review_number`` is the *semantic* round (which review of this task it is);
+    ``attempt_id`` is the durable identity of this execution of that round.
+    One semantic round can have several attempts (interrupted call, explicit
+    acknowledgement, retry), so the two must never be conflated.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    review_number: int
+    attempt_id: str
+    provider_name: str
+    status: ReviewAttemptStatus = ReviewAttemptStatus.IN_FLIGHT
+    started_at: str = Field(default_factory=utcnow_iso)
+    completed_at: str | None = None
+    model: str | None = None
+    endpoint_host: str | None = None
+    format_attempts: int = 0
+    transport_attempts: int = 0
+    external_calls_consumed: int = 0
+    call_ids: list[str] = Field(default_factory=list)
+    error_type: CallErrorType | None = None
+    error: str | None = None
+    result: ReviewResult | None = None
+    # Result lifecycle (v0.2-A remediation). Three distinct milestones:
+    #   CALL COMPLETED      -> status == COMPLETED (result may still be missing)
+    #   RESULT PERSISTED    -> result_persisted + result_hash (authoritative,
+    #                          sanitized, schema-valid; replayable after a crash)
+    #   RESULT APPLIED      -> result_applied + applied_at/applied_state
+    # A persisted-but-unapplied result is replayed locally on restart with
+    # ZERO additional external calls; an uncertain call fails closed instead.
+    result_persisted: bool = False
+    result_hash: str = ""
+    result_applied: bool = False
+    applied_at: str | None = None
+    applied_state: str | None = None
+
+
+class ProviderUsage(BaseModel):
+    """Counts derived from persisted call records (never from iteration math)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    implementer_calls: int = 0
+    reviewer_calls: int = 0
+    total_calls: int = 0
+
+
 class PolicyViolation(BaseModel):
     """A structured repository-policy violation detected after a provider run."""
 
@@ -339,6 +561,117 @@ class RepoSnapshot(BaseModel):
     note: str = ""
 
 
+# Structured implementer result contract version (v0.2-C), distinct from
+# STATE_SCHEMA_VERSION below.
+IMPLEMENTATION_RESULT_SCHEMA_VERSION = 1
+
+
+class AttemptMilestone(str, Enum):
+    """Durable implementer lifecycle (v0.2-C).
+
+    "provider process finished" and "completion applied to pipeline state" are
+    different facts; the milestone records which one is durable.
+    """
+
+    IN_FLIGHT = "IN_FLIGHT"
+    PROCESS_EXITED = "PROCESS_EXITED"
+    WORKSPACE_OBSERVED = "WORKSPACE_OBSERVED"
+    GUARD_VERDICT_PERSISTED = "GUARD_VERDICT_PERSISTED"
+    RESULT_PERSISTED = "RESULT_PERSISTED"
+    COMPLETION_READY = "COMPLETION_READY"
+    COMPLETION_APPLIED = "COMPLETION_APPLIED"
+
+
+class WorkspaceIdentity(BaseModel):
+    """Authoritative workspace/guard identity recorded for one attempt."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    worktree_tree_sha: str = ""
+    delta_identity: str = ""
+    guard_identity: str = ""
+    head_sha: str | None = None
+    branch: str | None = None
+    index_tree_sha: str | None = None
+    changed_files: list[str] = Field(default_factory=list)
+    observed_at: str = Field(default_factory=utcnow_iso)
+
+
+class TestClaim(BaseModel):
+    """One test run *claimed* by the model (always advisory)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    command: str = ""
+    result: str = "NOT_RUN"          # PASS | FAIL | NOT_RUN
+    notes: str = ""
+
+
+class ImplementationResult(BaseModel):
+    """Structured implementer result (advisory evidence, schema version 1)."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    schema_version: int = IMPLEMENTATION_RESULT_SCHEMA_VERSION
+    status: str = "COMPLETE"         # COMPLETE | PARTIAL | BLOCKED | FAILED
+    summary: str = ""
+    changed_files: list[str] = Field(default_factory=list)
+    tests_run: list[TestClaim] = Field(default_factory=list)
+    unresolved_items: list[str] = Field(default_factory=list)
+    known_risks: list[str] = Field(default_factory=list)
+
+
+class AttemptRuntimeEvidence(BaseModel):
+    """Paths/hashes of the immutable runtime evidence for one attempt."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    runtime_mode: str = "text"       # structured | text
+    result_path: str = ""
+    result_sha256: str = ""
+    raw_result_sha256: str = ""
+    result_status: str = ""
+    result_schema_version: int | None = None
+    events_path: str = ""
+    events_sha256: str = ""
+    session_id: str = ""
+    model: str = ""
+    staging_file: str = ""
+    staging_removed: bool = False
+    warnings: list[str] = Field(default_factory=list)
+    implementation_reconciliation_path: str = ""
+    test_reconciliation_paths: list[str] = Field(default_factory=list)
+    control_plane_pre_sha256: str = ""
+    control_plane_post_sha256: str = ""
+    # SHA-256 of the exact state.json bytes written by the COMPLETION_READY
+    # write; any later external edit changes it and blocks replay.
+    state_sha256_at_ready: str = ""
+    control_plane_changes: int = 0
+    result_claimed: bool = False
+    # Strong process containment: the mechanism that guarantees no descendant of
+    # the Codex child can outlive it (and therefore can never mutate the control
+    # plane after the POST check).
+    containment: str = ""                 # e.g. windows-job-object | none
+    containment_all_dead: bool = False    # parent-verified before POST
+    containment_error: str = ""
+
+
+class ControlPlaneDifference(BaseModel):
+    """One control-plane change (metadata only; never raw content)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    rel_path: str
+    change: str
+    kind_before: str | None = None
+    kind_after: str | None = None
+    size_before: int | None = None
+    size_after: int | None = None
+    sha256_before: str | None = None
+    sha256_after: str | None = None
+    detail: str = ""
+
+
 class ProviderAttempt(BaseModel):
     """One persisted implement/fix execution attempt (audit evidence).
 
@@ -366,6 +699,19 @@ class ProviderAttempt(BaseModel):
     policy_checked: bool = False
     policy_check_error: str | None = None
     violations: list[PolicyViolation] = Field(default_factory=list)
+    # Durable call identities that belong to this attempt (v0.2-A remediation),
+    # so attempt -> call -> phase -> budget is traceable without guessing.
+    call_ids: list[str] = Field(default_factory=list)
+
+    # v0.2-C: durable milestones, replay identity and runtime evidence.
+    milestone: AttemptMilestone = AttemptMilestone.IN_FLIGHT
+    workspace_identity: WorkspaceIdentity | None = None
+    completion_ready: bool = False
+    completion_applied: bool = False
+    applied_at: str | None = None
+    applied_state: str | None = None
+    runtime: AttemptRuntimeEvidence | None = None
+    control_plane_violation: bool = False
 
 
 class BaselineUntrackedEntry(BaseModel):
@@ -443,6 +789,48 @@ class TaskDelta(BaseModel):
         return bool(self.changed_files)
 
 
+# State schema versions (v0.2-C).
+STATE_SCHEMA_VERSION = 6
+MAX_SUPPORTED_STATE_SCHEMA = 6
+
+# Structured implementer result contract version (distinct from the state
+# schema version above).
+IMPLEMENTATION_RESULT_SCHEMA_VERSION = 1
+SNAPSHOT_ERA_SCHEMA = 5
+
+
+class ProfileRef(BaseModel):
+    """One profile that contributed to a resolved policy document."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    name: str
+    sha256: str = ""
+
+
+class PolicyProvenance(BaseModel):
+    """Where a task's frozen policy came from (v0.2-B, state schema 5).
+
+    Profile hashes are provenance, not trust anchors: normal execution never
+    re-reads or re-hashes a profile file.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    # Successful frozen-policy evidence generation (1 at task creation, +1 per
+    # successful explicit refresh/recovery) - not a count of semantic changes.
+    generation: int = 1
+    resolved_at: str = Field(default_factory=utcnow_iso)
+    selector_raw: list[str] = Field(default_factory=list)
+    profiles: list[ProfileRef] = Field(default_factory=list)
+    workspace_config_sha256: str = ""
+    snapshot_sha256: str = ""
+    resolver_version: str = "0.2-B/1"
+    # sha256_verified | unverified_legacy_no_digest | unverified_legacy_tolerant
+    integrity: str = ""
+    dropped_legacy_keys: list[str] = Field(default_factory=list)
+
+
 class TaskRun(BaseModel):
     """Persisted per-task runtime state (tasks/<id>/state.json)."""
 
@@ -450,7 +838,7 @@ class TaskRun(BaseModel):
 
     task_id: str
     title: str
-    state_schema_version: int = 2
+    state_schema_version: int = STATE_SCHEMA_VERSION
     packet: TaskPacket | None = None
     state: PipelineState = PipelineState.NEW
     plan_ready: bool = False
@@ -485,10 +873,68 @@ class TaskRun(BaseModel):
     attempts: list[ProviderAttempt] = Field(default_factory=list)
     attempt_in_flight: bool = False
 
+    # v0.2-A: external provider accounting + review lifecycle.
+    provider_calls: list[ProviderCallRecord] = Field(default_factory=list)
+    review_attempts: list[ReviewAttempt] = Field(default_factory=list)
+    review_call_in_flight: bool = False
+    # Fingerprint -> number of review rounds in which this blocker was seen.
+    finding_seen_counts: dict[str, int] = Field(default_factory=dict)
+    # Which config governed this task's policy: "snapshot" | "live-fallback".
+    # v0.2-B writes it only at task freeze and at an explicit refresh/recovery;
+    # execution never rewrites it, and read-only commands only display it.
+    policy_source: str = ""
+
+    # v0.2-B (schema 5): frozen-policy identity, integrity and provenance.
+    policy_snapshot_path: str = ""
+    policy_config_sha256: str = ""
+    policy_provenance: PolicyProvenance | None = None
+
+    # Durable, task-scoped, monotonic identity sequences (v0.2-A remediation).
+    # Allocated and persisted BEFORE the external invocation, never decremented,
+    # never reused after a failure, never reset by unblock or policy refresh.
+    next_provider_call_sequence: int = 1
+    next_provider_attempt_sequence: int = 1
+    next_review_attempt_sequence: int = 1
+    # Audited history of explicit policy refreshes (before/after evidence).
+    policy_refreshes: list[PolicyRefreshRecord] = Field(default_factory=list)
+    # Semantic application markers: one entry per applied ReviewResult.
+    applied_reviews: list[AppliedReviewRecord] = Field(default_factory=list)
+
     @property
     def next_attempt(self) -> int:
-        """1-based attempt number for the next implementation pass."""
+        """1-based logical pass number for the next implementation pass."""
         return max(1, self.implementation_passes + 1)
+
+    # -- durable identity allocation (mutates only; the caller persists) -----
+    def allocate_call_id(self) -> str:
+        """Allocate the next external-call identity (``DR-0001-C0007``)."""
+        sequence = max(1, int(self.next_provider_call_sequence))
+        self.next_provider_call_sequence = sequence + 1
+        return f"{self.task_id}-C{sequence:04d}"
+
+    def allocate_attempt_id(self) -> str:
+        """Allocate the next implementer-attempt identity (``DR-0001-A0002``)."""
+        sequence = max(1, int(self.next_provider_attempt_sequence))
+        self.next_provider_attempt_sequence = sequence + 1
+        return f"{self.task_id}-A{sequence:04d}"
+
+    def allocate_review_attempt_id(self) -> str:
+        """Allocate the next review-attempt identity (``DR-0001-R0002``)."""
+        sequence = max(1, int(self.next_review_attempt_sequence))
+        self.next_review_attempt_sequence = sequence + 1
+        return f"{self.task_id}-R{sequence:04d}"
+
+    def call_by_id(self, call_id: str) -> "ProviderCallRecord | None":
+        for record in self.provider_calls:
+            if record.call_id == call_id:
+                return record
+        return None
+
+    def applied_review_identity(self, identity: str) -> "AppliedReviewRecord | None":
+        for record in self.applied_reviews:
+            if record.identity == identity:
+                return record
+        return None
 
     @property
     def open_blocking_findings(self) -> list[Finding]:

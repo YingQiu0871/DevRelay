@@ -3,63 +3,23 @@
 from __future__ import annotations
 
 import shutil
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal, Optional
 
 import yaml
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from devrelay.artifacts.store import encode_lf
 from devrelay.errors import ConfigError
-from devrelay.models import Severity
+from devrelay.models import PolicyProvenance, Severity
+from devrelay.opencode.models import MAX_MESSAGES as OPENCODE_HARD_MAX_MESSAGES
+from devrelay.roles.models import RolesConfig
+from devrelay.redact import redact_text
 
-# The exact same content as profiles/default.yaml at the repository root.
-# Loaded via importlib.resources-compatible fallback in _bundled_default().
+# The packaged default policy file (the only default authority).
 DEFAULT_PROFILE_NAME = "default.yaml"
 
-DEFAULT_PROFILE_YAML = """\
-pipeline:
-  max_fix_iterations: 3
-  auto_fix_tests: false
-
-review:
-  provider: manual
-  blocking_severities: [P0, P1, P2]
-  retries: 1
-  max_diff_bytes: 300000
-  timeout_seconds: 120
-
-baseline:
-  # Per-file cap for pre-existing untracked files copied into the baseline.
-  # Files above this limit fail task creation with an explicit error.
-  max_untracked_file_bytes: 52428800
-
-tests:
-  targeted: []
-  full: []
-  full_regression: release_only
-  timeout_seconds: 900
-
-scope:
-  reuse_approved_scope: true
-  current_delta_first: true
-
-git:
-  allow_commit: false
-  allow_push: false
-  allow_tag: false
-  allow_reset_hard: false
-  allow_index_mutation: false
-
-codex:
-  executable: codex
-  # Verified against `codex exec --help` (codex-cli 0.150.1): this CLI does not
-  # offer --full-auto; the documented sandbox flag is used instead.  The
-  # implementation prompt is streamed on stdin (canonical transport); argv is
-  # kept only as an explicit compatibility fallback.
-  args: ["exec", "--sandbox", "workspace-write"]
-  prompt_mode: stdin
-  timeout_seconds: 1800
-"""
 
 
 class PipelineConfig(BaseModel):
@@ -67,6 +27,19 @@ class PipelineConfig(BaseModel):
 
     max_fix_iterations: int = Field(default=3, ge=1)
     auto_fix_tests: bool = False
+    # 0 = disabled (default): fingerprints/seen-counts are always recorded, but
+    # the loop is never stopped for repetition unless a project opts in.
+    max_same_finding_cycles: int = Field(default=0, ge=0, le=10)
+
+
+class BudgetConfig(BaseModel):
+    """External provider call budget for one task (v0.2-A)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    max_implementer_calls: int = Field(default=4, ge=1)
+    max_reviewer_calls: int = Field(default=4, ge=0)
+    max_total_provider_calls: int = Field(default=8, ge=1)
 
 
 class ReviewConfig(BaseModel):
@@ -76,7 +49,14 @@ class ReviewConfig(BaseModel):
     blocking_severities: list[Severity] = Field(
         default_factory=lambda: [Severity.P0, Severity.P1, Severity.P2]
     )
+    # Format retries (HTTP 200 but not schema-valid JSON).
     retries: int = Field(default=1, ge=0, le=5)
+    # Transport retries (network/HTTP failures); separate on purpose.
+    transport_retries: int = Field(default=0, ge=0, le=5)
+    # Parsing/persistence cap on the reviewer response body (fail closed, never
+    # truncate-and-guess). The HTTP client may buffer the body first: this is not
+    # a network-level memory limit.
+    max_response_chars: int = Field(default=200_000, ge=1_000)
     max_diff_bytes: int = Field(default=300_000, ge=1_000)
     timeout_seconds: float = Field(default=120.0, gt=0)
 
@@ -117,6 +97,10 @@ class CodexConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     executable: str = "codex"
+    # Fixed launcher prefix for wrapper scripts / alternative entry points
+    # (e.g. ["python", "wrapper.py"]).  Never a runtime-control surface: the
+    # same argument-ownership validation applies to it.
+    launcher_args: list[str] = Field(default_factory=list)
     # Defaults verified against codex-cli 0.150.1 `codex exec --help`:
     # prompts travel on stdin (canonical); --full-auto is NOT offered by this
     # CLI version, so the shipped default uses the documented sandbox flag.
@@ -125,6 +109,145 @@ class CodexConfig(BaseModel):
     )
     prompt_mode: Literal["stdin", "argv"] = "stdin"
     timeout_seconds: float = Field(default=1800.0, gt=0)
+    # v0.2-C: structured Codex runtime is the default; `text` is the explicit,
+    # visible compatibility opt-out (never an automatic downgrade).
+    runtime_mode: Literal["structured", "text"] = "structured"
+    # Bounded reads/captures for the structured runtime (bytes).
+    max_result_bytes: int = Field(default=262_144, ge=1_024, le=8_388_608)
+    max_capture_bytes: int = Field(default=262_144, ge=1_024, le=8_388_608)
+
+    @model_validator(mode="after")
+    def _validate_argument_ownership(self) -> "CodexConfig":
+        # Imported lazily: codex_runtime imports models, not config.
+        from devrelay.providers.codex_runtime import validate_user_args
+
+        validate_user_args(self.args, launcher_args=self.launcher_args)
+        return self
+
+
+class OpenCodeConfig(BaseModel):
+    """v0.3-A OpenCode session bridge wiring (never task policy).
+
+    The endpoint is explicit by design: DevRelay never scans ports or processes.
+    The access token is read from the environment (``DEVRELAY_OPENCODE_TOKEN``)
+    and never persisted in this document or in any artifact.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    base_url: str = ""
+    workspace: str = ""            # defaults to the DevRelay workspace root
+    default_session: str = ""
+    agent: str = ""
+    model: str = ""
+    timeout_seconds: float = Field(default=30.0, gt=0)
+    idle_timeout_seconds: float = Field(default=300.0, gt=0)
+    poll_interval_seconds: float = Field(default=1.0, gt=0)
+    max_response_bytes: int = Field(default=1_048_576, ge=1_024, le=33_554_432)
+    # The wire-level window cap lives in the bridge (MAX_MESSAGES); a
+    # configuration above it could never be honoured, so it fails here instead
+    # of being silently clamped at request time.
+    max_messages: int = Field(default=50, ge=1, le=OPENCODE_HARD_MAX_MESSAGES)
+    allow_unknown_workspace: bool = False
+
+    @model_validator(mode="before")
+    @classmethod
+    def _hide_embedded_credentials(cls, data: Any) -> Any:
+        """Never let a URL password reach an error message or a log.
+
+        Pydantic echoes the offending input value in validation errors, and the
+        config layer wraps those errors into ``ConfigError`` (which the CLI
+        prints).  A ``user:password@host`` authority must therefore be defanged
+        *before* any validation runs: the credential segment is replaced by a
+        placeholder here, so every later error/echo only ever contains the
+        placeholder.  The value is still rejected by
+        :meth:`_validate_base_url` (the placeholder is itself userinfo).
+        """
+        if not isinstance(data, dict):
+            return data
+        value = data.get("base_url")
+        if not isinstance(value, str) or "@" not in value:
+            return data
+        scheme, separator, rest = value.partition("://")
+        if not separator or "@" not in rest:
+            return data
+        host = rest.rpartition("@")[2]
+        # A plain placeholder (no brackets): brackets would make urlparse treat
+        # it as an IPv6 literal and hide the real reason for the failure.
+        return {**data, "base_url": f"{scheme}://redacted@{host}"}
+
+    @field_validator("base_url")
+    @classmethod
+    def _validate_base_url(cls, value: str) -> str:
+        """An explicit, unambiguous endpoint - or nothing at all.
+
+        The endpoint is a live control channel carrying a bearer token, so a
+        value DevRelay cannot honour exactly (unknown scheme, embedded
+        credentials, a path prefix that request construction would silently
+        drop, a malformed authority that httpx would reject later) is refused
+        here rather than mis-called at request time.  Every failure is a
+        configuration error - never an unexpected ``httpx.InvalidURL``.
+        """
+        value = (value or "").strip()
+        if not value:
+            return ""
+        from urllib.parse import urlsplit
+
+        if any(
+            char.isspace() or ord(char) < 0x20 or ord(char) == 0x7F for char in value
+        ):
+            raise ValueError(
+                "opencode.base_url must not contain whitespace or control "
+                "characters"
+            )
+        try:
+            parts = urlsplit(value)
+        except ValueError as exc:
+            raise ValueError(
+                f"opencode.base_url is not a valid URL ({redact_text(str(exc))})"
+            ) from None
+        if parts.scheme not in ("http", "https"):
+            raise ValueError(
+                "opencode.base_url must use http:// or https:// "
+                f"(got {parts.scheme or 'no scheme'!r})"
+            )
+        if not parts.hostname:
+            raise ValueError("opencode.base_url must include a host")
+        if parts.username is not None or parts.password is not None:
+            raise ValueError(
+                "opencode.base_url must not embed credentials; the bearer token "
+                "comes from DEVRELAY_OPENCODE_TOKEN"
+            )
+        if "%" in parts.netloc:
+            # A percent-encoded separator inside the authority is exactly the
+            # ambiguity that turns one authority into another after decoding.
+            raise ValueError(
+                "opencode.base_url must not percent-encode characters in the "
+                "authority"
+            )
+        try:
+            # ``.port`` is the explicit authority check: a non-numeric,
+            # duplicated or out-of-range port raises here (PART II-E).
+            port = parts.port
+        except ValueError as exc:
+            raise ValueError(
+                "opencode.base_url has an invalid authority "
+                f"({redact_text(str(exc))})"
+            ) from None
+        if port is not None and not 1 <= port <= 65_535:  # pragma: no cover - urlsplit
+            raise ValueError("opencode.base_url port must be between 1 and 65535")
+        if parts.query or parts.fragment:
+            raise ValueError("opencode.base_url must not contain a query or fragment")
+        if parts.path.rstrip("/"):
+            raise ValueError(
+                "opencode.base_url must not contain a path prefix: v0.3-A issues "
+                "requests at the server root, so a prefix would be dropped silently"
+            )
+        return value.rstrip("/")
+
+    @property
+    def configured(self) -> bool:
+        return bool(self.base_url.strip())
 
 
 class DevRelayConfig(BaseModel):
@@ -133,12 +256,18 @@ class DevRelayConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     pipeline: PipelineConfig = Field(default_factory=PipelineConfig)
+    budget: BudgetConfig = Field(default_factory=BudgetConfig)
     review: ReviewConfig = Field(default_factory=ReviewConfig)
     tests: TestsConfig = Field(default_factory=TestsConfig)
     scope: ScopeConfig = Field(default_factory=ScopeConfig)
     git: GitPolicyConfig = Field(default_factory=GitPolicyConfig)
     baseline: BaselineConfig = Field(default_factory=BaselineConfig)
     codex: CodexConfig = Field(default_factory=CodexConfig)
+    opencode: OpenCodeConfig = Field(default_factory=OpenCodeConfig)
+    # v0.3-C: semantic role routing.  Runtime wiring (which model plays which
+    # role), never task policy; an absent/empty section is valid and only
+    # role-aware tools report the missing route.
+    roles: RolesConfig = Field(default_factory=RolesConfig)
 
     @model_validator(mode="after")
     def _hard_git_boundaries(self) -> "DevRelayConfig":
@@ -158,16 +287,208 @@ class DevRelayConfig(BaseModel):
         return self
 
 
+# ---------------------------------------------------------------------------
+# v0.2-B: runtime wiring vs task policy
+#
+# Runtime wiring (WiringConfig)  = which local tool/endpoint runs and how it is
+#                                  invoked.  Live, environment-specific, never
+#                                  frozen and never supplied by a profile.
+# Task policy (PolicyDocument)   = everything that decides blocking, budget
+#                                  consumption, test policy and the git guard.
+#                                  Resolved once, frozen into the task.
+# ---------------------------------------------------------------------------
+
+
+class ReviewPolicy(BaseModel):
+    """Review knobs that are task policy.
+
+    ``review.provider`` is deliberately absent: provider selection is runtime
+    wiring, so a project profile can never switch the reviewer backend.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    blocking_severities: list[Severity] = Field(
+        default_factory=lambda: [Severity.P0, Severity.P1, Severity.P2]
+    )
+    retries: int = Field(default=1, ge=0, le=5)
+    transport_retries: int = Field(default=0, ge=0, le=5)
+    max_response_chars: int = Field(default=200_000, ge=1_000)
+    max_diff_bytes: int = Field(default=300_000, ge=1_000)
+    timeout_seconds: float = Field(default=120.0, gt=0)
+
+
+class FrozenBudget(BudgetConfig):
+    """A budget carried by a resolved :class:`PolicyDocument`.
+
+    The marker subclass lets the execution path assert that the limits it
+    enforces came from a policy resolution, never from live wiring/workspace
+    defaults.
+    """
+
+
+class WiringConfig(BaseModel):
+    """Live runtime wiring: how DevRelay talks to the outside world.
+
+    Deliberately contains **no** policy field, so ``self.runtime_config`` can
+    never become a policy fallback: there is no budget, severity list or test
+    policy to read from it.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    review_provider: Literal["manual", "openai_compatible"] = "manual"
+    codex: CodexConfig = Field(default_factory=CodexConfig)
+    opencode: OpenCodeConfig = Field(default_factory=OpenCodeConfig)
+    #: v0.3-C role routes: environment-specific wiring, never frozen policy.
+    roles: RolesConfig = Field(default_factory=RolesConfig)
+
+    @classmethod
+    def from_workspace_config(cls, config: "DevRelayConfig") -> "WiringConfig":
+        return cls(
+            review_provider=config.review.provider,
+            codex=config.codex,
+            opencode=config.opencode,
+            roles=config.roles,
+        )
+
+
+class PolicyDocument(BaseModel):
+    """The resolved, frozen task policy (the only policy authority).
+
+    Serialized verbatim into ``tasks/<id>/config.snapshot.yaml``; contains no
+    selector, no provider, no codex and no other wiring.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    pipeline: PipelineConfig = Field(default_factory=PipelineConfig)
+    budget: FrozenBudget = Field(default_factory=FrozenBudget)
+    review: ReviewPolicy = Field(default_factory=ReviewPolicy)
+    tests: TestsConfig = Field(default_factory=TestsConfig)
+    scope: ScopeConfig = Field(default_factory=ScopeConfig)
+    baseline: BaselineConfig = Field(default_factory=BaselineConfig)
+    git: GitPolicyConfig = Field(default_factory=GitPolicyConfig)
+
+    @model_validator(mode="after")
+    def _hard_git_boundaries(self) -> "PolicyDocument":
+        allowed = {
+            "allow_commit": self.git.allow_commit,
+            "allow_push": self.git.allow_push,
+            "allow_tag": self.git.allow_tag,
+            "allow_reset_hard": self.git.allow_reset_hard,
+            "allow_index_mutation": self.git.allow_index_mutation,
+        }
+        enabled = [name for name, value in allowed.items() if value]
+        if enabled:
+            raise ValueError(
+                "DevRelay v0.1 hard-disables automatic git mutations "
+                f"({', '.join(sorted(enabled))}); keep these false."
+            )
+        return self
+
+    @classmethod
+    def from_workspace_config(cls, config: "DevRelayConfig") -> "PolicyDocument":
+        """Policy view of a workspace document (wiring sections are dropped)."""
+        return cls(
+            pipeline=config.pipeline.model_copy(deep=True),
+            budget=FrozenBudget(**config.budget.model_dump()),
+            review=ReviewPolicy(
+                **{
+                    name: getattr(config.review, name)
+                    for name in ReviewPolicy.model_fields
+                }
+            ),
+            tests=config.tests.model_copy(deep=True),
+            scope=config.scope.model_copy(deep=True),
+            baseline=config.baseline.model_copy(deep=True),
+            git=config.git.model_copy(deep=True),
+        )
+
+    @classmethod
+    def from_overrides(
+        cls, base: "PolicyDocument", overrides: dict[str, Any], *, source: str
+    ) -> "PolicyDocument":
+        """Deep-merge partial policy overrides onto *base* (lists replace)."""
+        if not overrides:
+            return base.model_copy(deep=True)
+        merged = _deep_merge(base.model_dump(mode="python"), overrides)
+        try:
+            return cls.model_validate(merged)
+        except Exception as exc:
+            raise ConfigError(f"invalid policy overrides in {source}: {exc}") from exc
+
+
+class ProfileDocument(BaseModel):
+    """A project profile file: partial policy only.
+
+    Sections are optional; ``model_dump(exclude_unset=True)`` yields exactly
+    what the file wrote, which is what the merge applies.  The model itself is
+    the allowlist: ``git``, ``codex``, ``review.provider`` and ``profiles`` are
+    not fields, so ``extra="forbid"`` rejects them inside a profile.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    pipeline: Optional[PipelineConfig] = None
+    budget: Optional[BudgetConfig] = None
+    review: Optional[ReviewPolicy] = None
+    tests: Optional[TestsConfig] = None
+    scope: Optional[ScopeConfig] = None
+    baseline: Optional[BaselineConfig] = None
+
+    def policy_overrides(self) -> dict[str, Any]:
+        return self.model_dump(exclude_unset=True, exclude_none=True, mode="python")
+
+
+class WorkspaceFile(DevRelayConfig):
+    """Parsed ``.devrelay/config.yaml``: wiring + policy overrides + selector.
+
+    ``profiles`` is a workspace-level field.  It is split away from the
+    :class:`DevRelayConfig` view by :func:`load_workspace_file`, and it is not a
+    member of :class:`PolicyDocument`, so it can never be frozen into a task
+    snapshot or handed to the engine as task policy.
+    """
+
+    profiles: list[str] = Field(default_factory=list)
+
+
+@dataclass(frozen=True)
+class ResolvedPolicy:
+    """A policy document plus the provenance that produced it."""
+
+    document: PolicyDocument
+    provenance: PolicyProvenance
+    source: str = "live-fallback"
+
+    @classmethod
+    def from_workspace_config(
+        cls, config: "DevRelayConfig", *, generation: int = 1
+    ) -> "ResolvedPolicy":
+        document = PolicyDocument.from_workspace_config(config)
+        return cls(
+            document=document,
+            provenance=PolicyProvenance(
+                generation=generation, integrity="workspace_overrides"
+            ),
+            source="live-fallback",
+        )
+
+
 def bundled_default_path() -> Path:
     """Path of the bundled profile shipped inside the package."""
     return Path(__file__).resolve().parent / "profiles" / DEFAULT_PROFILE_NAME
 
 
 def bundled_default_yaml() -> str:
+    """The single editable default policy authority, shipped in the package."""
     path = bundled_default_path()
-    if path.is_file():
-        return path.read_text(encoding="utf-8")
-    return DEFAULT_PROFILE_YAML
+    if not path.is_file():  # pragma: no cover - packaging failure
+        raise ConfigError(
+            f"packaged default policy is missing: {path}. "
+            "Reinstall DevRelay; there is deliberately no in-code fallback."
+        )
+    return path.read_text(encoding="utf-8")
 
 
 def _deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:
@@ -184,6 +505,23 @@ def _deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any
     return merged
 
 
+def _drop_null_known_sections(merged: dict[str, Any]) -> dict[str, Any]:
+    """A *known* section written as an empty/null YAML body means "not set".
+
+    ``opencode:`` with nothing under it parses as ``None``; that is a normal way
+    to leave a documented section commented out, so it must fall back to the
+    field default instead of failing validation.  Only schema fields are
+    dropped: an unknown key stays in the document so ``extra="forbid"`` still
+    rejects it (a typo must never be silently ignored).
+    """
+    known = set(WorkspaceFile.model_fields)
+    return {
+        key: value
+        for key, value in merged.items()
+        if not (value is None and key in known)
+    }
+
+
 def _parse_yaml(text: str, source: str) -> dict[str, Any]:
     try:
         data = yaml.safe_load(text)
@@ -196,19 +534,171 @@ def _parse_yaml(text: str, source: str) -> dict[str, Any]:
     return data
 
 
-def load_config(user_config_path: str | Path | None = None) -> DevRelayConfig:
-    """Load the bundled defaults merged with the optional workspace profile."""
-    defaults = _parse_yaml(bundled_default_yaml(), "bundled default profile")
-    merged: dict[str, Any] = defaults
-    if user_config_path is not None:
-        path = Path(user_config_path)
-        if path.is_file():
-            user = _parse_yaml(path.read_text(encoding="utf-8"), str(path))
-            merged = _deep_merge(defaults, user)
+def _parse_yaml_bytes(data: bytes, source: str) -> dict[str, Any]:
     try:
-        return DevRelayConfig.model_validate(merged)
+        text = data.decode("utf-8")
+    except UnicodeDecodeError as exc:
+        raise ConfigError(f"{source} is not valid UTF-8: {exc}") from exc
+    return _parse_yaml(text, source)
+
+
+def _merge_bundled_defaults(user_path: Path | None) -> dict[str, Any]:
+    defaults = _parse_yaml(bundled_default_yaml(), "bundled default profile")
+    if user_path is not None and user_path.is_file():
+        user = _parse_yaml(user_path.read_text(encoding="utf-8"), str(user_path))
+        return _drop_null_known_sections(_deep_merge(defaults, user))
+    return defaults
+
+
+def load_workspace_file(user_config_path: str | Path | None = None) -> WorkspaceFile:
+    """Load the workspace document: bundled defaults < workspace config file.
+
+    Unlike :func:`load_config`, the ``profiles`` selector is visible here (it is
+    a workspace-level input) and is stripped from the returned
+    :class:`DevRelayConfig` view.
+    """
+    path = Path(user_config_path) if user_config_path is not None else None
+    merged = _merge_bundled_defaults(path)
+    try:
+        return WorkspaceFile.model_validate(merged)
     except Exception as exc:  # pydantic ValidationError etc.
         raise ConfigError(f"Invalid DevRelay configuration: {exc}") from exc
+
+
+def load_config(user_config_path: str | Path | None = None) -> DevRelayConfig:
+    """Backward-compatible view: the workspace document without the selector."""
+    workspace = load_workspace_file(user_config_path)
+    return DevRelayConfig.model_validate(
+        workspace.model_dump(exclude={"profiles"}, mode="python")
+    )
+
+
+def load_wiring_config(root_or_path: str | Path) -> WiringConfig:
+    """Load live runtime wiring only.
+
+    Policy sections (``pipeline``/``budget``/policy ``review`` knobs/``tests``/
+    ``scope``/``baseline``) are deliberately **not** validated here: a malformed
+    live policy override must never become an execution prerequisite for a task
+    that already owns a frozen snapshot.  Whole-file YAML that cannot be parsed
+    at all is still an error, because wiring cannot be extracted from it.
+    """
+    path = Path(root_or_path)
+    if path.is_dir():
+        path = path / ".devrelay" / "config.yaml"
+    if not path.is_file():
+        return WiringConfig()
+    data = _parse_yaml_bytes(path.read_bytes(), str(path))
+    review = data.get("review")
+    if review is not None and not isinstance(review, dict):
+        raise ConfigError(
+            f"Invalid DevRelay configuration: review must be a mapping in {path}"
+        )
+    provider: Any = "manual"
+    if isinstance(review, dict) and "provider" in review:
+        provider = review["provider"]
+    try:
+        return WiringConfig(
+            review_provider=provider,
+            codex=data.get("codex", {}),
+            # v0.3-A wiring section (never policy).  An empty/null YAML body
+            # means "not configured", never "None".
+            opencode=data.get("opencode") or {},
+            # v0.3-C role routing (never policy; same "not configured" rule).
+            roles=data.get("roles") or {},
+        )
+    except Exception as exc:
+        raise ConfigError(f"Invalid DevRelay runtime wiring in {path}: {exc}") from exc
+
+
+def packaged_default_policy() -> PolicyDocument:
+    """The packaged default *policy* (wiring keys in the file are ignored)."""
+    data = bundled_default_yaml().encode("utf-8")
+    document, _dropped = load_policy_snapshot(
+        data, strict=False, source="bundled default profile"
+    )
+    return document
+
+
+def workspace_policy_overrides(root_or_path: str | Path) -> dict[str, Any]:
+    """Policy overrides the user actually wrote in ``.devrelay/config.yaml``.
+
+    Only the user's own keys count: the packaged defaults must stay *below* the
+    profiles in the precedence order, and the selector/wiring are not policy.
+    The file as a whole was already validated by :func:`load_workspace_file`.
+    """
+    path = Path(root_or_path)
+    if path.is_dir():
+        path = path / ".devrelay" / "config.yaml"
+    if not path.is_file():
+        return {}
+    data = _parse_yaml_bytes(path.read_bytes(), str(path))
+    # A section whose body is empty parses as None and is "not written".
+    data = {key: value for key, value in data.items() if value is not None}
+    data.pop("profiles", None)
+    data.pop("codex", None)
+    # v0.3-A: the OpenCode bridge is runtime wiring, never task policy.
+    data.pop("opencode", None)
+    # v0.3-C: role -> model/agent routes are runtime wiring too (which model
+    # plays which role is environment-specific and must never be frozen into a
+    # task's policy snapshot).
+    data.pop("roles", None)
+    review = data.get("review")
+    if isinstance(review, dict):
+        review.pop("provider", None)
+        if not review:
+            data.pop("review")
+    return data
+
+
+def dump_policy_yaml(document: PolicyDocument) -> str:
+    """Deterministic policy serialization (stable key order, LF, no aliases)."""
+    data = document.model_dump(mode="json")
+    return yaml.safe_dump(data, sort_keys=False, default_flow_style=False)
+
+
+def load_policy_snapshot(
+    data_or_path: bytes | str | Path, *, strict: bool = True, source: str = ""
+) -> tuple[PolicyDocument, list[str]]:
+    """Parse a policy snapshot document, returning (document, dropped_keys).
+
+    ``strict=True`` is the schema-5 rule: the document must be exactly a policy
+    document (any unknown key fails closed).  ``strict=False`` is the approved
+    legacy tolerance for digest-less v0.2-A snapshots, which were a full
+    workspace-config dump: only the known wiring keys ``codex``, ``opencode``,
+    ``profiles`` and ``review.provider`` are dropped - any other unknown key
+    still fails.
+    """
+    if isinstance(data_or_path, (str, Path)):
+        path = Path(data_or_path)
+        source = source or str(path)
+        data = path.read_bytes()
+    else:
+        data = data_or_path
+    doc = _parse_yaml_bytes(data, source or "policy snapshot")
+    dropped: list[str] = []
+    if not strict:
+        if "codex" in doc:
+            doc.pop("codex")
+            dropped.append("codex")
+        if "opencode" in doc:
+            # v0.3-A wiring section: a legacy full-config dump may contain it.
+            doc.pop("opencode")
+            dropped.append("opencode")
+        if "roles" in doc:
+            # v0.3-C wiring section: same tolerance for full-config dumps.
+            doc.pop("roles")
+            dropped.append("roles")
+        if "profiles" in doc:
+            doc.pop("profiles")
+            dropped.append("profiles")
+        review = doc.get("review")
+        if isinstance(review, dict) and "provider" in review:
+            review.pop("provider")
+            dropped.append("review.provider")
+    try:
+        return PolicyDocument.model_validate(doc), dropped
+    except Exception as exc:
+        raise ConfigError(f"invalid policy snapshot {source}: {exc}") from exc
 
 
 def dump_config_yaml(config: DevRelayConfig) -> str:
@@ -216,14 +706,87 @@ def dump_config_yaml(config: DevRelayConfig) -> str:
     return yaml.safe_dump(data, sort_keys=False, default_flow_style=False)
 
 
+WORKSPACE_CONFIG_TEMPLATE = """# DevRelay workspace configuration (installed once by `devrelay init`).
+#
+# This file is runtime wiring plus optional policy overrides.  Reusable policy
+# belongs in .devrelay/profiles/<name>.yaml, selected by `profiles:` below.
+#
+# Precedence:  packaged policy defaults  <  profiles (in order)  <  the policy
+#              overrides written here
+#
+# A task freezes the resolved policy at `devrelay start`; editing this file
+# afterwards never changes a running task (an explicit, audited
+# `devrelay unblock --refresh-policy` is required).
+
+# Project profiles, applied in order (later wins).  Profile files may set
+# pipeline / budget / review policy / tests / scope / baseline - never
+# review.provider, codex.*, git.* or this selector.
+profiles: []
+
+# ---- runtime wiring (environment-specific, live, never frozen) -------------
+review:
+  # manual | openai_compatible
+  provider: manual
+
+# v0.3-A: OpenCode session bridge (disabled until base_url is set).
+# The access token, when needed, comes from DEVRELAY_OPENCODE_TOKEN and is never
+# written to this file.
+opencode:
+  base_url: ""                      # e.g. http://127.0.0.1:4096 (explicit endpoint)
+  workspace: ""                     # defaults to this repository root
+  default_session: ""
+  agent: ""
+  model: ""
+  timeout_seconds: 30
+  idle_timeout_seconds: 300
+  poll_interval_seconds: 1.0
+  max_response_bytes: 1048576
+  max_messages: 50
+  allow_unknown_workspace: false
+
+# v0.3-C: semantic role routing (optional; uncomment to enable).  A role is a
+# name DevRelay understands (implementer | reviewer); the workspace decides which
+# provider/model plays it.  Identifiers only - never prompts, credentials,
+# endpoints, retry policies, fallback models or candidate lists.  While this
+# section is absent (or a model is empty) the role-aware tools fail locally with
+# role_unconfigured and every raw v0.3-B tool keeps working unchanged.
+# roles:
+#   implementer:
+#     model: "provider/model"       # e.g. the workspace's implementer route
+#     agent: null                   # optional: accepted v0.3-A agent semantics
+#   reviewer:
+#     model: "provider/model"       # e.g. the workspace's reviewer route
+#     agent: null
+
+codex:
+  executable: codex
+  # Verified against `codex exec --help` (codex-cli 0.150.1): no --full-auto.
+  args: ["exec", "--sandbox", "workspace-write"]
+  prompt_mode: stdin
+  timeout_seconds: 1800
+
+# ---- optional policy overrides (uncomment what this workspace pins) --------
+# budget:
+#   max_reviewer_calls: 2
+#   max_total_provider_calls: 6
+# tests:
+#   targeted: ["pytest -q"]
+#   full: []
+# scope:
+#   reuse_approved_scope: true
+"""
+
+
 def install_default_config(destination: str | Path) -> Path:
-    """Write the merged default profile to *destination* (never overwrite)."""
+    """Write the workspace config template to *destination* (never overwrite).
+
+    The template carries live wiring, the (empty) profile selector and commented
+    policy-override examples - not the policy defaults, which stay editable in
+    exactly one place: the packaged ``profiles/default.yaml``.
+    """
     dest = Path(destination)
     if dest.exists():
         return dest
     dest.parent.mkdir(parents=True, exist_ok=True)
-    # Prefer the human-readable repository profile when running from a source
-    # checkout; otherwise use the bundled copy.
-    text = bundled_default_yaml()
-    dest.write_text(text, encoding="utf-8")
+    dest.write_bytes(encode_lf(WORKSPACE_CONFIG_TEMPLATE))
     return dest

@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import json
 import os
 import subprocess
+import sys
 from pathlib import Path
 from typing import Optional
 
@@ -23,8 +25,17 @@ from devrelay.models import (
     WorkspaceBaseline,
     WorkspaceSnapshot,
 )
+from devrelay.errors import ProviderError, ReviewFormatError
+from devrelay.models import (
+    CallErrorType,
+    ProviderCallPhase,
+    ProviderCallRecord,
+    ProviderKind,
+    utcnow_iso,
+)
 from devrelay.pipeline.engine import DevRelayEngine
 from devrelay.providers.base import ImplementerProvider, ReviewerProvider
+from devrelay.providers.evidence import NullCallSink
 from devrelay.workspace.git import GitWorkspace
 from devrelay.workspace.runner import CommandRunner
 
@@ -89,13 +100,23 @@ class FakeCommandRunner:
         self.calls: list[dict] = []
         self.which_map: dict[str, str | None] = {}
 
-    def run(self, argv, cwd=None, timeout_seconds=900.0, input_text=None, env=None):
+    def run(
+        self,
+        argv,
+        cwd=None,
+        timeout_seconds=900.0,
+        input_text=None,
+        env=None,
+        env_remove=None,
+    ):
         self.calls.append(
             {
                 "argv": list(argv),
                 "cwd": str(cwd) if cwd is not None else None,
                 "input": input_text,
                 "timeout": timeout_seconds,
+                "env": env,
+                "env_remove": list(env_remove or []),
             }
         )
         result = self.results.get(" ".join(argv))
@@ -229,6 +250,86 @@ class QueueImplementer(FakeImplementer):
         return ProviderExecutionResult(exit_code=0, stdout="ok", report="ok")
 
 
+class ScriptedAutoReviewer(ReviewerProvider):
+    """Automatic reviewer fake that accounts calls exactly like the real one.
+
+    Each scripted outcome consumes exactly one external reviewer call through
+    the sink the engine injects (``call_policy.sink``), so engine-level tests
+    exercise the real budget/accounting path instead of mocking it away.
+    """
+
+    name = "scripted-auto"
+
+    def __init__(self, outcomes: list, *, model: str = "fake-model") -> None:
+        self.outcomes = list(outcomes)
+        self.bundles: list = []
+        self._model = model
+        self._sequence = 0
+
+    @property
+    def automatic(self) -> bool:
+        return True
+
+    @property
+    def model(self) -> str:
+        return self._model
+
+    @property
+    def endpoint_host(self) -> str:
+        return "fake.endpoint.invalid"
+
+    def prepare_request(self, bundle, review_number=None):
+        return None
+
+    def review(self, bundle, *, call_policy=None):
+        self.bundles.append(bundle)
+        outcome = self.outcomes.pop(0) if self.outcomes else ReviewResult(
+            decision="PASS", summary="default pass"
+        )
+        sink = getattr(call_policy, "sink", None) or NullCallSink()
+        self._sequence += 1
+        # Identity comes from the sink (durable, task-scoped) - exactly like the
+        # real provider, so engine-level tests exercise real accounting.
+        record = ProviderCallRecord(
+            call_id="",
+            provider_kind=ProviderKind.REVIEWER,
+            provider_name=self.name,
+            phase=ProviderCallPhase.REVIEW,
+            attempt_number=self._sequence,
+            external_call_count=1,
+            model=self._model,
+            endpoint_host=self.endpoint_host,
+        )
+        sink.preflight(ProviderKind.REVIEWER, ProviderCallPhase.REVIEW)
+        record = sink.start(record)
+
+        def settle(*, success: bool, error_type=None, error=None) -> ProviderCallRecord:
+            settled = record.model_copy(
+                update={
+                    "success": success,
+                    "completed_at": utcnow_iso(),
+                    "error_type": error_type,
+                    "error": error,
+                }
+            )
+            sink.finish(settled)
+            return settled
+
+        if isinstance(outcome, ReviewResult):
+            settle(success=True)
+            return outcome
+        if isinstance(outcome, tuple) and outcome and outcome[0] == "format":
+            settle(success=False, error_type=CallErrorType.FORMAT, error=outcome[1])
+            raise ReviewFormatError(outcome[1])
+        if isinstance(outcome, tuple) and outcome and outcome[0] == "transport":
+            settle(success=False, error_type=CallErrorType.TRANSPORT, error=outcome[1])
+            raise ProviderError(outcome[1])
+        if isinstance(outcome, BaseException):
+            settle(success=False, error_type=CallErrorType.EXCEPTION, error=str(outcome))
+            raise outcome
+        raise AssertionError(f"unsupported scripted outcome: {outcome!r}")
+
+
 class QueueReviewer(ReviewerProvider):
     """Automatic reviewer with a queue of ReviewResults."""
 
@@ -245,7 +346,7 @@ class QueueReviewer(ReviewerProvider):
     def prepare_request(self, bundle, review_number=None):
         return None
 
-    def review(self, bundle) -> ReviewResult:
+    def review(self, bundle, *, call_policy=None) -> ReviewResult:
         self.bundles.append(bundle)
         if self.queue:
             return self.queue.pop(0)
@@ -334,6 +435,19 @@ class FakeBaselineService:
         self.post_snapshots += 1
         return RepoSnapshot(head_sha="abc123", branch="main", index_tree_sha="i" * 40)
 
+    def validate_baseline(self, task_id: str) -> WorkspaceBaseline:
+        """In-memory double: nothing to validate, always succeeds."""
+        return self.capture(task_id)
+
+    def task_delta(self, task) -> TaskDelta:
+        return TaskDelta(
+            text_diff=self._delta_text,
+            changed_files=["src/x.py"],
+            from_tree="a" * 40,
+            to_tree="b" * 40,
+            method="trees",
+        )
+
     def check_policy(self, before, after) -> list:
         if self._violation_queues:
             return self._violation_queues.pop(0)
@@ -368,6 +482,8 @@ def build_engine(
     runner=None,
     use_real_git: bool = False,
     baseline_service=None,
+    fallback_policy_config=None,
+    runtime_config=None,
 ):
     """Return (root, store, engine). Root contains a .devrelay store."""
     root = tmp_path / "ws"
@@ -399,8 +515,225 @@ def build_engine(
         reviewer=reviewer or ManualReviewerProxy(),
         runner=runner or FakeCommandRunner(),
         baselines=baseline_service,
+        runtime_config=runtime_config,
+        fallback_policy_config=fallback_policy_config,
     )
     return root, store, eng
 
 
 from devrelay.providers.manual import ManualReviewer as ManualReviewerProxy  # noqa: E402
+
+
+# ---------------------------------------------------------------------------
+# v0.2-C: fake Codex CLI (offline structured-runtime harness)
+# ---------------------------------------------------------------------------
+CODEX_STUB_HELP = """Run Codex non-interactively
+
+Usage: codex exec [OPTIONS] [PROMPT]
+
+Options:
+  -s, --sandbox <SANDBOX_MODE>      [possible values: read-only, workspace-write, danger-full-access]
+      --ignore-user-config          Do not load $CODEX_HOME/config.toml; auth still uses CODEX_HOME
+      --ignore-rules                Do not load user or project execpolicy `.rules` files
+      --output-schema <FILE>        Path to a JSON Schema file describing the model's final response shape
+  -o, --output-last-message <FILE>  Specifies file where the last message from the agent should be written
+      --json                        Print events to stdout as JSONL
+      --color <COLOR>               [possible values: always, never, auto]
+  -h, --help                        Print help
+"""
+
+CODEX_STUB_SOURCE = '''"""Offline `codex` stub for DevRelay v0.2-C tests (never calls a model)."""
+import json
+import os
+import subprocess
+import sys
+import time
+from pathlib import Path
+
+HELP = """%s"""
+
+
+def strict_schema_problems(path):
+    """Local strictness lint mirroring the real structured-output endpoint.
+
+    Mirrors the *transport* contract: an exact schema-keyword allowlist, closed
+    objects and fully required objects.  Property *names* are not keywords.
+    """
+    allowed = ("type", "properties", "required", "additionalProperties", "items", "enum")
+    problems = []
+    try:
+        schema = json.loads(Path(path).read_text(encoding="utf-8"))
+    except Exception as exc:
+        return ["schema unreadable: " + str(exc)]
+
+    def walk(node, where):
+        if isinstance(node, dict):
+            for key in node:
+                if key not in allowed:
+                    problems.append(where + ": unsupported schema keyword " + str(key))
+            is_object = node.get("type") == "object" or "properties" in node
+            if is_object:
+                if node.get("additionalProperties") is not False:
+                    problems.append(where + ": additionalProperties must be false")
+                props = node.get("properties")
+                required = node.get("required")
+                if not isinstance(props, dict) or not props:
+                    problems.append(where + ": missing properties")
+                elif not isinstance(required, list):
+                    problems.append(where + ": missing required")
+                else:
+                    if len(set(required)) != len(required):
+                        problems.append(where + ": duplicate required keys")
+                    if set(required) != set(props):
+                        problems.append(where + ": required must list every property")
+                    if [k for k in required if k not in props]:
+                        problems.append(where + ": required keys not declared")
+                if where == "root" and isinstance(props, dict):
+                    version = props.get("schema_version")
+                    if isinstance(version, dict):
+                        if version.get("type") != "integer" or list(version.get("enum") or []) != [1]:
+                            problems.append("root: schema_version must be integer enum [1]")
+            for key, value in node.items():
+                if key == "properties" and isinstance(value, dict):
+                    for name, sub in value.items():
+                        walk(sub, where + ".properties." + str(name))
+                elif key == "items":
+                    walk(value, where + ".items")
+        elif isinstance(node, list):
+            for index, item in enumerate(node):
+                walk(item, where + "[" + str(index) + "]")
+
+    walk(schema, "root")
+    return problems
+def main() -> int:
+    args = sys.argv[1:]
+    config_path = Path(__file__).with_name("stub-config.json")
+    cfg = json.loads(config_path.read_text(encoding="utf-8")) if config_path.is_file() else {}
+    # Capture *before* the probe early-returns: `--version` and `exec --help` are
+    # real Codex child processes and must be auditable too (P1-A).
+    if cfg.get("invocation_log"):
+        entry = {
+            "argv": list(args),
+            "env": {name: bool(os.environ.get(name)) for name in cfg.get("env_names", [])},
+            "env_present": sorted(os.environ),
+        }
+        with open(cfg["invocation_log"], "a", encoding="utf-8") as handle:
+            handle.write(json.dumps(entry) + chr(10))
+    if "--version" in args:
+        print("codex-cli 9.9.9-stub")
+        return 0
+    if "exec" in args and ("--help" in args or "-h" in args):
+        print(HELP)
+        return 0
+    prompt = ""
+    if not sys.stdin.isatty():
+        try:
+            prompt = sys.stdin.buffer.read().decode("utf-8", errors="replace")
+        except Exception:
+            prompt = ""
+    if cfg.get("prompt_capture"):
+        Path(cfg["prompt_capture"]).write_text(prompt, encoding="utf-8", errors="replace")
+    if cfg.get("env_capture"):
+        record = {name: bool(os.environ.get(name)) for name in cfg.get("env_names", [])}
+        Path(cfg["env_capture"]).write_text(json.dumps(record), encoding="utf-8")
+    if cfg.get("argv_capture"):
+        Path(cfg["argv_capture"]).write_text(json.dumps(args), encoding="utf-8")
+    if cfg.get("argv_full_capture"):
+        # sys.argv including the entry point: proves whether the run went through
+        # the configured launcher prefix (structured) or straight to the CLI.
+        Path(cfg["argv_full_capture"]).write_text(
+            json.dumps(sys.argv), encoding="utf-8"
+        )
+    if cfg.get("descendant"):
+        # A deferred, detached grandchild: it outlives this process (and is
+        # deliberately given the inherited pipes when close_fds is False) so the
+        # parent can prove that containment kills the whole tree before POST.
+        subprocess.Popen(
+            [sys.executable, str(cfg["descendant"])]
+            + [str(arg) for arg in cfg.get("descendant_args", [])],
+            creationflags=0x00000008 if os.name == "nt" else 0,
+            close_fds=bool(cfg.get("descendant_close_fds", True)),
+        )
+    for op, target, *rest in cfg.get("tamper", []) or []:
+        path = Path(target)
+        if op == "write":
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(rest[0] if rest else "", encoding="utf-8")
+        elif op == "delete" and path.exists():
+            path.unlink()
+    if cfg.get("sleep"):
+        time.sleep(float(cfg["sleep"]))
+    exit_code = int(cfg.get("exit_code", 0) or 0)
+    out = None
+    for index, token in enumerate(args):
+        if token in ("-o", "--output-last-message") and index + 1 < len(args):
+            out = args[index + 1]
+        elif token.startswith("--output-last-message="):
+            out = token.split("=", 1)[1]
+    if cfg.get("extra_staging") and out:
+        Path(out).parent.joinpath(cfg["extra_staging"]).write_text("x", encoding="utf-8")
+    schema_path = None
+    for index, token in enumerate(args):
+        if token == "--output-schema" and index + 1 < len(args):
+            schema_path = args[index + 1]
+        elif token.startswith("--output-schema="):
+            schema_path = token.split("=", 1)[1]
+    if schema_path and cfg.get("strict_schema", True):
+        problems = strict_schema_problems(schema_path)
+        if problems:
+            print(json.dumps({"type": "error", "message": "invalid_json_schema: "
+                              + "; ".join(problems)}))
+            return 3
+    if out and cfg.get("result", "valid") != "missing":
+        payload = cfg.get("result_payload")
+        if payload is None:
+            payload = {
+                "schema_version": 1,
+                "status": cfg.get("status", "COMPLETE"),
+                "summary": cfg.get("summary", "stub implementation"),
+                "changed_files": cfg.get("changed_files", ["app.py"]),
+                "tests_run": cfg.get("tests_run", [{"command": "python -m pytest -q", "result": "PASS"}]),
+                "unresolved_items": cfg.get("unresolved_items", []),
+                "known_risks": cfg.get("known_risks", []),
+            }
+        raw = payload if isinstance(payload, str) else json.dumps(payload)
+        Path(out).parent.mkdir(parents=True, exist_ok=True)
+        Path(out).write_text(raw, encoding="utf-8")
+    for line in cfg.get("events", ['{"type":"thread.started","thread_id":"stub-session-1"}', '{"type":"turn.completed","model":"stub-model"}']):
+        print(line)
+    return exit_code
+
+
+if __name__ == "__main__":
+    sys.exit(main())
+''' % CODEX_STUB_HELP
+
+
+def write_codex_stub(directory: Path, **config) -> Path:
+    """Write an offline Codex stub plus its behaviour sidecar.
+
+    Returns the stub path; use it as ``CodexConfig(executable=sys.executable,
+    launcher_args=[str(stub)], runtime_mode="structured")``.
+    """
+    directory = Path(directory)
+    directory.mkdir(parents=True, exist_ok=True)
+    stub = directory / "codex_stub.py"
+    stub.write_text(CODEX_STUB_SOURCE, encoding="utf-8")
+    (directory / "stub-config.json").write_text(
+        json.dumps(config, indent=2), encoding="utf-8"
+    )
+    return stub
+
+
+def structured_codex_config(stub: Path, **overrides):
+    """CodexConfig wired to the offline stub in structured mode."""
+    from devrelay.config import CodexConfig
+
+    payload = {
+        "executable": sys.executable,
+        "launcher_args": [str(stub)],
+        "args": ["exec", "--sandbox", "workspace-write"],
+        "runtime_mode": "structured",
+    }
+    payload.update(overrides)
+    return CodexConfig(**payload)

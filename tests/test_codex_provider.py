@@ -200,8 +200,11 @@ def test_unknown_configured_flags_rejected_before_start():
     runner = FakeCommandRunner(
         results={"codex exec --help": cmd_result(stdout=help_text)}
     )
+    # v0.2-C: `--sandbox` is DevRelay-owned (the shipped default is recognised
+    # and normalised), so the unknown-flag check is exercised with a flag that
+    # is not part of the ownership contract.
     provider = CodexCLIProvider(
-        CodexConfig(args=["exec", "--full-auto", "--sandbox", "workspace-write"]),
+        CodexConfig(args=["exec", "--full-auto"]),
         runner=runner,
         workspace_root="/fake/ws",
     )

@@ -1,0 +1,79 @@
+ETB U2/U3 AUTHORITATIVE SEMANTICS — ROUND-2 EVIDENCE INDEX
+================================================================================
+
+Round: DEVRELAY v0.3-E G0.5-PRE / SIC — ETB execution-oracle design support,
+U2/U3 authoritative semantics resolution (round 2).
+Baseline commit: 5615b300519dc141787f5bd759f3308c31ef616b
+Status: candidate finding, NOT ACCEPTED.  Design support only — not an ETB
+execution oracle, not ETB execution, not Mode-B SIC oracle construction.
+
+CLOSED EXTERNAL SOURCE SET (Microsoft Learn only; no other source consulted)
+Retrieval method: one bounded direct HTTPS retrieval per approved page from the
+local Windows PowerShell session (Invoke-WebRequest, -UseBasicParsing, 45 s
+timeout, at most 5 redirects).  No search-engine result was used as semantic
+evidence; no third-party page, blog, Q&A, issue tracker or forum was consulted;
+no link was followed from any approved page.  Full page bodies were NOT committed
+(see "copyright handling" below).  Retrieval count: 9 pages (D1–D9), all HTTP 200.
+
+ID  Title                                    Retrieved final URL (learn.microsoft.com)                                        Bytes   SHA-256 of retrieved body                                              Retrieved
+D1  Get-NetTCPConnection (NetTCPIP)           /en-us/powershell/module/nettcpip/get-nettcpconnection?view=windowsserver2025-ps  69290   e6d01fef2b73cda806d21b57399bcc7f470d1edf4b115f2f053265961f6d815c   2026-09-20T12:57:51
+D2  MSFT_NetTCPConnection class               /en-us/windows/win32/fwp/wmi/nettcpipprov/msft-nettcpconnection                   109836  6a840d574f233838dc0cb0066b11d0c7ef954e6f589b6befc3b62f6695f025ba   2026-09-20T12:57:51
+D3  Win32_Process class                       /en-us/windows/win32/cimwin32prov/win32-process                                   104616  22630ac5d64a70e8463582ff6678edb562837a6383ceb40b17fc14abfca357ad   2026-09-20T12:57:51
+D4  Get-CimInstance (CimCmdlets), 5.1 view    /en-us/powershell/module/cimcmdlets/get-ciminstance?view=powershell-5.1           120192  72aa6ae90a0412f4bf9cad4f9e51e9b8549de654078702ec386c1a45dd914218   2026-09-20T12:57:52
+D5  about_WQL, 5.1 view                       /en-us/powershell/module/microsoft.powershell.core/about/about_wql?view=powershell-5.1     74466  e5965760204e20653677cd1096b72ea5ef43c9fa12ba5fb7e1be5ff4f720967c   2026-09-20T12:57:52
+D6  about_Arrays, 5.1 view                    /en-us/powershell/module/microsoft.powershell.core/about/about_arrays?view=powershell-5.1  88056  0f5b158724f5b9135fd182f521fcaa4842e58db3f34cb23c45cd6960ee293ac1   2026-09-20T12:57:52
+D7  GetFinalPathNameByHandleW (fileapi.h)     /en-us/windows/win32/api/fileapi/nf-fileapi-getfinalpathnamebyhandlew              59967   79eece1aa66bb7305039bd583f7e157606270d432fd1c74cd3f03141151cdea9   2026-09-20T12:57:53
+D8  CreateFileW (fileapi.h)                   /en-us/windows/win32/api/fileapi/nf-fileapi-createfilew                            115289  928be0bdc6cd702f41f4f09df6c8ddd2c46ddba45629eccb5e4b49e890081630   2026-09-20T12:57:53
+D9  Add-Type (Microsoft.PowerShell.Utility)   /en-us/powershell/module/microsoft.powershell.utility/add-type?view=powershell-5.1 115125  55f5f2a865f5869f1964ee6ff57511ba2421c29ea64264d212836eecdf1ff3d8   2026-09-20T12:57:53
+
+SOURCE-VERSION / APPLICABILITY DISCIPLINE
+- D4, D5, D6 and D9 were retrieved in the Windows PowerShell 5.1 documentation view
+  (as preferred for this environment).  D1's canonical page was served in the
+  windowsserver2025-ps view (the NetTCPIP module ships with Windows, not with
+  PowerShell), and its semantics are bound to the local machine through probe S1.
+- D2 and D3 (WMI/CIM class documentation) are bound to local availability through
+  probes S2 and S3, which confirm the same classes, namespaces and properties on
+  this machine.
+- D7 and D8 are Win32 API documentation for the Windows platform and are the
+  documented basis for the canonicalization mechanism; they were not invoked.
+
+COPYRIGHT HANDLING
+- No Microsoft Learn page (HTML or full text) is stored in this repository.
+- Each D* file below records only: source ID, title, canonical location, retrieval
+  timestamp, retrieved-body SHA-256, paraphrased semantic propositions, and the
+  minimal short excerpts required to prove those propositions.
+
+CLOSED LOCAL SCHEMA / METADATA PROBE SET (S1–S4) — metadata only, no instances
+All four probes were executed once each through the local Windows PowerShell
+session in this round.  No TCP connection, listener, port or process instance was
+queried or enumerated at any point.
+
+ID  Command                                                                          Result summary
+S1  Get-Command Get-NetTCPConnection                                                  Function, NetTCPIP 1.0.0.0; OutputType has 2 entries, the second being Microsoft.Management.Infrastructure.CimInstance#ROOT/StandardCimv2/MSFT_NetTCPConnection
+S2  Get-CimClass -Namespace root/StandardCimv2 -ClassName MSFT_NetTCPConnection      class present in ROOT/StandardCimv2; LocalAddress, LocalPort, State, OwningProcess, CreationTime all present, all ReadOnly
+S3  Get-CimClass -Namespace root/cimv2 -ClassName Win32_Process                      class present in ROOT/CIMV2; ProcessId, ExecutablePath, CreationDate all present, all ReadOnly; CreationDate carries Fixed=True; ExecutablePath carries Privileges=SeDebugPrivilege
+S4  Get-Command Add-Type                                                             Cmdlet, Microsoft.PowerShell.Utility 3.1.0.0
+
+EVIDENCE FILE INVENTORY
+  source-index.txt                              this file
+  D1-get-nettcpconnection.txt                   source D1 record
+  D2-msft-nettcpconnection.txt                  source D2 record
+  D3-win32-process.txt                          source D3 record
+  D4-get-ciminstance.txt                        source D4 record
+  D5-about-wql.txt                              source D5 record
+  D6-about-arrays.txt                           source D6 record
+  D7-getfinalpathnamebyhandlew.txt              source D7 record
+  D8-createfilew.txt                            source D8 record
+  D9-add-type.txt                               source D9 record
+  S1-get-nettcpconnection-command-metadata.json probe S1 metadata
+  S2-msft-nettcpconnection-schema.json          probe S2 schema metadata
+  S3-win32-process-schema.json                  probe S3 schema metadata
+  S4-add-type-command-metadata.json             probe S4 metadata
+  MANIFEST.sha256                               SHA-256 of every file above (except itself)
+
+NON-CLAIMS
+This index and the records it lists are design-support evidence only.  They do not
+establish an endpoint, do not select a port, address or address family, do not
+select Mode L or Mode P, do not authorize any configuration change or OpenCode
+start, and are not an ETB execution oracle, ETB execution, ETB SATISFIED/UNSATISFIED,
+a SIC result, a P6 result or a G0.5 result.

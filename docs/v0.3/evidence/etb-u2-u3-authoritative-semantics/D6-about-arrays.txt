@@ -1,0 +1,20 @@
+SOURCE D6 — about_Arrays, Windows PowerShell 5.1 view
+canonical family: https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.core/about/about_arrays
+retrieved final URL: https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.core/about/about_arrays?view=powershell-5.1
+retrieved: 2026-09-20T12:57:52 (local, UTC+02:00)
+retrieved body: 88056 bytes, SHA-256 0f5b158724f5b9135fd182f521fcaa4842e58db3f34cb23c45cd6960ee293ac1
+scope: closed-set retrieval for the ETB U2/U3 authoritative-semantics round.  No full page text is stored here; only the propositions and the minimal excerpts needed to prove them.
+
+SEMANTIC PROPOSITIONS (paraphrase)
+P1  The array sub-expression operator `@( ... )` places whatever the enclosed statement produces into an array, **even if there is zero or one object**.
+P2  The documented examples show a single-object array whose `.Count` is 1 and an empty array whose `.Count` is 0.
+P3  `Count` is documented as the most commonly used property for the number of items in any collection (not only arrays), of type int32; in Windows PowerShell 5.1 it is an alias property for `Length`.
+P4  Therefore `@(<query result>).Count` deterministically distinguishes 0, 1 and N results, including the zero and singleton cases.
+
+MINIMAL EXCERPTS
+"Whatever the statement inside the operator produces, the operator places it in an array. Even if there is zero or one object. The syntax of the array operator is as follows: @( ... ) You can use the array operator to create an array of zero or one object."
+"$a = @("Hello World") $a.Count 1   $b = @() $b.Count 0"
+"Count - This property is the most commonly used property to determine the number of items in any collection, not just an array. It's an [int32] type value. In Windows PowerShell 5.1 (and older) Count alias property for Length ."
+
+CLASSIFICATION (this round)
+- U2 result cardinality / uniqueness detectability: ESTABLISHED — a future oracle may normalize a query result with `@(...)` and use `.Count` to require exactly one match, failing closed on 0 or >1.
