@@ -1,12 +1,13 @@
 # DevRelay v0.4-A — Local HTTP Control API
 
-Status: **A1 IMPLEMENTED + INDEPENDENTLY REVIEWED — APPROVE WITH FINDINGS;
-pending owner acceptance.  A2 IMPLEMENTED — pending independent review.**
+Status: **A1 + A2 IMPLEMENTED + INDEPENDENTLY REVIEWED — APPROVE WITH
+FINDINGS; pending owner acceptance.**
 The A1 review and its dispositions are recorded in
 [V04A_REVIEW.md](V04A_REVIEW.md); the A1 localhost cookie limitation was
 resolved by moving sessions to a header, which is the prerequisite A2 needed.
-The A2 review and its remediation are recorded in
-[V04A_A2_REVIEW.md](V04A_A2_REVIEW.md); A2 remains pending re-review.
+The A2 review, re-review and remediation are recorded in
+[V04A_A2_REVIEW.md](V04A_A2_REVIEW.md); A2 is reviewed with findings and awaits
+owner acceptance.
 
 This document proposes the transport and security foundation for the v0.4 local
 WebUI.  It deliberately does not implement the WebUI, live run control, or a
@@ -49,7 +50,7 @@ human.
 
 - `PUT /api/config` with optimistic concurrency and an explicit confirmation
   header;
-- full-document validation through the existing config model;
+- full-file validation of the merged document through the existing config model;
 - atomic replacement, previous-file backup, comments not preserved (documented);
 - no secrets in the submitted document;
 - still no run-control endpoint.
@@ -225,20 +226,25 @@ reported explicitly.
 
 ## Configuration write (A2, implemented; pending review)
 
-- `GET /api/config` includes `config_sha256`, the digest of the current
-  `.devrelay/config.yaml`.
+- `GET /api/config` includes `config_sha256` (the digest of the current
+  `.devrelay/config.yaml`) and `restart_required` (the file no longer matches
+  the wiring loaded at process start).
 - `PUT /api/config` body:
-  `{"expected_sha256": "<current file digest>", "config": { ...full document... },
+  `{"expected_sha256": "<current file digest>", "config": { ...curated patch... },
     "confirm": "apply"}`.
 - A header-borne session or bearer token **and** `X-DevRelay-Confirm: apply` are
   required; no CSRF token exists.
-- The document is parsed with `WorkspaceFile`/`DevRelayConfig`; unknown keys,
-  secret-looking keys (`token`, `password`, `api_key`, `secret`, `credential`)
-  and `codex.args`/`codex.launcher_args` are rejected.
+- The merged document is parsed with `WorkspaceFile`/`DevRelayConfig`; unknown
+  keys, secret-looking keys (`token`, `password`, `api_key`, `secret`,
+  `credential`) and execution/wiring fields (`codex.executable`,
+  `codex.args`, `codex.launcher_args`, `opencode.base_url`,
+  `opencode.workspace`, `profiles`, `tests.targeted`, `tests.full`) are
+  rejected.
 - `expected_sha256` must match the current file; otherwise `409 config_changed`.
 - Write is atomic (`temp` + fsync + `os.replace`), after saving the previous file
   as `.devrelay/config.yaml.bak-<timestamp>`; comments are not preserved and the
-  response says so.
+  response says so.  A `.devrelay/web/config.lock` advisory lock serializes
+  writers across processes; a busy lock is `409 config_busy`.
 - The write never changes a running task's frozen policy snapshot.  The live
   process keeps its loaded wiring until restart; the file is the source for the
   next start.

@@ -188,8 +188,8 @@ Goal: configuration, monitoring, and emergency intervention through a localhost 
 
 ### v0.4-A — Local HTTP Control API
 
-Status: 🧪 A1 implemented and independently reviewed (APPROVE WITH FINDINGS;
-pending owner acceptance); A2 implemented and pending independent review.  See
+Status: 🧪 A1 + A2 implemented and independently reviewed (APPROVE WITH
+FINDINGS; pending owner acceptance).  See
 [V04A_SPEC.md](v0.4/V04A_SPEC.md).  A1 is the original read-only transport
 foundation; A2 adds the backend-owned configuration write and has its own review
 gate.  The A1 localhost cookie-scope P2 was resolved by the header-borne session
@@ -288,9 +288,9 @@ Potential directions / 潜在方向：
 
 ## Immediate next steps / 当前最近步骤
 
-1. Independently review the **v0.4-A2 configuration write** and accept/close
-   A1+A2 together ([V04A_SPEC.md](v0.4/V04A_SPEC.md)); A2 is implemented with the
-   digest guard, confirmation header, backup and atomic replace.
+1. Accept/close the independently reviewed **v0.4-A1 + A2** stage
+   ([V04A_SPEC.md](v0.4/V04A_SPEC.md)); A2 is the allowlisted configuration
+   patch with digest guard, confirmation header, backup and atomic replace.
 2. Close the remaining v0.3-E platform gates (G0.4/P4, G0.5/P6, G1, G2) and decide whether recovery adoption may be enabled; `adopt_completed_turn` stays disabled until then.
 3. Complete independent acceptance for v0.2-A/B/C, and close the v0.2-C E2E when Codex quota returns.
 4. Investigate the v0.2-C Windows Codex shell-policy P2 offline, without another real Codex call.

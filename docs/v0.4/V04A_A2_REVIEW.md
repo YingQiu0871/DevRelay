@@ -1,13 +1,15 @@
 # DevRelay v0.4-A2 — independent review record
 
-Status: **A2 review returned REQUEST CHANGES; the blocking findings were
-remediated in the working tree and A2 is pending re-review.**  A1 remains
-APPROVE WITH FINDINGS with R1 resolved by the header-session change.
+Status: **A2 re-reviewed: APPROVE WITH FINDINGS (P0/P1 = 0); the two P2
+findings were remediated.  A2 remains implemented and not tagged/released.**
+A1 remains APPROVE WITH FINDINGS with R1 resolved by the header-session change.
 
 - Review target: the A2 `PUT /api/config` implementation and the R1 header
   session migration.
-- Verdict received: **REQUEST CHANGES** (P0 = 0, P1 = 2, P2 = 4, P3 = 5).
-- The reviewed tree was not accepted as-is; no A2 tag or release is implied.
+- First verdict: **REQUEST CHANGES** (P0 = 0, P1 = 2, P2 = 4, P3 = 5).
+- Re-review verdict after remediation: **APPROVE WITH FINDINGS** (P0 = 0,
+  P1 = 0); the remaining P2s and P3s are recorded below.  No A2 tag or release
+  is implied.
 
 ## Blocking findings and remediation
 
@@ -30,9 +32,19 @@ APPROVE WITH FINDINGS with R1 resolved by the header-session change.
 | A2-P3-4 | P3 | `GET /api/config` after PUT mixed the new digest with old startup wiring. | Response adds `restart_required`; the spec documents that the live process reloads on restart. |
 | A2-P3-5 | P3 | Documentation drift (PUT absent from route table, stale A2-absent text, read-only docstring). | Corrected in `V04A_SPEC.md`, `V04A_REVIEW.md`, `ROADMAP.md`, `PROJECT_STATUS.md` and the service docstring. |
 
-## Remaining gate
+## Re-review disposition
 
-A2 must be re-reviewed against the allowlisted patch implementation.  Until then
-the stage is **implemented, not accepted**.  The open P3 items (backup
-retention/write-failure residue and the residual external-editor TOCTOU window)
-are recorded, not claimed as solved.
+The re-review found no P0/P1.  Two P2 items were raised and fixed after that
+review:
+
+- `review.provider` was editable wholesale.  The allowlist now names only the
+  non-provider review-policy fields; `review.provider` is rejected.
+- Cross-process writers could both pass the digest check.  A best-effort
+  `.devrelay/web/config.lock` advisory lock (msvcrt on Windows, flock on POSIX)
+  now serializes writers with a 5-second timeout and `409 config_busy`.
+
+The remaining P3 notes are retained: validate/apply missing-file asymmetry was
+closed (validate now requires an existing file), post-replace directory-fsync
+errors are ignored, and the symlink-check/read TOCTOU and backup accumulation
+remain documented limitations.  A2 is **implemented and independently reviewed
+with findings**, not tagged or released.

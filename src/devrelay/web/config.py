@@ -15,9 +15,11 @@ import re
 import stat
 import tempfile
 import threading
+import time
+from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterator
 
 import yaml
 from pydantic import ValidationError
@@ -33,7 +35,12 @@ _EDITABLE_PREFIXES = frozenset(
     {
         "pipeline",
         "budget",
-        "review",
+        "review.blocking_severities",
+        "review.retries",
+        "review.transport_retries",
+        "review.max_response_chars",
+        "review.max_diff_bytes",
+        "review.timeout_seconds",
         "scope",
         "baseline",
         "git",
@@ -181,6 +188,8 @@ def _fsync_directory(directory: Path) -> None:
         return
     try:
         os.fsync(fd)
+    except OSError:  # pragma: no cover - durability is best-effort
+        pass
     finally:
         os.close(fd)
 
@@ -200,6 +209,57 @@ class ConfigWriter:
         except OSError:
             return None
         return hashlib.sha256(payload).hexdigest()
+
+    @contextmanager
+    def _process_lock(self) -> Iterator[None]:
+        """Best-effort cross-process writer lock beside the configuration."""
+        lock_path = self.devrelay_dir / "web" / "config.lock"
+        lock_path.parent.mkdir(parents=True, exist_ok=True)
+        fd = os.open(lock_path, os.O_RDWR | os.O_CREAT, stat.S_IRUSR | stat.S_IWUSR)
+        acquired = False
+        try:
+            os.lseek(fd, 0, os.SEEK_SET)
+            if os.fstat(fd).st_size == 0:
+                os.write(fd, b"\0")
+                os.lseek(fd, 0, os.SEEK_SET)
+            deadline = time.monotonic() + 5.0
+            while True:
+                try:
+                    if os.name == "nt":
+                        import msvcrt
+
+                        os.lseek(fd, 0, os.SEEK_SET)
+                        msvcrt.locking(fd, msvcrt.LK_NBLCK, 1)
+                    else:
+                        import fcntl
+
+                        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                    acquired = True
+                    break
+                except OSError as exc:
+                    if time.monotonic() >= deadline:
+                        raise WebApiError(
+                            "config_busy",
+                            "another configuration writer is active",
+                            status_code=409,
+                        ) from exc
+                    time.sleep(0.05)
+            yield
+        finally:
+            if acquired:
+                try:
+                    if os.name == "nt":
+                        import msvcrt
+
+                        os.lseek(fd, 0, os.SEEK_SET)
+                        msvcrt.locking(fd, msvcrt.LK_UNLCK, 1)
+                    else:
+                        import fcntl
+
+                        fcntl.flock(fd, fcntl.LOCK_UN)
+                except OSError:  # pragma: no cover - best effort unlock
+                    pass
+            os.close(fd)
 
     def _read_current(self, *, required: bool) -> tuple[bytes, dict[str, Any]]:
         if self.path.is_symlink():
@@ -274,7 +334,7 @@ class ConfigWriter:
     def validate(self, config: dict[str, Any]) -> list[dict[str, Any]]:
         """Return bounded validation errors; never writes or echoes values."""
         try:
-            _payload, current = self._read_current(required=False)
+            _payload, current = self._read_current(required=True)
         except WebApiError as exc:
             return [{"loc": [], "type": exc.code, "msg": exc.message}]
         return self._validate_patch(config, current)
@@ -327,7 +387,7 @@ class ConfigWriter:
             raise
 
     def apply(self, config: dict[str, Any], expected_sha256: str) -> dict[str, Any]:
-        with self._lock:
+        with self._lock, self._process_lock():
             current_bytes, current = self._read_current(required=True)
             actual = hashlib.sha256(current_bytes).hexdigest()
             if actual != expected_sha256:

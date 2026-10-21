@@ -44,6 +44,10 @@ class WebReadService:
             package_version=__version__,
         )
         self.config_writer = ConfigWriter(self.workspace_root, self.devrelay_dir)
+        # The process keeps the wiring it loaded at startup.  Comparing the
+        # current file digest against this marker tells the UI that a restart is
+        # required after a successful A2 write.
+        self._loaded_config_sha = self.config_writer.sha256()
 
     @classmethod
     def from_workspace(cls, root: Path, wiring: Any, devrelay_dir: Path) -> "WebReadService":
@@ -68,8 +72,9 @@ class WebReadService:
         return {
             "package_version": __version__,
             "project_id": project_id,
-            "workspace": str(self.workspace_root),
-            "read_only": True,
+            "workspace_id": project_id,
+            "read_only": False,
+            "write_supported": True,
         }
 
     def status(self) -> dict[str, Any]:
@@ -123,8 +128,10 @@ class WebReadService:
     def config(self) -> dict[str, Any]:
         opencode = self.wiring.opencode
         codex = self.wiring.codex
+        current_sha = self.config_writer.sha256()
         return {
-            "config_sha256": self.config_writer.sha256(),
+            "config_sha256": current_sha,
+            "restart_required": current_sha != self._loaded_config_sha,
             "review_provider": self.wiring.review_provider,
             "opencode": {
                 "configured": bool(opencode.configured),

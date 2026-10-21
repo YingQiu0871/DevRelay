@@ -235,6 +235,7 @@ def test_read_routes_are_bounded_and_secret_free(client: TestClient, workspace: 
     assert config.json()["data"]["codex"]["executable"] == "codex"
     assert config.json()["data"]["write_supported"] is True
     assert config.json()["data"]["read_only"] is False
+    assert config.json()["data"]["restart_required"] is False
     assert len(config.json()["data"]["config_sha256"]) == 64
     assert client.get("/api/runs", headers=auth).json()["data"]["runs"] == []
 
@@ -310,6 +311,8 @@ def test_config_write_is_atomic_with_backup_and_new_digest(client: TestClient, w
     assert "max_fix_iterations: 2" in new_text
     assert "opencode:" in new_text
     assert "profiles:" in new_text
+    refreshed = client.get("/api/config", headers=auth)
+    assert refreshed.json()["data"]["restart_required"] is True
     assert data["new_sha256"] == hashlib.sha256(new_text.encode("utf-8")).hexdigest()
     assert data["restart_required"] is True
     backups = list((workspace / ".devrelay").glob("config.yaml.bak-*"))
@@ -404,6 +407,7 @@ def test_config_write_rejects_wiring_and_execution_fields(client: TestClient):
         {"codex": {"executable": "C:\\tmp\\evil.exe"}},
         {"opencode": {"base_url": "https://remote.example:4096"}},
         {"opencode": {"workspace": "C:\\outside"}},
+        {"review": {"provider": "openai_compatible"}},
         {"profiles": ["untrusted"]},
         {"tests": {"targeted": ["cmd.exe /c whoami"]}},
     ):
