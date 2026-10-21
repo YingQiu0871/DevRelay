@@ -11,15 +11,19 @@ DevRelay 是一个本地运行、可审计的多模型软件开发编排层。�
 
 | Item / 项目 | Status / 状态 |
 | --- | --- |
-| Public release / 当前公开版本 | **v0.1.0** |
-| `main` branch / 主分支 | v0.1.x public codebase |
-| v0.2-C structured runtime | Implemented and offline-verified. A real Codex replacement smoke confirmed the schema regression is fixed, but the turn hit the provider usage limit before end-to-end structured-result delivery; E2E closure remains pending / 已实现并完成离线验证。一次真实 Codex replacement smoke 已确认 schema 回归问题修复，但 provider 使用额度在结构化结果完整交付前耗尽，因此 E2E 闭环仍待完成 |
-| v0.3-A OpenCode Session Bridge | **In progress / 开发中** |
-| OpenCode-first orchestration | Planned, not yet released / 已确定方向，尚未发布 |
-| ChatGPT/MCP integration | Planned / 计划中 |
-| localhost WebUI | Planned / 计划中 |
+| Public release / 当前公开版本 | **v0.3.0** (2026-10-21) |
+| `main` branch / 主分支 | v0.3.0 release line |
+| v0.2-A / v0.2-B / v0.2-C | Included in 0.3.0; independent acceptance not complete; offline / fake-provider evidence only / 已随 0.3.0 发布；独立验收尚未完成，仅有离线/假 provider 证据 |
+| v0.3-A OpenCode Session Bridge | Accepted / closed / shipped in 0.3.0 / 已验收、关闭并随 0.3.0 发布 |
+| v0.3-B ChatGPT/MCP Tool Surface | Accepted / closed / shipped in 0.3.0 / 已验收、关闭并随 0.3.0 发布 |
+| v0.3-C Agent Role Routing | Accepted / closed / shipped in 0.3.0 / 已验收、关闭并随 0.3.0 发布 |
+| v0.3-D Bounded Orchestration Loop | Accepted / closed / shipped in 0.3.0 / 已验收、关闭并随 0.3.0 发布 |
+| v0.3-E Recovery & Hardening | Mandatory fail-closed core accepted (P0=0, P1=0, P2=2; 2026-10-17) / adoption disabled / platform gates open / shipped in 0.3.0 / 强制 fail-closed 核心已验收（P0=0、P1=0、P2=2；2026-10-17）；adoption 仍关闭；平台门未闭合；已随 0.3.0 发布 |
+| OpenCode-first orchestration | Shipped in 0.3.0 / 已随 0.3.0 发布 |
+| ChatGPT/MCP integration | Local stdio MCP surface shipped (19 tools); product-native ChatGPT distribution not released / 本地 stdio MCP 面已发布（19 个工具）；产品级 ChatGPT 分发尚未发布 |
+| localhost WebUI | Planned (v0.4) / 计划中（v0.4） |
 
-**Important / 重要：** the development milestones above are not all present on `main` yet. The public, supported release remains v0.1.0 until later work is reviewed, merged, and released. / 上述开发里程碑并不都已经进入 `main`。在后续版本完成复审、合并并正式发布前，当前公开支持版本仍为 v0.1.0。
+**Release status / 发布状态：** `v0.3.0` supersedes `v0.1.0`. The tag-driven workflow in `.github/workflows/release.yml` publishes this release; the publisher records the PyPI and GitHub Release results in [docs/RELEASE_CHECKLIST.md](docs/RELEASE_CHECKLIST.md). v0.2-A/B/C ship inside 0.3.0 but are not separately released v0.2 stages; their independent acceptance is not complete. / `v0.3.0` 取代 `v0.1.0`。发布由 `.github/workflows/release.yml` 的 tag 驱动工作流完成；发布者把 PyPI 与 GitHub Release 的结果记录在 [docs/RELEASE_CHECKLIST.md](docs/RELEASE_CHECKLIST.md)。v0.2-A/B/C 随 0.3.0 一起交付，但不是单独的 v0.2 发布阶段；它们的独立验收尚未完成。
 
 ## Vision / 产品愿景
 
@@ -97,11 +101,11 @@ A future **Direct API** execution mode may also be supported as an optional prov
 
 未来可增加可选的 **Direct API** 模式，但它不会取代 OpenCode 作为主要交互式代码执行环境的定位。
 
-## What v0.1.0 already provides / v0.1.0 已实现能力
+## What v0.3.0 provides / v0.3.0 已实现能力
 
-The current public release is a local CLI orchestrator with a real persisted state machine:
+v0.3.0 keeps the v0.1 orchestration loop and adds an explicit OpenCode-first execution path on top of it:
 
-当前公开版本已经是一个具备持久化状态机的本地 CLI 编排器：
+v0.3.0 保留了 v0.1 的编排循环，并在其上增加了明确的 OpenCode-first 执行路径：
 
 ```text
 PLAN → IMPLEMENT → TEST → REVIEW → FIX(loop) → FINAL_GATE → DONE
@@ -109,16 +113,19 @@ PLAN → IMPLEMENT → TEST → REVIEW → FIX(loop) → FINAL_GATE → DONE
 
 Key capabilities / 主要能力：
 
-- Persistent task state and restart-safe workflow / 持久化任务状态与可恢复流程
-- Dirty-workspace task baselines / 支持已有未提交改动的工作区基线
-- Task-relative diffs instead of blindly comparing with `HEAD` / 基于任务起点而非简单 `HEAD` 的增量差异
-- Repository policy guards for branch, HEAD, refs and index state / Git 分支、HEAD、引用和索引保护
-- Bounded review/fix loops / 有上限的审阅与修复循环
-- Official Codex CLI implementer path / 官方 Codex CLI 实现者路径
-- Manual planner/reviewer handoff / 手动规划与审阅导入导出
-- OpenAI-compatible reviewer provider / OpenAI-compatible reviewer provider
-- Human-readable and machine-readable task evidence / 人类可读与机器可读的任务证据
-- Fail-closed handling for uncertain or interrupted provider runs / 对不确定或中断执行采用 fail-closed 策略
+- **v0.1 foundation**: persistent task state, dirty-workspace baselines, task-relative diffs, repository policy guards, bounded review/fix loops, the official Codex CLI implementer, human/machine-readable evidence, and fail-closed handling of uncertain runs. / **v0.1 基础**：持久化任务状态、dirty 工作区基线、任务相对 diff、仓库策略保护、有上限的审阅/修复循环、官方 Codex CLI 实现者、人类/机器可读证据，以及对不确定执行的 fail-closed 处理。
+- **v0.2-A/B/C (candidates included in 0.3.0)**: automatic review loop, project profiles and frozen policy, and the structured Codex runtime. Their independent acceptance is not complete; the evidence is offline / fake-provider only. / **v0.2-A/B/C（作为候选随 0.3.0 发布）**：自动审阅循环、项目 profile 与冻结策略、结构化 Codex runtime；独立验收尚未完成，只有离线/假 provider 证据。
+- **v0.3-A OpenCode session bridge**: an explicit OpenCode endpoint, list/read sessions, send one prompt, bounded wait, interrupt, and normalized output. / **v0.3-A OpenCode session bridge**：显式 OpenCode endpoint、列出/读取 session、发送一条 prompt、有界等待、interrupt，以及标准化输出。
+- **v0.3-B ChatGPT/MCP tool surface**: `devrelay mcp serve --workspace <project>` exposes 19 tools over local stdio. / **v0.3-B ChatGPT/MCP 工具面**：`devrelay mcp serve --workspace <project>` 通过本地 stdio 暴露 19 个工具。
+- **v0.3-C agent role routing**: semantic implementer/reviewer roles with no fallback and no silent override. / **v0.3-C Agent 角色路由**：implementer/reviewer 语义角色，无 fallback、无静默覆盖。
+- **v0.3-D bounded orchestration loop**: durable run state, `max_cycles` 1–3, at most `2 × max_cycles` model turns, `AWAITING_DECISION`, and never automatic acceptance. / **v0.3-D 有界编排循环**：持久化 run 状态、`max_cycles` 1–3、最多 `2 × max_cycles` 个模型轮次、`AWAITING_DECISION`，且从不自动接受。
+- **v0.3-E recovery and hardening**: read-only reconcile plus a one-shot `mark_unrecoverable`; adoption stays disabled and the platform gates stay open. / **v0.3-E 恢复与加固**：只读 reconcile 与一次性 `mark_unrecoverable`；adoption 仍关闭，平台门未闭合。
+
+The offline suite runs 1,271 tests on Python 3.11–3.14, with Linux and Windows CI jobs; releases are created by a tag-driven workflow. / 离线测试套件在 Python 3.11–3.14 上运行 1,271 项测试，CI 覆盖 Linux 与 Windows；发布由 tag 驱动工作流完成。
+
+`devrelay mcp serve --workspace <project>` exposes 19 tools over local stdio, including `devrelay_*` and `opencode_*`. HTTP/SSE, multi-workspace serving, and product-native ChatGPT distribution are not released.
+
+`devrelay mcp serve --workspace <project>` 通过本地 stdio 暴露 19 个工具，包括 `devrelay_*` 与 `opencode_*`。HTTP/SSE、多工作区服务以及产品级 ChatGPT 分发尚未发布。
 
 For release details, see [CHANGELOG.md](CHANGELOG.md).
 
@@ -126,19 +133,27 @@ For release details, see [CHANGELOG.md](CHANGELOG.md).
 
 ## Development direction / 当前开发方向
 
-The next development line moves DevRelay from a Codex-centric CLI toward an OpenCode-first orchestration platform.
+v0.3 shipped the OpenCode orchestration foundation. The next development line is v0.4, the local Web control plane.
 
-下一阶段会把 DevRelay 从“以 Codex 为中心的 CLI”逐步升级为“以 OpenCode 为第一等执行环境的编排平台”。
+v0.3 已交付 OpenCode 编排基础。下一阶段开发是 v0.4，即本地 Web 控制面。
 
 ### v0.3 — OpenCode orchestration foundation / OpenCode 编排基础
 
-- **v0.3-A — OpenCode Session Bridge**: connect to an explicitly configured OpenCode instance, read sessions/output, send one prompt, wait with a bounded timeout, and interrupt safely.
-- **v0.3-B — ChatGPT/MCP Tool Surface**: expose a narrow DevRelay control surface so ChatGPT can read state and issue the next bounded action.
-- **v0.3-C — Agent Role Routing**: explicitly bind planner / implementer / reviewer roles, e.g. ChatGPT / DeepSeek / GLM.
-- **v0.3-D — Bounded Orchestration Loop**: automate IMPLEMENT → REVIEW → FIX cycles without allowing an unbounded autonomous loop.
-- **v0.3-E — Recovery & Hardening**: replay safety, crash recovery, duplicate-action prevention, call accounting, and security hardening.
+All five v0.3 stages shipped in 0.3.0:
+
+五个 v0.3 阶段均已随 0.3.0 发布：
+
+- **v0.3-A — OpenCode Session Bridge** (shipped in 0.3.0): connect to an explicitly configured OpenCode instance, read sessions/output, send one prompt, wait with a bounded timeout, and interrupt safely.
+- **v0.3-B — ChatGPT/MCP Tool Surface** (shipped in 0.3.0): expose a narrow DevRelay control surface so ChatGPT can read state and issue the next bounded action.
+- **v0.3-C — Agent Role Routing** (shipped in 0.3.0): explicitly bind planner / implementer / reviewer roles, e.g. ChatGPT / DeepSeek / GLM.
+- **v0.3-D — Bounded Orchestration Loop** (shipped in 0.3.0): automate IMPLEMENT → REVIEW → FIX cycles without allowing an unbounded autonomous loop.
+- **v0.3-E — Recovery & Hardening** (shipped in 0.3.0; mandatory core only; adoption disabled; platform gates open): replay safety, crash recovery, duplicate-action prevention, call accounting, and security hardening.
 
 ### v0.4 — Local Web Control Plane / 本地 Web 控制面
+
+Status: planned; not started.
+
+状态：计划中，尚未开始。
 
 The planned GUI is a **localhost WebUI**, not a heavy desktop application.
 
@@ -189,24 +204,47 @@ Secrets such as API keys should not be stored in ordinary project configuration 
 
 API Key 等敏感凭据不应以明文形式写入普通项目配置。计划中的 WebUI 应尽可能使用操作系统凭据存储，并只在 DevRelay 配置中保存凭据引用。
 
-## Quick start — v0.1.0 / 快速开始 — v0.1.0
+## Quick start — v0.3.0 / 快速开始 — v0.3.0
 
 Requirements / 要求：Python >= 3.11, Git, and a repository with at least one commit.
 
 ```bash
-# from a source checkout
+# from this release tree
 python -m pip install .
 
-cd your-project
-devrelay init
-devrelay doctor
-devrelay start "Describe the task"
-devrelay status
+# or isolated
+pipx install .
+
+# after the PyPI publication recorded in docs/RELEASE_CHECKLIST.md
+python -m pip install devrelay==0.3.0
 ```
 
-The current public release is still CLI-first. OpenCode bridge, ChatGPT control, and the WebUI are development roadmap items and should not be assumed to exist in v0.1.0.
+In your project / 在项目目录中：
 
-当前公开版本仍以 CLI 为主。OpenCode Bridge、ChatGPT 控制以及 WebUI 都属于后续开发路线，不应被误认为已经存在于 v0.1.0。
+```bash
+devrelay init
+devrelay start "Describe the task"
+devrelay plan import ...
+devrelay continue
+devrelay status
+devrelay usage
+devrelay diff
+devrelay logs
+devrelay mcp serve --workspace .
+```
+
+Until the release workflow completes, `pip install devrelay` still resolves to v0.1.0; the actual results are recorded in [docs/RELEASE_CHECKLIST.md](docs/RELEASE_CHECKLIST.md).
+
+在发布工作流完成之前，`pip install devrelay` 仍会解析到 v0.1.0；实际结果以 [docs/RELEASE_CHECKLIST.md](docs/RELEASE_CHECKLIST.md) 为准。
+
+## Current limitations / 当前限制
+
+- v0.2-A/B/C are candidates included in 0.3.0; their independent acceptance is not complete, and the evidence is fake-provider / offline only. / v0.2-A/B/C 只是随 0.3.0 交付的候选特性；独立验收尚未完成，证据仅限假 provider / 离线测试。
+- v0.3-E ships only the mandatory fail-closed recovery core: `adopt_completed_turn` remains disabled, there is no automatic resume, and remote correlation has not been exercised in practice. / v0.3-E 只发布了强制 fail-closed 恢复核心：`adopt_completed_turn` 仍处于禁用状态，没有自动 resume，远端关联（remote correlation）尚未实际演练。
+- The orchestration store fsyncs only temporary files and POSIX parent directories; Windows has no directory fsync, the OpenCode ledger has no fsync, and there is a single writer. / 编排存储只对临时文件与 POSIX 父目录执行 fsync；Windows 没有目录 fsync，OpenCode ledger 没有 fsync，且只支持单 writer。
+- Platform gates: G0.1/P7, G0.2, and G0.3/P5 PASS; G0.4/P4 is an authoritative FAIL / P4 UNPROVEN; G0.5/P6 NOT RUN; G1 and G2 were not run. / 平台门：G0.1/P7、G0.2、G0.3/P5 PASS；G0.4/P4 为 authoritative FAIL / P4 UNPROVEN；G0.5/P6 NOT RUN；G1、G2 未运行。
+- MCP is stdio-only: no HTTP/SSE, no multi-workspace serving, and no product-native ChatGPT distribution. / MCP 仅支持 stdio：没有 HTTP/SSE，不支持多工作区服务，也没有产品级 ChatGPT 分发。
+- One active task, one Codex implementer, no WebUI; push prevention and secret redaction are best-effort. / 同一时间只有一个活动任务、一个 Codex 实现者，没有 WebUI；push 防护与密钥脱敏都是 best-effort。
 
 ## Documentation / 文档
 
@@ -237,11 +275,11 @@ Core principles / 核心原则：
 
 ## Distribution goal / 分发目标
 
-The long-term distribution target is GitHub Releases with a low-friction Windows package, plus developer-oriented package formats.
+v0.3.0 ships a PyPI wheel/sdist and a GitHub Release; the Windows installer remains a v0.4-E target.
 
-长期分发目标是通过 GitHub Releases 提供低门槛 Windows 安装包，同时保留开发者安装方式。
+v0.3.0 已提供 PyPI wheel/sdist 与 GitHub Release；Windows 安装包仍是 v0.4-E 的目标。
 
-Planned examples / 计划形式：
+Artifacts (Windows installers planned) / 产物（Windows 安装包为计划中）：
 
 ```text
 DevRelay-Setup-Windows-x64.exe
@@ -250,9 +288,9 @@ devrelay-<version>-py3-none-any.whl
 SHA256SUMS.txt
 ```
 
-A future release pipeline should build, test, checksum, and publish these artifacts automatically from a version tag.
+The tag-driven release workflow already builds, checks, and publishes the wheel/sdist and the GitHub Release from a version tag; the Windows installers remain future work.
 
-未来发布流水线应能够从版本 tag 自动完成测试、构建、校验和发布。
+tag 驱动发布工作流已经能够从版本 tag 完成构建、校验并发布 wheel/sdist 与 GitHub Release；Windows 安装包仍是后续工作。
 
 ## License / 许可证
 

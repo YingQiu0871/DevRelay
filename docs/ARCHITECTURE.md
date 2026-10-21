@@ -112,7 +112,7 @@ OpenCode is intended to be the primary execution environment because it already 
 
 OpenCode 被定位为主要执行环境，因为它已经提供低层 coding-agent runtime。
 
-DevRelay v0.3-A introduces a narrow bridge with capabilities conceptually equivalent to:
+DevRelay 0.3.0 ships a narrow bridge with capabilities conceptually equivalent to:
 
 ```text
 health()
@@ -176,11 +176,15 @@ The loop must be bounded by policy, for example:
 
 ## 6. ChatGPT/MCP boundary / ChatGPT/MCP 边界
 
-The planned ChatGPT/MCP interface should be intentionally narrow. It should expose bounded orchestration actions rather than arbitrary local execution.
+0.3.0 ships a local stdio MCP surface with 19 tools; HTTP/SSE and product-native ChatGPT distribution remain planned.
 
-计划中的 ChatGPT/MCP 接口应保持狭窄，提供有界编排动作，而不是任意本地执行能力。
+0.3.0 已交付本地 stdio MCP 接口，共 19 个工具；HTTP/SSE 与产品级 ChatGPT 分发仍为计划中。
 
-Example future surface / 未来接口示例：
+The ChatGPT/MCP interface is intentionally narrow. It exposes bounded orchestration actions rather than arbitrary local execution.
+
+ChatGPT/MCP 接口保持狭窄，提供有界编排动作，而不是任意本地执行能力。
+
+Surface shipped in 0.3.0 (capabilities conceptually equivalent to) / 0.3.0 已交付接口（概念上等价于）：
 
 ```text
 project_status()
@@ -203,6 +207,8 @@ The interface should not silently permit arbitrary filesystem reads, arbitrary s
 The planned GUI is a localhost WebUI backed by a DevRelay-owned local HTTP API.
 
 计划中的 GUI 为 localhost WebUI，由 DevRelay 自己的本地 HTTP API 提供后端。
+
+Planned for v0.4; nothing in 0.3.0 depends on it. / 计划在 v0.4 交付；0.3.0 不依赖它。
 
 ```text
 Browser
@@ -292,6 +298,10 @@ However, Direct API mode should not force DevRelay to reinvent all of OpenCode's
 但是 Direct API 模式不应迫使 DevRelay 重新实现 OpenCode 已经提供的完整 agent runtime。
 
 ## 11. Distribution architecture / 分发架构
+
+0.3.0 ships a PyPI wheel/sdist and a GitHub Release; the Windows installer remains v0.4-E.
+
+0.3.0 已提供 PyPI wheel/sdist 与 GitHub Release；Windows 安装包仍是 v0.4-E。
 
 Long-term packaging target:
 

@@ -1,6 +1,6 @@
 # DevRelay v0.3-A acceptance matrix
 
-> Later status (2026-10-20): released as part of DevRelay 0.3.0.
+> Later status (2026-10-21): released as part of DevRelay 0.3.0.
 
 ## Final decision
 

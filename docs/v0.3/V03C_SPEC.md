@@ -12,7 +12,7 @@ documentation closeout `c883bab…`).  Branch: `v0.3-c-agent-role-routing`.
 
 > Later status (2026-10-18): the package is now 0.3.0; v0.3-D and the v0.3-E mandatory fail-closed core were subsequently accepted; v0.3-E adoption remains DISABLED.
 
-> Later status (2026-10-20): released as part of DevRelay 0.3.0.
+> Later status (2026-10-21): released as part of DevRelay 0.3.0.
 
 ## 1. Objective and boundary
 

@@ -1,10 +1,10 @@
 # DevRelay v0.3-E acceptance matrix — recovery & reconciliation (design phase)
 
-> Later status (2026-10-20): released as part of DevRelay 0.3.0; adoption remains DISABLED; platform gates remain open.
+> Later status (2026-10-21): released as part of DevRelay 0.3.0; adoption remains DISABLED; platform gates remain open.
 
 Status: **DESIGN FROZEN / MANDATORY FAIL-CLOSED CORE ACCEPTED BY INDEPENDENT
 ACCEPTANCE REVIEW (P0 = 0, P1 = 0, P2 = 2; 2026-10-17) / ADOPTION DISABLED /
-PLATFORM GATES OPEN / RELEASED IN 0.3.0 (2026-10-20)**
+PLATFORM GATES OPEN / RELEASED IN 0.3.0 (2026-10-21)**
 
 ## 0. Acceptance decision (independent review, 2026-10-17)
 

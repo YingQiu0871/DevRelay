@@ -7,6 +7,7 @@ This roadmap separates **released**, **implemented but unreleased**, **in progre
 ## Status legend / 状态说明
 
 - ✅ **Released / 已发布**
+- ✅ **Released (in 0.3.0) / 已随 0.3.0 发布**
 - 🧪 **Implemented, unreleased / 已实现未发布**
 - 🚧 **In progress / 开发中**
 - 📋 **Planned / 计划中**
@@ -34,13 +35,13 @@ Implemented / 已实现：
 
 ### v0.2-A / v0.2-B
 
-Status: 🧪 Implemented in development history, not released on `main` as a public version.
+Status: ✅ Shipped in 0.3.0; independent acceptance not complete; not separately released. / 已随 0.3.0 发布；独立验收尚未完成；不是单独的 v0.2 发布。
 
 方向：强化自动 review、控制状态、迁移与调用记账等基础能力。
 
 ### v0.2-C — Structured Codex Runtime
 
-Status: 🧪 + ⏸
+Status: ✅ Shipped in 0.3.0; independent acceptance not complete; E2E closure pending (⏸ externally blocked). / 已随 0.3.0 发布；独立验收尚未完成；E2E 闭环待完成（⏸ 外部条件阻塞）。
 
 Implemented development evidence includes:
 
@@ -77,7 +78,7 @@ Goal / 目标：把 DevRelay 从 Codex-centric CLI 演进为 OpenCode-first orch
 
 ### v0.3-A — OpenCode Session Bridge
 
-Status: 🚧 In progress
+Status: ✅ Released in 0.3.0
 
 Target / 目标：
 
@@ -100,7 +101,7 @@ Non-goals / 本阶段不做：
 
 ### v0.3-B — ChatGPT/MCP Tool Surface
 
-Status: 📋 Planned
+Status: ✅ Released in 0.3.0 (19 tools, local stdio)
 
 Goal: expose a narrow, explicit DevRelay tool surface so ChatGPT can inspect state, read evidence, and issue the next bounded action.
 
@@ -115,7 +116,7 @@ Goal: expose a narrow, explicit DevRelay tool surface so ChatGPT can inspect sta
 
 ### v0.3-C — Agent Role Routing
 
-Status: 📋 Planned
+Status: ✅ Released in 0.3.0
 
 Goal: make agent roles explicit and configurable.
 
@@ -136,7 +137,7 @@ Required properties / 约束：
 
 ### v0.3-D — Bounded Orchestration Loop
 
-Status: 📋 Planned
+Status: ✅ Released in 0.3.0
 
 Goal: automate the repetitive loop without creating an unlimited autonomous agent.
 
@@ -166,7 +167,7 @@ Planned controls / 计划控制：
 
 ### v0.3-E — Recovery, Replay & Security Hardening
 
-Status: 📋 Planned
+Status: ✅ Released in 0.3.0 (mandatory fail-closed core; adoption disabled; platform gates open)
 
 Targets / 目标：
 
@@ -238,7 +239,7 @@ Status: 📋 Planned
 
 ### v0.4-E — Packaging & GitHub Release Automation
 
-Status: 📋 Planned
+Status: 📋 Planned for the Windows installers (PyPI wheel/sdist and the GitHub Release already ship in 0.3.0). / 安装包仍为计划中（PyPI wheel/sdist 与 GitHub Release 已随 0.3.0 提供）。
 
 Target artifacts / 目标产物：
 
@@ -282,11 +283,10 @@ Potential directions / 潜在方向：
 
 ## Immediate next steps / 当前最近步骤
 
-1. Resume and complete **v0.3-A OpenCode Session Bridge**.
-2. Independently review v0.3-A before starting v0.3-B.
-3. Investigate the v0.2-C Windows Codex shell-policy P2 offline in parallel, without another real Codex call.
-4. When Codex quota becomes available again, authorize a later minimal E2E smoke only after the Windows issue is understood.
-5. Keep the public release at v0.1.0 until unreleased milestones are reviewed and intentionally promoted.
+1. Start **v0.4 — Local Web Control Plane**.
+2. Close the remaining v0.3-E platform gates (G0.4/P4, G0.5/P6, G1, G2) and decide whether recovery adoption may be enabled; `adopt_completed_turn` stays disabled until then.
+3. Complete independent acceptance for v0.2-A/B/C, and close the v0.2-C E2E when Codex quota returns.
+4. Investigate the v0.2-C Windows Codex shell-policy P2 offline, without another real Codex call.
 
 ## Long-term product goal / 长期产品目标
 

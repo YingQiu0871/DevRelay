@@ -6,7 +6,7 @@ The publication flow is the tag-driven workflow in
 this file claims that a release, tag or push exists until the publisher performs
 it.
 
-## v0.3.0 (2026-10-20)
+## v0.3.0 (2026-10-21)
 
 ### Verified in this tree
 
@@ -42,15 +42,19 @@ it.
 
 ### Publisher steps (owner only; not performed by the implementer)
 
-1. Fast-forward merge `release/0.3.0-prep` into `main` (no merge commit) and
-   push `main`.
+1. Merge the reviewed `release/0.3.0-integrate` branch into `main` (fast-forward
+   if `main` has not moved; otherwise a merge commit), and push `main`.  The
+   integration docs commit inside that branch changes documentation only; the
+   merge itself only brings the release branch's code and docs into `main`.
 2. Wait for the CI workflow to be green on that commit.
 3. Create the annotated tag `v0.3.0` on `main` and push it.
 4. Create a **draft** GitHub Release for the `v0.3.0` tag, without assets.
 5. Dispatch the `release` workflow by hand with `tag = v0.3.0` and
    `confirm = PUBLISH`.
 6. Verify the outcome: PyPI serves `devrelay 0.3.0` (wheel and sdist) and the
-   GitHub Release is no longer a draft and carries the three assets.
+   GitHub Release is no longer a draft and carries the three assets.  Record the
+   `test.yml` run URL, the tag, the draft-Release state and the PyPI file list in
+   *Release evidence* below.
 
 ### Release evidence (fill in when publishing)
 

@@ -1,6 +1,6 @@
 # DevRelay v0.3-B acceptance matrix — MCP tool surface
 
-> Later status (2026-10-20): released as part of DevRelay 0.3.0.
+> Later status (2026-10-21): released as part of DevRelay 0.3.0.
 
 Status: **ACCEPT — V0.3-B CHATGPT/MCP TOOL SURFACE** — functional development
 **CLOSED** (accepted internally; **UNRELEASED**).

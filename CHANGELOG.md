@@ -4,14 +4,14 @@ All notable changes to DevRelay are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## 0.3.0 - 2026-10-20
+## 0.3.0 - 2026-10-21
 
 Earlier entries record the status at their date.
 
 Version `0.3.0` is single-sourced in `pyproject.toml` and in the
 `src/devrelay/__init__.py` fallback constant, and is what `devrelay version`
 reports.  The tag-driven workflow in `.github/workflows/release.yml` publishes
-this release (2026-10-20); publication results are recorded in
+this release (2026-10-21); publication results are recorded in
 `docs/RELEASE_CHECKLIST.md`.
 
 ### Added
@@ -82,7 +82,7 @@ this release (2026-10-20); publication results are recorded in
 
 ## v0.3-E (2026-10-17) - mandatory fail-closed core accepted
 
-**Design frozen.  Mandatory fail-closed core implemented and independently accepted (P0 = 0, P1 = 0, P2 = 2; 2026-10-17); adoption disabled; platform gates open; subsequently released in 0.3.0 (2026-10-20).**  The independent
+**Design frozen.  Mandatory fail-closed core implemented and independently accepted (P0 = 0, P1 = 0, P2 = 2; 2026-10-17); adoption disabled; platform gates open; subsequently released in 0.3.0 (2026-10-21).**  The independent
 design-freeze review approved candidate
 `9f4a01804b9affe8938a272553df345b5a60aeed` with **P0 = 0, P1 = 0, P2 = 0** and
 F1-F12 **CLOSED**, decision *APPROVE V0.3-E FAIL-CLOSED CORE DESIGN; PLATFORM PROOF

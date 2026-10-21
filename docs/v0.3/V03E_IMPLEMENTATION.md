@@ -3,7 +3,7 @@
 Status: **IMPLEMENTED / OFFLINE TESTS PASS / ADVERSARIALLY REVIEWED (findings
 remediated) / AUTHORIZED / REAL SMOKE EXECUTED (R1 FAIL per oracle, R2 PASS under
 the corrective oracle) / MANDATORY CORE ACCEPTED BY INDEPENDENT ACCEPTANCE REVIEW
-(P0 = 0, P1 = 0, P2 = 2) / ADOPTION DISABLED / RELEASED IN 0.3.0 (2026-10-20)**.
+(P0 = 0, P1 = 0, P2 = 2) / ADOPTION DISABLED / RELEASED IN 0.3.0 (2026-10-21)**.
 
 > **Acceptance status — read this first.** The independently conducted
 > acceptance review (read-only, separate from the implementer, HEAD `9cf8f14`)
@@ -20,7 +20,7 @@ the corrective oracle) / MANDATORY CORE ACCEPTED BY INDEPENDENT ACCEPTANCE REVIE
 > fixed in the acceptance bookkeeping commit) and P2-2 (the R2 conformance
 > matcher matches labels globally rather than phase-scoped; no rule is
 > unasserted today, fix before extending the oracle — recorded in
-> `docs/BACKLOG.md` §10). The package is **released as 0.3.0** (2026-10-20).
+> `docs/BACKLOG.md` §10). The package is **released as 0.3.0** (2026-10-21).
 >
 > **Authorization status.** Work authorization exists:
 > `V03E_IMPLEMENTATION_AUTHORIZATION.md` (owner instruction `m01693`, baseline

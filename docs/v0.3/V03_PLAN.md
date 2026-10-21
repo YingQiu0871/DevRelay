@@ -16,7 +16,7 @@ candidate (`bcf9627…`); v0.3-A sources were not modified by v0.3-B.
 v0.3-B (MCP tool surface) is **accepted internally and closed** at candidate
 `d058d62341a173414bdba88fe357b08c236c8bb4` on branch `v0.3-b-mcp-tool-surface`:
 see `docs/v0.3/V03B_SPEC.md` and `docs/v0.3/V03B_ACCEPTANCE.md`.  It ships in
-0.3.0 (2026-10-20) and its final
+0.3.0 (2026-10-21) and its final
 evidence includes one separately authorized real MCP smoke
 (`PASS — V0.3-B LOCAL REAL MCP SMOKE`: real official MCP Python SDK 2.2.0 client
 -> stdio -> this server -> the accepted v0.3-A bridge -> real OpenCode 1.18.11 ->
@@ -34,7 +34,7 @@ orchestrate anything.  Real routing was verified by two bounded runs: implemente
 one explicit model turn and one `POST /session/{id}/message` each, with
 three-way route agreement (`devrelay_get_role`, response metadata, OpenCode
 provider log).  The package version is 0.3.0 and the release is 0.3.0
-(2026-10-20).
+(2026-10-21).
 
 v0.3-D (bounded orchestration) is **accepted internally, closed and shipped in
 0.3.0** at candidate `8b70610a5cdda600ef57cf8378c4f69cd33d5be4` on branch
