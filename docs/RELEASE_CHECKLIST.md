@@ -2,9 +2,9 @@
 
 The publication flow is the tag-driven workflow in
 `.github/workflows/release.yml`, described step by step in
-`docs/PYPI_PUBLISHING.md`.  The publisher owns every remote action: nothing in
-this file claims that a release, tag or push exists until the publisher performs
-it.
+`docs/PYPI_PUBLISHING.md`.  The publisher owns every remote action.  For v0.3.0
+the publisher completed the steps below on 2026-10-21; the evidence is recorded
+here and the release is public.
 
 ## v0.3.0 (2026-10-21)
 
@@ -43,9 +43,8 @@ it.
   unchanged: POSIX still fails closed with
   `codex_process_containment_unsupported` and zero provider calls, exactly as
   `docs/v0.2/V02C_SPEC.md` requires.
-- [x] The failed `test.yml` run on `9e7192b` produced no tag.  A green run on
-  the fixed `main` commit is required before the tag, as recorded under the
-  publisher steps.
+- [x] The failed `test.yml` run on `9e7192b` produced no tag.  The fixed
+  `main` commit `f78d46e` passed `test.yml` before the tag (evidence below).
 
 ### Release scope (disclosed, not claimed)
 
@@ -59,31 +58,34 @@ it.
   not complete** (G0.1/P7 = PASS, G0.2 = PASS, G0.3/P5 = PASS, G0.4/P4 =
   authoritative FAIL / P4 UNPROVEN, G0.5/P6 = NOT RUN, G1/G2 not run).
 
-### Publisher steps (owner only; not performed by the implementer)
+### Publisher steps (completed 2026-10-21)
 
-1. Merge the reviewed `release/0.3.0-integrate` branch into `main` (fast-forward
-   if `main` has not moved; otherwise a merge commit), and push `main`.  The
-   integration docs commit inside that branch changes documentation only; the
-   merge itself only brings the release branch's code and docs into `main`.
-2. Wait for the CI workflow to be green on that commit.
-3. Create the annotated tag `v0.3.0` on `main` and push it.
-4. Create a **draft** GitHub Release for the `v0.3.0` tag, without assets.
-5. Dispatch the `release` workflow by hand with `tag = v0.3.0` and
+1. [x] Fast-forwarded `main` to the reviewed release commit and pushed it.
+2. [x] Waited for `test.yml` to be green on that commit.
+3. [x] Created the annotated tag `v0.3.0` on `main` and pushed it.
+4. [x] Created a **draft** GitHub Release for the `v0.3.0` tag.
+5. [x] Dispatched the `release` workflow with `tag = v0.3.0` and
    `confirm = PUBLISH`.
-6. Verify the outcome: PyPI serves `devrelay 0.3.0` (wheel and sdist) and the
-   GitHub Release is no longer a draft and carries the three assets.  Record the
-   `test.yml` run URL, the tag, the draft-Release state and the PyPI file list in
-   *Release evidence* below.
+6. [x] Verified PyPI serves `devrelay 0.3.0` (wheel and sdist), the GitHub
+   Release is no longer a draft and carries the three assets, and a fresh venv
+   installs the published wheel.
 
-### Release evidence (fill in when publishing)
+### Release evidence
 
-- Release commit:
-- Tag:
-- `test.yml` run:
-- `release.yml` run:
+- Release commit: `f78d46edc4802870c3af9a98bf91464890971a74`
+- Tag: `v0.3.0` (annotated; peeled commit `f78d46e`)
+- `test.yml` run: https://github.com/YingQiu0871/DevRelay/actions/runs/39658557766
+- `release.yml` run: https://github.com/YingQiu0871/DevRelay/actions/runs/39659859484
 - PyPI files:
-- Install verification (`devrelay version`):
+  - `devrelay-0.3.0-py3-none-any.whl`
+    (`sha256:258aef99cb923c303843c54fa26301b4c2e99089028e51e5c4061d1cd680b941`)
+  - `devrelay-0.3.0.tar.gz`
+    (`sha256:6cd6d75383ab49bfd02444490954fa7d3cee1316ffa30ea249ef94965add52d7`)
+- PyPI page: https://pypi.org/project/devrelay/0.3.0/
+- Install verification: fresh venv from PyPI reports `devrelay 0.3.0`.
 - GitHub Release (draft=false):
+  https://github.com/YingQiu0871/DevRelay/releases/tag/v0.3.0
+  with the wheel, sdist, and `SHA256SUMS`.
 
 ## v0.1.0 (historical)
 

@@ -23,7 +23,7 @@ DevRelay 是一个本地运行、可审计的多模型软件开发编排层。�
 | ChatGPT/MCP integration | Local stdio MCP surface shipped (19 tools); product-native ChatGPT distribution not released / 本地 stdio MCP 面已发布（19 个工具）；产品级 ChatGPT 分发尚未发布 |
 | localhost WebUI | Planned (v0.4) / 计划中（v0.4） |
 
-**Release status / 发布状态：** `v0.3.0` supersedes `v0.1.0`. The tag-driven workflow in `.github/workflows/release.yml` publishes this release; the publisher records the PyPI and GitHub Release results in [docs/RELEASE_CHECKLIST.md](docs/RELEASE_CHECKLIST.md). v0.2-A/B/C ship inside 0.3.0 but are not separately released v0.2 stages; their independent acceptance is not complete. / `v0.3.0` 取代 `v0.1.0`。发布由 `.github/workflows/release.yml` 的 tag 驱动工作流完成；发布者把 PyPI 与 GitHub Release 的结果记录在 [docs/RELEASE_CHECKLIST.md](docs/RELEASE_CHECKLIST.md)。v0.2-A/B/C 随 0.3.0 一起交付，但不是单独的 v0.2 发布阶段；它们的独立验收尚未完成。
+**Release status / 发布状态：** `v0.3.0` supersedes `v0.1.0` and is published on [PyPI](https://pypi.org/project/devrelay/0.3.0/) and [GitHub Releases](https://github.com/YingQiu0871/DevRelay/releases/tag/v0.3.0); the tag-driven workflow and recorded evidence are in [docs/RELEASE_CHECKLIST.md](docs/RELEASE_CHECKLIST.md). v0.2-A/B/C ship inside 0.3.0 but are not separately released v0.2 stages; their independent acceptance is not complete. / `v0.3.0` 取代 `v0.1.0`，已发布至 [PyPI](https://pypi.org/project/devrelay/0.3.0/) 与 [GitHub Release](https://github.com/YingQiu0871/DevRelay/releases/tag/v0.3.0)；tag 驱动流程与记录见 [docs/RELEASE_CHECKLIST.md](docs/RELEASE_CHECKLIST.md)。v0.2-A/B/C 随 0.3.0 一起交付，但不是单独的 v0.2 发布阶段；它们的独立验收尚未完成。
 
 ## Vision / 产品愿景
 
@@ -215,7 +215,7 @@ python -m pip install .
 # or isolated
 pipx install .
 
-# after the PyPI publication recorded in docs/RELEASE_CHECKLIST.md
+# from PyPI (published; evidence in docs/RELEASE_CHECKLIST.md)
 python -m pip install devrelay==0.3.0
 ```
 

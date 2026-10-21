@@ -6,11 +6,13 @@ This document is the status ledger for DevRelay. It intentionally distinguishes 
 
 ## Current public release / 当前公开版本
 
-**v0.3.0** on `main` (2026-10-21).
+**v0.3.0** on `main` (2026-10-21), published to
+[PyPI](https://pypi.org/project/devrelay/0.3.0/) and
+[GitHub Releases](https://github.com/YingQiu0871/DevRelay/releases/tag/v0.3.0).
 
-The public repository supports the v0.3 orchestration line: the v0.1 CLI workflow plus the v0.3 OpenCode-first orchestration surface. Publication results (PyPI and GitHub Release) are recorded in [RELEASE_CHECKLIST.md](RELEASE_CHECKLIST.md); later milestones described below must not be presented as released capability until reviewed, merged, tagged, and published.
+The public repository supports the v0.3 orchestration line: the v0.1 CLI workflow plus the v0.3 OpenCode-first orchestration surface. Publication evidence is recorded in [RELEASE_CHECKLIST.md](RELEASE_CHECKLIST.md); later milestones described below must not be presented as released capability until reviewed, merged, tagged, and published.
 
-当前公开仓库支持 v0.3 编排线：v0.1 的 CLI 工作流，加上 v0.3 的 OpenCode-first 编排能力。PyPI 与 GitHub Release 的发布结果记录在 [RELEASE_CHECKLIST.md](RELEASE_CHECKLIST.md)；下述后续里程碑只有在完成复审、合并、打 tag 并正式发布后，才可以作为“已发布能力”对外描述。
+当前公开仓库支持 v0.3 编排线：v0.1 的 CLI 工作流，加上 v0.3 的 OpenCode-first 编排能力。发布证据记录在 [RELEASE_CHECKLIST.md](RELEASE_CHECKLIST.md)；下述后续里程碑只有在完成复审、合并、打 tag 并正式发布后，才可以作为“已发布能力”对外描述。
 
 ## Capability matrix / 能力矩阵
 
