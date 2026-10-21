@@ -1,7 +1,8 @@
 # DevRelay v0.4-B1 — independent review record
 
 Status: **B1 reviewed: APPROVE WITH FINDINGS (P0/P1 = 0); P2 findings
-remediated; pending owner acceptance.**  No v0.4 tag or release is implied.
+remediated; accepted by the owner on 2026-10-22.**  No v0.4 tag or release is
+implied.  See [V04B_ACCEPTANCE.md](V04B_ACCEPTANCE.md).
 
 Two independent read-only reviews were performed against the static UI and the
 `editable_document` projection.  Neither found a P0/P1.  The findings below are

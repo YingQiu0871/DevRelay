@@ -1,10 +1,11 @@
 # DevRelay v0.4-B — Local WebUI Configuration
 
-Status: **IMPLEMENTED + INDEPENDENTLY REVIEWED — APPROVE WITH FINDINGS; P2
-findings remediated; pending owner acceptance.**  The review is recorded in
-[V04B_REVIEW.md](V04B_REVIEW.md).  This is a local, static single-page UI served
-by `devrelay web serve`; it is not a hosted service and adds no frontend build
-chain.  No v0.4 tag or release is implied.
+Status: **B1 ACCEPTED / CLOSED by the owner on 2026-10-22.**  The review is
+recorded in [V04B_REVIEW.md](V04B_REVIEW.md) and the acceptance record in
+[V04B_ACCEPTANCE.md](V04B_ACCEPTANCE.md).  This is a local, static single-page
+UI served by `devrelay web serve`; it is not a hosted service and adds no
+frontend build chain.  No v0.4 tag or release is implied.  B2 (separate wiring
+API) is the next slice.
 
 ## Objective
 

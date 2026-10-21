@@ -159,10 +159,10 @@ v0.3.0 meets that bar through the annotated `v0.3.0` tag and the publication rec
 
 ## Next gates / 下一步门槛
 
-1. Accept/close **v0.4-B B1 WebUI Configuration**
-   ([V04B_SPEC.md](v0.4/V04B_SPEC.md)); it is implemented on the accepted A1/A2
-   API, reviewed with findings in [V04B_REVIEW.md](v0.4/V04B_REVIEW.md), edits
-   only the A2 allowlist, and shows endpoint/credential/profile wiring read-only.
+1. Build **v0.4-B2 wiring API** for OpenCode endpoint and MCP connection
+   metadata ([V04B_SPEC.md](v0.4/V04B_SPEC.md)); B1 is accepted, and B2 must
+   keep credentials as environment references and stay outside the A2 config
+   allowlist.
 2. Close the remaining v0.3-E platform gates (G0.4/P4, G0.5/P6, G1, G2) and decide whether recovery adoption may be enabled; `adopt_completed_turn` stays disabled until then.
 3. Complete independent acceptance for v0.2-A/B/C, and close the v0.2-C E2E when provider quota returns.
 4. Investigate the Windows Codex shell-policy P2 offline; do not spend another real Codex call on diagnosis.
