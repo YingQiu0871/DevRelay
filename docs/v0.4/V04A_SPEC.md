@@ -1,13 +1,14 @@
 # DevRelay v0.4-A — Local HTTP Control API
 
-Status: **A1 + A2 IMPLEMENTED + INDEPENDENTLY REVIEWED — APPROVE WITH
-FINDINGS; pending owner acceptance.**
+Status: **A1 + A2 ACCEPTED / CLOSED by the owner on 2026-10-22.**  This is a
+stage acceptance, not a v0.4 release.  The acceptance record is
+[V04A_ACCEPTANCE.md](V04A_ACCEPTANCE.md).
 The A1 review and its dispositions are recorded in
 [V04A_REVIEW.md](V04A_REVIEW.md); the A1 localhost cookie limitation was
 resolved by moving sessions to a header, which is the prerequisite A2 needed.
 The A2 review, re-review and remediation are recorded in
-[V04A_A2_REVIEW.md](V04A_A2_REVIEW.md); A2 is reviewed with findings and awaits
-owner acceptance.
+[V04A_A2_REVIEW.md](V04A_A2_REVIEW.md); A2 was accepted with the residual P3
+notes carried forward.
 
 This document proposes the transport and security foundation for the v0.4 local
 WebUI.  It deliberately does not implement the WebUI, live run control, or a

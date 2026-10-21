@@ -1,8 +1,10 @@
 # DevRelay v0.4-A2 — independent review record
 
 Status: **A2 re-reviewed: APPROVE WITH FINDINGS (P0/P1 = 0); the two P2
-findings were remediated.  A2 remains implemented and not tagged/released.**
-A1 remains APPROVE WITH FINDINGS with R1 resolved by the header-session change.
+findings were remediated, and A2 was accepted by the owner on 2026-10-22.**
+This is a stage acceptance, not a tag or release.  A1 remains APPROVE WITH
+FINDINGS with R1 resolved by the header-session change.  See
+[V04A_ACCEPTANCE.md](V04A_ACCEPTANCE.md).
 
 - Review target: the A2 `PUT /api/config` implementation and the R1 header
   session migration.
@@ -46,5 +48,5 @@ review:
 The remaining P3 notes are retained: validate/apply missing-file asymmetry was
 closed (validate now requires an existing file), post-replace directory-fsync
 errors are ignored, and the symlink-check/read TOCTOU and backup accumulation
-remain documented limitations.  A2 is **implemented and independently reviewed
-with findings**, not tagged or released.
+remain documented limitations.  A2 is **accepted with findings**, not tagged or
+released.

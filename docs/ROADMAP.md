@@ -188,19 +188,19 @@ Goal: configuration, monitoring, and emergency intervention through a localhost 
 
 ### v0.4-A — Local HTTP Control API
 
-Status: 🧪 A1 + A2 implemented and independently reviewed (APPROVE WITH
-FINDINGS; pending owner acceptance).  See
-[V04A_SPEC.md](v0.4/V04A_SPEC.md).  A1 is the original read-only transport
-foundation; A2 adds the backend-owned configuration write and has its own review
-gate.  The A1 localhost cookie-scope P2 was resolved by the header-borne session
-before A2; its history is in [BACKLOG.md](BACKLOG.md) §12.
+Status: ✅ **ACCEPTED / CLOSED by the owner on 2026-10-22** — stage acceptance,
+not a v0.4 release.  See [V04A_SPEC.md](v0.4/V04A_SPEC.md) and
+[V04A_ACCEPTANCE.md](v0.4/V04A_ACCEPTANCE.md).  A1 is the read-only transport
+foundation; A2 adds the allowlisted backend-owned configuration patch.  The A1
+localhost cookie-scope P2 was resolved by the header-borne session before A2;
+its history is in [BACKLOG.md](BACKLOG.md) §12.
 
 - bind localhost by default — implemented in A1
 - authenticated local session — implemented in A1
 - origin validation + header-session protection — implemented in A1
 - validated project/workspace registry — implemented in A1
 - no arbitrary filesystem browsing — enforced in A1
-- backend-owned config mutation — implemented in A2, pending review
+- backend-owned config mutation — implemented in A2 and accepted
 
 ### v0.4-B — WebUI Configuration
 
@@ -288,9 +288,9 @@ Potential directions / 潜在方向：
 
 ## Immediate next steps / 当前最近步骤
 
-1. Accept/close the independently reviewed **v0.4-A1 + A2** stage
-   ([V04A_SPEC.md](v0.4/V04A_SPEC.md)); A2 is the allowlisted configuration
-   patch with digest guard, confirmation header, backup and atomic replace.
+1. Build **v0.4-B WebUI Configuration** on the accepted A1/A2 API
+   ([V04A_SPEC.md](v0.4/V04A_SPEC.md)); it must use the header session, the
+   curated `PUT /api/config` allowlist, and the `restart_required` signal.
 2. Close the remaining v0.3-E platform gates (G0.4/P4, G0.5/P6, G1, G2) and decide whether recovery adoption may be enabled; `adopt_completed_turn` stays disabled until then.
 3. Complete independent acceptance for v0.2-A/B/C, and close the v0.2-C E2E when Codex quota returns.
 4. Investigate the v0.2-C Windows Codex shell-policy P2 offline, without another real Codex call.

@@ -1,8 +1,9 @@
 # DevRelay v0.4-A1 — independent review record
 
-Status: **A1 reviewed; verdict APPROVE WITH FINDINGS.  The one P2 localhost
-cookie-scope item was resolved by moving sessions to `X-DevRelay-Session`; A2 is
-implemented and awaits its own independent review.**
+Status: **A1 reviewed (APPROVE WITH FINDINGS) and accepted by the owner on
+2026-10-22 together with A2.**  The one P2 localhost cookie-scope item was
+resolved by moving sessions to `X-DevRelay-Session`.  See
+[V04A_ACCEPTANCE.md](V04A_ACCEPTANCE.md).
 
 - Review target: the v0.4-A1 read-only local HTTP control API
   (`src/devrelay/web/`, `src/devrelay/cli_web.py`,
