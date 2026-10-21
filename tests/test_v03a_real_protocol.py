@@ -41,6 +41,7 @@ from devrelay.opencode.models import (
 
 from helpers import make_git_repo
 from opencode_stub import DEFAULT_WORKSPACE, SPA_FALLBACK_HTML, StubOpenCodeServer, _session
+from test_v03a_remediation import _Clock
 
 WS = DEFAULT_WORKSPACE
 SESSION_ID = "ses_match"
@@ -380,10 +381,20 @@ def test_wait_idle_retry_keeps_evidence_and_continues(tmp_path):
 
 
 def test_wait_idle_bounded_busy_timeout(tmp_path):
+    # Drive the whole-operation deadline with a fake clock: a real 0.2 s budget
+    # is tight enough that a slow ledger fsync can consume it before the first
+    # status poll, making the "last observed status" assertion timing-dependent.
+    clock = _Clock()
     stub = StubOpenCodeServer(
         sessions=[_idle_session()], status_map={SESSION_ID: real_status("busy")}
     )
-    result = _bridge(tmp_path, stub, poll_interval_seconds=0.05).wait_idle(SESSION_ID, 0.2)
+    result = _bridge(
+        tmp_path,
+        stub,
+        poll_interval_seconds=0.05,
+        sleep=clock.sleep,
+        monotonic=clock.monotonic,
+    ).wait_idle(SESSION_ID, 0.2)
 
     assert result.state is OpenCodeOperationState.TIMED_OUT
     assert result.error_type == "idle_timeout"
