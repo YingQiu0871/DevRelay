@@ -188,7 +188,9 @@ Goal: configuration, monitoring, and emergency intervention through a localhost 
 
 ### v0.4-A — Local HTTP Control API
 
-Status: 📋 Planned
+Status: 📝 Design candidate — see [V04A_SPEC.md](v0.4/V04A_SPEC.md); no runtime
+code yet.  The proposal splits A into a read-only transport foundation (A1) and
+a backend-owned configuration write (A2), each with its own review gate.
 
 - bind localhost by default
 - authenticated local session
@@ -283,7 +285,9 @@ Potential directions / 潜在方向：
 
 ## Immediate next steps / 当前最近步骤
 
-1. Start **v0.4 — Local Web Control Plane**.
+1. Review the **v0.4-A local HTTP control API** design
+   ([V04A_SPEC.md](v0.4/V04A_SPEC.md)); implementation starts only after the
+   auth/Host/Origin/CSRF boundary and the optional `web` dependency are approved.
 2. Close the remaining v0.3-E platform gates (G0.4/P4, G0.5/P6, G1, G2) and decide whether recovery adoption may be enabled; `adopt_completed_turn` stays disabled until then.
 3. Complete independent acceptance for v0.2-A/B/C, and close the v0.2-C E2E when Codex quota returns.
 4. Investigate the v0.2-C Windows Codex shell-policy P2 offline, without another real Codex call.
