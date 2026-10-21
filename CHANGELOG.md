@@ -14,11 +14,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   serve` / `devrelay web project ...` commands.  The optional `web` extra keeps
   the core CLI small.
 - v0.4-A2 backend-owned configuration write: `PUT /api/config` with a current
-  SHA-256 guard, `X-DevRelay-Confirm: apply`, full `WorkspaceFile` validation,
-  secret-key/argv rejection, an owner-only backup, and atomic replacement.
-  Comments are not preserved; the live process reloads on restart.  Review and
-  the resolved localhost cookie-scope item are recorded in
-  `docs/v0.4/V04A_REVIEW.md` and `docs/BACKLOG.md`.
+  SHA-256 guard, `X-DevRelay-Confirm: apply`, allowlisted `WorkspaceFile`
+  validation, secret-key/value rejection, a cross-process writer lock, an
+  owner-only backup, and atomic replacement.  Comments are not preserved; the
+  live process reloads on restart.  Review and the resolved localhost
+  cookie-scope item are recorded in `docs/v0.4/V04A_REVIEW.md` and
+  `docs/BACKLOG.md`.
+- v0.4-B local WebUI: a static, no-build single page served at `/` by
+  `devrelay web serve`, with fragment-token login, header sessions, summary
+  cards, an allowlisted configuration form, read-only wiring display, status
+  and recent runs.  The UI uses `X-DevRelay-Session`, a self-only CSP, fixed
+  assets and no cookies; it deliberately does not edit OpenCode
+  endpoint/workspace, profiles, argv or test shell commands.
 
 ## 0.3.0 - 2026-10-21
 

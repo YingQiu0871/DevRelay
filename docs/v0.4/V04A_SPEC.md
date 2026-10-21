@@ -116,7 +116,9 @@ package is an adapter, never a second orchestration engine.
   server.  It is registered automatically if absent.  Host, workspace and token
   shape are validated before bind; any later registry/service construction
   failure closes the bound socket before serving.
-- Startup prints the login URL `http://127.0.0.1:<port>/#token=<one-time-token>`.
+- Startup prints the login URL `http://127.0.0.1:<port>/#token=<per-process-token>`.
+  The token is valid until the process exits (or the env-supplied token is
+  rotated); it is not a single-use token.
   The token is never written to logs, artifacts, config, or the registry.  A
   non-interactive caller may set `DEVRELAY_WEB_TOKEN`; the token is then not
   printed.
@@ -350,8 +352,9 @@ list limit; the cap fails closed, but incremental pagination belongs to v0.4-C.
 2. **A1 was read-only; A2 adds written configuration behind a separate review
    gate** — A1 shipped without a write endpoint; A2 is now implemented and
    awaiting review.
-3. **One-time fragment login URL, no persisted token file** — accepted; the
-   token is per-process or supplied by `DEVRELAY_WEB_TOKEN`.
+3. **Per-process fragment login URL, no persisted token file** — accepted; the
+   token is per-process or supplied by `DEVRELAY_WEB_TOKEN`.  It is not claimed
+   to be single-use.
 
 ## Review focus for A1 + A2
 

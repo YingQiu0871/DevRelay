@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import secrets
 import sys
+from pathlib import Path
 from typing import Any, Awaitable, Callable
 
 from pydantic import ValidationError
@@ -36,6 +37,12 @@ from devrelay.web.registry import ProjectRegistry
 from devrelay.web.service import WebReadService
 from devrelay.web.workspace import resolve_workspace
 
+STATIC_DIR = Path(__file__).resolve().parent / "static"
+_ASSET_TYPES = {
+    "app.js": "text/javascript; charset=utf-8",
+    "styles.css": "text/css; charset=utf-8",
+}
+
 
 # ---------------------------------------------------------------------------
 # response helpers
@@ -63,6 +70,34 @@ def _json(
     if extra_headers:
         headers.update(extra_headers)
     return JSONResponse(data, status_code=status_code, headers=headers)
+
+
+def _ui_headers() -> dict[str, str]:
+    """CSP for the local UI; API responses keep the stricter default-src none."""
+    return {
+        "Cache-Control": "no-store",
+        "X-Content-Type-Options": "nosniff",
+        "Referrer-Policy": "no-referrer",
+        "X-Frame-Options": "DENY",
+        "Cross-Origin-Resource-Policy": "same-origin",
+        "Content-Security-Policy": (
+            "default-src 'none'; script-src 'self'; style-src 'self'; "
+            "connect-src 'self'; img-src 'self' data:; base-uri 'none'; "
+            "form-action 'none'; frame-ancestors 'none'"
+        ),
+    }
+
+
+def _static(name: str) -> Response:
+    media_type = _ASSET_TYPES.get(name, "text/html; charset=utf-8")
+    if name not in _ASSET_TYPES and name != "index.html":
+        raise WebApiError("not_found", "asset not found", status_code=404)
+    path = STATIC_DIR / name
+    try:
+        payload = path.read_bytes()
+    except OSError as exc:
+        raise WebApiError("not_found", "asset not found", status_code=404) from exc
+    return Response(payload, media_type=media_type, headers=_ui_headers())
 
 
 def _error_response(
@@ -167,6 +202,10 @@ class SecurityMiddleware:
             # No CORS negotiation is offered.  Let the router answer 405 rather
             # than turning an unauthenticated preflight into a misleading 401.
             return {"mode": "anonymous"}
+        if method in ("GET", "HEAD") and path in ("/", "/ui"):
+            return {"mode": "anonymous"}
+        if method in ("GET", "HEAD") and path.startswith("/assets/"):
+            return {"mode": "anonymous"}
         if path == "/healthz" and method in ("GET", "HEAD"):
             return {"mode": "anonymous"}
         if path == "/api/session" and method == "POST":
@@ -253,6 +292,16 @@ class LocalControlApi:
             request,
             success({"authenticated": False}, request_id=str(request.state.request_id)),
         )
+
+    # -- static UI ---------------------------------------------------
+    async def ui_index(self, request: Request) -> Response:
+        return _static("index.html")
+
+    async def ui_asset(self, request: Request) -> Response:
+        name = str(request.path_params.get("name", ""))
+        if name not in _ASSET_TYPES:
+            raise WebApiError("not_found", "asset not found", status_code=404)
+        return _static(name)
 
     # -- reads -------------------------------------------------------
     async def healthz(self, request: Request) -> Response:
@@ -412,6 +461,9 @@ def create_app(
 
     app = Starlette(
         routes=[
+            Route("/", api.ui_index, methods=["GET"]),
+            Route("/ui", api.ui_index, methods=["GET"]),
+            Route("/assets/{name}", api.ui_asset, methods=["GET"]),
             Route("/healthz", api.healthz, methods=["GET"]),
             Route("/api/session", api.session_create, methods=["POST"]),
             Route("/api/session", api.session_get, methods=["GET"]),

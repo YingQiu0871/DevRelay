@@ -1,0 +1,260 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark light">
+  <title>DevRelay Local</title>
+  <link rel="stylesheet" href="/assets/styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="mark" aria-hidden="true"></span>
+      <div>
+        <h1>DevRelay</h1>
+        <p class="eyebrow">local control plane</p>
+      </div>
+    </div>
+    <div class="top-actions">
+      <span id="connection" class="status status-muted">offline</span>
+      <button id="logout" class="button button-quiet" type="button" hidden>Log out</button>
+    </div>
+  </header>
+
+  <main class="shell">
+    <section id="login-view" class="panel login-panel">
+      <p class="kicker">Authenticate</p>
+      <h2>Open the local workspace</h2>
+      <p class="muted">
+        Paste the per-process token printed by <code>devrelay web serve</code>.
+        It is exchanged for an in-memory header session; DevRelay never sets a
+        cookie.
+      </p>
+      <form id="login-form" class="stack" method="post" action="/">
+        <label class="field">
+          <span>Local access token</span>
+          <input id="token" type="password" autocomplete="off"
+                 spellcheck="false" required placeholder="token printed by the CLI">
+        </label>
+        <button class="button" type="submit">Connect</button>
+      </form>
+      <p id="login-error" class="error" role="alert"></p>
+    </section>
+
+    <section id="app-view" hidden>
+      <div id="alert" class="alert" role="alert" hidden></div>
+
+      <section class="grid summary" aria-label="Workspace summary">
+        <article class="card">
+          <p class="kicker">Project</p>
+          <p id="project-name" class="value">-</p>
+          <p id="project-id" class="muted mono">-</p>
+        </article>
+        <article class="card">
+          <p class="kicker">Package</p>
+          <p id="package-version" class="value">-</p>
+          <p class="muted">read-only runtime</p>
+        </article>
+        <article class="card">
+          <p class="kicker">Config digest</p>
+          <p id="config-digest" class="value mono">-</p>
+          <p id="restart-note" class="muted">-</p>
+        </article>
+        <article class="card">
+          <p class="kicker">Runs</p>
+          <p id="run-count" class="value">-</p>
+          <p class="muted">bounded list</p>
+        </article>
+      </section>
+
+      <nav class="tabs" aria-label="Sections">
+        <button class="tab is-active" type="button" data-tab="config">Configuration</button>
+        <button class="tab" type="button" data-tab="status">Status &amp; runs</button>
+      </nav>
+
+      <section id="tab-config" class="tab-panel">
+        <div class="panel">
+          <div class="panel-head">
+            <div>
+              <p class="kicker">Allowlisted patch</p>
+              <h2>Workspace configuration</h2>
+            </div>
+            <span id="write-scope" class="status status-muted">read-only fields hidden</span>
+          </div>
+          <p class="muted">
+            Only the fields below are accepted by the local API. Execution and
+            wiring fields (provider endpoint, executable, profiles, test shell
+            commands) are intentionally not editable here; current values are shown
+            read-only.
+          </p>
+
+          <form id="config-form" class="config-form">
+            <fieldset>
+              <legend>Workflow</legend>
+              <div class="field-grid">
+                <label class="field">
+                  <span>Max fix iterations</span>
+                  <input name="pipeline.max_fix_iterations" type="number" min="1" step="1">
+                </label>
+                <label class="field">
+                  <span>Max same-finding cycles</span>
+                  <input name="pipeline.max_same_finding_cycles" type="number" min="0" max="10" step="1">
+                </label>
+              </div>
+              <label class="check">
+                <input name="pipeline.auto_fix_tests" type="checkbox">
+                <span>Auto-fix failing tests</span>
+              </label>
+            </fieldset>
+
+            <fieldset>
+              <legend>Provider budget</legend>
+              <div class="field-grid">
+                <label class="field">
+                  <span>Implementer calls</span>
+                  <input name="budget.max_implementer_calls" type="number" min="1" step="1">
+                </label>
+                <label class="field">
+                  <span>Reviewer calls</span>
+                  <input name="budget.max_reviewer_calls" type="number" min="0" step="1">
+                </label>
+                <label class="field">
+                  <span>Total provider calls</span>
+                  <input name="budget.max_total_provider_calls" type="number" min="1" step="1">
+                </label>
+              </div>
+            </fieldset>
+
+            <fieldset>
+              <legend>Review policy</legend>
+              <div class="field-grid">
+                <label class="field">
+                  <span>Review retries</span>
+                  <input name="review.retries" type="number" min="0" max="5" step="1">
+                </label>
+                <label class="field">
+                  <span>Transport retries</span>
+                  <input name="review.transport_retries" type="number" min="0" max="5" step="1">
+                </label>
+                <label class="field">
+                  <span>Timeout seconds</span>
+                  <input name="review.timeout_seconds" type="number" min="1" step="1">
+                </label>
+                <label class="field">
+                  <span>Max response chars</span>
+                  <input name="review.max_response_chars" type="number" min="1000" step="1000">
+                </label>
+                <label class="field">
+                  <span>Max diff bytes</span>
+                  <input name="review.max_diff_bytes" type="number" min="1000" step="1000">
+                </label>
+              </div>
+              <div class="severity-row" role="group" aria-label="Blocking severities">
+                <span class="field-label">Blocking severities</span>
+                <label class="check"><input type="checkbox" name="review.blocking_severities" value="P0"><span>P0</span></label>
+                <label class="check"><input type="checkbox" name="review.blocking_severities" value="P1"><span>P1</span></label>
+                <label class="check"><input type="checkbox" name="review.blocking_severities" value="P2"><span>P2</span></label>
+                <label class="check"><input type="checkbox" name="review.blocking_severities" value="P3"><span>P3</span></label>
+              </div>
+            </fieldset>
+
+            <fieldset>
+              <legend>Role assignment</legend>
+              <div class="field-grid">
+                <label class="field">
+                  <span>Implementer model</span>
+                  <input name="roles.implementer.model" type="text" autocomplete="off">
+                </label>
+                <label class="field">
+                  <span>Implementer agent</span>
+                  <input name="roles.implementer.agent" type="text" autocomplete="off">
+                </label>
+                <label class="field">
+                  <span>Reviewer model</span>
+                  <input name="roles.reviewer.model" type="text" autocomplete="off">
+                </label>
+                <label class="field">
+                  <span>Reviewer agent</span>
+                  <input name="roles.reviewer.agent" type="text" autocomplete="off">
+                </label>
+              </div>
+            </fieldset>
+
+            <fieldset>
+              <legend>Runtime limits</legend>
+              <div class="field-grid">
+                <label class="field">
+                  <span>Full regression</span>
+                  <select name="tests.full_regression">
+                    <option value="release_only">release_only</option>
+                    <option value="always">always</option>
+                    <option value="never">never</option>
+                  </select>
+                </label>
+                <label class="field">
+                  <span>Test timeout seconds</span>
+                  <input name="tests.timeout_seconds" type="number" min="1" step="1">
+                </label>
+                <label class="field">
+                  <span>Codex timeout seconds</span>
+                  <input name="codex.timeout_seconds" type="number" min="1" step="1">
+                </label>
+                <label class="field">
+                  <span>OpenCode timeout seconds</span>
+                  <input name="opencode.timeout_seconds" type="number" min="1" step="1">
+                </label>
+                <label class="field">
+                  <span>OpenCode idle timeout</span>
+                  <input name="opencode.idle_timeout_seconds" type="number" min="1" step="1">
+                </label>
+                <label class="field">
+                  <span>OpenCode poll interval</span>
+                  <input name="opencode.poll_interval_seconds" type="number" min="1" step="1">
+                </label>
+                <label class="field">
+                  <span>OpenCode message cap</span>
+                  <input name="opencode.max_messages" type="number" min="1" step="1">
+                </label>
+              </div>
+            </fieldset>
+
+            <fieldset class="readonly">
+              <legend>Read-only wiring</legend>
+              <dl id="wiring-view" class="details"></dl>
+              <p class="muted">
+                These values are deliberately outside the A2 editable allowlist.
+                Credentials are referenced by environment, never written here.
+              </p>
+            </fieldset>
+
+            <div class="form-actions">
+              <button id="validate" class="button button-quiet" type="button">Validate patch</button>
+              <button class="button" type="submit">Apply configuration</button>
+            </div>
+          </form>
+          <p id="config-result" class="result" role="status"></p>
+        </div>
+      </section>
+
+      <section id="tab-status" class="tab-panel" hidden>
+        <div class="panel">
+          <p class="kicker">Authenticated read surface</p>
+          <h2>Runtime status</h2>
+          <dl id="status-view" class="details"></dl>
+        </div>
+        <div class="panel">
+          <p class="kicker">Bounded</p>
+          <h2>Recent runs</h2>
+          <ul id="runs-view" class="runs"></ul>
+        </div>
+      </section>
+    </section>
+  </main>
+
+  <footer class="footer">
+    loopback only · header session · no cookies · no run control
+  </footer>
+  <script src="/assets/app.js" defer></script>
+</body>
+</html>

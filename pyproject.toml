@@ -58,7 +58,7 @@ devrelay = "devrelay.cli:app"
 where = ["src"]
 
 [tool.setuptools.package-data]
-devrelay = ["profiles/*.yaml"]
+devrelay = ["profiles/*.yaml", "web/static/*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

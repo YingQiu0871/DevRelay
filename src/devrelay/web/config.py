@@ -44,7 +44,10 @@ _EDITABLE_PREFIXES = frozenset(
         "scope",
         "baseline",
         "git",
-        "roles",
+        "roles.implementer.model",
+        "roles.implementer.agent",
+        "roles.reviewer.model",
+        "roles.reviewer.agent",
         "tests.full_regression",
         "tests.timeout_seconds",
         "codex.prompt_mode",
@@ -160,6 +163,42 @@ def _merge(base: Any, patch: Any) -> Any:
     return result
 
 
+def _filter_editable(value: Any, path: tuple[str, ...] = ()) -> Any:
+    """Project the current document onto the editable allowlist for the UI."""
+    if isinstance(value, dict):
+        out: dict[str, Any] = {}
+        for key, item in value.items():
+            name = str(key)
+            child = path + (name,)
+            if not _path_allowed(child):
+                continue
+            if any(part in name.lower() for part in _SECRET_NAME_PARTS):
+                continue
+            if isinstance(item, dict):
+                nested = _filter_editable(item, child)
+                if nested:
+                    out[key] = nested
+            elif isinstance(item, list):
+                filtered: list[Any] = []
+                for index, sub in enumerate(item):
+                    if isinstance(sub, dict):
+                        nested = _filter_editable(sub, child + (str(index),))
+                        if nested:
+                            filtered.append(nested)
+                    elif isinstance(sub, str) and _SECRET_VALUE_RE.search(sub):
+                        continue
+                    else:
+                        filtered.append(sub)
+                if filtered:
+                    out[key] = filtered
+            elif isinstance(item, str) and _SECRET_VALUE_RE.search(item):
+                continue
+            else:
+                out[key] = item
+        return out
+    return value
+
+
 def _dump(document: dict[str, Any]) -> str:
     try:
         text = yaml.safe_dump(
@@ -209,6 +248,16 @@ class ConfigWriter:
         except OSError:
             return None
         return hashlib.sha256(payload).hexdigest()
+
+    def available(self) -> bool:
+        return self.path.is_file() and not self.path.is_symlink()
+
+    def editable_document(self) -> dict[str, Any]:
+        try:
+            _payload, current = self._read_current(required=False)
+        except WebApiError:
+            return {}
+        return _filter_editable(current)
 
     @contextmanager
     def _process_lock(self) -> Iterator[None]:

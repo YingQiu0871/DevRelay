@@ -204,17 +204,26 @@ its history is in [BACKLOG.md](BACKLOG.md) §12.
 
 ### v0.4-B — WebUI Configuration
 
-Status: 📋 Planned
+Status: 🧪 B1 implemented and independently reviewed (APPROVE WITH FINDINGS;
+P2 findings remediated; pending owner acceptance).  See
+[V04B_SPEC.md](v0.4/V04B_SPEC.md) and [V04B_REVIEW.md](v0.4/V04B_REVIEW.md).
+The static UI is served at `/` by
+`devrelay web serve`; it uses fragment-token login, header sessions and only the
+A2 allowlisted configuration patch.
 
-Planned configuration surfaces:
+Implemented in B1:
 
-- OpenCode endpoint and compatibility
-- project/workspace selection
+- project/workspace context (active project read-only)
 - implementer/reviewer role assignment
-- model selection
-- workflow limits
-- ChatGPT/MCP connection
-- provider credentials by reference, not plaintext config
+- model identifiers per role
+- workflow/budget/review limits
+- bounded runtime limits
+- ChatGPT/MCP connection and provider wiring shown read-only
+- provider credentials by environment reference, never written
+
+Not in B1: editing OpenCode endpoint/workspace, profiles, arbitrary argv or
+test shell commands (needs a separate wiring API); project switching (D); live
+runs (C).
 
 ### v0.4-C — Dashboard & Live Runs
 

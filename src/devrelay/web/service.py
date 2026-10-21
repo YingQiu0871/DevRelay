@@ -132,6 +132,7 @@ class WebReadService:
         return {
             "config_sha256": current_sha,
             "restart_required": current_sha != self._loaded_config_sha,
+            "editable_config": self.config_writer.editable_document(),
             "review_provider": self.wiring.review_provider,
             "opencode": {
                 "configured": bool(opencode.configured),
@@ -155,7 +156,7 @@ class WebReadService:
             },
             "roles": self.surface.roles.summary(),
             "read_only": False,
-            "write_supported": True,
+            "write_supported": self.config_writer.available(),
             "write_scope": "workspace configuration only",
         }
 
