@@ -70,6 +70,7 @@
 
       <nav class="tabs" aria-label="Sections">
         <button class="tab is-active" type="button" data-tab="config">Configuration</button>
+        <button class="tab" type="button" data-tab="connections">Connections</button>
         <button class="tab" type="button" data-tab="status">Status &amp; runs</button>
       </nav>
 
@@ -234,6 +235,42 @@
             </div>
           </form>
           <p id="config-result" class="result" role="status"></p>
+        </div>
+      </section>
+
+      <section id="tab-connections" class="tab-panel" hidden>
+        <div class="panel">
+          <p class="kicker">Separate B2 wiring surface</p>
+          <h2>OpenCode endpoint</h2>
+          <p class="muted">
+            Only a loopback endpoint is writable here. The bearer token stays in
+            <code>DEVRELAY_OPENCODE_TOKEN</code>; remote endpoints require a
+            manual config edit. Workspace override,
+            <code>allow_unknown_workspace</code>, profiles and executable/argv
+            remain read-only.
+          </p>
+          <form id="wiring-form" class="stack" method="post" action="/">
+            <label class="field">
+              <span>Base URL</span>
+              <input id="opencode-base-url" type="url" autocomplete="off"
+                     spellcheck="false" placeholder="http://127.0.0.1:4096">
+            </label>
+            <div class="form-actions">
+              <button id="wiring-save" class="button" type="submit">Save endpoint</button>
+            </div>
+          </form>
+          <p id="wiring-result" class="result" role="status"></p>
+          <dl id="wiring-details" class="details"></dl>
+        </div>
+
+        <div class="panel">
+          <p class="kicker">Local stdio only</p>
+          <h2>MCP connection</h2>
+          <dl id="mcp-view" class="details"></dl>
+          <p class="muted">
+            DevRelay's MCP surface is a local stdio process; there is no HTTP
+            listener, hosted connector or credential stored in this UI.
+          </p>
         </div>
       </section>
 

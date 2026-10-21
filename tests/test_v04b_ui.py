@@ -173,6 +173,138 @@ def test_config_view_marks_missing_config_unwritable(client: TestClient, workspa
     assert data["editable_config"] == {}
 
 
+def test_wiring_view_is_separate_and_reference_only(client: TestClient, workspace: Path):
+    auth = _auth(client)
+    response = client.get("/api/wiring", headers=auth)
+    assert response.status_code == 200
+    data = response.json()["data"]
+    assert len(data["config_sha256"]) == 64
+    assert data["write_supported"] is True
+    assert data["opencode"]["base_url"] == ""
+    assert data["opencode"]["allow_unknown_workspace"] is False
+    assert data["credentials"]["opencode_token"]["env"] == "DEVRELAY_OPENCODE_TOKEN"
+    assert "value" not in data["credentials"]["opencode_token"]
+    assert data["mcp"]["transport"] == "stdio"
+    assert str(workspace) not in response.text
+    assert TOKEN not in response.text
+
+
+def test_wiring_write_updates_endpoint_with_backup(client: TestClient, workspace: Path):
+    auth = _auth(client)
+    before = client.get("/api/wiring", headers=auth).json()["data"]
+    config_path = workspace / ".devrelay" / "config.yaml"
+    old_text = config_path.read_text(encoding="utf-8")
+    response = client.put(
+        "/api/wiring",
+        json={
+            "expected_sha256": before["config_sha256"],
+            "wiring": {"opencode": {"base_url": "http://127.0.0.1:4096"}},
+            "confirm": "apply",
+        },
+        headers={**auth, "X-DevRelay-Confirm": "apply"},
+    )
+    assert response.status_code == 200, response.text
+    data = response.json()["data"]
+    assert data["applied"] is True
+    assert data["restart_required"] is True
+    assert data["write_scope"] == "OpenCode endpoint wiring only"
+    assert data["backup_created"] is True
+    updated_text = config_path.read_text(encoding="utf-8")
+    assert "127.0.0.1:4096" in updated_text
+    assert "review:" in updated_text
+    assert "opencode:" in updated_text
+    backups = list((workspace / ".devrelay").glob("config.yaml.bak-*"))
+    assert len(backups) == 1
+    assert backups[0].read_text(encoding="utf-8") == old_text
+    refreshed = client.get("/api/wiring", headers=auth).json()["data"]
+    assert refreshed["opencode"]["base_url"] == "http://127.0.0.1:4096"
+    assert refreshed["config_sha256"] != before["config_sha256"]
+
+
+def test_wiring_write_rejects_non_endpoint_fields(client: TestClient):
+    auth = _auth(client)
+    digest = client.get("/api/wiring", headers=auth).json()["data"]["config_sha256"]
+    for wiring in (
+        {"opencode": {"workspace": "C:\\outside"}},
+        {"opencode": {"allow_unknown_workspace": True}},
+        {"codex": {"executable": "evil.exe"}},
+    ):
+        response = client.put(
+            "/api/wiring",
+            json={"expected_sha256": digest, "wiring": wiring, "confirm": "apply"},
+            headers={**auth, "X-DevRelay-Confirm": "apply"},
+        )
+        assert response.status_code == 422, response.text
+        assert response.json()["error"]["code"] == "config_field_not_editable"
+
+
+def test_wiring_write_rejects_remote_endpoint(client: TestClient, workspace: Path):
+    auth = _auth(client)
+    digest = client.get("/api/wiring", headers=auth).json()["data"]["config_sha256"]
+    before = (workspace / ".devrelay" / "config.yaml").read_bytes()
+    response = client.put(
+        "/api/wiring",
+        json={
+            "expected_sha256": digest,
+            "wiring": {"opencode": {"base_url": "https://remote.example:4096"}},
+            "confirm": "apply",
+        },
+        headers={**auth, "X-DevRelay-Confirm": "apply"},
+    )
+    assert response.status_code == 422
+    assert response.json()["error"]["code"] == "endpoint_not_local"
+    assert (workspace / ".devrelay" / "config.yaml").read_bytes() == before
+
+
+def test_wiring_view_does_not_expose_workspace_or_token_value(
+    client: TestClient, workspace: Path, monkeypatch
+):
+    monkeypatch.setenv("DEVRELAY_OPENCODE_TOKEN", "opencode-super-secret-value")
+    auth = _auth(client)
+    config_path = workspace / ".devrelay" / "config.yaml"
+    config_path.write_text(
+        config_path.read_text(encoding="utf-8").replace(
+            'workspace: ""', 'workspace: "C:\\\\outside"'
+        ),
+        encoding="utf-8",
+    )
+    response = client.get("/api/wiring", headers=auth)
+    assert response.status_code == 200
+    data = response.json()["data"]
+    assert data["opencode"]["workspace_override"] is True
+    assert "opencode-super-secret-value" not in response.text
+    assert "C:\\\\outside" not in response.text
+    assert data["credentials"]["opencode_token"]["configured"] is True
+
+
+def test_wiring_write_requires_confirmation_and_current_digest(client: TestClient):
+    auth = _auth(client)
+    digest = client.get("/api/wiring", headers=auth).json()["data"]["config_sha256"]
+    body = {
+        "expected_sha256": digest,
+        "wiring": {"opencode": {"base_url": ""}},
+        "confirm": "apply",
+    }
+    assert client.put("/api/wiring", json=body, headers=auth).status_code == 403
+    stale = client.put(
+        "/api/wiring",
+        json={**body, "expected_sha256": "0" * 64},
+        headers={**auth, "X-DevRelay-Confirm": "apply"},
+    )
+    assert stale.status_code == 409
+    assert stale.json()["error"]["code"] == "config_changed"
+    assert client.get("/api/wiring").status_code == 401
+
+
+def test_connections_ui_has_no_credential_or_workspace_input(client: TestClient):
+    html = client.get("/").text
+    assert 'id="opencode-base-url"' in html
+    assert 'name="opencode.base_url"' not in html
+    assert 'name="opencode.workspace"' not in html
+    assert 'name="DEVRELAY_OPENCODE_TOKEN"' not in html
+    assert "Connections" in html
+
+
 def test_ui_does_not_expose_token_in_html(client: TestClient):
     response = client.get("/")
     assert TOKEN not in response.text

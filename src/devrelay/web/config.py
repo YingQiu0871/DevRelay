@@ -1,10 +1,11 @@
 """Backend-owned workspace configuration write (v0.4-A2).
 
-The API deliberately accepts a **curated patch**, not an unrestricted full
-document.  Execution/wiring fields that can repoint a local command, a provider
-endpoint or a workspace path are not editable here; they are preserved from the
-current file.  This keeps the WebUI configuration path from becoming an
-arbitrary-shell or arbitrary-endpoint surface.
+The A2 API accepts a **curated patch**, not an unrestricted full document.
+Execution/wiring fields that can repoint a local command, a provider endpoint or
+a workspace path are preserved from the current file.  B2 adds a separate,
+narrower `apply_wiring` path that can set only a loopback `opencode.base_url`.
+This keeps the WebUI configuration path from becoming an arbitrary-shell
+surface and keeps remote endpoint changes out of the browser.
 """
 
 from __future__ import annotations
@@ -20,6 +21,7 @@ from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterator
+from urllib.parse import urlsplit
 
 import yaml
 from pydantic import ValidationError
@@ -66,6 +68,11 @@ _EDITABLE_PREFIXES = frozenset(
     }
 )
 
+#: B2 is deliberately narrower than A2: only the OpenCode endpoint may be
+#: written through the separate wiring surface.
+_WIRING_PREFIXES = frozenset({"opencode.base_url"})
+_LOOPBACK_HOSTS = frozenset({"127.0.0.1", "localhost", "::1"})
+
 _SECRET_NAME_PARTS = (
     "token",
     "password",
@@ -88,22 +95,38 @@ _SECRET_VALUE_RE = re.compile(
 )
 
 
-def _path_allowed(path: tuple[str, ...]) -> bool:
+def _is_loopback_url(value: str) -> bool:
+    if not value:
+        return True
+    try:
+        host = urlsplit(value).hostname
+    except ValueError:
+        return False
+    return host in _LOOPBACK_HOSTS
+
+
+def _path_allowed(
+    path: tuple[str, ...], prefixes: frozenset[str] = _EDITABLE_PREFIXES
+) -> bool:
     dotted = ".".join(path)
     return any(
         dotted == prefix
         or dotted.startswith(prefix + ".")
         or prefix.startswith(dotted + ".")
-        for prefix in _EDITABLE_PREFIXES
+        for prefix in prefixes
     )
 
 
-def _path_errors(value: Any, path: tuple[str, ...] = ()) -> list[dict[str, Any]]:
+def _path_errors(
+    value: Any,
+    path: tuple[str, ...] = (),
+    prefixes: frozenset[str] = _EDITABLE_PREFIXES,
+) -> list[dict[str, Any]]:
     errors: list[dict[str, Any]] = []
     if isinstance(value, dict):
         for key, item in value.items():
             child = path + (str(key),)
-            if not _path_allowed(child):
+            if not _path_allowed(child, prefixes):
                 errors.append(
                     {
                         "loc": list(child),
@@ -112,10 +135,10 @@ def _path_errors(value: Any, path: tuple[str, ...] = ()) -> list[dict[str, Any]]
                     }
                 )
                 continue
-            errors.extend(_path_errors(item, child))
+            errors.extend(_path_errors(item, child, prefixes))
     elif isinstance(value, list):
         for index, item in enumerate(value):
-            errors.extend(_path_errors(item, path + (str(index),)))
+            errors.extend(_path_errors(item, path + (str(index),), prefixes))
     return errors
 
 
@@ -163,26 +186,30 @@ def _merge(base: Any, patch: Any) -> Any:
     return result
 
 
-def _filter_editable(value: Any, path: tuple[str, ...] = ()) -> Any:
-    """Project the current document onto the editable allowlist for the UI."""
+def _filter_editable(
+    value: Any,
+    path: tuple[str, ...] = (),
+    prefixes: frozenset[str] = _EDITABLE_PREFIXES,
+) -> Any:
+    """Project the current document onto an editable allowlist for the UI."""
     if isinstance(value, dict):
         out: dict[str, Any] = {}
         for key, item in value.items():
             name = str(key)
             child = path + (name,)
-            if not _path_allowed(child):
+            if not _path_allowed(child, prefixes):
                 continue
             if any(part in name.lower() for part in _SECRET_NAME_PARTS):
                 continue
             if isinstance(item, dict):
-                nested = _filter_editable(item, child)
+                nested = _filter_editable(item, child, prefixes)
                 if nested:
                     out[key] = nested
             elif isinstance(item, list):
                 filtered: list[Any] = []
                 for index, sub in enumerate(item):
                     if isinstance(sub, dict):
-                        nested = _filter_editable(sub, child + (str(index),))
+                        nested = _filter_editable(sub, child + (str(index),), prefixes)
                         if nested:
                             filtered.append(nested)
                     elif isinstance(sub, str) and _SECRET_VALUE_RE.search(sub):
@@ -258,6 +285,23 @@ class ConfigWriter:
         except WebApiError:
             return {}
         return _filter_editable(current)
+
+    def wiring_document(self) -> dict[str, Any]:
+        try:
+            _payload, current = self._read_current(required=False)
+        except WebApiError:
+            return {}
+        opencode = current.get("opencode")
+        if not isinstance(opencode, dict):
+            return {}
+        base_url = opencode.get("base_url")
+        base = base_url if isinstance(base_url, str) else ""
+        return {
+            "base_url": base,
+            "base_url_is_loopback": _is_loopback_url(base),
+            "allow_unknown_workspace": bool(opencode.get("allow_unknown_workspace", False)),
+            "workspace_override": bool(opencode.get("workspace")),
+        }
 
     @contextmanager
     def _process_lock(self) -> Iterator[None]:
@@ -359,14 +403,17 @@ class ConfigWriter:
         return errors
 
     def _validate_patch(
-        self, config: dict[str, Any], current: dict[str, Any]
+        self,
+        config: dict[str, Any],
+        current: dict[str, Any],
+        prefixes: frozenset[str] = _EDITABLE_PREFIXES,
     ) -> list[dict[str, Any]]:
         try:
             _walk_keys(config)
             _walk_values(config)
         except WebApiError as exc:
             return [{"loc": [], "type": exc.code, "msg": exc.message}]
-        errors = _path_errors(config)
+        errors = _path_errors(config, prefixes=prefixes)
         if errors:
             return errors
         merged = _merge(current, config)
@@ -380,13 +427,33 @@ class ConfigWriter:
             return [{"loc": [], "type": exc.code, "msg": exc.message}]
         return []
 
-    def validate(self, config: dict[str, Any]) -> list[dict[str, Any]]:
+    def validate(
+        self,
+        config: dict[str, Any],
+        prefixes: frozenset[str] = _EDITABLE_PREFIXES,
+    ) -> list[dict[str, Any]]:
         """Return bounded validation errors; never writes or echoes values."""
         try:
             _payload, current = self._read_current(required=True)
         except WebApiError as exc:
             return [{"loc": [], "type": exc.code, "msg": exc.message}]
-        return self._validate_patch(config, current)
+        return self._validate_patch(config, current, prefixes)
+
+    def validate_wiring(self, wiring: dict[str, Any]) -> list[dict[str, Any]]:
+        errors = self.validate(wiring, _WIRING_PREFIXES)
+        if errors:
+            return errors
+        opencode = wiring.get("opencode")
+        base = opencode.get("base_url", "") if isinstance(opencode, dict) else ""
+        if isinstance(base, str) and base and not _is_loopback_url(base):
+            return [
+                {
+                    "loc": ["opencode", "base_url"],
+                    "type": "endpoint_not_local",
+                    "msg": "B2 accepts loopback OpenCode endpoints only; edit a remote endpoint manually",
+                }
+            ]
+        return []
 
     def _backup(self, payload: bytes) -> Path:
         stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
@@ -435,7 +502,13 @@ class ConfigWriter:
                 pass
             raise
 
-    def apply(self, config: dict[str, Any], expected_sha256: str) -> dict[str, Any]:
+    def apply(
+        self,
+        config: dict[str, Any],
+        expected_sha256: str,
+        prefixes: frozenset[str] = _EDITABLE_PREFIXES,
+        scope: str = "workspace configuration patch",
+    ) -> dict[str, Any]:
         with self._lock, self._process_lock():
             current_bytes, current = self._read_current(required=True)
             actual = hashlib.sha256(current_bytes).hexdigest()
@@ -445,7 +518,7 @@ class ConfigWriter:
                     "the configuration changed since it was read; reload and retry",
                     status_code=409,
                 )
-            errors = self._validate_patch(config, current)
+            errors = self._validate_patch(config, current, prefixes)
             if errors:
                 first = errors[0]
                 code = str(first.get("type", "invalid_config"))
@@ -470,7 +543,7 @@ class ConfigWriter:
                     "backup_created": False,
                     "comments_preserved": False,
                     "restart_required": False,
-                    "write_scope": "workspace configuration patch",
+                    "write_scope": scope,
                 }
             text = _dump(merged)
             backup = self._backup(current_bytes)
@@ -491,5 +564,21 @@ class ConfigWriter:
                 "backup_name": backup.name,
                 "comments_preserved": False,
                 "restart_required": True,
-                "write_scope": "workspace configuration patch",
+                "write_scope": scope,
             }
+
+    def apply_wiring(self, wiring: dict[str, Any], expected_sha256: str) -> dict[str, Any]:
+        errors = self.validate_wiring(wiring)
+        if errors:
+            first = errors[0]
+            raise WebApiError(
+                str(first.get("type", "invalid_wiring")),
+                str(first.get("msg", "wiring is invalid")),
+                status_code=422,
+            )
+        return self.apply(
+            wiring,
+            expected_sha256,
+            _WIRING_PREFIXES,
+            "OpenCode endpoint wiring only",
+        )

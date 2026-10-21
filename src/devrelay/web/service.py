@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from typing import Any
 
@@ -19,11 +20,12 @@ MAX_RUN_SCAN = 500
 
 
 class WebReadService:
-    """Read operations plus the curated A2 config write.
+    """Read operations plus the curated A2 config and B2 wiring writes.
 
     The service holds exactly one ``McpToolSurface`` bound to the registered
     workspace.  It never calls an orchestration action tool and never constructs
-    a second engine; the only write is the allowlisted configuration patch.
+    a second engine.  Writes are limited to the allowlisted configuration patch
+    and the loopback OpenCode endpoint.
     """
 
     def __init__(
@@ -167,3 +169,30 @@ class WebReadService:
 
     def apply_config(self, config: dict[str, Any], expected_sha256: str) -> dict[str, Any]:
         return self.config_writer.apply(config, expected_sha256)
+
+    def wiring_status(self) -> dict[str, Any]:
+        """The separate B2 wiring surface: endpoint + references, never values."""
+        current_sha = self.config_writer.sha256()
+        return {
+            "config_sha256": current_sha,
+            "restart_required": current_sha != self._loaded_config_sha,
+            "write_supported": self.config_writer.available(),
+            "opencode": self.config_writer.wiring_document(),
+            "credentials": {
+                "opencode_token": {
+                    "env": "DEVRELAY_OPENCODE_TOKEN",
+                    "configured": bool(os.environ.get("DEVRELAY_OPENCODE_TOKEN")),
+                }
+            },
+            "mcp": {
+                "transport": "stdio",
+                "command": "devrelay mcp serve --workspace <registered workspace>",
+                "credentials": "client-side / environment only",
+            },
+            "write_scope": "OpenCode endpoint wiring only",
+        }
+
+    def apply_wiring(
+        self, wiring: dict[str, Any], expected_sha256: str
+    ) -> dict[str, Any]:
+        return self.config_writer.apply_wiring(wiring, expected_sha256)

@@ -26,6 +26,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   and recent runs.  The UI uses `X-DevRelay-Session`, a self-only CSP, fixed
   assets and no cookies; it deliberately does not edit OpenCode
   endpoint/workspace, profiles, argv or test shell commands.
+- v0.4-B2 wiring API: `GET/PUT /api/wiring` writes only a **loopback**
+  `opencode.base_url` through the same digest/confirmation/backup/atomic-write
+  discipline as A2.  The response exposes credential environment names and a
+  configured boolean, never the token, plus read-only local-stdio MCP metadata;
+  remote endpoints, workspace overrides, `allow_unknown_workspace`, executables,
+  argv, profiles and provider selection remain excluded.  A Connections tab
+  drives it.
 
 ## 0.3.0 - 2026-10-21
 

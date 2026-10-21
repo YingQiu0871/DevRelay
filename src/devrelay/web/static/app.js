@@ -12,7 +12,7 @@
   const form = document.getElementById("config-form");
   let sessionToken = readStoredSession();
   let memoryToken = null;
-  const state = { status: null, projects: [], config: null, runs: null };
+  const state = { status: null, projects: [], config: null, wiring: null, runs: null };
 
   class ApiError extends Error {
     constructor(message, status, code) {
@@ -231,6 +231,53 @@
     validateButton.disabled = !writable;
     state.configBaseline = readFormPatch(false);
     renderWiring();
+    renderWiringPanel();
+  }
+
+  function renderWiringPanel() {
+    const wiring = state.wiring || {};
+    const opencode = wiring.opencode || {};
+    const credentials = wiring.credentials || {};
+    const token = credentials.opencode_token || {};
+    const mcp = wiring.mcp || {};
+    $("opencode-base-url").value = opencode.base_url || "";
+    $("wiring-save").disabled = !wiring.write_supported;
+
+    const rows = [
+      ["Endpoint locality", opencode.base_url_is_loopback === false
+        ? "remote (manual config only)"
+        : "loopback / not set"],
+      ["Allow unknown workspace", opencode.allow_unknown_workspace ? "true" : "false (fixed)"],
+      ["Workspace override", opencode.workspace_override ? "configured (path hidden)" : "registered root"],
+      ["OpenCode token", `${token.env || "DEVRELAY_OPENCODE_TOKEN"}: ${token.configured ? "set in environment" : "not set"}`],
+      ["Write scope", wiring.write_scope || "OpenCode endpoint wiring only"],
+      ["Config digest", shortSha(wiring.config_sha256)],
+      ["Restart", wiring.restart_required ? "required" : "not required"],
+    ];
+    const list = $("wiring-details");
+    list.replaceChildren();
+    for (const [label, value] of rows) {
+      const dt = document.createElement("dt");
+      dt.textContent = label;
+      const dd = document.createElement("dd");
+      dd.textContent = value;
+      list.append(dt, dd);
+    }
+
+    const mcpRows = [
+      ["Transport", mcp.transport || "stdio"],
+      ["Command", mcp.command || "devrelay mcp serve --workspace <registered workspace>"],
+      ["Credentials", mcp.credentials || "client-side / environment only"],
+    ];
+    const mcpList = $("mcp-view");
+    mcpList.replaceChildren();
+    for (const [label, value] of mcpRows) {
+      const dt = document.createElement("dt");
+      dt.textContent = label;
+      const dd = document.createElement("dd");
+      dd.textContent = value;
+      mcpList.append(dt, dd);
+    }
   }
 
   function renderStatus() {
@@ -462,19 +509,99 @@
     }
   }
 
+  async function saveWiring(event) {
+    event.preventDefault();
+    const result = $("wiring-result");
+    result.textContent = "";
+    const baseUrl = $("opencode-base-url").value.trim();
+    if (baseUrl) {
+      let parsed;
+      try {
+        parsed = new URL(baseUrl);
+      } catch (_) {
+        result.textContent = "Base URL must be a valid http:// or https:// URL.";
+        return;
+      }
+      if (!["http:", "https:"].includes(parsed.protocol)) {
+        result.textContent = "Base URL must start with http:// or https://.";
+        return;
+      }
+      const host = parsed.hostname.replace(/^\[|\]$/g, "");
+      if (!["127.0.0.1", "localhost", "::1"].includes(host)) {
+        result.textContent = "B2 accepts loopback OpenCode endpoints only; edit a remote endpoint manually.";
+        return;
+      }
+    }
+    const wiring = state.wiring || {};
+    if (!wiring.config_sha256) {
+      result.textContent = "The config digest is unavailable; reload before saving.";
+      return;
+    }
+    const target = baseUrl || "(disabled)";
+    if (!window.confirm(`Set the OpenCode endpoint to ${target}? A config backup is created first.`)) {
+      return;
+    }
+    const button = $("wiring-save");
+    button.disabled = true;
+    try {
+      const data = await api("/api/wiring", {
+        method: "PUT",
+        headers: { "X-DevRelay-Confirm": "apply" },
+        body: {
+          expected_sha256: wiring.config_sha256,
+          wiring: { opencode: { base_url: baseUrl } },
+          confirm: "apply",
+        },
+      });
+      const message = data.applied
+        ? `Endpoint saved. Restart required: ${data.restart_required ? "yes" : "no"}.`
+        : "No change; the endpoint is already current.";
+      try {
+        await loadAll();
+        result.textContent = message;
+      } catch (reloadError) {
+        if (reloadError.status === 401) {
+          clearSession();
+          showLogin("Session expired. The endpoint may have been saved.");
+        } else {
+          result.textContent = `${message}\nReload failed: ${reloadError.message}`;
+        }
+      }
+    } catch (error) {
+      if (error.status === 401) {
+        clearSession();
+        showLogin("Session expired. Enter the token again.");
+      } else if (error.code === "config_changed") {
+        result.textContent = "The config changed on disk; reloading the latest view. Try again.";
+        try {
+          await loadAll();
+        } catch (reloadError) {
+          result.textContent = `The config changed and reload failed: ${reloadError.message}`;
+        }
+      } else {
+        result.textContent = `${error.code ? `${error.code}: ` : ""}${error.message}`;
+      }
+    } finally {
+      button.disabled = false;
+    }
+  }
+
   async function loadAll() {
-    const [status, projects, config, runs] = await Promise.all([
+    const [status, projects, config, wiring, runs] = await Promise.all([
       api("/api/status"),
       api("/api/projects"),
       api("/api/config"),
+      api("/api/wiring"),
       api("/api/runs?limit=8"),
     ]);
     state.status = status;
     state.projects = projects;
     state.config = config;
+    state.wiring = wiring;
     state.runs = runs;
     renderSummary();
     renderConfig();
+    renderWiringPanel();
     renderStatus();
   }
 
@@ -550,6 +677,7 @@
   $("logout").addEventListener("click", logout);
   $("validate").addEventListener("click", () => runValidation());
   form.addEventListener("submit", applyPatch);
+  $("wiring-form").addEventListener("submit", saveWiring);
   for (const button of document.querySelectorAll(".tab")) {
     button.addEventListener("click", () => switchTab(button.dataset.tab));
   }

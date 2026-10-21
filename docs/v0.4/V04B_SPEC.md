@@ -1,6 +1,7 @@
 # DevRelay v0.4-B — Local WebUI Configuration
 
-Status: **B1 ACCEPTED / CLOSED by the owner on 2026-10-22.**  The review is
+Status: **B1 ACCEPTED / CLOSED by the owner on 2026-10-22; B2 implemented,
+pending review — see [V04B2_SPEC.md](V04B2_SPEC.md).**  The B1 review is
 recorded in [V04B_REVIEW.md](V04B_REVIEW.md) and the acceptance record in
 [V04B_ACCEPTANCE.md](V04B_ACCEPTANCE.md).  This is a local, static single-page
 UI served by `devrelay web serve`; it is not a hosted service and adds no

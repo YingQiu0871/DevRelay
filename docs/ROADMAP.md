@@ -204,11 +204,13 @@ its history is in [BACKLOG.md](BACKLOG.md) §12.
 
 ### v0.4-B — WebUI Configuration
 
-Status: ✅ **B1 ACCEPTED / CLOSED by the owner on 2026-10-22.**  See
-[V04B_SPEC.md](v0.4/V04B_SPEC.md), [V04B_REVIEW.md](v0.4/V04B_REVIEW.md) and
-[V04B_ACCEPTANCE.md](v0.4/V04B_ACCEPTANCE.md).  B2 is planned as a separate
-wiring API for OpenCode endpoint / MCP connection wiring; it is not part of
-this acceptance.
+Status: ✅ **B1 ACCEPTED / CLOSED by the owner on 2026-10-22; B2 implemented and
+independently reviewed (APPROVE WITH FINDINGS; P2 findings remediated; pending
+owner acceptance).**  See [V04B_SPEC.md](v0.4/V04B_SPEC.md),
+[V04B_REVIEW.md](v0.4/V04B_REVIEW.md), [V04B_ACCEPTANCE.md](v0.4/V04B_ACCEPTANCE.md),
+[V04B2_SPEC.md](v0.4/V04B2_SPEC.md) and [V04B2_REVIEW.md](v0.4/V04B2_REVIEW.md).
+B2 is the separate wiring API for the loopback OpenCode endpoint plus read-only
+MCP/credential references.
 The static UI is served at `/` by
 `devrelay web serve`; it uses fragment-token login, header sessions and only the
 A2 allowlisted configuration patch.

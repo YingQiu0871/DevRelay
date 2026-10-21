@@ -30,6 +30,7 @@ from devrelay.web.models import (
     ConfigValidateRequest,
     ConfigWriteRequest,
     SessionRequest,
+    WiringWriteRequest,
     failure,
     success,
 )
@@ -393,6 +394,31 @@ class LocalControlApi:
             ),
         )
 
+    async def wiring(self, request: Request) -> Response:
+        return _json(
+            request,
+            success(
+                self.service.wiring_status(),
+                request_id=str(request.state.request_id),
+            ),
+        )
+
+    async def wiring_apply(self, request: Request) -> Response:
+        if request.headers.get("x-devrelay-confirm") != "apply":
+            raise WebApiError(
+                "confirmation_required",
+                "X-DevRelay-Confirm: apply is required",
+                status_code=403,
+            )
+        payload: WiringWriteRequest = await _read_json(request, WiringWriteRequest)
+        return _json(
+            request,
+            success(
+                self.service.apply_wiring(payload.wiring, payload.expected_sha256),
+                request_id=str(request.state.request_id),
+            ),
+        )
+
 
 # ---------------------------------------------------------------------------
 # app construction
@@ -477,6 +503,8 @@ def create_app(
             Route("/api/config", api.config, methods=["GET"]),
             Route("/api/config", api.config_apply, methods=["PUT"]),
             Route("/api/config/validate", api.config_validate, methods=["POST"]),
+            Route("/api/wiring", api.wiring, methods=["GET"]),
+            Route("/api/wiring", api.wiring_apply, methods=["PUT"]),
         ],
         exception_handlers={
             WebApiError: web_error_handler,

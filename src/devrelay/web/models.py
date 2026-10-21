@@ -35,6 +35,14 @@ class ConfigWriteRequest(BaseModel):
     confirm: Literal["apply"]
 
 
+class WiringWriteRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    expected_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    wiring: dict[str, Any]
+    confirm: Literal["apply"]
+
+
 def success(data: Any, *, request_id: str = "") -> dict[str, Any]:
     return {
         "schema_version": WEB_SCHEMA_VERSION,
