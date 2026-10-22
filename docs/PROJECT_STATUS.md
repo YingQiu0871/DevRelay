@@ -12,6 +12,8 @@ This document is the status ledger for DevRelay. It intentionally distinguishes 
 
 The public repository supports the v0.3 orchestration line: the v0.1 CLI workflow plus the v0.3 OpenCode-first orchestration surface. Publication evidence is recorded in [RELEASE_CHECKLIST.md](RELEASE_CHECKLIST.md); later milestones described below must not be presented as released capability until reviewed, merged, tagged, and published.
 
+**v0.4.0 release candidate:** the A/B/C/D1/E1 stages are accepted and prepared on `main` (version `0.4.0`), but **not yet published**.  See [release notes](v0.4/RELEASE_NOTES_v0.4.0.md) and the v0.4.0 checklist section; public installation remains `0.3.0` until the owner tags/drafts/dispatches.
+
 当前公开仓库支持 v0.3 编排线：v0.1 的 CLI 工作流，加上 v0.3 的 OpenCode-first 编排能力。发布证据记录在 [RELEASE_CHECKLIST.md](RELEASE_CHECKLIST.md)；下述后续里程碑只有在完成复审、合并、打 tag 并正式发布后，才可以作为“已发布能力”对外描述。
 
 ## Capability matrix / 能力矩阵
@@ -38,8 +40,10 @@ The public repository supports the v0.3 orchestration line: the v0.1 CLI workflo
 | Explicit GLM reviewer routing / GLM 审阅者路由 | ✅ | Stable | v0.3-C, shipped in 0.3.0 |
 | Automated bounded orchestration / 自动有界编排 | ✅ | Stable | v0.3-D, shipped in 0.3.0 |
 | Recovery and hardening (fail-closed core) / 恢复与加固（fail-closed 核心） | ✅ | Released with constraints | v0.3-E, shipped in 0.3.0; adoption disabled; platform gates open |
-| localhost WebUI / localhost WebUI | ❌ | 📋 Planned | v0.4 |
-| Windows portable zip / Windows portable zip | 🧪 E1 | Pending review | v0.4-E |
+| localhost WebUI / localhost WebUI | 🧪 v0.4.0 candidate | Accepted; publication pending | A/B/C/D1 |
+| Run/task dashboards, decision/interrupt, manual prompt/polling | 🧪 v0.4.0 candidate | Accepted; publication pending | C1/C2a/C2b/C2c |
+| Project activation + session inventory | 🧪 v0.4.0 candidate | Accepted; in-memory selection | D1 |
+| Windows portable zip / Windows portable zip | 🧪 v0.4.0 candidate | E1 accepted; unsigned | v0.4-E1 |
 | GitHub packaged Windows installer / GitHub Windows 安装包 | ❌ | 📋 Deferred (signing/Inno Setup) | v0.4-E2 |
 | Direct API execution mode / Direct API 执行模式 | ❌ | 📋 Optional future | v0.5+ |
 

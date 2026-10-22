@@ -324,12 +324,14 @@ Potential directions / 潜在方向：
 
 ## Immediate next steps / 当前最近步骤
 
-1. Build **v0.4-B WebUI Configuration** on the accepted A1/A2 API
-   ([V04A_SPEC.md](v0.4/V04A_SPEC.md)); it must use the header session, the
-   curated `PUT /api/config` allowlist, and the `restart_required` signal.
+1. **Publish v0.4.0** from the release-preparation commit: the owner creates the
+   annotated tag, draft Release and dispatches `release.yml`; record evidence in
+   [RELEASE_CHECKLIST.md](RELEASE_CHECKLIST.md).
 2. Close the remaining v0.3-E platform gates (G0.4/P4, G0.5/P6, G1, G2) and decide whether recovery adoption may be enabled; `adopt_completed_turn` stays disabled until then.
 3. Complete independent acceptance for v0.2-A/B/C, and close the v0.2-C E2E when Codex quota returns.
-4. Investigate the v0.2-C Windows Codex shell-policy P2 offline, without another real Codex call.
+4. Address v0.4 hardening residuals: pause/session switching, persistent active
+   project, prompt-marker durability, portable reproducibility/SBOM and an
+   optional signed installer.
 
 ## Long-term product goal / 长期产品目标
 

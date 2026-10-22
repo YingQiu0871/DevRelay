@@ -4,7 +4,11 @@ All notable changes to DevRelay are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## Unreleased
+## 0.4.0 - 2026-10-22
+
+Release-preparation entry.  Publication status and evidence are recorded in
+`docs/RELEASE_CHECKLIST.md`; do not describe these features as published until
+the owner completes the tag/draft/dispatch steps.
 
 ### Added
 
@@ -69,6 +73,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   publication.  The portable build is unsigned and has no installer/PATH/
   auto-update behavior.  The `.exe` installer, code signing and package-manager
   manifests remain deferred.
+
+### Changed
+
+- Package version `0.3.0` -> `0.4.0` (`pyproject.toml`,
+  `src/devrelay/__init__.py`, release-version test).
+- Release workflow actions are pinned to full commit SHAs, and the Windows
+  portable job is a hard dependency of publication.
+- The WebUI now bundles the accepted run/task/control surfaces (A/B/C/D1) and
+  the optional `web` extra; no new runtime dependency is added to the core CLI.
+
+### Security
+
+- `devrelay web serve` remains loopback-only with bearer/header-session auth,
+  Host/Origin validation, bounded bodies, confirmation headers for writes and
+  no cookies/CSRF surface.
+- Run controls are bounded to decision, role-scoped interrupt, one manual
+  prompt and normalized message polling; no arbitrary shell, path, session or
+  raw provider body is exposed.
+- Project activation accepts only registry ids; active selection is in-memory.
+- The portable Windows build is unsigned; verify `SHA256SUMS`.
+
+### Known limitations
+
+- Pause is not implemented; interrupt is an abort, not a pause.
+- OpenCode session switching/ownership transfer, persistent active-project
+  selection, HTTP project add/remove and archived-run mutation remain deferred.
+- The manual-prompt pending marker is process-local.
+- The Windows `.exe` installer, code signing, winget/scoop manifests and
+  auto-update are not shipped.
+- The release workflow has not been exercised against a real v0.4 tag; the
+  portable zip is built by the Windows runner on the first real publication.
 
 ## 0.3.0 - 2026-10-21
 

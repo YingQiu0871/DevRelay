@@ -50,7 +50,7 @@ refused. Create the draft first (its tag must be reachable from `origin/main`; t
 workflow checks that with `git merge-base --is-ancestor`):
 
 ```bash
-gh release create v0.3.0 --draft --title "devrelay v0.3.0" --notes-file <notes>
+gh release create v0.4.0 --draft --title "devrelay v0.4.0" --notes-file <notes>
 ```
 
 The draft is what makes the ordering checkable: the wheel, the sdist, the
@@ -62,11 +62,11 @@ publication job cannot start until that job succeeds.
 ### Dispatch it by hand
 
 From the repository's *Actions* tab, select the `release` workflow, choose
-**Run workflow**, and fill in the tag (for example `v0.3.0`) and `confirm` set to
+**Run workflow**, and fill in the tag (for example `v0.4.0`) and `confirm` set to
 `PUBLISH`. Or from a checkout:
 
 ```bash
-gh workflow run release.yml -f tag=v0.3.0 -f confirm=PUBLISH
+gh workflow run release.yml -f tag=v0.4.0 -f confirm=PUBLISH
 gh run watch
 ```
 
@@ -78,7 +78,7 @@ Without `confirm=PUBLISH` nothing is executed.
    or tags such as `v0.3` or `0.3.0` fail the run immediately.
 2. **Checkout** - the release tag itself is checked out, with full history.
 3. **Tag vs packaged version** - `pyproject.toml` is read at that tag and the tag
-   must be exactly `v<version>` (so `v0.3.0` for the current tree).
+   must be exactly `v<version>` (so `v0.4.0` for the current tree).
 4. **Ancestry** - `git merge-base --is-ancestor` must show the tag commit is
    reachable from `origin/main`; an unmerged tag is refused.
 5. **Release state** - `gh release view` must report `isDraft=true` and

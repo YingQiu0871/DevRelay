@@ -39,8 +39,8 @@ def test_installed_metadata_matches_pyproject():
     assert installed == devrelay.__version__
 
 
-def test_release_version_is_0_3_0():
-    assert _pyproject_version() == "0.3.0"
+def test_release_version_is_0_4_0():
+    assert _pyproject_version() == "0.4.0"
 
 
 def test_cli_version_command_reports_the_same_version():

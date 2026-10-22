@@ -6,6 +6,45 @@ The publication flow is the tag-driven workflow in
 the publisher completed the steps below on 2026-10-21; the evidence is recorded
 here and the release is public.
 
+## v0.4.0 (prepared 2026-10-22; publication pending)
+
+### Verified in this tree
+
+- [x] Version single-sourced at **0.4.0** in `pyproject.toml`, the
+  `src/devrelay/__init__.py` fallback and `tests/test_version.py`; editable
+  reinstall reports `devrelay 0.4.0`.
+- [x] Full offline suite: **1,345 collected — 1,343 pass + 2 environment skips**
+  on this Windows host.
+- [x] `python -m build` produced `devrelay-0.4.0-py3-none-any.whl` and
+  `devrelay-0.4.0.tar.gz`; `twine check` passed both.
+- [x] Portable local build produced `DevRelay-Portable-Windows-x64.zip`;
+  extracted `devrelay.exe version` reported `devrelay 0.4.0`; profile/static
+  assertions passed.
+- [x] A/B/C/D1/E1 acceptance records are present under `docs/v0.4/`.
+- [x] E1 release workflow includes the Windows portable job, four-asset gate,
+  provenance check and SHA-pinned actions; release tests pass.
+- [x] Release notes: [v0.4/RELEASE_NOTES_v0.4.0.md](v0.4/RELEASE_NOTES_v0.4.0.md).
+
+### Publisher steps (pending; owner only)
+
+1. [ ] Review the release-preparation commit and wait for `test.yml` green.
+2. [ ] Create an annotated tag `v0.4.0` on that commit and push it.
+3. [ ] Create a **draft** GitHub Release for `v0.4.0`.
+4. [ ] Dispatch `release.yml` with `tag=v0.4.0`, `confirm=PUBLISH`.
+5. [ ] Verify the Windows portable artifact, wheel, sdist and `SHA256SUMS`
+   are attached, the Release is no longer a draft, PyPI serves 0.4.0, and a
+   fresh venv installs it.
+6. [ ] Record the release commit, CI run, release run and PyPI digests here;
+   flip the README/project-status "publication pending" wording.
+
+### Disclosed caveats
+
+- The Windows portable job and the real v0.4 tag publication have **not** been
+  exercised before this release; the first real dispatch is the final gate.
+- The portable zip is unsigned and not byte-reproducible; no SBOM.
+- Pause, session switching, persistent active-project selection and the `.exe`
+  installer remain deferred.
+
 ## v0.3.0 (2026-10-21)
 
 ### Verified in this tree
