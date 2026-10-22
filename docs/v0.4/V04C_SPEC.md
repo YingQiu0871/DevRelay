@@ -1,10 +1,10 @@
 # DevRelay v0.4-C — Dashboard & Live Runs
 
-Status: **C1 IMPLEMENTED + INDEPENDENTLY REVIEWED — APPROVE WITH FINDINGS; P2
-findings remediated; pending owner acceptance.**  The review is recorded in
-[V04C_REVIEW.md](V04C_REVIEW.md).  C1 is a read-only dashboard over the accepted
-runs API; run-control actions are deliberately deferred to a separately reviewed
-C2.
+Status: **C1 ACCEPTED / CLOSED by the owner on 2026-10-22.**  The review is
+recorded in [V04C_REVIEW.md](V04C_REVIEW.md) and the acceptance record in
+[V04C1_ACCEPTANCE.md](V04C1_ACCEPTANCE.md).  C1 is a read-only dashboard over the
+accepted runs API; run-control actions are deliberately deferred to a separately
+reviewed C2.
 
 ## Scope
 
