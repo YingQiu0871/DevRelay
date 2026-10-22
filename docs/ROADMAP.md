@@ -255,13 +255,23 @@ Deferred to C2:
 
 ### v0.4-D — Project & Session Management
 
-Status: 📋 Planned
+Status: 🧪 D1 implemented and independently reviewed (APPROVE WITH FINDINGS;
+P1/P2 findings remediated; pending owner acceptance).  See
+[V04D_SPEC.md](v0.4/V04D_SPEC.md) and [V04D_REVIEW.md](v0.4/V04D_REVIEW.md).
 
-- multiple registered projects
-- explicit OpenCode session ownership
-- session history
-- safe session switching
-- archived/completed runs
+Implemented in D1:
+
+- multiple registered projects with explicit in-memory activation
+- run-recorded session inventory (roles, run ids, latest state)
+- completed/terminal runs remain visible in the bounded run list
+- no arbitrary path/session id; activation is confirmation-gated
+
+Deferred:
+
+- persistent active-project selection
+- OpenCode session switching/ownership transfer
+- project add/remove over HTTP
+- archived-run mutation
 
 ### v0.4-E — Packaging & GitHub Release Automation
 

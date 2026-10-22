@@ -581,6 +581,63 @@ class WebReadService:
             "current_task": current if isinstance(current, str) else None,
         }
 
+    def sessions(self) -> dict[str, Any]:
+        ids = self.surface.orchestration.list_run_ids()
+        if len(ids) > MAX_RUN_SCAN:
+            raise WebApiError(
+                "run_list_too_large",
+                f"more than {MAX_RUN_SCAN} runs exist; narrow the workspace before listing sessions",
+                status_code=503,
+            )
+        by_session: dict[str, dict[str, Any]] = {}
+        for run_id in ids:
+            try:
+                run = self.surface.orchestration.get_run(run_id)
+            except OrchestrationError as exc:
+                raise WebApiError(
+                    getattr(exc, "code", "orchestration_error"),
+                    "one or more run documents are unreadable",
+                    status_code=503,
+                ) from exc
+            for role in ("implementer", "reviewer"):
+                session_id = getattr(run, f"{role}_session_id", "")
+                if not isinstance(session_id, str) or not session_id:
+                    continue
+                entry = by_session.setdefault(
+                    session_id,
+                    {
+                        "session_id": session_id,
+                        "roles": [],
+                        "run_ids": [],
+                        "latest_run_id": run_id,
+                        "latest_state": run.state.value,
+                        "updated_at": run.updated_at,
+                        "run_ids_truncated": False,
+                    },
+                )
+                if role not in entry["roles"]:
+                    entry["roles"].append(role)
+                if run_id not in entry["run_ids"]:
+                    if len(entry["run_ids"]) < 50:
+                        entry["run_ids"].append(run_id)
+                    else:
+                        entry["run_ids_truncated"] = True
+                if str(run.updated_at) >= str(entry["updated_at"]):
+                    entry["updated_at"] = run.updated_at
+                    entry["latest_run_id"] = run_id
+                    entry["latest_state"] = run.state.value
+        sessions = sorted(
+            by_session.values(),
+            key=lambda item: str(item.get("updated_at", "")),
+            reverse=True,
+        )
+        return {
+            "sessions": sessions[:100],
+            "returned": min(len(sessions), 100),
+            "total": len(sessions),
+            "truncated": len(sessions) > 100,
+        }
+
     def task(self, task_id: str) -> dict[str, Any]:
         if not _TASK_ID_RE.fullmatch(task_id):
             raise WebApiError("invalid_task_id", "invalid task id", status_code=400)

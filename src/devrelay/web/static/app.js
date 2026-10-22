@@ -24,6 +24,7 @@
     runDetailRequest: 0,
     refreshInFlight: false,
     tasks: null,
+    sessions: null,
     taskDetail: null,
     selectedTaskId: "",
     taskDetailRequest: 0,
@@ -34,6 +35,8 @@
     messagesInFlight: false,
     messagesQueued: false,
     messagesRequest: 0,
+    workspaceEpoch: 0,
+    switchingProject: false,
   };
 
   class ApiError extends Error {
@@ -212,6 +215,16 @@
     const config = state.config || {};
     $("project-name").textContent = active ? (active.label || active.root) : "no active project";
     $("project-id").textContent = active ? active.project_id : "unregistered";
+    const select = $("project-select");
+    select.replaceChildren();
+    for (const project of projectList) {
+      const option = document.createElement("option");
+      option.value = project.project_id;
+      option.textContent = project.label || project.project_id;
+      select.append(option);
+    }
+    if (active) select.value = active.project_id;
+    $("project-activate").disabled = !active;
     $("package-version").textContent = status.package_version || "unknown";
     $("config-digest").textContent = shortSha(config.config_sha256);
     $("restart-note").textContent = config.restart_required
@@ -327,6 +340,29 @@
       const dd = document.createElement("dd");
       dd.textContent = value;
       mcpList.append(dt, dd);
+    }
+  }
+
+  function renderSessions() {
+    const target = $("sessions-view");
+    target.replaceChildren();
+    const sessions = (state.sessions && state.sessions.sessions) || [];
+    if (!sessions.length) {
+      const empty = document.createElement("li");
+      empty.textContent = "No run-recorded sessions.";
+      target.append(empty);
+      return;
+    }
+    for (const session of sessions) {
+      const item = document.createElement("li");
+      const left = document.createElement("span");
+      left.className = "mono";
+      left.textContent = session.session_id;
+      const right = document.createElement("span");
+      right.className = "muted";
+      right.textContent = `${(session.roles || []).join("/")} · ${session.latest_state || "?"} · ${(session.run_ids || []).length} run(s)`;
+      item.append(left, right);
+      target.append(item);
     }
   }
 
@@ -888,11 +924,76 @@
     }
   }
 
+  async function activateProject() {
+    const select = $("project-select");
+    const projectId = select.value;
+    if (!projectId) return;
+    const active = ((state.projects || {}).projects || []).find((item) => item.active);
+    if (active && active.project_id === projectId) {
+      showAlert("That project is already active.");
+      return;
+    }
+    if (!window.confirm("Switch the active workspace? In-memory run and task detail will reset.")) {
+      return;
+    }
+    const button = $("project-activate");
+    button.disabled = true;
+    state.workspaceEpoch += 1;
+    state.switchingProject = true;
+    if (state.autoTimer) {
+      clearInterval(state.autoTimer);
+      state.autoTimer = null;
+    }
+    $("auto-refresh").checked = false;
+    try {
+      await api(`/api/projects/${encodeURIComponent(projectId)}/activate`, {
+        method: "POST",
+        headers: { "X-DevRelay-Confirm": "apply" },
+        body: { confirm: "apply" },
+      });
+      state.selectedRunId = "";
+      state.runDetail = null;
+      state.runDetailRequest += 1;
+      state.selectedTaskId = "";
+      state.taskDetail = null;
+      state.taskDetailRequest += 1;
+      state.messages = [];
+      state.messagesCursor = "";
+      state.messagesRunId = "";
+      $("run-detail").hidden = true;
+      $("task-detail").hidden = true;
+      if (state.messagesTimer) {
+        clearInterval(state.messagesTimer);
+        state.messagesTimer = null;
+      }
+      $("messages-auto").checked = false;
+      state.switchingProject = false;
+      try {
+        await loadAll();
+        showAlert("Active project switched.");
+      } catch (reloadError) {
+        showAlert(`Project switched, but reload failed: ${reloadError.message}`);
+      }
+    } catch (error) {
+      if (error.status === 401) {
+        clearSession();
+        showLogin("Session expired. Enter the token again.");
+      } else {
+        showAlert(`${error.code ? `${error.code}: ` : ""}${error.message}`);
+      }
+    } finally {
+      state.switchingProject = false;
+      button.disabled = false;
+    }
+  }
+
   async function refreshRuns() {
-    if (state.refreshInFlight) return;
+    if (state.refreshInFlight || state.switchingProject) return;
+    const epoch = state.workspaceEpoch;
     state.refreshInFlight = true;
     try {
       const runs = await api("/api/runs?limit=8");
+      if (epoch !== state.workspaceEpoch) return;
       state.runs = runs;
       $("run-count").textContent = `${runs.total || 0} total`;
       showAlert("");
@@ -1182,25 +1283,31 @@
   }
 
   async function loadAll() {
-    const [status, projects, config, wiring, runs, tasks] = await Promise.all([
+    const epoch = state.workspaceEpoch;
+    const [status, projects, config, wiring, runs, tasks, sessions] = await Promise.all([
       api("/api/status"),
       api("/api/projects"),
       api("/api/config"),
       api("/api/wiring"),
       api("/api/runs?limit=8"),
       api("/api/tasks?limit=20"),
+      api("/api/sessions"),
     ]);
+    if (epoch !== state.workspaceEpoch) return false;
     state.status = status;
     state.projects = projects;
     state.config = config;
     state.wiring = wiring;
     state.runs = runs;
     state.tasks = tasks;
+    state.sessions = sessions;
     renderSummary();
     renderConfig();
     renderWiringPanel();
     renderStatus();
+    renderSessions();
     renderTasks();
+    return true;
   }
 
   async function enterApp() {
@@ -1280,6 +1387,7 @@
   $("auto-refresh").addEventListener("change", (event) => {
     setAutoRefresh(event.target.checked);
   });
+  $("project-activate").addEventListener("click", activateProject);
   $("run-decide").addEventListener("click", decideRun);
   $("run-interrupt").addEventListener("click", interruptRun);
   $("run-prompt-send").addEventListener("click", sendManualPrompt);

@@ -50,6 +50,10 @@
           <p class="kicker">Project</p>
           <p id="project-name" class="value">-</p>
           <p id="project-id" class="muted mono">-</p>
+          <div class="project-picker">
+            <select id="project-select" aria-label="Registered project"></select>
+            <button id="project-activate" class="button button-quiet" type="button">Activate</button>
+          </div>
         </article>
         <article class="card">
           <p class="kicker">Package</p>
@@ -321,6 +325,11 @@
           <p class="kicker">Authenticated read surface</p>
           <h2>Runtime status</h2>
           <dl id="status-view" class="details"></dl>
+        </div>
+        <div class="panel">
+          <p class="kicker">Run-recorded sessions</p>
+          <h2>Sessions</h2>
+          <ul id="sessions-view" class="runs"></ul>
         </div>
         <div class="panel">
           <div class="panel-head">

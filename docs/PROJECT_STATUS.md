@@ -159,9 +159,10 @@ v0.3.0 meets that bar through the annotated `v0.3.0` tag and the publication rec
 
 ## Next gates / 下一步门槛
 
-1. Decide the next stage: **v0.4-D project/session management**, or a hardening
-   pass for the accepted C1/C2a/C2b/C2c surface.  Pause remains unsupported
-   because the accepted state machine has no pause state.
+1. Accept/close **v0.4-D1 project activation + session inventory**
+   ([V04D_SPEC.md](v0.4/V04D_SPEC.md)); it is reviewed with findings in
+   [V04D_REVIEW.md](v0.4/V04D_REVIEW.md).  Active selection is in-memory, and
+   session switching/persistence remain deferred.
 2. Close the remaining v0.3-E platform gates (G0.4/P4, G0.5/P6, G1, G2) and decide whether recovery adoption may be enabled; `adopt_completed_turn` stays disabled until then.
 3. Complete independent acceptance for v0.2-A/B/C, and close the v0.2-C E2E when provider quota returns.
 4. Investigate the Windows Codex shell-policy P2 offline; do not spend another real Codex call on diagnosis.

@@ -187,6 +187,10 @@ input:focus, select:focus, button:focus-visible {
 
 .value { font-size: 18px; font-weight: 700; margin-top: 8px; overflow-wrap: anywhere; }
 
+.project-picker { display: flex; gap: 8px; margin-top: 10px; align-items: center; }
+.project-picker select { min-width: 0; flex: 1 1 auto; }
+.project-picker .button { padding: 7px 10px; font-size: 12px; }
+
 .tabs {
   display: flex;
   gap: 8px;

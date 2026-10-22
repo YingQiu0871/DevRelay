@@ -770,6 +770,154 @@ def test_c2b_ui_has_only_bounded_controls(client: TestClient):
         assert endpoint not in script
 
 
+def test_project_activation_switches_active_workspace(
+    client: TestClient, workspace: Path, tmp_path: Path
+):
+    from devrelay.config import install_default_config
+    from devrelay.web.registry import ProjectRegistry
+
+    other = tmp_path / "other-workspace"
+    (other / ".devrelay").mkdir(parents=True)
+    install_default_config(other / ".devrelay" / "config.yaml")
+    registry = ProjectRegistry(workspace / ".devrelay")
+    project = registry.add(other)
+    auth = _auth(client)
+    body = {"confirm": "apply"}
+    assert (
+        client.post(
+            f"/api/projects/{project.project_id}/activate",
+            json=body,
+            headers=auth,
+        ).status_code
+        == 403
+    )
+    assert (
+        client.post(
+            f"/api/projects/{project.project_id}/activate",
+            json={},
+            headers={**auth, "X-DevRelay-Confirm": "apply"},
+        ).status_code
+        == 422
+    )
+    response = client.post(
+        f"/api/projects/{project.project_id}/activate",
+        json=body,
+        headers={**auth, "X-DevRelay-Confirm": "apply"},
+    )
+    assert response.status_code == 200, response.text
+    assert response.json()["data"]["active"] is True
+    projects = client.get("/api/projects", headers=auth).json()["data"]["projects"]
+    assert [item["project_id"] for item in projects if item["active"]] == [
+        project.project_id
+    ]
+    status = client.get("/api/status", headers=auth).json()["data"]
+    assert status["workspace"] == str(other.resolve())
+    health = client.get("/api/health", headers=auth).json()["data"]
+    assert health["project_id"] == project.project_id
+    assert client.get("/api/runs", headers=auth).json()["data"]["total"] == 0
+    assert client.get("/api/tasks", headers=auth).json()["data"]["total"] == 0
+    assert client.get("/api/sessions", headers=auth).json()["data"]["total"] == 0
+    assert (
+        client.post(
+            "/api/projects/not-a-project/activate",
+            json=body,
+            headers={**auth, "X-DevRelay-Confirm": "apply"},
+        ).status_code
+        == 404
+    )
+
+
+def test_project_activation_failure_keeps_old_service(
+    client: TestClient, workspace: Path, tmp_path: Path
+):
+    from devrelay.config import install_default_config
+    from devrelay.web.registry import ProjectRegistry
+    import shutil
+
+    other = tmp_path / "broken-workspace"
+    (other / ".devrelay").mkdir(parents=True)
+    install_default_config(other / ".devrelay" / "config.yaml")
+    registry = ProjectRegistry(workspace / ".devrelay")
+    project = registry.add(other)
+    shutil.rmtree(other)
+    auth = _auth(client)
+    response = client.post(
+        f"/api/projects/{project.project_id}/activate",
+        json={"confirm": "apply"},
+        headers={**auth, "X-DevRelay-Confirm": "apply"},
+    )
+    assert response.status_code == 503
+    status = client.get("/api/status", headers=auth).json()["data"]
+    assert status["workspace"] == str(workspace.resolve())
+
+
+def test_concurrent_project_activation_does_not_deadlock(
+    client: TestClient, workspace: Path, tmp_path: Path
+):
+    from concurrent.futures import ThreadPoolExecutor
+    from devrelay.config import install_default_config
+    from devrelay.web.registry import ProjectRegistry
+
+    registry = ProjectRegistry(workspace / ".devrelay")
+    projects = []
+    for index in range(2):
+        other = tmp_path / f"concurrent-{index}"
+        (other / ".devrelay").mkdir(parents=True)
+        install_default_config(other / ".devrelay" / "config.yaml")
+        projects.append(registry.add(other))
+    headers = {
+        "Authorization": f"Bearer {TOKEN}",
+        "X-DevRelay-Confirm": "apply",
+    }
+
+    def activate(project_id: str) -> int:
+        with TestClient(client.app, base_url=BASE_URL) as worker:
+            return worker.post(
+                f"/api/projects/{project_id}/activate",
+                json={"confirm": "apply"},
+                headers=headers,
+            ).status_code
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        results = list(pool.map(activate, [item.project_id for item in projects]))
+    assert results == [200, 200]
+
+
+def test_sessions_inventory_is_run_recorded(client: TestClient, workspace: Path):
+    from devrelay.orchestration.store import OrchestrationStore
+    from v03d_helpers import honest_run
+
+    auth = _auth(client)
+    store = OrchestrationStore(workspace / ".devrelay")
+    run = honest_run(workspace=str(workspace.resolve()))
+    store.create(run)
+    response = client.get("/api/sessions", headers=auth)
+    assert response.status_code == 200
+    data = response.json()["data"]
+    ids = {item["session_id"] for item in data["sessions"]}
+    assert run.implementer_session_id in ids
+    assert run.reviewer_session_id in ids
+    for item in data["sessions"]:
+        assert "parts" not in item
+        assert "prompt" not in item
+    assert client.get("/api/sessions").status_code == 401
+    assert (
+        client.get(f"/api/sessions/{run.implementer_session_id}", headers=auth).status_code
+        == 404
+    )
+
+
+def test_d_ui_has_project_and_session_controls(client: TestClient):
+    html = client.get("/").text
+    script = client.get("/assets/app.js").text
+    for marker in ("project-select", "project-activate", "sessions-view"):
+        assert marker in html
+    assert "activateProject" in script
+    assert "/api/sessions" in script
+    assert "workspaceEpoch" in script
+    assert "switchingProject" in script
+
+
 def test_ui_does_not_expose_token_in_html(client: TestClient):
     response = client.get("/")
     assert TOKEN not in response.text

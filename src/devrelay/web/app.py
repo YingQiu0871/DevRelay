@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import secrets
 import sys
+import threading
 from pathlib import Path
 from typing import Any, Awaitable, Callable
 
@@ -30,6 +31,7 @@ from devrelay.web.models import (
     MAX_BODY_BYTES,
     ConfigValidateRequest,
     ConfigWriteRequest,
+    ProjectActivateRequest,
     RunDecisionRequest,
     RunInterruptRequest,
     RunPromptRequest,
@@ -247,6 +249,7 @@ class LocalControlApi:
         self.registry = registry
         self.project_id = project_id
         self.auth = auth
+        self._switch_lock = threading.RLock()
 
     # -- session -----------------------------------------------------
     async def session_create(self, request: Request) -> Response:
@@ -338,6 +341,58 @@ class LocalControlApi:
         return _json(
             request,
             success({"projects": items}, request_id=str(request.state.request_id)),
+        )
+
+    async def activate_project(self, request: Request) -> Response:
+        if request.headers.get("x-devrelay-confirm") != "apply":
+            raise WebApiError(
+                "confirmation_required",
+                "X-DevRelay-Confirm: apply is required",
+                status_code=403,
+            )
+        payload: ProjectActivateRequest = await _read_json(request, ProjectActivateRequest)
+        if payload.confirm != "apply":
+            raise WebApiError("confirmation_required", "confirm must be apply", status_code=403)
+        project_id = str(request.path_params.get("project_id", ""))
+        project = self.registry.get(project_id)
+        if not Path(project.root).is_absolute():
+            raise WebApiError(
+                "invalid_project",
+                "registered project root is not absolute",
+                status_code=409,
+            )
+        root, wiring, devrelay_dir = resolve_workspace(project.root)
+        # Build outside the lock: holding a thread lock across await can deadlock
+        # the single uvicorn event loop.  The swap itself is a no-await critical
+        # section; concurrent activations simply last-write-wins.
+        service = await run_in_threadpool(
+            WebReadService.from_workspace,
+            root,
+            wiring,
+            devrelay_dir,
+        )
+        with self._switch_lock:
+            self.service = service
+            self.project_id = project.project_id
+        return _json(
+            request,
+            success(
+                {
+                    "project": project.public(active=True),
+                    "active": True,
+                    "restart_required": False,
+                },
+                request_id=str(request.state.request_id),
+            ),
+        )
+
+    async def sessions(self, request: Request) -> Response:
+        return _json(
+            request,
+            success(
+                self.service.sessions(),
+                request_id=str(request.state.request_id),
+            ),
         )
 
     async def runs(self, request: Request) -> Response:
@@ -607,6 +662,12 @@ def create_app(
             Route("/api/health", api.health, methods=["GET"]),
             Route("/api/status", api.status, methods=["GET"]),
             Route("/api/projects", api.projects, methods=["GET"]),
+            Route(
+                "/api/projects/{project_id}/activate",
+                api.activate_project,
+                methods=["POST"],
+            ),
+            Route("/api/sessions", api.sessions, methods=["GET"]),
             Route("/api/runs", api.runs, methods=["GET"]),
             Route("/api/runs/{run_id}", api.run, methods=["GET"]),
             Route("/api/runs/{run_id}/decide", api.run_decide, methods=["POST"]),
@@ -630,5 +691,4 @@ def create_app(
     )
     app.state.api = api
     app.state.auth = auth
-    app.state.project_id = project.project_id
     return SecurityMiddleware(app, auth=auth)

@@ -57,6 +57,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   The UI confirms prompts and optionally polls every 5 seconds.  Pause remains
   unsupported because the state machine has no pause state; no WebSocket/SSE
   transport is added.
+- v0.4-D1 project/session management: `POST /api/projects/{project_id}/activate`
+  switches the active registered project in-memory under a lock with an explicit
+  confirmation, and `GET /api/sessions` lists run-recorded implementer/reviewer
+  session metadata.  The UI gains a project selector and Sessions list.  Active
+  selection is not persisted across restarts; arbitrary paths/session ids,
+  OpenCode session switching and HTTP project add/remove remain out of scope.
 
 ## 0.3.0 - 2026-10-21
 
