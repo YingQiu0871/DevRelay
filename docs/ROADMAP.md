@@ -204,11 +204,10 @@ its history is in [BACKLOG.md](BACKLOG.md) §12.
 
 ### v0.4-B — WebUI Configuration
 
-Status: ✅ **B1 ACCEPTED / CLOSED by the owner on 2026-10-22; B2 implemented and
-independently reviewed (APPROVE WITH FINDINGS; P2 findings remediated; pending
-owner acceptance).**  See [V04B_SPEC.md](v0.4/V04B_SPEC.md),
-[V04B_REVIEW.md](v0.4/V04B_REVIEW.md), [V04B_ACCEPTANCE.md](v0.4/V04B_ACCEPTANCE.md),
-[V04B2_SPEC.md](v0.4/V04B2_SPEC.md) and [V04B2_REVIEW.md](v0.4/V04B2_REVIEW.md).
+Status: ✅ **B1 + B2 ACCEPTED / CLOSED by the owner on 2026-10-22.**  See
+[V04B_SPEC.md](v0.4/V04B_SPEC.md), [V04B_REVIEW.md](v0.4/V04B_REVIEW.md),
+[V04B_ACCEPTANCE.md](v0.4/V04B_ACCEPTANCE.md), [V04B2_SPEC.md](v0.4/V04B2_SPEC.md),
+[V04B2_REVIEW.md](v0.4/V04B2_REVIEW.md) and [V04B2_ACCEPTANCE.md](v0.4/V04B2_ACCEPTANCE.md).
 B2 is the separate wiring API for the loopback OpenCode endpoint plus read-only
 MCP/credential references.
 The static UI is served at `/` by

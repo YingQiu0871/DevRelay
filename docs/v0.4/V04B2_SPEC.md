@@ -1,10 +1,10 @@
 # DevRelay v0.4-B2 — Wiring API
 
-Status: **IMPLEMENTED + INDEPENDENTLY REVIEWED — APPROVE WITH FINDINGS; P2
-findings remediated; pending owner acceptance.**  The review is recorded in
-[V04B2_REVIEW.md](V04B2_REVIEW.md).  B2 adds a separate, narrow wiring surface on
-top of the accepted B1 UI.  It does not widen the A2 configuration allowlist and
-does not add run control.
+Status: **B2 ACCEPTED / CLOSED by the owner on 2026-10-22.**  The review is
+recorded in [V04B2_REVIEW.md](V04B2_REVIEW.md) and the acceptance record in
+[V04B2_ACCEPTANCE.md](V04B2_ACCEPTANCE.md).  B2 adds a separate, narrow wiring
+surface on top of the accepted B1 UI.  It does not widen the A2 configuration
+allowlist and does not add run control.
 
 ## Objective
 

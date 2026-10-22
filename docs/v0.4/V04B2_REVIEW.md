@@ -1,7 +1,8 @@
 # DevRelay v0.4-B2 — independent review record
 
 Status: **B2 reviewed: APPROVE WITH FINDINGS (P0/P1 = 0); P2 findings
-remediated; pending owner acceptance.**  No v0.4 tag or release is implied.
+remediated; accepted by the owner on 2026-10-22.**  No v0.4 tag or release is
+implied.  See [V04B2_ACCEPTANCE.md](V04B2_ACCEPTANCE.md).
 
 The review covered the separate wiring API, the ConfigWriter refactor, the
 Connections tab and the B2 tests.
