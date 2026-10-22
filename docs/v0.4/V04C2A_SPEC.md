@@ -1,8 +1,8 @@
 # DevRelay v0.4-C2a — Read-Only Task Artifact Dashboard
 
-Status: **IMPLEMENTED + INDEPENDENTLY REVIEWED — APPROVE WITH FINDINGS; P2
-findings remediated; pending owner acceptance.**  The review is recorded in
-[V04C2A_REVIEW.md](V04C2A_REVIEW.md).  C2a enriches the C1 dashboard with
+Status: **C2a ACCEPTED / CLOSED by the owner on 2026-10-22.**  The review is
+recorded in [V04C2A_REVIEW.md](V04C2A_REVIEW.md) and the acceptance record in
+[V04C2A_ACCEPTANCE.md](V04C2A_ACCEPTANCE.md).  C2a enriches the C1 dashboard with
 task-relative evidence.  It adds no run/task control and no streaming transport.
 
 ## Objective
