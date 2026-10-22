@@ -275,22 +275,30 @@ Core principles / 核心原则：
 
 ## Distribution goal / 分发目标
 
-v0.3.0 ships a PyPI wheel/sdist and a GitHub Release; the Windows installer remains a v0.4-E target.
+v0.3.0 ships a PyPI wheel/sdist and a GitHub Release.  E1 adds an unsigned
+portable Windows zip to the tag-driven release; a signed `.exe` installer remains
+deferred.
 
-v0.3.0 已提供 PyPI wheel/sdist 与 GitHub Release；Windows 安装包仍是 v0.4-E 的目标。
+v0.3.0 已提供 PyPI wheel/sdist 与 GitHub Release。E1 在 tag 驱动发布中增加了
+**未签名**的 Windows portable zip；带签名的 `.exe` 安装包仍延后。
 
-Artifacts (Windows installers planned) / 产物（Windows 安装包为计划中）：
+Artifacts / 产物：
 
 ```text
-DevRelay-Setup-Windows-x64.exe
 DevRelay-Portable-Windows-x64.zip
 devrelay-<version>-py3-none-any.whl
-SHA256SUMS.txt
+devrelay-<version>.tar.gz
+SHA256SUMS
 ```
 
-The tag-driven release workflow already builds, checks, and publishes the wheel/sdist and the GitHub Release from a version tag; the Windows installers remain future work.
+The release workflow builds the wheel/sdist and the portable zip from the tag,
+checks all four assets, and only then publishes the GitHub Release and PyPI
+artifacts.  The portable build is unsigned; verify `SHA256SUMS`.  The `.exe`
+installer, code signing and package-manager manifests remain future work.
 
-tag 驱动发布工作流已经能够从版本 tag 完成构建、校验并发布 wheel/sdist 与 GitHub Release；Windows 安装包仍是后续工作。
+发布工作流从 tag 构建 wheel/sdist 与 portable zip，校验四个资产后才发布
+GitHub Release 与 PyPI 产物。portable 构建未签名，请校验 `SHA256SUMS`；
+`.exe` 安装包、代码签名与包管理器清单仍为后续工作。
 
 ## License / 许可证
 

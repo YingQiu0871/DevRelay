@@ -275,15 +275,20 @@ Deferred:
 
 ### v0.4-E — Packaging & GitHub Release Automation
 
-Status: 📋 Planned for the Windows installers (PyPI wheel/sdist and the GitHub Release already ship in 0.3.0). / 安装包仍为计划中（PyPI wheel/sdist 与 GitHub Release 已随 0.3.0 提供）。
+Status: 🧪 **E1 implemented and independently reviewed (REQUEST CHANGES → P1s
+remediated; pending owner acceptance).**  The `.exe` installer is explicitly
+deferred (no validated Inno Setup/code-signing path).  See
+[V04E_SPEC.md](v0.4/V04E_SPEC.md) and [V04E_REVIEW.md](v0.4/V04E_REVIEW.md).
+PyPI wheel/sdist and the GitHub Release already ship in 0.3.0.
 
 Target artifacts / 目标产物：
 
 ```text
-DevRelay-Setup-Windows-x64.exe
-DevRelay-Portable-Windows-x64.zip
+DevRelay-Portable-Windows-x64.zip   (E1, unsigned)
 devrelay-<version>-py3-none-any.whl
-SHA256SUMS.txt
+devrelay-<version>.tar.gz
+SHA256SUMS
+DevRelay-Setup-Windows-x64.exe      (deferred; needs signing/Inno Setup)
 ```
 
 Target release flow / 目标发布流程：

@@ -39,7 +39,8 @@ The public repository supports the v0.3 orchestration line: the v0.1 CLI workflo
 | Automated bounded orchestration / 自动有界编排 | ✅ | Stable | v0.3-D, shipped in 0.3.0 |
 | Recovery and hardening (fail-closed core) / 恢复与加固（fail-closed 核心） | ✅ | Released with constraints | v0.3-E, shipped in 0.3.0; adoption disabled; platform gates open |
 | localhost WebUI / localhost WebUI | ❌ | 📋 Planned | v0.4 |
-| GitHub packaged Windows installer / GitHub Windows 安装包 | ❌ | 📋 Planned | v0.4-E |
+| Windows portable zip / Windows portable zip | 🧪 E1 | Pending review | v0.4-E |
+| GitHub packaged Windows installer / GitHub Windows 安装包 | ❌ | 📋 Deferred (signing/Inno Setup) | v0.4-E2 |
 | Direct API execution mode / Direct API 执行模式 | ❌ | 📋 Optional future | v0.5+ |
 
 ## v0.2-C status / v0.2-C 状态
@@ -159,10 +160,13 @@ v0.3.0 meets that bar through the annotated `v0.3.0` tag and the publication rec
 
 ## Next gates / 下一步门槛
 
-1. Decide the next stage: **v0.4-E packaging/release**, a v0.4.0 release
-   preparation, or a hardening pass for the accepted A/B/C/D surface.  D1 is
-   accepted; active selection remains in-memory and session switching/persistence
-   remain deferred.
+1. Accept/close **v0.4-E1 portable packaging + release automation**
+   ([V04E_SPEC.md](v0.4/V04E_SPEC.md)); it is reviewed with findings in
+   [V04E_REVIEW.md](v0.4/V04E_REVIEW.md).  The Windows `.exe` installer, code
+   signing and package-manager manifests remain deferred.
+2. The requested **hardening pass** is recorded in
+   [HARDENING_v0.4.md](HARDENING_v0.4.md); remaining items are explicit
+   residuals, not hidden assumptions.
 2. Close the remaining v0.3-E platform gates (G0.4/P4, G0.5/P6, G1, G2) and decide whether recovery adoption may be enabled; `adopt_completed_turn` stays disabled until then.
 3. Complete independent acceptance for v0.2-A/B/C, and close the v0.2-C E2E when provider quota returns.
 4. Investigate the Windows Codex shell-policy P2 offline; do not spend another real Codex call on diagnosis.

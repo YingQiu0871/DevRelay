@@ -63,6 +63,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   session metadata.  The UI gains a project selector and Sessions list.  Active
   selection is not persisted across restarts; arbitrary paths/session ids,
   OpenCode session switching and HTTP project add/remove remain out of scope.
+- v0.4-E1 packaging: the release workflow builds a PyInstaller onedir
+  `DevRelay-Portable-Windows-x64.zip` on a Windows runner, includes it in
+  `SHA256SUMS`, attaches it to the draft Release and requires it before
+  publication.  The portable build is unsigned and has no installer/PATH/
+  auto-update behavior.  The `.exe` installer, code signing and package-manager
+  manifests remain deferred.
 
 ## 0.3.0 - 2026-10-21
 

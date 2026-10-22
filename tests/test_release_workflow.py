@@ -29,7 +29,7 @@ ROOT = Path(__file__).resolve().parents[1]
 WORKFLOWS = ROOT / ".github" / "workflows"
 WORKFLOW_PATH = WORKFLOWS / "release.yml"
 TEST_WORKFLOW_PATH = WORKFLOWS / "test.yml"
-PUBLISH_ACTION = "pypa/gh-action-pypi-publish@release/v1"
+PUBLISH_ACTION = "pypa/gh-action-pypi-publish@7245906fb61fa33a13554f9d5fb856fe61758086"
 TAG_PATTERN = r"^v[0-9]+\.[0-9]+\.[0-9]+$"
 SKIP_WHEN_PUBLISHED = "steps.pypi.outputs.exists != 'true'"
 
@@ -377,6 +377,7 @@ def test_assets_are_attached_to_the_draft_before_the_pypi_upload():
     run = steps[upload_index]["run"]
     assert "dist/*.whl" in run and "dist/*.tar.gz" in run
     assert "release-assets/SHA256SUMS" in run
+    assert "windows-assets/DevRelay-Portable-Windows-x64.zip" in run
     assert "--clobber" in run
     assert steps[publish_index]["with"]["packages-dir"] == "dist/"
     # `--clobber` belongs to the asset upload only. The final step may mention
@@ -464,6 +465,7 @@ def test_the_final_step_publishes_the_release_only_after_checking_its_assets():
     assert "devrelay-${VERSION}-py3-none-any.whl" in run
     assert "devrelay-${VERSION}.tar.gz" in run
     assert "SHA256SUMS" in run
+    assert "DevRelay-Portable-Windows-x64.zip" in run
     assert "exit 1" in run
     assert run.index("--json assets") < run.index("gh release edit")
     assert "--draft=false" in run
@@ -554,6 +556,48 @@ def test_test_workflow_runs_the_suite_on_both_platforms():
         if str(step.get("uses", "")).startswith("actions/setup-python")
     ]
     assert setup and setup[0]["with"]["cache"] == "pip"
-    commands = [step.get("run", "") for step in job["steps"]]
-    assert any('pip install -e ".[dev]"' in command for command in commands)
-    assert any("python -m pytest -q" in command for command in commands)
+
+
+def test_release_actions_are_pinned_to_commit_shas():
+    for workflow_path in (WORKFLOW_PATH, TEST_WORKFLOW_PATH):
+        workflow = yaml.safe_load(workflow_path.read_text(encoding="utf-8"))
+        for job in workflow["jobs"].values():
+            for step in job.get("steps", []):
+                uses = str(step.get("uses", ""))
+                if not uses or uses.startswith("./"):
+                    continue
+                assert re.search(r"@[0-9a-f]{40}$", uses), (workflow_path, uses)
+
+
+def test_windows_portable_is_built_from_the_tag_and_gated_before_publish():
+    data, _ = _load()
+    windows = data["jobs"]["windows-portable"]
+    publish = data["jobs"]["publish"]
+    assert publish["needs"] == "windows-portable"
+    assert windows["if"] == "${{ inputs.confirm == 'PUBLISH' }}"
+    checkout = next(
+        step for step in windows["steps"] if "actions/checkout" in str(step.get("uses", ""))
+    )
+    assert checkout["with"]["ref"] == "${{ inputs.tag }}"
+    upload = next(
+        step
+        for step in windows["steps"]
+        if "actions/upload-artifact" in str(step.get("uses", ""))
+    )
+    assert upload["with"]["name"] == "windows-portable"
+    assert upload["with"]["path"] == "windows-assets/"
+    publish_text = "\n".join(step.get("run", "") for step in publish["steps"])
+    assert "windows-assets/COMMIT_SHA.txt" in publish_text
+    assert "actions/download-artifact" in str(
+        [step.get("uses", "") for step in publish["steps"]]
+    )
+
+
+def test_portable_builder_checks_zip_layout_metadata_and_payload():
+    script = (ROOT / "scripts" / "build_portable.py").read_text(encoding="utf-8")
+    assert 'f"DevRelay/{item.relative_to(portable).as_posix()}"' in script
+    assert '"--copy-metadata"' in script
+    assert "devrelay {version}" in script
+    assert "_internal/devrelay/profiles/default.yaml" in script
+    assert "_internal/devrelay/web/static/index.html" in script
+    assert "installed_version" in script

@@ -53,9 +53,11 @@ workflow checks that with `git merge-base --is-ancestor`):
 gh release create v0.3.0 --draft --title "devrelay v0.3.0" --notes-file <notes>
 ```
 
-The draft is what makes the ordering checkable: the wheel, the sdist and
-`SHA256SUMS` are attached to it before PyPI sees the upload, and it is flipped to
-a published Release only once all three assets are present.
+The draft is what makes the ordering checkable: the wheel, the sdist, the
+portable Windows zip and `SHA256SUMS` are attached to it before PyPI sees the
+upload, and it is flipped to a published Release only once all four assets are
+present.  A separate Windows runner builds the portable zip from the tag; the
+publication job cannot start until that job succeeds.
 
 ### Dispatch it by hand
 
@@ -87,20 +89,22 @@ Without `confirm=PUBLISH` nothing is executed.
    clean `dist/`, with `build==1.6.1` and `twine==7.0.0` installed in CI. The
    build tools are CI-only: they are not project dependencies. The distributions
    are built from the tag's own source, not taken from an existing Release.
-8. **Artifact set and checksums** - exactly one wheel and one sdist, and both
-   must contain `devrelay/profiles/default.yaml`. `release-assets/SHA256SUMS` is
-   written beside `dist/`, never inside it (a checksum file in `dist/` would make
-   the next step fail).
-9. **`twine check dist/*.whl dist/*.tar.gz`** - metadata validation of exactly
-   those two files.
-10. **Attach to the draft** - `gh release upload ... --clobber` for the wheel, the
-    sdist and `release-assets/SHA256SUMS`.
-11. **Upload to PyPI** - `pypa/gh-action-pypi-publish` with `packages-dir: dist/`
+8. **Windows portable** - a Windows runner builds the wheel at the tag, runs
+   PyInstaller 6.15.0 (onedir), executes `devrelay.exe version`, and uploads
+   `DevRelay-Portable-Windows-x64.zip` as the `windows-portable` artifact.
+9. **Artifact set and checksums** - exactly one wheel and one sdist, both
+   containing `devrelay/profiles/default.yaml`, plus the portable zip;
+   `release-assets/SHA256SUMS` covers all three files.
+10. **`twine check dist/*.whl dist/*.tar.gz`** - metadata validation of exactly
+    those two files.
+11. **Attach to the draft** - `gh release upload ... --clobber` for the wheel, the
+    sdist, `release-assets/SHA256SUMS` and the portable zip.
+12. **Upload to PyPI** - `pypa/gh-action-pypi-publish` with `packages-dir: dist/`
     and `attestations: true`, authenticating with OIDC (`id-token: write`) in the
     `pypi` environment; no stored credentials are involved.
-12. **Finish the Release** - the last step re-reads the draft's assets and
-    requires `devrelay-<version>-py3-none-any.whl`, `devrelay-<version>.tar.gz`
-    and `SHA256SUMS`; only then does it run
+13. **Finish the Release** - the last step re-reads the draft's assets and
+    requires `devrelay-<version>-py3-none-any.whl`, `devrelay-<version>.tar.gz`,
+    `SHA256SUMS` and `DevRelay-Portable-Windows-x64.zip`; only then does it run
     `gh release edit "$TAG" --draft=false`. A missing asset fails the run and
     leaves the Release a draft.
 
