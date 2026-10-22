@@ -71,6 +71,7 @@
       <nav class="tabs" aria-label="Sections">
         <button class="tab is-active" type="button" data-tab="config">Configuration</button>
         <button class="tab" type="button" data-tab="connections">Connections</button>
+        <button class="tab" type="button" data-tab="tasks">Tasks</button>
         <button class="tab" type="button" data-tab="status">Status &amp; runs</button>
       </nav>
 
@@ -271,6 +272,47 @@
             DevRelay's MCP surface is a local stdio process; there is no HTTP
             listener, hosted connector or credential stored in this UI.
           </p>
+        </div>
+      </section>
+
+      <section id="tab-tasks" class="tab-panel" hidden>
+        <div class="panel">
+          <p class="kicker">Read-only task artifacts</p>
+          <h2>Tasks</h2>
+          <p class="muted">
+            Test evidence, review findings, provider-call accounting and a
+            task-relative diff summary. No task action is exposed.
+          </p>
+          <ul id="tasks-view" class="runs"></ul>
+        </div>
+        <div id="task-detail" class="panel" hidden>
+          <div class="panel-head">
+            <div>
+              <p class="kicker">Read-only task detail</p>
+              <h2 id="task-detail-title">Task</h2>
+            </div>
+            <button id="task-detail-close" class="button button-quiet" type="button">Close</button>
+          </div>
+          <dl id="task-metrics" class="details"></dl>
+          <div class="run-columns">
+            <div>
+              <h3>Tests &amp; evidence</h3>
+              <ul id="task-tests" class="runs"></ul>
+            </div>
+            <div>
+              <h3>Review findings</h3>
+              <ul id="task-findings" class="runs"></ul>
+            </div>
+          </div>
+          <h3>Git diff summary</h3>
+          <pre id="task-diff" class="diff-view"></pre>
+          <h3>Provider calls</h3>
+          <ul id="task-calls" class="runs"></ul>
+          <h3>Review attempts</h3>
+          <ul id="task-attempts" class="runs"></ul>
+          <h3>Review history</h3>
+          <ul id="task-reviews" class="runs"></ul>
+          <p id="task-notes" class="muted"></p>
         </div>
       </section>
 

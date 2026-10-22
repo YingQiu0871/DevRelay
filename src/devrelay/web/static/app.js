@@ -23,6 +23,10 @@
     autoTimer: null,
     runDetailRequest: 0,
     refreshInFlight: false,
+    tasks: null,
+    taskDetail: null,
+    selectedTaskId: "",
+    taskDetailRequest: 0,
   };
 
   class ApiError extends Error {
@@ -69,8 +73,13 @@
     state.selectedRunId = "";
     state.runDetail = null;
     state.runDetailRequest += 1;
+    state.selectedTaskId = "";
+    state.taskDetail = null;
+    state.taskDetailRequest += 1;
     const detail = document.getElementById("run-detail");
     if (detail) detail.hidden = true;
+    const taskDetail = document.getElementById("task-detail");
+    if (taskDetail) taskDetail.hidden = true;
     const tokenField = document.getElementById("token");
     if (tokenField) tokenField.value = "";
   }
@@ -441,6 +450,204 @@
     $("run-reasons").textContent = reasons.join("\n");
   }
 
+  function renderTasks() {
+    const target = $("tasks-view");
+    target.replaceChildren();
+    const tasks = (state.tasks && state.tasks.tasks) || [];
+    if (!tasks.length) {
+      const empty = document.createElement("li");
+      empty.textContent = "No tasks yet.";
+      target.append(empty);
+      return;
+    }
+    for (const task of tasks) {
+      const item = document.createElement("li");
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "run-row";
+      const left = document.createElement("span");
+      left.className = "mono";
+      left.textContent = task.task_id;
+      const title = document.createElement("span");
+      title.className = "muted";
+      title.textContent = ` ${task.title || ""}`;
+      left.append(title);
+      const right = document.createElement("span");
+      right.className = "muted";
+      right.textContent = `${task.state || "unknown"}${task.current ? " · current" : ""}`;
+      button.append(left, right);
+      button.addEventListener("click", () => loadTaskDetail(task.task_id));
+      item.append(button);
+      target.append(item);
+    }
+  }
+
+  function renderTaskDetail(detail) {
+    $("task-detail").hidden = false;
+    $("task-detail-title").textContent = `${detail.task_id} — ${detail.title || ""}`;
+    const metrics = $("task-metrics");
+    metrics.replaceChildren();
+    appendDetailRow(metrics, "State", detail.state);
+    appendDetailRow(metrics, "Current", detail.current ? "yes" : "no");
+    appendDetailRow(metrics, "Plan ready", detail.plan_ready ? "yes" : "no");
+    appendDetailRow(metrics, "Implementation passes", detail.implementation_passes);
+    appendDetailRow(metrics, "Fix iterations", detail.fix_iterations_used);
+    appendDetailRow(metrics, "Updated", detail.updated_at);
+    appendDetailRow(metrics, "Baseline", detail.baseline_available ? "available" : "unavailable");
+    const usage = detail.usage || {};
+    appendDetailRow(
+      metrics,
+      "Provider calls",
+      `${usage.total_calls ?? 0} total · ${usage.implementer_calls ?? 0} implementer · ${usage.reviewer_calls ?? 0} reviewer`,
+    );
+    appendDetailRow(metrics, "Token/cost", "not available in provider records");
+
+    const tests = $("task-tests");
+    tests.replaceChildren();
+    const testItems = [];
+    if (detail.tests && detail.tests.passed !== null && detail.tests.passed !== undefined) {
+      testItems.push(`Last run: ${detail.tests.passed ? "PASS" : "FAIL"}`);
+    } else {
+      testItems.push("Last run: not recorded");
+    }
+    for (const line of (detail.tests && detail.tests.evidence) || []) {
+      testItems.push(line);
+    }
+    for (const line of testItems) {
+      const item = document.createElement("li");
+      item.textContent = line;
+      tests.append(item);
+    }
+
+    const findings = $("task-findings");
+    findings.replaceChildren();
+    const review = (detail.review && detail.review.last) || null;
+    const findingItems = review ? (review.findings || []) : [];
+    const currentFindings = (detail.review && detail.review.current_findings) || [];
+    const openP3 = (detail.review && detail.review.open_p3) || [];
+    const allFindings = findingItems.concat(currentFindings, openP3);
+    if (!allFindings.length) {
+      const empty = document.createElement("li");
+      empty.textContent = "No review findings recorded.";
+      findings.append(empty);
+    } else {
+      for (const finding of allFindings) {
+        const item = document.createElement("li");
+        const left = document.createElement("span");
+        left.className = "mono";
+        left.textContent = `${finding.severity || "?"} ${finding.title || ""}`;
+        const right = document.createElement("span");
+        right.className = "muted";
+        right.textContent = finding.files && finding.files.length
+          ? finding.files.join(", ")
+          : "";
+        item.append(left, right);
+        findings.append(item);
+      }
+    }
+
+    const diff = $("task-diff");
+    const git = detail.git || {};
+    diff.textContent = git.available
+      ? (git.stat || "(no changes)")
+      : `Unavailable: ${git.reason || "no baseline"}`;
+
+    const calls = $("task-calls");
+    calls.replaceChildren();
+    const providerCalls = (detail.usage && detail.usage.provider_calls) || [];
+    if (!providerCalls.length) {
+      const empty = document.createElement("li");
+      empty.textContent = "No provider calls recorded.";
+      calls.append(empty);
+    } else {
+      for (const call of providerCalls) {
+        const item = document.createElement("li");
+        const left = document.createElement("span");
+        left.className = "mono";
+        left.textContent = `${call.call_id} · ${call.kind}`;
+        const right = document.createElement("span");
+        right.className = "muted";
+        right.textContent = `${call.phase} · ${call.success ? "success" : "failed"} · ${call.external_calls} external · ${call.duration_seconds.toFixed(2)}s`;
+        item.append(left, right);
+        calls.append(item);
+      }
+    }
+
+    const attempts = $("task-attempts");
+    attempts.replaceChildren();
+    const reviewAttempts = (detail.usage && detail.usage.review_attempts) || [];
+    if (!reviewAttempts.length) {
+      const empty = document.createElement("li");
+      empty.textContent = "No review attempts recorded.";
+      attempts.append(empty);
+    } else {
+      for (const attempt of reviewAttempts) {
+        const item = document.createElement("li");
+        const left = document.createElement("span");
+        left.className = "mono";
+        left.textContent = `#${attempt.review_number} · ${attempt.status}`;
+        const right = document.createElement("span");
+        right.className = "muted";
+        right.textContent = `${attempt.provider} · ${attempt.external_calls} external · ${attempt.transport_attempts} transport / ${attempt.format_attempts} format`;
+        item.append(left, right);
+        attempts.append(item);
+      }
+    }
+
+    const reviews = $("task-reviews");
+    reviews.replaceChildren();
+    const history = (detail.review && detail.review.history) || [];
+    if (!history.length) {
+      const empty = document.createElement("li");
+      empty.textContent = "No reviews recorded.";
+      reviews.append(empty);
+    } else {
+      for (const entry of history) {
+        const item = document.createElement("li");
+        const left = document.createElement("span");
+        left.textContent = entry.decision || "review";
+        const right = document.createElement("span");
+        right.className = "muted";
+        right.textContent = entry.summary || "";
+        item.append(left, right);
+        reviews.append(item);
+      }
+    }
+
+    const notes = [];
+    if (detail.blocked && (detail.blocked.code || detail.blocked.reason)) {
+      notes.push(`Blocked: ${detail.blocked.code || ""} ${detail.blocked.reason || ""}`.trim());
+    }
+    if (detail.final_gate) {
+      notes.push(`Final gate: ${detail.final_gate.approved_by || "approved"}`);
+    }
+    $("task-notes").textContent = notes.join("\n");
+  }
+
+  async function loadTaskDetail(taskId) {
+    if (!taskId) return;
+    const request = ++state.taskDetailRequest;
+    try {
+      const detail = await api(`/api/tasks/${encodeURIComponent(taskId)}`);
+      if (request !== state.taskDetailRequest) return;
+      state.selectedTaskId = taskId;
+      state.taskDetail = detail;
+      showAlert("");
+      renderTaskDetail(detail);
+    } catch (error) {
+      if (request !== state.taskDetailRequest) return;
+      if (error.status === 401) {
+        clearSession();
+        showLogin("Session expired. Enter the token again.");
+      } else {
+        state.selectedTaskId = "";
+        state.taskDetail = null;
+        $("task-detail").hidden = true;
+        showAlert(`${error.code ? `${error.code}: ` : ""}${error.message}`);
+      }
+    }
+  }
+
   async function loadRunDetail(runId) {
     if (!runId) return;
     const request = ++state.runDetailRequest;
@@ -759,22 +966,25 @@
   }
 
   async function loadAll() {
-    const [status, projects, config, wiring, runs] = await Promise.all([
+    const [status, projects, config, wiring, runs, tasks] = await Promise.all([
       api("/api/status"),
       api("/api/projects"),
       api("/api/config"),
       api("/api/wiring"),
       api("/api/runs?limit=8"),
+      api("/api/tasks?limit=20"),
     ]);
     state.status = status;
     state.projects = projects;
     state.config = config;
     state.wiring = wiring;
     state.runs = runs;
+    state.tasks = tasks;
     renderSummary();
     renderConfig();
     renderWiringPanel();
     renderStatus();
+    renderTasks();
   }
 
   async function enterApp() {
@@ -859,6 +1069,12 @@
     state.runDetail = null;
     state.runDetailRequest += 1;
     $("run-detail").hidden = true;
+  });
+  $("task-detail-close").addEventListener("click", () => {
+    state.selectedTaskId = "";
+    state.taskDetail = null;
+    state.taskDetailRequest += 1;
+    $("task-detail").hidden = true;
   });
   for (const button of document.querySelectorAll(".tab")) {
     button.addEventListener("click", () => switchTab(button.dataset.tab));

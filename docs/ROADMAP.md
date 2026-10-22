@@ -230,10 +230,12 @@ runs (C).
 
 ### v0.4-C — Dashboard & Live Runs
 
-Status: ✅ **C1 ACCEPTED / CLOSED by the owner on 2026-10-22.**  See
-[V04C_SPEC.md](v0.4/V04C_SPEC.md), [V04C_REVIEW.md](v0.4/V04C_REVIEW.md) and
-[V04C1_ACCEPTANCE.md](v0.4/V04C1_ACCEPTANCE.md); C2 control/output work is
-planned.
+Status: ✅ **C1 ACCEPTED / CLOSED by the owner on 2026-10-22; C2a implemented and
+independently reviewed (APPROVE WITH FINDINGS; P2 findings remediated; pending
+owner acceptance).**  See [V04C_SPEC.md](v0.4/V04C_SPEC.md),
+[V04C_REVIEW.md](v0.4/V04C_REVIEW.md), [V04C1_ACCEPTANCE.md](v0.4/V04C1_ACCEPTANCE.md),
+[V04C2A_SPEC.md](v0.4/V04C2A_SPEC.md) and [V04C2A_REVIEW.md](v0.4/V04C2A_REVIEW.md).
+C2a adds read-only task artifacts; C2b control/output work remains planned.
 
 C1 read-only dashboard:
 

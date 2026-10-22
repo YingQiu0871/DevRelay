@@ -38,6 +38,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   and blocked/recovery reasons, plus manual refresh and optional 5-second
   auto-refresh.  No pause/interrupt/prompt/decide action is added; those remain
   C2.
+- v0.4-C2a read-only task artifact dashboard: `GET /api/tasks` and
+  `GET /api/tasks/{task_id}` expose test evidence, review findings/history,
+  task-relative diff **stat only**, provider-call/review-attempt accounting and
+  final-gate/blocked state.  Task IDs are grammar-checked, all text is bounded
+  and redacted, token/cost data is explicitly unavailable, and no task/run
+  control or full diff is exposed.
 
 ## 0.3.0 - 2026-10-21
 

@@ -340,6 +340,56 @@ def test_dashboard_has_auto_refresh_and_no_run_controls(client: TestClient):
         assert f'id="{control}"' not in html
 
 
+def test_task_dashboard_uses_read_only_task_api(client: TestClient, workspace: Path):
+    from devrelay.artifacts.store import ArtifactStore
+    from devrelay.models import TaskRun
+
+    auth = _auth(client)
+    store = ArtifactStore(workspace)
+    store.ensure_initialized()
+    task_id = store.allocate_task_id()
+    store.write_task(TaskRun(task_id=task_id, title="Seeded dashboard task"))
+    listed = client.get("/api/tasks?limit=20", headers=auth)
+    assert listed.status_code == 200
+    data = listed.json()["data"]
+    assert data["total"] == 1
+    assert data["tasks"][0]["task_id"] == task_id
+    detail = client.get(f"/api/tasks/{task_id}", headers=auth)
+    assert detail.status_code == 200, detail.text
+    payload = detail.json()["data"]
+    assert payload["task_id"] == task_id
+    assert payload["title"] == "Seeded dashboard task"
+    assert payload["git"]["available"] is False
+    assert "diff" not in payload["git"]
+    assert payload["tests"]["passed"] is None
+    assert payload["usage"]["total_calls"] == 0
+    assert "provider_calls" in payload["usage"]
+    assert client.get("/api/tasks/not-a-task", headers=auth).status_code == 400
+    assert client.get("/api/tasks/DR-0001%0A", headers=auth).status_code == 400
+    assert client.get("/api/tasks/DR-9999", headers=auth).status_code == 404
+    assert client.get("/api/tasks").status_code == 401
+
+
+def test_task_store_corruption_is_503(client: TestClient, workspace: Path):
+    auth = _auth(client)
+    (workspace / ".devrelay" / "state.json").write_text("{not-json", encoding="utf-8")
+    response = client.get("/api/tasks", headers=auth)
+    assert response.status_code == 503
+    assert response.json()["error"]["code"] == "task_store_unreadable"
+
+
+def test_ui_has_task_dashboard_markers(client: TestClient):
+    html = client.get("/").text
+    script = client.get("/assets/app.js").text
+    for marker in ("task-detail", "tasks-view", "Tests &amp; evidence", "Review findings"):
+        assert marker in html
+    assert "/api/tasks" in script
+    assert "loadTaskDetail" in script
+    assert "taskDetailRequest" in script
+    assert "review_attempts" in script
+    assert "token_usage_available" not in script  # UI states unavailable copy, not a token value
+
+
 def test_ui_does_not_expose_token_in_html(client: TestClient):
     response = client.get("/")
     assert TOKEN not in response.text

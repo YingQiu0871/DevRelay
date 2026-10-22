@@ -356,6 +356,32 @@ class LocalControlApi:
             success(self.service.run(run_id), request_id=str(request.state.request_id)),
         )
 
+    async def tasks(self, request: Request) -> Response:
+        raw = request.query_params.get("limit", "20")
+        try:
+            limit = int(raw)
+        except ValueError as exc:
+            raise WebApiError("invalid_limit", "limit must be an integer") from exc
+        if limit < 1 or limit > 100:
+            raise WebApiError("invalid_limit", "limit must be between 1 and 100")
+        return _json(
+            request,
+            success(
+                self.service.tasks(limit=limit),
+                request_id=str(request.state.request_id),
+            ),
+        )
+
+    async def task(self, request: Request) -> Response:
+        task_id = str(request.path_params.get("task_id", ""))
+        return _json(
+            request,
+            success(
+                self.service.task(task_id),
+                request_id=str(request.state.request_id),
+            ),
+        )
+
     async def roles(self, request: Request) -> Response:
         return _json(
             request,
@@ -499,6 +525,8 @@ def create_app(
             Route("/api/projects", api.projects, methods=["GET"]),
             Route("/api/runs", api.runs, methods=["GET"]),
             Route("/api/runs/{run_id}", api.run, methods=["GET"]),
+            Route("/api/tasks", api.tasks, methods=["GET"]),
+            Route("/api/tasks/{task_id}", api.task, methods=["GET"]),
             Route("/api/roles", api.roles, methods=["GET"]),
             Route("/api/config", api.config, methods=["GET"]),
             Route("/api/config", api.config_apply, methods=["PUT"]),

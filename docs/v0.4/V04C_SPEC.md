@@ -32,12 +32,11 @@ transport is added.
 
 - pause / interrupt / manual prompt / decide actions;
 - raw or normalized provider output streaming;
-- git diff summary, test evidence and review findings from task artifacts;
-- token/cost accounting beyond the run's model-turn counts;
 - live WebSocket/SSE transport.
 
-Those need their own endpoint and threat-model review; C1 does not infer them
-from the read-only snapshot.
+C2a (test evidence, review findings, diff stat, provider-call accounting) is
+implemented separately in [V04C2A_SPEC.md](V04C2A_SPEC.md); it is still
+read-only and does not add controls.
 
 ## Security boundary
 
