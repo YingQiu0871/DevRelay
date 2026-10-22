@@ -44,6 +44,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   final-gate/blocked state.  Task IDs are grammar-checked, all text is bounded
   and redacted, token/cost data is explicitly unavailable, and no task/run
   control or full diff is exposed.
+- v0.4-C2b bounded run control: `POST /api/runs/{run_id}/decide` records one of
+  complete/request_changes/stop with an `expected_updated_at` guard, and
+  `POST /api/runs/{run_id}/interrupt` aborts only the run's own
+  implementer/reviewer session.  Both require `X-DevRelay-Confirm: apply` and an
+  explicit body `confirm`.  Pause, manual prompt, raw streaming and run phase
+  execution remain out of scope.
 
 ## 0.3.0 - 2026-10-21
 

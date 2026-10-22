@@ -134,6 +134,73 @@ class WebReadService:
             status = 404 if code == "orchestration_run_not_found" else 503
             raise WebApiError(code, redact_text(str(exc))[:300], status_code=status) from exc
 
+    def decide_run(
+        self,
+        run_id: str,
+        decision: str,
+        expected_updated_at: str,
+    ) -> dict[str, Any]:
+        current = self.run(run_id)
+        if str(current.get("updated_at", "")) != expected_updated_at:
+            raise WebApiError(
+                "run_changed",
+                "the run changed since it was loaded; reload and retry",
+                status_code=409,
+            )
+        try:
+            return self._data(
+                self.surface.devrelay_decide_run(run_id, decision),
+                operation="decide_run",
+            )
+        except WebApiError as exc:
+            if exc.code in {
+                "orchestration_invalid_transition",
+                "orchestration_cycle_limit",
+                "orchestration_recovery_required",
+                "orchestration_recovery_unsupported",
+                "orchestration_recovery_already_resolved",
+                "orchestration_route_changed",
+                "orchestration_session_conflict",
+                "orchestration_state_corrupt",
+            }:
+                raise WebApiError(exc.code, exc.message, status_code=409) from exc
+            raise
+
+    def interrupt_run(self, run_id: str, role: str) -> dict[str, Any]:
+        current = self.run(run_id)
+        if current.get("terminal"):
+            raise WebApiError("run_terminal", "the run is already terminal", status_code=409)
+        if not current.get("in_flight"):
+            raise WebApiError(
+                "no_in_flight_turn",
+                "the run has no in-flight turn to interrupt",
+                status_code=409,
+            )
+        try:
+            run = self.surface.orchestration.get_run(run_id)
+        except OrchestrationError as exc:
+            code = getattr(exc, "code", "orchestration_error")
+            status = 404 if code == "orchestration_run_not_found" else 503
+            raise WebApiError(code, "the run could not be loaded", status_code=status) from exc
+        turn = run.in_flight_turn
+        if turn is None or turn.role != role:
+            raise WebApiError(
+                "no_matching_in_flight_turn",
+                "the selected role has no in-flight turn",
+                status_code=409,
+            )
+        session_id = current.get(f"{role}_session_id")
+        if not isinstance(session_id, str) or not session_id:
+            raise WebApiError(
+                "session_unavailable",
+                "the run has no role session to interrupt",
+                status_code=409,
+            )
+        return self._data(
+            self.surface.opencode_interrupt(session_id),
+            operation="interrupt_run",
+        )
+
     def config(self) -> dict[str, Any]:
         opencode = self.wiring.opencode
         codex = self.wiring.codex

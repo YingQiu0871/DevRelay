@@ -283,6 +283,20 @@ legend { color: var(--text); font-weight: 700; padding: 0 6px; }
 .run-tools { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
 .run-tools .check { margin-top: 0; }
 
+.control-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 12px;
+  flex-wrap: wrap;
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  padding: 14px;
+  margin: 12px 0;
+}
+
+.control-row .field { min-width: 190px; }
+.control-row .button { min-height: 38px; }
+
 .run-columns {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));

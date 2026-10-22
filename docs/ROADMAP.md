@@ -230,12 +230,15 @@ runs (C).
 
 ### v0.4-C — Dashboard & Live Runs
 
-Status: ✅ **C1 + C2a ACCEPTED / CLOSED by the owner on 2026-10-22.**  See
-[V04C_SPEC.md](v0.4/V04C_SPEC.md), [V04C_REVIEW.md](v0.4/V04C_REVIEW.md),
-[V04C1_ACCEPTANCE.md](v0.4/V04C1_ACCEPTANCE.md), [V04C2A_SPEC.md](v0.4/V04C2A_SPEC.md),
-[V04C2A_REVIEW.md](v0.4/V04C2A_REVIEW.md) and
-[V04C2A_ACCEPTANCE.md](v0.4/V04C2A_ACCEPTANCE.md).  C2a adds read-only task
-artifacts; C2b control/output work remains planned.
+Status: ✅ **C1 + C2a ACCEPTED / CLOSED by the owner on 2026-10-22; C2b
+implemented and independently reviewed (APPROVE WITH FINDINGS; P2 findings
+remediated; pending owner acceptance).**  See [V04C_SPEC.md](v0.4/V04C_SPEC.md),
+[V04C_REVIEW.md](v0.4/V04C_REVIEW.md), [V04C1_ACCEPTANCE.md](v0.4/V04C1_ACCEPTANCE.md),
+[V04C2A_SPEC.md](v0.4/V04C2A_SPEC.md), [V04C2A_REVIEW.md](v0.4/V04C2A_REVIEW.md),
+[V04C2A_ACCEPTANCE.md](v0.4/V04C2A_ACCEPTANCE.md), [V04C2B_SPEC.md](v0.4/V04C2B_SPEC.md)
+and [V04C2B_REVIEW.md](v0.4/V04C2B_REVIEW.md).  C2b adds only decision +
+in-flight role-scoped interrupt; C2c (pause/manual prompt/streaming) remains
+separate.
 
 C1 read-only dashboard:
 

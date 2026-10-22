@@ -29,6 +29,8 @@ from devrelay.web.models import (
     MAX_BODY_BYTES,
     ConfigValidateRequest,
     ConfigWriteRequest,
+    RunDecisionRequest,
+    RunInterruptRequest,
     SessionRequest,
     WiringWriteRequest,
     failure,
@@ -356,6 +358,44 @@ class LocalControlApi:
             success(self.service.run(run_id), request_id=str(request.state.request_id)),
         )
 
+    async def run_decide(self, request: Request) -> Response:
+        if request.headers.get("x-devrelay-confirm") != "apply":
+            raise WebApiError(
+                "confirmation_required",
+                "X-DevRelay-Confirm: apply is required",
+                status_code=403,
+            )
+        payload: RunDecisionRequest = await _read_json(request, RunDecisionRequest)
+        run_id = str(request.path_params.get("run_id", ""))
+        return _json(
+            request,
+            success(
+                self.service.decide_run(
+                    run_id,
+                    payload.decision,
+                    payload.expected_updated_at,
+                ),
+                request_id=str(request.state.request_id),
+            ),
+        )
+
+    async def run_interrupt(self, request: Request) -> Response:
+        if request.headers.get("x-devrelay-confirm") != "apply":
+            raise WebApiError(
+                "confirmation_required",
+                "X-DevRelay-Confirm: apply is required",
+                status_code=403,
+            )
+        payload: RunInterruptRequest = await _read_json(request, RunInterruptRequest)
+        run_id = str(request.path_params.get("run_id", ""))
+        return _json(
+            request,
+            success(
+                self.service.interrupt_run(run_id, payload.role),
+                request_id=str(request.state.request_id),
+            ),
+        )
+
     async def tasks(self, request: Request) -> Response:
         raw = request.query_params.get("limit", "20")
         try:
@@ -525,6 +565,8 @@ def create_app(
             Route("/api/projects", api.projects, methods=["GET"]),
             Route("/api/runs", api.runs, methods=["GET"]),
             Route("/api/runs/{run_id}", api.run, methods=["GET"]),
+            Route("/api/runs/{run_id}/decide", api.run_decide, methods=["POST"]),
+            Route("/api/runs/{run_id}/interrupt", api.run_interrupt, methods=["POST"]),
             Route("/api/tasks", api.tasks, methods=["GET"]),
             Route("/api/tasks/{task_id}", api.task, methods=["GET"]),
             Route("/api/roles", api.roles, methods=["GET"]),

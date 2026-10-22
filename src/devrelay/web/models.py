@@ -43,6 +43,21 @@ class WiringWriteRequest(BaseModel):
     confirm: Literal["apply"]
 
 
+class RunDecisionRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    expected_updated_at: str
+    decision: Literal["complete", "request_changes", "stop"]
+    confirm: Literal["apply"]
+
+
+class RunInterruptRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    role: Literal["implementer", "reviewer"]
+    confirm: Literal["apply"]
+
+
 def success(data: Any, *, request_id: str = "") -> dict[str, Any]:
     return {
         "schema_version": WEB_SCHEMA_VERSION,

@@ -402,6 +402,8 @@
   function renderRunDetail(detail) {
     $("run-detail").hidden = false;
     $("run-detail-title").textContent = detail.run_id || "Run";
+    $("run-decide").disabled = detail.state !== "AWAITING_DECISION" || Boolean(detail.in_flight);
+    $("run-interrupt").disabled = !detail.in_flight;
     const metrics = $("run-detail-metrics");
     metrics.replaceChildren();
     appendDetailRow(metrics, "State", detail.state);
@@ -651,6 +653,7 @@
   async function loadRunDetail(runId) {
     if (!runId) return;
     const request = ++state.runDetailRequest;
+    $("run-action-result").textContent = "";
     try {
       const detail = await api(`/api/runs/${encodeURIComponent(runId)}`);
       if (request !== state.runDetailRequest) return;
@@ -669,6 +672,70 @@
         $("run-detail").hidden = true;
         showAlert(`${error.code ? `${error.code}: ` : ""}${error.message}`);
       }
+    }
+  }
+
+  async function decideRun() {
+    const detail = state.runDetail;
+    if (!detail) return;
+    const decision = $("run-decision").value;
+    if (!window.confirm(`Apply decision "${decision}" to ${detail.run_id}?`)) return;
+    const button = $("run-decide");
+    button.disabled = true;
+    try {
+      await api(`/api/runs/${encodeURIComponent(detail.run_id)}/decide`, {
+        method: "POST",
+        headers: { "X-DevRelay-Confirm": "apply" },
+        body: {
+          expected_updated_at: detail.updated_at,
+          decision,
+          confirm: "apply",
+        },
+      });
+      await loadRunDetail(detail.run_id);
+      $("run-action-result").textContent = `Decision "${decision}" recorded.`;
+    } catch (error) {
+      if (error.status === 401) {
+        clearSession();
+        showLogin("Session expired. Enter the token again.");
+      } else if (error.code === "run_changed") {
+        await loadRunDetail(detail.run_id);
+        $("run-action-result").textContent = "The run changed; reloaded. Retry the decision.";
+      } else {
+        $("run-action-result").textContent = `${error.code ? `${error.code}: ` : ""}${error.message}`;
+      }
+    } finally {
+      button.disabled = false;
+    }
+  }
+
+  async function interruptRun() {
+    const detail = state.runDetail;
+    if (!detail) return;
+    const role = $("run-interrupt-role").value;
+    if (!window.confirm(`Request an interrupt of the ${role} session for ${detail.run_id}?`)) return;
+    const button = $("run-interrupt");
+    button.disabled = true;
+    try {
+      const data = await api(`/api/runs/${encodeURIComponent(detail.run_id)}/interrupt`, {
+        method: "POST",
+        headers: { "X-DevRelay-Confirm": "apply" },
+        body: { role, confirm: "apply" },
+      });
+      const message = data.interrupt_verified
+        ? "Interrupt accepted and verified."
+        : "Interrupt request accepted; terminal state is not verified.";
+      await loadRunDetail(detail.run_id);
+      $("run-action-result").textContent = message;
+    } catch (error) {
+      if (error.status === 401) {
+        clearSession();
+        showLogin("Session expired. Enter the token again.");
+      } else {
+        $("run-action-result").textContent = `${error.code ? `${error.code}: ` : ""}${error.message}`;
+      }
+    } finally {
+      button.disabled = false;
     }
   }
 
@@ -1064,6 +1131,8 @@
   $("auto-refresh").addEventListener("change", (event) => {
     setAutoRefresh(event.target.checked);
   });
+  $("run-decide").addEventListener("click", decideRun);
+  $("run-interrupt").addEventListener("click", interruptRun);
   $("run-detail-close").addEventListener("click", () => {
     state.selectedRunId = "";
     state.runDetail = null;

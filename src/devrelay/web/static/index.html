@@ -341,7 +341,7 @@
         <div id="run-detail" class="panel" hidden>
           <div class="panel-head">
             <div>
-              <p class="kicker">Read-only run detail</p>
+              <p class="kicker">Bounded run detail</p>
               <h2 id="run-detail-title">Run</h2>
             </div>
             <button id="run-detail-close" class="button button-quiet" type="button">Close</button>
@@ -360,9 +360,30 @@
           <h3>Decision history</h3>
           <ul id="run-decisions" class="runs"></ul>
           <p id="run-reasons" class="muted"></p>
+          <div class="control-row">
+            <label class="field">
+              <span>Decision</span>
+              <select id="run-decision">
+                <option value="complete">complete</option>
+                <option value="request_changes">request_changes</option>
+                <option value="stop">stop</option>
+              </select>
+            </label>
+            <button id="run-decide" class="button" type="button">Apply decision</button>
+            <label class="field">
+              <span>Interrupt role session</span>
+              <select id="run-interrupt-role">
+                <option value="implementer">implementer</option>
+                <option value="reviewer">reviewer</option>
+              </select>
+            </label>
+            <button id="run-interrupt" class="button button-quiet" type="button">Interrupt</button>
+          </div>
+          <p id="run-action-result" class="result"></p>
           <p class="muted">
-            This dashboard is a read-only snapshot. Pause/interrupt/manual
-            prompt controls are deliberately not exposed here.
+            Both controls require an explicit confirmation. This UI does not
+            expose pause, manual prompt or a live output stream; those remain
+            separately gated.
           </p>
         </div>
       </section>
@@ -370,7 +391,7 @@
   </main>
 
   <footer class="footer">
-    loopback only · header session · no cookies · no run control
+    loopback only · header session · no cookies · bounded run control
   </footer>
   <script src="/assets/app.js" defer></script>
 </body>

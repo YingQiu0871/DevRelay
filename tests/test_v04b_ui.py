@@ -336,7 +336,9 @@ def test_dashboard_has_auto_refresh_and_no_run_controls(client: TestClient):
     assert "submission_uncertain" in script
     assert "setInterval(refreshRuns, 5000)" in script
     assert "clearInterval(state.autoTimer)" in script
-    for control in ("pause", "interrupt", "sendPrompt", "decide", "manual-prompt"):
+    assert 'id="run-decide"' in html
+    assert 'id="run-interrupt"' in html
+    for control in ("pause", "sendPrompt", "manual-prompt", "stream"):
         assert f'id="{control}"' not in html
 
 
@@ -388,6 +390,165 @@ def test_ui_has_task_dashboard_markers(client: TestClient):
     assert "taskDetailRequest" in script
     assert "review_attempts" in script
     assert "token_usage_available" not in script  # UI states unavailable copy, not a token value
+
+
+def test_run_decide_requires_confirmation_and_current_revision(
+    client: TestClient, workspace: Path
+):
+    from devrelay.orchestration.models import RunState
+    from devrelay.orchestration.store import OrchestrationStore
+    from v03d_helpers import honest_run
+
+    auth = _auth(client)
+    store = OrchestrationStore(workspace / ".devrelay")
+    run = honest_run(RunState.AWAITING_DECISION, workspace=str(workspace.resolve()))
+    store.create(run)
+    ready = honest_run(workspace=str(workspace.resolve()), run_id="DR-" + "c" * 32)
+    store.create(ready)
+    not_ready = client.post(
+        f"/api/runs/{ready.run_id}/decide",
+        json={"expected_updated_at": "x", "decision": "complete", "confirm": "apply"},
+        headers={**auth, "X-DevRelay-Confirm": "apply"},
+    )
+    assert not_ready.status_code == 409
+    ready_detail = client.get(f"/api/runs/{ready.run_id}", headers=auth).json()["data"]
+    invalid_state = client.post(
+        f"/api/runs/{ready.run_id}/decide",
+        json={
+            "expected_updated_at": ready_detail["updated_at"],
+            "decision": "complete",
+            "confirm": "apply",
+        },
+        headers={**auth, "X-DevRelay-Confirm": "apply"},
+    )
+    assert invalid_state.status_code == 409
+    assert invalid_state.json()["error"]["code"] == "orchestration_invalid_transition"
+    detail = client.get(f"/api/runs/{run.run_id}", headers=auth).json()["data"]
+    body = {
+        "expected_updated_at": detail["updated_at"],
+        "decision": "complete",
+        "confirm": "apply",
+    }
+    assert (
+        client.post(f"/api/runs/{run.run_id}/decide", json=body, headers=auth).status_code
+        == 403
+    )
+    stale = client.post(
+        f"/api/runs/{run.run_id}/decide",
+        json={**body, "expected_updated_at": "not-current"},
+        headers={**auth, "X-DevRelay-Confirm": "apply"},
+    )
+    assert stale.status_code == 409
+    assert stale.json()["error"]["code"] == "run_changed"
+    applied = client.post(
+        f"/api/runs/{run.run_id}/decide",
+        json=body,
+        headers={**auth, "X-DevRelay-Confirm": "apply"},
+    )
+    assert applied.status_code == 200, applied.text
+    after = client.get(f"/api/runs/{run.run_id}", headers=auth).json()["data"]
+    assert after["decision_history"][-1]["decision"] == "complete"
+    invalid = client.post(
+        f"/api/runs/{run.run_id}/decide",
+        json={**body, "decision": "explode"},
+        headers={**auth, "X-DevRelay-Confirm": "apply"},
+    )
+    assert invalid.status_code == 422
+    missing_body_confirm = client.post(
+        f"/api/runs/{run.run_id}/decide",
+        json={"expected_updated_at": detail["updated_at"], "decision": "stop"},
+        headers={**auth, "X-DevRelay-Confirm": "apply"},
+    )
+    assert missing_body_confirm.status_code == 422
+    assert (
+        client.post(
+            "/api/runs/not-a-run/decide",
+            json=body,
+            headers={**auth, "X-DevRelay-Confirm": "apply"},
+        ).status_code
+        == 400
+    )
+
+
+def test_run_interrupt_is_role_scoped_and_confirmed(
+    client: TestClient, workspace: Path, monkeypatch
+):
+    from devrelay.mcp.models import ok_envelope
+    from devrelay.mcp.tools import McpToolSurface
+    from devrelay.orchestration.store import OrchestrationStore
+    from v03d_helpers import honest_run, with_in_flight
+
+    seen = {}
+
+    def fake_interrupt(self, session_id=None):
+        seen["session_id"] = session_id
+        return ok_envelope(
+            "opencode_interrupt",
+            {"session_id": session_id, "interrupt_verified": False},
+        )
+
+    monkeypatch.setattr(McpToolSurface, "opencode_interrupt", fake_interrupt)
+    auth = _auth(client)
+    store = OrchestrationStore(workspace / ".devrelay")
+    not_in_flight = honest_run(workspace=str(workspace.resolve()), run_id="DR-" + "d" * 32)
+    store.create(not_in_flight)
+    blocked = client.post(
+        f"/api/runs/{not_in_flight.run_id}/interrupt",
+        json={"role": "implementer", "confirm": "apply"},
+        headers={**auth, "X-DevRelay-Confirm": "apply"},
+    )
+    assert blocked.status_code == 409
+    run = with_in_flight(honest_run(workspace=str(workspace.resolve())), "implementer")
+    store.create(run)
+    body = {"role": "implementer", "confirm": "apply"}
+    assert (
+        client.post(f"/api/runs/{run.run_id}/interrupt", json=body, headers=auth).status_code
+        == 403
+    )
+    response = client.post(
+        f"/api/runs/{run.run_id}/interrupt",
+        json=body,
+        headers={**auth, "X-DevRelay-Confirm": "apply"},
+    )
+    assert response.status_code == 200, response.text
+    assert response.json()["data"]["interrupt_verified"] is False
+    assert seen["session_id"] == run.implementer_session_id
+    invalid = client.post(
+        f"/api/runs/{run.run_id}/interrupt",
+        json={"role": "other", "confirm": "apply"},
+        headers={**auth, "X-DevRelay-Confirm": "apply"},
+    )
+    assert invalid.status_code == 422
+    extra = client.post(
+        f"/api/runs/{run.run_id}/interrupt",
+        json={"role": "implementer", "session_id": "other", "confirm": "apply"},
+        headers={**auth, "X-DevRelay-Confirm": "apply"},
+    )
+    assert extra.status_code == 422
+    assert (
+        client.post(
+            "/api/runs/not-a-run/interrupt",
+            json=body,
+            headers={**auth, "X-DevRelay-Confirm": "apply"},
+        ).status_code
+        == 400
+    )
+
+
+def test_c2b_ui_has_only_bounded_controls(client: TestClient):
+    html = client.get("/").text
+    script = client.get("/assets/app.js").text
+    assert 'id="run-decide"' in html
+    assert 'id="run-interrupt"' in html
+    assert "decideRun" in script
+    assert "interruptRun" in script
+    assert "X-DevRelay-Confirm" in script
+    assert 'detail.state !== "AWAITING_DECISION"' in script
+    assert "detail.in_flight" in script
+    assert 'id="run-pause"' not in html
+    assert 'id="run-prompt"' not in html
+    for endpoint in ("/pause", "/prompt", "/phase", "/stream"):
+        assert endpoint not in script
 
 
 def test_ui_does_not_expose_token_in_html(client: TestClient):
