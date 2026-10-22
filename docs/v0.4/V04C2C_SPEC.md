@@ -1,9 +1,9 @@
 # DevRelay v0.4-C2c — Manual Prompt & Normalized Message Polling
 
-Status: **IMPLEMENTED + INDEPENDENTLY REVIEWED — APPROVE WITH FINDINGS; P2
-findings remediated; pending owner acceptance.**  The review is recorded in
-[V04C2C_REVIEW.md](V04C2C_REVIEW.md).  C2c adds a manual prompt to an existing
-run session and a bounded, normalized message-polling surface.
+Status: **C2c ACCEPTED / CLOSED by the owner on 2026-10-22.**  The review is
+recorded in [V04C2C_REVIEW.md](V04C2C_REVIEW.md) and the acceptance record in
+[V04C2C_ACCEPTANCE.md](V04C2C_ACCEPTANCE.md).  C2c adds a manual prompt to an
+existing run session and a bounded, normalized message-polling surface.
 
 **Pause is not implemented in C2c.**  The accepted orchestration state machine
 has no durable pause state; `interrupt` is an abort request, not a pause.  C2c
