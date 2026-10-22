@@ -159,11 +159,9 @@ v0.3.0 meets that bar through the annotated `v0.3.0` tag and the publication rec
 
 ## Next gates / 下一步门槛
 
-1. Accept/close **v0.4-C2b bounded run control**
-   ([V04C2B_SPEC.md](v0.4/V04C2B_SPEC.md)); it is reviewed with findings in
-   [V04C2B_REVIEW.md](v0.4/V04C2B_REVIEW.md) and adds only decision and
-   in-flight role-scoped interrupt.  C2c (pause/manual prompt/streaming) remains
-   a separate gate.
+1. Decide and design **v0.4-C2c** pause/manual-prompt/streaming scope
+   ([V04C_SPEC.md](v0.4/V04C_SPEC.md)); C1+C2a+C2b are accepted, and C2c
+   requires its own endpoint, confirmation and threat-model review.
 2. Close the remaining v0.3-E platform gates (G0.4/P4, G0.5/P6, G1, G2) and decide whether recovery adoption may be enabled; `adopt_completed_turn` stays disabled until then.
 3. Complete independent acceptance for v0.2-A/B/C, and close the v0.2-C E2E when provider quota returns.
 4. Investigate the Windows Codex shell-policy P2 offline; do not spend another real Codex call on diagnosis.

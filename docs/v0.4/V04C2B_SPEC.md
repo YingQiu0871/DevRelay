@@ -1,8 +1,8 @@
 # DevRelay v0.4-C2b — Bounded Run Control
 
-Status: **IMPLEMENTED + INDEPENDENTLY REVIEWED — APPROVE WITH FINDINGS; P2
-findings remediated; pending owner acceptance.**  The review is recorded in
-[V04C2B_REVIEW.md](V04C2B_REVIEW.md).  C2b adds exactly two explicit run
+Status: **C2b ACCEPTED / CLOSED by the owner on 2026-10-22.**  The review is
+recorded in [V04C2B_REVIEW.md](V04C2B_REVIEW.md) and the acceptance record in
+[V04C2B_ACCEPTANCE.md](V04C2B_ACCEPTANCE.md).  C2b adds exactly two explicit run
 controls.  It does **not** add pause, manual prompt, free-form provider output or
 a live stream.
 

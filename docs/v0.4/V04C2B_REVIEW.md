@@ -1,7 +1,8 @@
 # DevRelay v0.4-C2b — independent review record
 
 Status: **C2b reviewed: APPROVE WITH FINDINGS (P0/P1 = 0); P2 findings
-remediated; pending owner acceptance.**  No v0.4 tag or release is implied.
+remediated; accepted by the owner on 2026-10-22.**  No v0.4 tag or release is
+implied.  See [V04C2B_ACCEPTANCE.md](V04C2B_ACCEPTANCE.md).
 
 ## Findings and disposition
 
