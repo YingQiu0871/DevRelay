@@ -275,11 +275,11 @@ Deferred:
 
 ### v0.4-E — Packaging & GitHub Release Automation
 
-Status: 🧪 **E1 implemented and independently reviewed (REQUEST CHANGES → P1s
-remediated; pending owner acceptance).**  The `.exe` installer is explicitly
-deferred (no validated Inno Setup/code-signing path).  See
-[V04E_SPEC.md](v0.4/V04E_SPEC.md) and [V04E_REVIEW.md](v0.4/V04E_REVIEW.md).
-PyPI wheel/sdist and the GitHub Release already ship in 0.3.0.
+Status: ✅ **E1 ACCEPTED / CLOSED by the owner on 2026-10-22.**  The `.exe`
+installer is explicitly deferred (no validated Inno Setup/code-signing path).
+See [V04E_SPEC.md](v0.4/V04E_SPEC.md), [V04E_REVIEW.md](v0.4/V04E_REVIEW.md) and
+[V04E_ACCEPTANCE.md](v0.4/V04E_ACCEPTANCE.md).  PyPI wheel/sdist and the GitHub
+Release already ship in 0.3.0; portable packaging is unreleased `main` work.
 
 Target artifacts / 目标产物：
 

@@ -1,9 +1,9 @@
 # DevRelay v0.4-E — Packaging & GitHub Release Automation
 
-Status: **E1 IMPLEMENTED + INDEPENDENTLY REVIEWED — two REQUEST CHANGES reports,
-P1 findings remediated; pending owner acceptance.**  The review is recorded in
-[V04E_REVIEW.md](V04E_REVIEW.md).  E1 adds a portable Windows x64 build to the
-tag-driven release workflow.
+Status: **E1 ACCEPTED / CLOSED by the owner on 2026-10-22.**  The review is
+recorded in [V04E_REVIEW.md](V04E_REVIEW.md) and the acceptance record in
+[V04E_ACCEPTANCE.md](V04E_ACCEPTANCE.md).  E1 adds a portable Windows x64 build
+to the tag-driven release workflow.
 
 ## Scope (E1)
 

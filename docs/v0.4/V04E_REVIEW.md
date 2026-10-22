@@ -1,7 +1,8 @@
 # DevRelay v0.4-E1 — independent review record
 
 Status: **E1 reviewed: two REQUEST CHANGES reports (no P0); P1s remediated;
-pending owner acceptance.**  No v0.4 tag or release is implied.
+accepted by the owner on 2026-10-22.**  No v0.4 tag or release is implied.
+See [V04E_ACCEPTANCE.md](V04E_ACCEPTANCE.md).
 
 ## Findings and disposition
 

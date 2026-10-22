@@ -160,11 +160,11 @@ v0.3.0 meets that bar through the annotated `v0.3.0` tag and the publication rec
 
 ## Next gates / 下一步门槛
 
-1. Accept/close **v0.4-E1 portable packaging + release automation**
-   ([V04E_SPEC.md](v0.4/V04E_SPEC.md)); it is reviewed with findings in
-   [V04E_REVIEW.md](v0.4/V04E_REVIEW.md).  The Windows `.exe` installer, code
-   signing and package-manager manifests remain deferred.
-2. The requested **hardening pass** is recorded in
+1. Prepare the **v0.4.0 release**: bump the version, freeze release docs, run
+   the full suite and release-workflow checks, then the owner tags/publishes.
+   E1 is accepted; the portable zip will be built for the first time on the
+   real release tag.
+2. The **hardening pass** is recorded in
    [HARDENING_v0.4.md](HARDENING_v0.4.md); remaining items are explicit
    residuals, not hidden assumptions.
 2. Close the remaining v0.3-E platform gates (G0.4/P4, G0.5/P6, G1, G2) and decide whether recovery adoption may be enabled; `adopt_completed_turn` stays disabled until then.
