@@ -50,6 +50,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   implementer/reviewer session.  Both require `X-DevRelay-Confirm: apply` and an
   explicit body `confirm`.  Pause, manual prompt, raw streaming and run phase
   execution remain out of scope.
+- v0.4-C2c manual prompt + normalized polling: `POST /api/runs/{run_id}/prompt`
+  sends one bounded prompt to the run's implementer/reviewer session (no
+  in-flight turn, no retry/fallback), and `GET /api/runs/{run_id}/messages`
+  returns a cursor-windowed, redacted and bounded normalized message page.
+  The UI confirms prompts and optionally polls every 5 seconds.  Pause remains
+  unsupported because the state machine has no pause state; no WebSocket/SSE
+  transport is added.
 
 ## 0.3.0 - 2026-10-21
 

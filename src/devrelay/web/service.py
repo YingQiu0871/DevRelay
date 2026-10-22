@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import re
+import threading
 from pathlib import Path
 from typing import Any
 
@@ -23,6 +24,10 @@ from devrelay.web.models import MAX_LIST_LIMIT
 MAX_RUN_SCAN = 500
 MAX_TASK_SCAN = 200
 MAX_TASK_TEXT = 16_384
+MAX_C2C_MESSAGES = 50
+MAX_C2C_MESSAGE_TEXT = 4_000
+MAX_C2C_TOTAL_TEXT = 16_384
+MAX_C2C_CURSOR = 512
 _TASK_ID_RE = re.compile(r"DR-[0-9]{4}\Z")
 
 
@@ -53,6 +58,8 @@ class WebReadService:
             package_version=__version__,
         )
         self.config_writer = ConfigWriter(self.workspace_root, self.devrelay_dir)
+        self._prompt_lock = threading.RLock()
+        self._manual_prompt_pending: set[str] = set()
         # The process keeps the wiring it loaded at startup.  Comparing the
         # current file digest against this marker tells the UI that a restart is
         # required after a successful A2 write.
@@ -72,7 +79,7 @@ class WebReadService:
         error = envelope.error
         code = error.type if error is not None and error.type else "upstream_error"
         message = error.message if error is not None and error.message else f"{operation} failed"
-        raise WebApiError(code, message, status_code=503)
+        raise WebApiError(code, redact_text(message)[:500], status_code=503)
 
     # ------------------------------------------------------------------
     # read operations
@@ -165,6 +172,110 @@ class WebReadService:
             }:
                 raise WebApiError(exc.code, exc.message, status_code=409) from exc
             raise
+
+    @classmethod
+    def _safe_messages(cls, data: dict[str, Any]) -> list[dict[str, Any]]:
+        messages: list[dict[str, Any]] = []
+        remaining = MAX_C2C_TOTAL_TEXT
+        for item in (data.get("messages") or [])[:MAX_C2C_MESSAGES]:
+            if not isinstance(item, dict) or remaining <= 0:
+                continue
+            parts = item.get("parts") or []
+            text = "\n".join(
+                str(part.get("text", ""))
+                for part in parts
+                if isinstance(part, dict) and part.get("text")
+            )
+            text = cls._bounded(text, min(MAX_C2C_MESSAGE_TEXT, remaining))
+            remaining -= len(text)
+            messages.append(
+                {
+                    "message_id": cls._bounded(item.get("message_id", ""), 200),
+                    "role": cls._bounded(item.get("role", "unknown"), 50),
+                    "created_at": cls._bounded(item.get("created_at", ""), 100),
+                    "text": text,
+                }
+            )
+        return messages
+
+    def prompt_run(self, run_id: str, role: str, prompt: str) -> dict[str, Any]:
+        with self._prompt_lock:
+            if run_id in self._manual_prompt_pending:
+                raise WebApiError(
+                    "manual_prompt_pending",
+                    "a previous manual prompt may still be in flight; resolve it before sending another",
+                    status_code=409,
+                )
+            current = self.run(run_id)
+            if current.get("terminal"):
+                raise WebApiError("run_terminal", "the run is already terminal", status_code=409)
+            if current.get("in_flight"):
+                raise WebApiError(
+                    "run_in_flight",
+                    "a model-bearing turn is in flight; interrupt it before a manual prompt",
+                    status_code=409,
+                )
+            session_id = current.get(f"{role}_session_id")
+            if not isinstance(session_id, str) or not session_id:
+                raise WebApiError(
+                    "session_unavailable",
+                    "the run has no role session for a manual prompt",
+                    status_code=409,
+                )
+            envelope = self.surface.opencode_send_prompt(session_id, prompt)
+            data = dict(envelope.data or {})
+            error = envelope.error
+            result = {
+                "completed": bool(envelope.ok),
+                "code": error.type if error is not None else None,
+                "message": self._bounded(error.message, 1_000) if error is not None else "",
+                "state": self._bounded(data.get("state", ""), 100),
+                "call_ids": [self._bounded(item, 200) for item in (data.get("call_ids") or [])[:20]],
+                "request_count": data.get("request_count", 0),
+                "duration_ms": data.get("duration_ms", 0),
+                "http_status": data.get("http_status"),
+                "submission_status": data.get("submission_status"),
+                "submission_uncertain": bool(data.get("submission_uncertain", False)),
+                "reply_pending": bool(data.get("reply_pending", False)),
+                "retry_safe": bool(data.get("retry_safe", False)),
+                "error_type": self._bounded(data.get("error_type", ""), 200),
+                "messages": self._safe_messages(data),
+            }
+            if not envelope.ok and not data:
+                raise WebApiError(
+                    error.type if error is not None else "prompt_failed",
+                    self._bounded(error.message if error is not None else "prompt failed", 300),
+                    status_code=503,
+                )
+            if result["reply_pending"] or result["submission_uncertain"]:
+                self._manual_prompt_pending.add(run_id)
+            return result
+
+    def run_messages(
+        self, run_id: str, role: str, cursor: str | None = None
+    ) -> dict[str, Any]:
+        current = self.run(run_id)
+        session_id = current.get(f"{role}_session_id")
+        if not isinstance(session_id, str) or not session_id:
+            raise WebApiError(
+                "session_unavailable",
+                "the run has no role session to read",
+                status_code=409,
+            )
+        if cursor is not None and len(cursor) > MAX_C2C_CURSOR:
+            raise WebApiError("invalid_cursor", "cursor is too long", status_code=400)
+        data = self._data(
+            self.surface.opencode_read_messages(session_id, cursor or None),
+            operation="run_messages",
+        )
+        return {
+            "next_cursor": self._bounded(data.get("next_cursor", ""), MAX_C2C_CURSOR),
+            "cursor_unknown": bool(data.get("cursor_unknown", False)),
+            "replayed": bool(data.get("replayed", False)),
+            "window_truncated": bool(data.get("window_truncated", False)),
+            "provider_message_count": data.get("provider_message_count", 0),
+            "messages": self._safe_messages(data),
+        }
 
     def interrupt_run(self, run_id: str, role: str) -> dict[str, Any]:
         current = self.run(run_id)

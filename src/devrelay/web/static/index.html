@@ -380,10 +380,47 @@
             <button id="run-interrupt" class="button button-quiet" type="button">Interrupt</button>
           </div>
           <p id="run-action-result" class="result"></p>
+          <div class="control-row prompt-row">
+            <label class="field">
+              <span>Manual prompt role</span>
+              <select id="run-prompt-role">
+                <option value="implementer">implementer</option>
+                <option value="reviewer">reviewer</option>
+              </select>
+            </label>
+            <label class="field prompt-field">
+              <span>Manual prompt</span>
+              <textarea id="run-prompt-text" maxlength="16000"
+                        placeholder="Explicit manual message; no automatic retry."></textarea>
+            </label>
+            <button id="run-prompt-send" class="button" type="button">Send prompt</button>
+          </div>
+          <div class="messages-panel">
+            <div class="panel-head">
+              <h3>Live normalized messages</h3>
+              <div class="run-tools">
+                <label class="field">
+                  <span>Session</span>
+                  <select id="messages-role">
+                    <option value="implementer">implementer</option>
+                    <option value="reviewer">reviewer</option>
+                  </select>
+                </label>
+                <label class="check">
+                  <input id="messages-auto" type="checkbox">
+                  <span>Poll 5s</span>
+                </label>
+                <button id="messages-refresh" class="button button-quiet" type="button">Load messages</button>
+              </div>
+            </div>
+            <p id="messages-status" class="muted"></p>
+            <ul id="messages-view" class="runs"></ul>
+          </div>
           <p class="muted">
-            Both controls require an explicit confirmation. This UI does not
-            expose pause, manual prompt or a live output stream; those remain
-            separately gated.
+            Manual prompt and message polling require explicit confirmation or
+            a load action. Pause is not implemented because the accepted
+            orchestration state machine has no pause state; interrupt remains an
+            abort request, not a pause.
           </p>
         </div>
       </section>

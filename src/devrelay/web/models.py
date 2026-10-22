@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 WEB_SCHEMA_VERSION = 1
 
@@ -56,6 +56,22 @@ class RunInterruptRequest(BaseModel):
 
     role: Literal["implementer", "reviewer"]
     confirm: Literal["apply"]
+
+
+class RunPromptRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    role: Literal["implementer", "reviewer"]
+    prompt: str = Field(min_length=1, max_length=16_000)
+    confirm: Literal["apply"]
+
+    @field_validator("prompt")
+    @classmethod
+    def _prompt_not_blank(cls, value: str) -> str:
+        text = value.strip()
+        if not text:
+            raise ValueError("prompt must not be blank")
+        return text
 
 
 def success(data: Any, *, request_id: str = "") -> dict[str, Any]:

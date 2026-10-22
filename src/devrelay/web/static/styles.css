@@ -297,6 +297,27 @@ legend { color: var(--text); font-weight: 700; padding: 0 6px; }
 .control-row .field { min-width: 190px; }
 .control-row .button { min-height: 38px; }
 
+textarea {
+  width: 100%;
+  min-height: 88px;
+  resize: vertical;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: #0d1528;
+  color: var(--text);
+  padding: 9px 11px;
+  font: inherit;
+  outline: none;
+}
+
+textarea:focus { border-color: var(--accent-strong); box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.18); }
+
+.prompt-row { align-items: stretch; }
+.prompt-field { flex: 1 1 360px; }
+.messages-panel { border-top: 1px solid var(--line); margin-top: 16px; padding-top: 16px; }
+.messages-panel .panel-head { align-items: flex-end; }
+.messages-panel .run-tools .field { min-width: 150px; }
+
 .run-columns {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));

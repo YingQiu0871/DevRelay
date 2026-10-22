@@ -10,6 +10,7 @@ from typing import Any, Awaitable, Callable
 
 from pydantic import ValidationError
 from starlette.applications import Starlette
+from starlette.concurrency import run_in_threadpool
 from starlette.datastructures import Headers
 from starlette.exceptions import HTTPException
 from starlette.requests import Request
@@ -31,6 +32,7 @@ from devrelay.web.models import (
     ConfigWriteRequest,
     RunDecisionRequest,
     RunInterruptRequest,
+    RunPromptRequest,
     SessionRequest,
     WiringWriteRequest,
     failure,
@@ -367,16 +369,56 @@ class LocalControlApi:
             )
         payload: RunDecisionRequest = await _read_json(request, RunDecisionRequest)
         run_id = str(request.path_params.get("run_id", ""))
+        data = await run_in_threadpool(
+            self.service.decide_run,
+            run_id,
+            payload.decision,
+            payload.expected_updated_at,
+        )
         return _json(
             request,
-            success(
-                self.service.decide_run(
-                    run_id,
-                    payload.decision,
-                    payload.expected_updated_at,
-                ),
-                request_id=str(request.state.request_id),
-            ),
+            success(data, request_id=str(request.state.request_id)),
+        )
+
+    async def run_prompt(self, request: Request) -> Response:
+        if request.headers.get("x-devrelay-confirm") != "apply":
+            raise WebApiError(
+                "confirmation_required",
+                "X-DevRelay-Confirm: apply is required",
+                status_code=403,
+            )
+        payload: RunPromptRequest = await _read_json(request, RunPromptRequest)
+        run_id = str(request.path_params.get("run_id", ""))
+        data = await run_in_threadpool(
+            self.service.prompt_run,
+            run_id,
+            payload.role,
+            payload.prompt,
+        )
+        return _json(
+            request,
+            success(data, request_id=str(request.state.request_id)),
+        )
+
+    async def run_messages(self, request: Request) -> Response:
+        role = request.query_params.get("role", "")
+        if role not in ("implementer", "reviewer"):
+            raise WebApiError(
+                "invalid_role",
+                "role must be implementer or reviewer",
+                status_code=400,
+            )
+        cursor = request.query_params.get("cursor")
+        run_id = str(request.path_params.get("run_id", ""))
+        data = await run_in_threadpool(
+            self.service.run_messages,
+            run_id,
+            role,
+            cursor,
+        )
+        return _json(
+            request,
+            success(data, request_id=str(request.state.request_id)),
         )
 
     async def run_interrupt(self, request: Request) -> Response:
@@ -388,12 +430,14 @@ class LocalControlApi:
             )
         payload: RunInterruptRequest = await _read_json(request, RunInterruptRequest)
         run_id = str(request.path_params.get("run_id", ""))
+        data = await run_in_threadpool(
+            self.service.interrupt_run,
+            run_id,
+            payload.role,
+        )
         return _json(
             request,
-            success(
-                self.service.interrupt_run(run_id, payload.role),
-                request_id=str(request.state.request_id),
-            ),
+            success(data, request_id=str(request.state.request_id)),
         )
 
     async def tasks(self, request: Request) -> Response:
@@ -567,6 +611,8 @@ def create_app(
             Route("/api/runs/{run_id}", api.run, methods=["GET"]),
             Route("/api/runs/{run_id}/decide", api.run_decide, methods=["POST"]),
             Route("/api/runs/{run_id}/interrupt", api.run_interrupt, methods=["POST"]),
+            Route("/api/runs/{run_id}/prompt", api.run_prompt, methods=["POST"]),
+            Route("/api/runs/{run_id}/messages", api.run_messages, methods=["GET"]),
             Route("/api/tasks", api.tasks, methods=["GET"]),
             Route("/api/tasks/{task_id}", api.task, methods=["GET"]),
             Route("/api/roles", api.roles, methods=["GET"]),

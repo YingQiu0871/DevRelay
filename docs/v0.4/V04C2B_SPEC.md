@@ -60,8 +60,8 @@ a live stream.
 
 - No pause: the accepted orchestration state machine has no pause state, and
   C2b does not invent one.
-- No manual prompt: `opencode_send_prompt` remains out of scope; arbitrary
-  prompt injection needs its own ownership/redaction review.
+- No manual prompt: `opencode_send_prompt` is C2c
+  ([V04C2C_SPEC.md](V04C2C_SPEC.md)), not C2b.
 - No raw provider output, WebSocket/SSE or log stream.
 - No run start, implementer/reviewer phase execution, recovery resolution,
   task approval or project switch.

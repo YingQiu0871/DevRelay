@@ -30,13 +30,14 @@ transport is added.
 
 ## Explicitly deferred to C2
 
-- pause / interrupt / manual prompt / decide actions;
-- raw or normalized provider output streaming;
-- live WebSocket/SSE transport.
+- pause actions;
+- raw provider output streaming and WebSocket/SSE transport.
 
 C2a (test evidence, review findings, diff stat, provider-call accounting) is
-implemented separately in [V04C2A_SPEC.md](V04C2A_SPEC.md); it is still
-read-only and does not add controls.
+implemented separately in [V04C2A_SPEC.md](V04C2A_SPEC.md); C2b (decision and
+interrupt) is in [V04C2B_SPEC.md](V04C2B_SPEC.md); C2c (manual prompt and
+normalized polling) is in [V04C2C_SPEC.md](V04C2C_SPEC.md).  Pause remains
+unsupported because the accepted state machine has no pause state.
 
 ## Security boundary
 

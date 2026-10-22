@@ -535,6 +535,225 @@ def test_run_interrupt_is_role_scoped_and_confirmed(
     )
 
 
+def test_manual_prompt_is_confirmed_and_session_scoped(
+    client: TestClient, workspace: Path, monkeypatch
+):
+    from devrelay.mcp.models import ok_envelope
+    from devrelay.mcp.tools import McpToolSurface
+    from devrelay.orchestration.store import OrchestrationStore
+    from v03d_helpers import honest_run
+
+    seen = {}
+
+    def fake_prompt(self, session_id=None, prompt=None, agent=None, model=None):
+        seen.update(session_id=session_id, prompt=prompt, agent=agent, model=model)
+        return ok_envelope(
+            "opencode_send_prompt",
+            {
+                "session_id": session_id,
+                "state": "COMPLETED",
+                "call_ids": ["OC-0001"],
+                "messages": [
+                    {
+                        "message_id": "msg_1",
+                        "role": "assistant",
+                        "created_at": "2026-10-22T00:00:00+00:00",
+                        "parts": [{"kind": "text", "text": "done"}],
+                    }
+                ],
+                "reply_pending": False,
+                "submission_uncertain": False,
+            },
+        )
+
+    monkeypatch.setattr(McpToolSurface, "opencode_send_prompt", fake_prompt)
+    auth = _auth(client)
+    store = OrchestrationStore(workspace / ".devrelay")
+    run = honest_run(workspace=str(workspace.resolve()))
+    store.create(run)
+    body = {"role": "implementer", "prompt": "manual check", "confirm": "apply"}
+    assert (
+        client.post(f"/api/runs/{run.run_id}/prompt", json=body, headers=auth).status_code
+        == 403
+    )
+    response = client.post(
+        f"/api/runs/{run.run_id}/prompt",
+        json=body,
+        headers={**auth, "X-DevRelay-Confirm": "apply"},
+    )
+    assert response.status_code == 200, response.text
+    data = response.json()["data"]
+    assert data["completed"] is True
+    assert data["messages"][0]["text"] == "done"
+    assert seen["session_id"] == run.implementer_session_id
+    assert seen["agent"] is None and seen["model"] is None
+    too_long = client.post(
+        f"/api/runs/{run.run_id}/prompt",
+        json={"role": "implementer", "prompt": "x" * 16_001, "confirm": "apply"},
+        headers={**auth, "X-DevRelay-Confirm": "apply"},
+    )
+    assert too_long.status_code == 422
+
+
+def test_run_messages_are_role_scoped_and_bounded(
+    client: TestClient, workspace: Path, monkeypatch
+):
+    from devrelay.mcp.models import ok_envelope
+    from devrelay.mcp.tools import McpToolSurface
+    from devrelay.orchestration.store import OrchestrationStore
+    from v03d_helpers import honest_run
+
+    seen = {}
+
+    def fake_read(self, session_id=None, cursor=None):
+        seen.update(session_id=session_id, cursor=cursor)
+        messages = [
+            {
+                "message_id": f"msg_{index}",
+                "role": "assistant",
+                "parts": [{"text": "Authorization: Bearer secret-token " + "x" * 5_000}],
+            }
+            for index in range(60)
+        ]
+        return ok_envelope(
+            "opencode_read_messages",
+            {
+                "session_id": session_id,
+                "next_cursor": "next",
+                "messages": messages,
+            },
+        )
+
+    monkeypatch.setattr(McpToolSurface, "opencode_read_messages", fake_read)
+    auth = _auth(client)
+    store = OrchestrationStore(workspace / ".devrelay")
+    run = honest_run(workspace=str(workspace.resolve()))
+    store.create(run)
+    response = client.get(
+        f"/api/runs/{run.run_id}/messages?role=implementer&cursor=old",
+        headers=auth,
+    )
+    assert response.status_code == 200, response.text
+    data = response.json()["data"]
+    assert len(data["messages"]) <= 50
+    assert all(len(item["text"]) <= 4_000 for item in data["messages"])
+    assert sum(len(item["text"]) for item in data["messages"]) <= 16_384
+    assert "secret-token" not in response.text
+    assert data["next_cursor"] == "next"
+    assert "session_id" not in data
+    assert seen["session_id"] == run.implementer_session_id
+    assert seen["cursor"] == "old"
+    assert (
+        client.get(f"/api/runs/{run.run_id}/messages?role=other", headers=auth).status_code
+        == 400
+    )
+    too_long = client.get(
+        f"/api/runs/{run.run_id}/messages?role=implementer&cursor={'x' * 513}",
+        headers=auth,
+    )
+    assert too_long.status_code == 400
+    assert too_long.json()["error"]["code"] == "invalid_cursor"
+    assert client.get(f"/api/runs/{run.run_id}/messages?role=implementer").status_code == 401
+
+
+def test_manual_prompt_rejects_in_flight_terminal_and_blank(
+    client: TestClient, workspace: Path
+):
+    from devrelay.orchestration.models import RunState
+    from devrelay.orchestration.store import OrchestrationStore
+    from v03d_helpers import honest_run, with_in_flight
+
+    auth = _auth(client)
+    store = OrchestrationStore(workspace / ".devrelay")
+    in_flight = with_in_flight(
+        honest_run(workspace=str(workspace.resolve())), "implementer"
+    )
+    store.create(in_flight)
+    terminal = honest_run(
+        RunState.COMPLETED,
+        workspace=str(workspace.resolve()),
+        run_id="DR-" + "e" * 32,
+    )
+    store.create(terminal)
+    headers = {**auth, "X-DevRelay-Confirm": "apply"}
+    for run in (in_flight, terminal):
+        response = client.post(
+            f"/api/runs/{run.run_id}/prompt",
+            json={"role": "implementer", "prompt": "x", "confirm": "apply"},
+            headers=headers,
+        )
+        assert response.status_code == 409
+    blank = client.post(
+        f"/api/runs/{in_flight.run_id}/prompt",
+        json={"role": "implementer", "prompt": "   ", "confirm": "apply"},
+        headers=headers,
+    )
+    assert blank.status_code == 422
+
+
+def test_manual_prompt_pending_and_redaction(client: TestClient, workspace: Path, monkeypatch):
+    from devrelay.mcp.models import error_envelope
+    from devrelay.mcp.tools import McpToolSurface
+    from devrelay.orchestration.store import OrchestrationStore
+    from v03d_helpers import honest_run
+
+    def fake_prompt(self, session_id=None, prompt=None, agent=None, model=None):
+        return error_envelope(
+            "opencode_send_prompt",
+            "submission_not_confirmed",
+            "pending",
+            {
+                "session_id": session_id,
+                "reply_pending": True,
+                "submission_uncertain": True,
+                "messages": [
+                    {
+                        "message_id": "m1",
+                        "role": "assistant",
+                        "parts": [{"text": "Authorization: Bearer secret-token"}],
+                    }
+                ],
+            },
+        )
+
+    monkeypatch.setattr(McpToolSurface, "opencode_send_prompt", fake_prompt)
+    auth = _auth(client)
+    store = OrchestrationStore(workspace / ".devrelay")
+    run = honest_run(workspace=str(workspace.resolve()))
+    store.create(run)
+    headers = {**auth, "X-DevRelay-Confirm": "apply"}
+    first = client.post(
+        f"/api/runs/{run.run_id}/prompt",
+        json={"role": "implementer", "prompt": "x", "confirm": "apply"},
+        headers=headers,
+    )
+    assert first.status_code == 200
+    data = first.json()["data"]
+    assert data["completed"] is False
+    assert data["reply_pending"] is True
+    assert "secret-token" not in first.text
+    second = client.post(
+        f"/api/runs/{run.run_id}/prompt",
+        json={"role": "implementer", "prompt": "y", "confirm": "apply"},
+        headers=headers,
+    )
+    assert second.status_code == 409
+    assert second.json()["error"]["code"] == "manual_prompt_pending"
+
+
+def test_c2c_ui_has_manual_prompt_and_polling(client: TestClient):
+    html = client.get("/").text
+    script = client.get("/assets/app.js").text
+    for marker in ("run-prompt", "messages-view", "Live normalized messages"):
+        assert marker in html
+    assert "sendManualPrompt" in script
+    assert "loadMessages" in script
+    assert "/api/runs/" in script
+    assert 'id="run-pause"' not in html
+    assert "setInterval" in script
+    assert "loadMessages(false)" in script
+
+
 def test_c2b_ui_has_only_bounded_controls(client: TestClient):
     html = client.get("/").text
     script = client.get("/assets/app.js").text
@@ -546,8 +765,8 @@ def test_c2b_ui_has_only_bounded_controls(client: TestClient):
     assert 'detail.state !== "AWAITING_DECISION"' in script
     assert "detail.in_flight" in script
     assert 'id="run-pause"' not in html
-    assert 'id="run-prompt"' not in html
-    for endpoint in ("/pause", "/prompt", "/phase", "/stream"):
+    assert 'id="run-prompt-send"' in html
+    for endpoint in ("/pause", "/phase", "/stream"):
         assert endpoint not in script
 
 

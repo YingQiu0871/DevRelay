@@ -27,6 +27,13 @@
     taskDetail: null,
     selectedTaskId: "",
     taskDetailRequest: 0,
+    messages: [],
+    messagesCursor: "",
+    messagesRunId: "",
+    messagesTimer: null,
+    messagesInFlight: false,
+    messagesQueued: false,
+    messagesRequest: 0,
   };
 
   class ApiError extends Error {
@@ -68,6 +75,18 @@
       clearInterval(state.autoTimer);
       state.autoTimer = null;
     }
+    if (state.messagesTimer) {
+      clearInterval(state.messagesTimer);
+      state.messagesTimer = null;
+    }
+    state.messages = [];
+    state.messagesCursor = "";
+    state.messagesRunId = "";
+    state.messagesInFlight = false;
+    state.messagesQueued = false;
+    state.messagesRequest += 1;
+    const messagesAuto = document.getElementById("messages-auto");
+    if (messagesAuto) messagesAuto.checked = false;
     const autoRefresh = document.getElementById("auto-refresh");
     if (autoRefresh) autoRefresh.checked = false;
     state.selectedRunId = "";
@@ -404,6 +423,7 @@
     $("run-detail-title").textContent = detail.run_id || "Run";
     $("run-decide").disabled = detail.state !== "AWAITING_DECISION" || Boolean(detail.in_flight);
     $("run-interrupt").disabled = !detail.in_flight;
+    $("run-prompt-send").disabled = Boolean(detail.terminal || detail.in_flight);
     const metrics = $("run-detail-metrics");
     metrics.replaceChildren();
     appendDetailRow(metrics, "State", detail.state);
@@ -652,6 +672,13 @@
 
   async function loadRunDetail(runId) {
     if (!runId) return;
+    if (state.messagesRunId !== runId) {
+      state.messagesRunId = runId;
+      state.messages = [];
+      state.messagesCursor = "";
+      state.messagesRequest += 1;
+      renderMessages();
+    }
     const request = ++state.runDetailRequest;
     $("run-action-result").textContent = "";
     try {
@@ -727,6 +754,128 @@
         : "Interrupt request accepted; terminal state is not verified.";
       await loadRunDetail(detail.run_id);
       $("run-action-result").textContent = message;
+    } catch (error) {
+      if (error.status === 401) {
+        clearSession();
+        showLogin("Session expired. Enter the token again.");
+      } else {
+        $("run-action-result").textContent = `${error.code ? `${error.code}: ` : ""}${error.message}`;
+      }
+    } finally {
+      button.disabled = false;
+    }
+  }
+
+  function renderMessages() {
+    const view = $("messages-view");
+    view.replaceChildren();
+    if (!state.messages.length) {
+      const empty = document.createElement("li");
+      empty.textContent = "No messages loaded.";
+      view.append(empty);
+    } else {
+      for (const message of state.messages) {
+        const item = document.createElement("li");
+        const left = document.createElement("span");
+        left.className = "mono";
+        left.textContent = `${message.role || "unknown"} ${message.message_id || ""}`.trim();
+        const right = document.createElement("span");
+        right.className = "muted";
+        right.textContent = message.text || "(no text)";
+        item.append(left, right);
+        view.append(item);
+      }
+    }
+    $("messages-status").textContent = state.messages.length
+      ? `${state.messages.length} message(s) · cursor ${state.messagesCursor || "(start)"}`
+      : "No messages loaded.";
+  }
+
+  async function loadMessages(reset = false) {
+    if (!state.selectedRunId) return;
+    if (reset) {
+      state.messages = [];
+      state.messagesCursor = "";
+      state.messagesRequest += 1;
+      renderMessages();
+    }
+    if (state.messagesInFlight) {
+      state.messagesQueued = true;
+      return;
+    }
+    const request = ++state.messagesRequest;
+    const role = $("messages-role").value;
+    const runId = state.selectedRunId;
+    const params = new URLSearchParams({ role });
+    if (state.messagesCursor) params.set("cursor", state.messagesCursor);
+    state.messagesInFlight = true;
+    try {
+      const data = await api(
+        `/api/runs/${encodeURIComponent(runId)}/messages?${params.toString()}`,
+      );
+      if (
+        request !== state.messagesRequest
+        || runId !== state.selectedRunId
+        || role !== $("messages-role").value
+      ) {
+        return;
+      }
+      state.messages = state.messages.concat(data.messages || []).slice(-200);
+      state.messagesCursor = data.next_cursor || "";
+      renderMessages();
+      if (data.cursor_unknown) {
+        $("messages-status").textContent += " · cursor expired; new window";
+      }
+    } catch (error) {
+      if (error.status === 401) {
+        clearSession();
+        showLogin("Session expired. Enter the token again.");
+      } else {
+        $("messages-status").textContent = `${error.code ? `${error.code}: ` : ""}${error.message}`;
+      }
+    } finally {
+      state.messagesInFlight = false;
+      if (state.messagesQueued) {
+        state.messagesQueued = false;
+        loadMessages(false);
+      }
+    }
+  }
+
+  function setMessagesAuto(enabled) {
+    if (state.messagesTimer) {
+      clearInterval(state.messagesTimer);
+      state.messagesTimer = null;
+    }
+    if (enabled) state.messagesTimer = setInterval(() => loadMessages(false), 5000);
+  }
+
+  async function sendManualPrompt() {
+    const detail = state.runDetail;
+    if (!detail) return;
+    const role = $("run-prompt-role").value;
+    const prompt = $("run-prompt-text").value.trim();
+    if (!prompt) {
+      $("run-action-result").textContent = "Enter a prompt first.";
+      return;
+    }
+    if (!window.confirm(`Send this manual prompt to the ${role} session of ${detail.run_id}?`)) {
+      return;
+    }
+    const button = $("run-prompt-send");
+    button.disabled = true;
+    try {
+      const data = await api(`/api/runs/${encodeURIComponent(detail.run_id)}/prompt`, {
+        method: "POST",
+        headers: { "X-DevRelay-Confirm": "apply" },
+        body: { role, prompt, confirm: "apply" },
+      });
+      $("run-prompt-text").value = "";
+      const callCount = Array.isArray(data.call_ids) ? data.call_ids.length : 0;
+      $("run-action-result").textContent = data.completed
+        ? `Prompt completed (${callCount} call id(s)).`
+        : `Prompt not confirmed: ${data.code || "submission_not_confirmed"}`;
+      await loadMessages(false);
     } catch (error) {
       if (error.status === 401) {
         clearSession();
@@ -1133,10 +1282,24 @@
   });
   $("run-decide").addEventListener("click", decideRun);
   $("run-interrupt").addEventListener("click", interruptRun);
+  $("run-prompt-send").addEventListener("click", sendManualPrompt);
+  $("messages-refresh").addEventListener("click", () => loadMessages(true));
+  $("messages-auto").addEventListener("change", (event) => {
+    setMessagesAuto(event.target.checked);
+  });
+  $("messages-role").addEventListener("change", () => loadMessages(true));
   $("run-detail-close").addEventListener("click", () => {
     state.selectedRunId = "";
     state.runDetail = null;
     state.runDetailRequest += 1;
+    if (state.messagesTimer) {
+      clearInterval(state.messagesTimer);
+      state.messagesTimer = null;
+    }
+    $("messages-auto").checked = false;
+    state.messages = [];
+    state.messagesCursor = "";
+    renderMessages();
     $("run-detail").hidden = true;
   });
   $("task-detail-close").addEventListener("click", () => {
