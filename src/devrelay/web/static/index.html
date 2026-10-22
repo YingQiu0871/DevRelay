@@ -281,9 +281,47 @@
           <dl id="status-view" class="details"></dl>
         </div>
         <div class="panel">
-          <p class="kicker">Bounded</p>
-          <h2>Recent runs</h2>
+          <div class="panel-head">
+            <div>
+              <p class="kicker">Bounded · read-only</p>
+              <h2>Recent runs</h2>
+            </div>
+            <div class="run-tools">
+              <label class="check">
+                <input id="auto-refresh" type="checkbox">
+                <span>Auto-refresh 5s</span>
+              </label>
+              <button id="refresh-runs" class="button button-quiet" type="button">Refresh</button>
+            </div>
+          </div>
           <ul id="runs-view" class="runs"></ul>
+        </div>
+        <div id="run-detail" class="panel" hidden>
+          <div class="panel-head">
+            <div>
+              <p class="kicker">Read-only run detail</p>
+              <h2 id="run-detail-title">Run</h2>
+            </div>
+            <button id="run-detail-close" class="button button-quiet" type="button">Close</button>
+          </div>
+          <dl id="run-detail-metrics" class="details"></dl>
+          <div class="run-columns">
+            <div>
+              <h3>Implementer turns</h3>
+              <ul id="run-impl-turns" class="runs"></ul>
+            </div>
+            <div>
+              <h3>Reviewer turns</h3>
+              <ul id="run-rev-turns" class="runs"></ul>
+            </div>
+          </div>
+          <h3>Decision history</h3>
+          <ul id="run-decisions" class="runs"></ul>
+          <p id="run-reasons" class="muted"></p>
+          <p class="muted">
+            This dashboard is a read-only snapshot. Pause/interrupt/manual
+            prompt controls are deliberately not exposed here.
+          </p>
         </div>
       </section>
     </section>

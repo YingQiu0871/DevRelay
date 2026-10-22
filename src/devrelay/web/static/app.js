@@ -12,7 +12,18 @@
   const form = document.getElementById("config-form");
   let sessionToken = readStoredSession();
   let memoryToken = null;
-  const state = { status: null, projects: [], config: null, wiring: null, runs: null };
+  const state = {
+    status: null,
+    projects: [],
+    config: null,
+    wiring: null,
+    runs: null,
+    runDetail: null,
+    selectedRunId: "",
+    autoTimer: null,
+    runDetailRequest: 0,
+    refreshInFlight: false,
+  };
 
   class ApiError extends Error {
     constructor(message, status, code) {
@@ -49,6 +60,17 @@
     sessionToken = "";
     memoryToken = null;
     storeSession("");
+    if (state.autoTimer) {
+      clearInterval(state.autoTimer);
+      state.autoTimer = null;
+    }
+    const autoRefresh = document.getElementById("auto-refresh");
+    if (autoRefresh) autoRefresh.checked = false;
+    state.selectedRunId = "";
+    state.runDetail = null;
+    state.runDetailRequest += 1;
+    const detail = document.getElementById("run-detail");
+    if (detail) detail.hidden = true;
     const tokenField = document.getElementById("token");
     if (tokenField) tokenField.value = "";
   }
@@ -314,14 +336,164 @@
     }
     for (const run of runs) {
       const item = document.createElement("li");
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "run-row";
       const left = document.createElement("span");
       left.className = "mono";
       left.textContent = run.run_id || "run";
       const right = document.createElement("span");
       right.className = "muted";
       right.textContent = `${run.state || "unknown"} · cycle ${run.current_cycle ?? 0}`;
-      item.append(left, right);
+      button.append(left, right);
+      button.addEventListener("click", () => loadRunDetail(run.run_id));
+      item.append(button);
       runList.append(item);
+    }
+  }
+
+  function appendDetailRow(list, label, value) {
+    const dt = document.createElement("dt");
+    dt.textContent = label;
+    const dd = document.createElement("dd");
+    dd.textContent = value === undefined || value === null || value === "" ? "-" : String(value);
+    list.append(dt, dd);
+  }
+
+  function renderTurns(target, turns) {
+    target.replaceChildren();
+    if (!turns || !turns.length) {
+      const empty = document.createElement("li");
+      empty.textContent = "No turns recorded.";
+      target.append(empty);
+      return;
+    }
+    for (const turn of turns) {
+      const item = document.createElement("li");
+      const left = document.createElement("span");
+      left.className = "mono";
+      left.textContent = `cycle ${turn.cycle ?? "?"} · ${turn.outcome || "unknown"}`;
+      const right = document.createElement("span");
+      right.className = "muted";
+      const status = turn.submission_status ?? "-";
+      const calls = Array.isArray(turn.call_ids) && turn.call_ids.length
+        ? turn.call_ids.join(", ")
+        : "no call ids";
+      const flags = [];
+      if (turn.submission_uncertain) flags.push("submission uncertain");
+      if (turn.reply_pending) flags.push("reply pending");
+      if (turn.retry_safe) flags.push("retry-safe");
+      const suffix = flags.length ? ` · ${flags.join(", ")}` : "";
+      right.textContent = `${turn.resolved_model || "-"} · HTTP ${status}${suffix} · ${calls}`;
+      item.append(left, right);
+      target.append(item);
+    }
+  }
+
+  function renderRunDetail(detail) {
+    $("run-detail").hidden = false;
+    $("run-detail-title").textContent = detail.run_id || "Run";
+    const metrics = $("run-detail-metrics");
+    metrics.replaceChildren();
+    appendDetailRow(metrics, "State", detail.state);
+    appendDetailRow(metrics, "Cycle", `${detail.cycle ?? "?"} / ${detail.max_cycles ?? "?"}`);
+    appendDetailRow(metrics, "Completed cycles", detail.completed_cycles);
+    appendDetailRow(metrics, "Model turns", `${detail.model_turns_used ?? 0} / ${detail.model_turn_budget ?? 0}`);
+    appendDetailRow(metrics, "Turn attempts", detail.turn_attempts);
+    appendDetailRow(metrics, "In flight", detail.in_flight ? "yes" : "no");
+    appendDetailRow(metrics, "Updated", detail.updated_at);
+    const routes = detail.route_snapshot || {};
+    appendDetailRow(
+      metrics,
+      "Implementer route",
+      routes.implementer ? `${routes.implementer.model || "-"} / ${routes.implementer.agent || "-"}` : "-",
+    );
+    appendDetailRow(
+      metrics,
+      "Reviewer route",
+      routes.reviewer ? `${routes.reviewer.model || "-"} / ${routes.reviewer.agent || "-"}` : "-",
+    );
+    renderTurns($("run-impl-turns"), detail.implementer_turns);
+    renderTurns($("run-rev-turns"), detail.reviewer_turns);
+
+    const decisions = $("run-decisions");
+    decisions.replaceChildren();
+    const history = detail.decision_history || [];
+    if (!history.length) {
+      const empty = document.createElement("li");
+      empty.textContent = "No decisions recorded.";
+      decisions.append(empty);
+    } else {
+      for (const decision of history) {
+        const item = document.createElement("li");
+        const left = document.createElement("span");
+        left.textContent = decision.decision || "decision";
+        const right = document.createElement("span");
+        right.className = "muted";
+        right.textContent = `${decision.previous_state || "-"} → ${decision.next_state || "-"}`;
+        item.append(left, right);
+        decisions.append(item);
+      }
+    }
+    const reasons = [];
+    if (detail.blocked_reason) reasons.push(`Blocked: ${detail.blocked_reason}`);
+    if (detail.recovery_reason) reasons.push(`Recovery: ${detail.recovery_reason}`);
+    $("run-reasons").textContent = reasons.join("\n");
+  }
+
+  async function loadRunDetail(runId) {
+    if (!runId) return;
+    const request = ++state.runDetailRequest;
+    try {
+      const detail = await api(`/api/runs/${encodeURIComponent(runId)}`);
+      if (request !== state.runDetailRequest) return;
+      state.selectedRunId = runId;
+      state.runDetail = detail;
+      showAlert("");
+      renderRunDetail(detail);
+    } catch (error) {
+      if (request !== state.runDetailRequest) return;
+      if (error.status === 401) {
+        clearSession();
+        showLogin("Session expired. Enter the token again.");
+      } else {
+        state.selectedRunId = "";
+        state.runDetail = null;
+        $("run-detail").hidden = true;
+        showAlert(`${error.code ? `${error.code}: ` : ""}${error.message}`);
+      }
+    }
+  }
+
+  async function refreshRuns() {
+    if (state.refreshInFlight) return;
+    state.refreshInFlight = true;
+    try {
+      const runs = await api("/api/runs?limit=8");
+      state.runs = runs;
+      $("run-count").textContent = `${runs.total || 0} total`;
+      showAlert("");
+      renderStatus();
+      if (state.selectedRunId) await loadRunDetail(state.selectedRunId);
+    } catch (error) {
+      if (error.status === 401) {
+        clearSession();
+        showLogin("Session expired. Enter the token again.");
+      } else {
+        showAlert(`${error.code ? `${error.code}: ` : ""}${error.message}`);
+      }
+    } finally {
+      state.refreshInFlight = false;
+    }
+  }
+
+  function setAutoRefresh(enabled) {
+    if (state.autoTimer) {
+      clearInterval(state.autoTimer);
+      state.autoTimer = null;
+    }
+    if (enabled) {
+      state.autoTimer = setInterval(refreshRuns, 5000);
     }
   }
 
@@ -678,6 +850,16 @@
   $("validate").addEventListener("click", () => runValidation());
   form.addEventListener("submit", applyPatch);
   $("wiring-form").addEventListener("submit", saveWiring);
+  $("refresh-runs").addEventListener("click", refreshRuns);
+  $("auto-refresh").addEventListener("change", (event) => {
+    setAutoRefresh(event.target.checked);
+  });
+  $("run-detail-close").addEventListener("click", () => {
+    state.selectedRunId = "";
+    state.runDetail = null;
+    state.runDetailRequest += 1;
+    $("run-detail").hidden = true;
+  });
   for (const button of document.querySelectorAll(".tab")) {
     button.addEventListener("click", () => switchTab(button.dataset.tab));
   }

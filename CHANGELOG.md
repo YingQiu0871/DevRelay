@@ -33,6 +33,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   remote endpoints, workspace overrides, `allow_unknown_workspace`, executables,
   argv, profiles and provider selection remain excluded.  A Connections tab
   drives it.
+- v0.4-C1 read-only run dashboard: click-through run detail with state, cycle,
+  budget, route snapshot, implementer/reviewer turn evidence, decision history
+  and blocked/recovery reasons, plus manual refresh and optional 5-second
+  auto-refresh.  No pause/interrupt/prompt/decide action is added; those remain
+  C2.
 
 ## 0.3.0 - 2026-10-21
 

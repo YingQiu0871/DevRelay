@@ -230,19 +230,24 @@ runs (C).
 
 ### v0.4-C — Dashboard & Live Runs
 
-Status: 📋 Planned
+Status: 🧪 C1 implemented and independently reviewed (APPROVE WITH FINDINGS;
+P2 findings remediated; pending owner acceptance).  See
+[V04C_SPEC.md](v0.4/V04C_SPEC.md) and [V04C_REVIEW.md](v0.4/V04C_REVIEW.md);
+C2 control/output work is planned.
 
-Dashboard targets:
+C1 read-only dashboard:
 
-- active project
-- current stage
-- implementer/reviewer state
-- live normalized output
-- git diff summary
-- test status
-- review findings
-- call/token/cost accounting where available
-- pause / interrupt / manual prompt
+- run list and click-through detail
+- state, cycle, budget, turn attempts, in-flight flag
+- implementer/reviewer route and turn evidence
+- decision history, blocked/recovery reasons
+- manual refresh + optional 5s auto-refresh
+
+Deferred to C2:
+
+- live normalized output / WebSocket/SSE
+- git diff summary, test status, review findings, token/cost accounting
+- pause / interrupt / manual prompt / decide actions
 
 ### v0.4-D — Project & Session Management
 

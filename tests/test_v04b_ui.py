@@ -305,6 +305,41 @@ def test_connections_ui_has_no_credential_or_workspace_input(client: TestClient)
     assert "Connections" in html
 
 
+def test_dashboard_run_detail_uses_existing_read_api(client: TestClient, workspace: Path):
+    from devrelay.orchestration.store import OrchestrationStore
+    from v03d_helpers import honest_run
+
+    auth = _auth(client)
+    store = OrchestrationStore(workspace / ".devrelay")
+    run = honest_run(workspace=str(workspace.resolve()))
+    store.create(run)
+    listed = client.get("/api/runs", headers=auth)
+    assert listed.status_code == 200
+    assert any(item["run_id"] == run.run_id for item in listed.json()["data"]["runs"])
+    detail = client.get(f"/api/runs/{run.run_id}", headers=auth)
+    assert detail.status_code == 200, detail.text
+    data = detail.json()["data"]
+    assert data["run_id"] == run.run_id
+    assert "state" in data
+    assert "implementer_turns" in data
+
+
+def test_dashboard_has_auto_refresh_and_no_run_controls(client: TestClient):
+    html = client.get("/").text
+    script = client.get("/assets/app.js").text
+    for marker in ("run-detail", "auto-refresh", "refresh-runs", "Decision history"):
+        assert marker in html
+    assert "loadRunDetail" in script
+    assert "/api/runs/" in script
+    assert "runDetailRequest" in script
+    assert "refreshInFlight" in script
+    assert "submission_uncertain" in script
+    assert "setInterval(refreshRuns, 5000)" in script
+    assert "clearInterval(state.autoTimer)" in script
+    for control in ("pause", "interrupt", "sendPrompt", "decide", "manual-prompt"):
+        assert f'id="{control}"' not in html
+
+
 def test_ui_does_not_expose_token_in_html(client: TestClient):
     response = client.get("/")
     assert TOKEN not in response.text
