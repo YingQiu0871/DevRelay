@@ -1,9 +1,9 @@
 # DevRelay v0.4-D — Project & Session Management
 
-Status: **D1 IMPLEMENTED + INDEPENDENTLY REVIEWED — APPROVE WITH FINDINGS; P1/P2
-findings remediated; pending owner acceptance.**  The review is recorded in
-[V04D_REVIEW.md](V04D_REVIEW.md).  D1 adds explicit in-memory project activation
-and a run-recorded session inventory.
+Status: **D1 ACCEPTED / CLOSED by the owner on 2026-10-22.**  The review is
+recorded in [V04D_REVIEW.md](V04D_REVIEW.md) and the acceptance record in
+[V04D_ACCEPTANCE.md](V04D_ACCEPTANCE.md).  D1 adds explicit in-memory project
+activation and a run-recorded session inventory.
 
 ## Scope
 

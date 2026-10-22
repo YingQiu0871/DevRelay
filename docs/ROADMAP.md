@@ -255,9 +255,9 @@ Deferred to C2:
 
 ### v0.4-D — Project & Session Management
 
-Status: 🧪 D1 implemented and independently reviewed (APPROVE WITH FINDINGS;
-P1/P2 findings remediated; pending owner acceptance).  See
-[V04D_SPEC.md](v0.4/V04D_SPEC.md) and [V04D_REVIEW.md](v0.4/V04D_REVIEW.md).
+Status: ✅ **D1 ACCEPTED / CLOSED by the owner on 2026-10-22.**  See
+[V04D_SPEC.md](v0.4/V04D_SPEC.md), [V04D_REVIEW.md](v0.4/V04D_REVIEW.md) and
+[V04D_ACCEPTANCE.md](v0.4/V04D_ACCEPTANCE.md).
 
 Implemented in D1:
 
