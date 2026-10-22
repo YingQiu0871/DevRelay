@@ -6,7 +6,7 @@ The publication flow is the tag-driven workflow in
 the publisher completed the steps below on 2026-10-21; the evidence is recorded
 here and the release is public.
 
-## v0.4.0 (prepared 2026-10-22; publication pending)
+## v0.4.0 (published 2026-10-22)
 
 ### Verified in this tree
 
@@ -25,25 +25,48 @@ here and the release is public.
   provenance check and SHA-pinned actions; release tests pass.
 - [x] Release notes: [v0.4/RELEASE_NOTES_v0.4.0.md](v0.4/RELEASE_NOTES_v0.4.0.md).
 
-### Publisher steps (pending; owner only)
+### Publisher steps (completed 2026-10-22)
 
-1. [ ] Review the release-preparation commit and wait for `test.yml` green.
-2. [ ] Create an annotated tag `v0.4.0` on that commit and push it.
-3. [ ] Create a **draft** GitHub Release for `v0.4.0`.
-4. [ ] Dispatch `release.yml` with `tag=v0.4.0`, `confirm=PUBLISH`.
-5. [ ] Verify the Windows portable artifact, wheel, sdist and `SHA256SUMS`
+1. [x] Reviewed the release-preparation commit and waited for `test.yml` green.
+2. [x] Created annotated tag `v0.4.0` on `c3a5416` and pushed it.
+3. [x] Created a **draft** GitHub Release for `v0.4.0`.
+4. [x] Dispatched `release.yml` with `tag=v0.4.0`, `confirm=PUBLISH`.
+5. [x] Verified the Windows portable artifact, wheel, sdist and `SHA256SUMS`
    are attached, the Release is no longer a draft, PyPI serves 0.4.0, and a
    fresh venv installs it.
-6. [ ] Record the release commit, CI run, release run and PyPI digests here;
-   flip the README/project-status "publication pending" wording.
+6. [x] Recorded the release commit, CI run, release run and PyPI digests here;
+   flipped README/project-status to published.
+
+### Release evidence
+
+- Release commit: `c3a54162547cb810e454c498ee05f8eac33c99ae`
+- Tag: `v0.4.0` (annotated tag object `007528204baa5d232893897fe9d4f1b8717ae009`,
+  peeled commit `c3a5416`)
+- `test.yml` run: https://github.com/YingQiu0871/DevRelay/actions/runs/39857350094
+- `release.yml` run: https://github.com/YingQiu0871/DevRelay/actions/runs/39858586636
+- PyPI page: https://pypi.org/project/devrelay/0.4.0/
+- GitHub Release: https://github.com/YingQiu0871/DevRelay/releases/tag/v0.4.0
+- Published at: `2026-10-22T21:38:24Z`; `isDraft=false`, `isPrerelease=false`
+- Assets:
+  - `devrelay-0.4.0-py3-none-any.whl` (316,610 bytes)
+    `sha256:17e7710ed1614f3c845d85068c675c820f3bf4d4c543dd645ba87155afea16aa`
+  - `devrelay-0.4.0.tar.gz` (1,364,176 bytes)
+    `sha256:da4fa52ee77b2017a70cc3f58cbd6ecb3696d68bca1f8db2129a9c19931492c2`
+  - `DevRelay-Portable-Windows-x64.zip` (19,740,716 bytes)
+    `sha256:6c5eb6c47f1b194e84334fba3b0566c2c4725c93c0a5200ccde8e042a759a2dc`
+  - `SHA256SUMS` (286 bytes)
+    `sha256:4129ca1944a11108da0b5a2fcfe373c0197dea45918939e32cc60b80e2ed9027`
+- Downloaded-asset verification: `SHA256SUMS` matched all three files;
+  extracted `devrelay.exe version` reported `devrelay 0.4.0`; a fresh venv
+  installed the published wheel and reported `0.4.0`.
 
 ### Disclosed caveats
 
-- The Windows portable job and the real v0.4 tag publication have **not** been
-  exercised before this release; the first real dispatch is the final gate.
 - The portable zip is unsigned and not byte-reproducible; no SBOM.
 - Pause, session switching, persistent active-project selection and the `.exe`
   installer remain deferred.
+- Actions still emit Node.js 20 deprecation warnings; pinned action bumps are a
+  post-release hardening item.
 
 ## v0.3.0 (2026-10-21)
 

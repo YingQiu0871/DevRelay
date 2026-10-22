@@ -137,16 +137,17 @@ Trusted Publishing needs none.
 - Every later release goes through the same workflow: the tag shape, the packaged
   version and the `main` ancestry are validated per release, so nothing is pinned
   to a particular version any more.
-- Future hardening (recorded in `docs/BACKLOG.md` section 11): the `checkout`,
-  `setup-python` and `pypa/gh-action-pypi-publish` actions ride their
-  major/release tags today, and pinning them to commit SHAs is the remaining
-  step. The PyPI upload already carries attestations (`attestations: true`); the
-  GitHub Release assets do not have separate attestations.
+- Release actions are pinned to full commit SHAs.  GitHub still emits Node.js 20
+  deprecation warnings for the current pins; bumping to Node.js 24 action
+  releases is a post-release hardening item.  The PyPI upload already carries
+  attestations (`attestations: true`); the GitHub Release assets do not have
+  separate attestations.
 
 ## History
 
-`v0.1.0` is the only previously published release; the `v0.3.0` publication
-record is kept in `docs/RELEASE_CHECKLIST.md`. The first version of this guide
+`v0.1.0` and `v0.3.0` were previously published; the `v0.3.0` and `v0.4.0`
+publication records are kept in `docs/RELEASE_CHECKLIST.md`.  `v0.4.0` was the
+first release with the Windows portable asset. The first version of this guide
 and of the workflow belonged to a bootstrap: the workflow accepted **only** the
 `v0.1.0` tag, fetched the wheel and the sdist from an existing GitHub Release
 instead of building them, and compared them against hard-coded sha256 digests.

@@ -1,8 +1,8 @@
-# DevRelay v0.4.0 — release notes (prepared, publication pending)
+# DevRelay v0.4.0 — release notes
 
-Status: **RELEASE-PREPARATION DRAFT.**  The owner has not yet created the
-`v0.4.0` tag, draft Release, or dispatched publication.  Do not describe this
-version as published until the checklist is complete.
+Status: **PUBLISHED 2026-10-22.**  Tag `v0.4.0` peels to
+`c3a54162547cb810e454c498ee05f8eac33c99ae`; PyPI and the GitHub Release are
+public.  Evidence is recorded in [RELEASE_CHECKLIST.md](../RELEASE_CHECKLIST.md).
 
 ## Highlights
 
@@ -30,7 +30,7 @@ interrupt is an abort, not a pause.
 
 ## Install / upgrade
 
-Published artifacts (after the owner completes publication):
+Published artifacts:
 
 - PyPI: `python -m pip install devrelay==0.4.0`
 - GitHub Release: wheel, sdist, `SHA256SUMS`,
@@ -38,9 +38,6 @@ Published artifacts (after the owner completes publication):
 
 The portable zip is unsigned.  Extract it as a whole and verify `SHA256SUMS`
 before running `devrelay.exe`; it does not install a service or modify PATH.
-
-Until publication, `pip install devrelay` resolves the published **0.3.0**.
-Do not point users at 0.4.0 before it exists on PyPI.
 
 ## Security notes
 
@@ -56,14 +53,17 @@ Do not point users at 0.4.0 before it exists on PyPI.
 ## Verification
 
 - Full offline suite: **1,345 collected — 1,343 passed + 2 environment skips**
-  on Windows.
+  on Windows; CI `test.yml` 8/8 on commit `c3a5416`.
 - Release workflow tests: tag/PyPI/draft gates, portable job, four-asset gate,
   provenance and SHA pins.
-- Portable local smoke: rebuilt for 0.4.0, extracted from the zip and
-  `devrelay.exe version` reported `devrelay 0.4.0`; profile/static payload
-  assertions passed during the build.
-- The Windows runner/portable job is statically validated but has **not** run
-  against a real v0.4 tag.
+- Release workflow
+  [39858586636](https://github.com/YingQiu0871/DevRelay/actions/runs/39858586636):
+  both jobs succeeded; the Windows runner built the portable zip and the publish
+  job verified its commit provenance.
+- Downloaded-asset verification: `SHA256SUMS` matched all three artifacts;
+  extracted `devrelay.exe version` reported `devrelay 0.4.0`; a fresh venv
+  installed the published wheel and reported `0.4.0`.
+- The Windows runner/portable job has now run against the real v0.4 tag.
 
 ## Known limitations
 
@@ -73,11 +73,13 @@ Do not point users at 0.4.0 before it exists on PyPI.
 - Manual-prompt pending marker is process-local; the CLI can still start turns.
 - Portable build is not byte-reproducible; no SBOM/lock is bundled.
 - No `.exe` installer, code signing, winget/scoop manifest or auto-update.
-- The release workflow's first real Windows publication remains the final
-  gate; a failure must leave the Release as a draft and be fixed/re-run.
+- Actions still emit Node.js 20 deprecation warnings; bumping the pinned action
+  SHAs is a post-release hardening item.
+- The release workflow/portable job succeeded on the first real v0.4 tag; a
+  future failure must still leave the Release as a draft and be fixed/re-run.
 
-## Owner publication steps
+## Publication evidence
 
-See `docs/RELEASE_CHECKLIST.md` § v0.4.0.  The publisher creates the annotated
-tag, draft Release and dispatches `release.yml` with `tag=v0.4.0` and
-`confirm=PUBLISH`; the AI does none of those remote actions.
+See `docs/RELEASE_CHECKLIST.md` § v0.4.0.  The owner created the annotated tag,
+draft Release and dispatched `release.yml` with `tag=v0.4.0` and
+`confirm=PUBLISH`; the AI recorded and verified the evidence.

@@ -6,13 +6,17 @@ This document is the status ledger for DevRelay. It intentionally distinguishes 
 
 ## Current public release / 当前公开版本
 
-**v0.3.0** on `main` (2026-10-21), published to
-[PyPI](https://pypi.org/project/devrelay/0.3.0/) and
-[GitHub Releases](https://github.com/YingQiu0871/DevRelay/releases/tag/v0.3.0).
+**v0.4.0** on `main` (2026-10-22), published to
+[PyPI](https://pypi.org/project/devrelay/0.4.0/) and
+[GitHub Releases](https://github.com/YingQiu0871/DevRelay/releases/tag/v0.4.0).
 
-The public repository supports the v0.3 orchestration line: the v0.1 CLI workflow plus the v0.3 OpenCode-first orchestration surface. Publication evidence is recorded in [RELEASE_CHECKLIST.md](RELEASE_CHECKLIST.md); later milestones described below must not be presented as released capability until reviewed, merged, tagged, and published.
+The public repository supports the v0.4 orchestration line: the v0.1 CLI workflow, the v0.3 OpenCode-first orchestration surface, and the v0.4 local Web control plane. Publication evidence is recorded in [RELEASE_CHECKLIST.md](RELEASE_CHECKLIST.md).
 
-**v0.4.0 release candidate:** the A/B/C/D1/E1 stages are accepted and prepared on `main` (version `0.4.0`), but **not yet published**.  See [release notes](v0.4/RELEASE_NOTES_v0.4.0.md) and the v0.4.0 checklist section; public installation remains `0.3.0` until the owner tags/drafts/dispatches.
+The A/B/C/D1/E1 stages are accepted and shipped in 0.4.0.  v0.4.0 adds the
+loopback WebUI, read-only run/task dashboards, bounded decision/interrupt,
+manual prompt + normalized polling, project activation/session inventory and an
+unsigned portable Windows zip.  Pause, session switching, persistent active
+project selection and the `.exe` installer remain deferred.
 
 当前公开仓库支持 v0.3 编排线：v0.1 的 CLI 工作流，加上 v0.3 的 OpenCode-first 编排能力。发布证据记录在 [RELEASE_CHECKLIST.md](RELEASE_CHECKLIST.md)；下述后续里程碑只有在完成复审、合并、打 tag 并正式发布后，才可以作为“已发布能力”对外描述。
 
@@ -40,10 +44,10 @@ The public repository supports the v0.3 orchestration line: the v0.1 CLI workflo
 | Explicit GLM reviewer routing / GLM 审阅者路由 | ✅ | Stable | v0.3-C, shipped in 0.3.0 |
 | Automated bounded orchestration / 自动有界编排 | ✅ | Stable | v0.3-D, shipped in 0.3.0 |
 | Recovery and hardening (fail-closed core) / 恢复与加固（fail-closed 核心） | ✅ | Released with constraints | v0.3-E, shipped in 0.3.0; adoption disabled; platform gates open |
-| localhost WebUI / localhost WebUI | 🧪 v0.4.0 candidate | Accepted; publication pending | A/B/C/D1 |
-| Run/task dashboards, decision/interrupt, manual prompt/polling | 🧪 v0.4.0 candidate | Accepted; publication pending | C1/C2a/C2b/C2c |
-| Project activation + session inventory | 🧪 v0.4.0 candidate | Accepted; in-memory selection | D1 |
-| Windows portable zip / Windows portable zip | 🧪 v0.4.0 candidate | E1 accepted; unsigned | v0.4-E1 |
+| localhost WebUI / localhost WebUI | ✅ | Released | A/B/C/D1, shipped in 0.4.0 |
+| Run/task dashboards, decision/interrupt, manual prompt/polling | ✅ | Released | C1/C2a/C2b/C2c, shipped in 0.4.0 |
+| Project activation + session inventory | ✅ | Released with constraints | D1, shipped in 0.4.0; active selection in-memory |
+| Windows portable zip / Windows portable zip | ✅ | Released, unsigned | v0.4-E1 |
 | GitHub packaged Windows installer / GitHub Windows 安装包 | ❌ | 📋 Deferred (signing/Inno Setup) | v0.4-E2 |
 | Direct API execution mode / Direct API 执行模式 | ❌ | 📋 Optional future | v0.5+ |
 

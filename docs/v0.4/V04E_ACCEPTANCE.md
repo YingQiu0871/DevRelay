@@ -33,8 +33,10 @@ auto-update are explicitly deferred; no fake installer is shipped.**
 
 ## Limitations carried forward
 
-- The release workflow has **not** been dispatched against a real v0.4 tag; the
-  Windows runner job is statically validated, not exercised in CI.
+- **Post-acceptance evidence (2026-10-22):** the workflow was dispatched for
+  `v0.4.0`; both jobs succeeded, the Windows runner built the portable zip, and
+  the published assets/checksums were verified.  See
+  [RELEASE_CHECKLIST.md](../RELEASE_CHECKLIST.md).
 - The portable build is unsigned and not byte-reproducible; `.[web]` is resolved
   at release time and no SBOM/lock is bundled.
 - The final gate checks asset names and checksum membership, but a skip-rebuild

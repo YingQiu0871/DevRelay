@@ -275,11 +275,11 @@ Deferred:
 
 ### v0.4-E — Packaging & GitHub Release Automation
 
-Status: ✅ **E1 ACCEPTED / CLOSED by the owner on 2026-10-22.**  The `.exe`
-installer is explicitly deferred (no validated Inno Setup/code-signing path).
-See [V04E_SPEC.md](v0.4/V04E_SPEC.md), [V04E_REVIEW.md](v0.4/V04E_REVIEW.md) and
-[V04E_ACCEPTANCE.md](v0.4/V04E_ACCEPTANCE.md).  PyPI wheel/sdist and the GitHub
-Release already ship in 0.3.0; portable packaging is unreleased `main` work.
+Status: ✅ **E1 ACCEPTED / CLOSED and shipped in v0.4.0 (2026-10-22).**  The
+`.exe` installer is explicitly deferred (no validated Inno Setup/code-signing
+path).  See [V04E_SPEC.md](v0.4/V04E_SPEC.md), [V04E_REVIEW.md](v0.4/V04E_REVIEW.md),
+[V04E_ACCEPTANCE.md](v0.4/V04E_ACCEPTANCE.md) and the v0.4.0 evidence in
+[RELEASE_CHECKLIST.md](RELEASE_CHECKLIST.md).
 
 Target artifacts / 目标产物：
 
@@ -324,14 +324,13 @@ Potential directions / 潜在方向：
 
 ## Immediate next steps / 当前最近步骤
 
-1. **Publish v0.4.0** from the release-preparation commit: the owner creates the
-   annotated tag, draft Release and dispatches `release.yml`; record evidence in
-   [RELEASE_CHECKLIST.md](RELEASE_CHECKLIST.md).
+1. **v0.4.0 published (2026-10-22)** — tag/PyPI/GitHub Release and the portable
+   asset are verified; evidence is in [RELEASE_CHECKLIST.md](RELEASE_CHECKLIST.md).
 2. Close the remaining v0.3-E platform gates (G0.4/P4, G0.5/P6, G1, G2) and decide whether recovery adoption may be enabled; `adopt_completed_turn` stays disabled until then.
 3. Complete independent acceptance for v0.2-A/B/C, and close the v0.2-C E2E when Codex quota returns.
 4. Address v0.4 hardening residuals: pause/session switching, persistent active
-   project, prompt-marker durability, portable reproducibility/SBOM and an
-   optional signed installer.
+   project, prompt-marker durability, portable reproducibility/SBOM, Node 20
+   action bumps and an optional signed installer.
 
 ## Long-term product goal / 长期产品目标
 

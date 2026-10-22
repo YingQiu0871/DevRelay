@@ -6,9 +6,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## 0.4.0 - 2026-10-22
 
-Release-preparation entry.  Publication status and evidence are recorded in
-`docs/RELEASE_CHECKLIST.md`; do not describe these features as published until
-the owner completes the tag/draft/dispatch steps.
+Published 2026-10-22.  Evidence: tag `v0.4.0` (peeled `c3a5416`), PyPI and
+GitHub Release; see `docs/RELEASE_CHECKLIST.md` for asset digests and workflow
+runs.
 
 ### Added
 

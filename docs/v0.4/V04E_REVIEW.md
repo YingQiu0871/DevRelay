@@ -28,6 +28,8 @@ See [V04E_ACCEPTANCE.md](V04E_ACCEPTANCE.md).
 
 ## Remaining gate
 
-E1 is implemented and reviewed; owner acceptance is pending.  The portable build
-is unsigned and not byte-reproducible; no installer, code signing, winget/scoop
+E1 is implemented, reviewed and accepted.  Post-acceptance, the workflow was
+dispatched for `v0.4.0` and both jobs succeeded; the published portable zip,
+checksums and fresh-wheel install were verified.  The portable build remains
+unsigned and not byte-reproducible; no installer, code signing, winget/scoop
 manifests or auto-update ship.
