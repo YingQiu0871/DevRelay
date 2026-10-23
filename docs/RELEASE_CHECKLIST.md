@@ -65,8 +65,8 @@ here and the release is public.
 - The portable zip is unsigned and not byte-reproducible; no SBOM.
 - Pause, session switching, persistent active-project selection and the `.exe`
   installer remain deferred.
-- Actions still emit Node.js 20 deprecation warnings; pinned action bumps are a
-  post-release hardening item.
+- Post-release: actions were bumped to Node.js 24 releases after v0.4.0; the
+  next CI run verifies the new pins.
 
 ## v0.3.0 (2026-10-21)
 

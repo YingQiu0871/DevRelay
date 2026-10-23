@@ -137,11 +137,9 @@ Trusted Publishing needs none.
 - Every later release goes through the same workflow: the tag shape, the packaged
   version and the `main` ancestry are validated per release, so nothing is pinned
   to a particular version any more.
-- Release actions are pinned to full commit SHAs.  GitHub still emits Node.js 20
-  deprecation warnings for the current pins; bumping to Node.js 24 action
-  releases is a post-release hardening item.  The PyPI upload already carries
-  attestations (`attestations: true`); the GitHub Release assets do not have
-  separate attestations.
+- Release actions are pinned to full commit SHAs and target Node.js 24 action
+  releases.  The PyPI upload already carries attestations (`attestations:
+  true`); the GitHub Release assets do not have separate attestations.
 
 ## History
 

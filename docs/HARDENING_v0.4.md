@@ -8,6 +8,10 @@ new E1 portable package.  This is not a new feature stage.
 - **Release actions pinned to full commit SHAs** in `test.yml` and
   `release.yml` (checkout, setup-python, upload/download-artifact, PyPA
   publish).  A static test rejects unpinned remote actions.
+- **Node.js 24 action runtime** (2026-10-23): pinned actions upgraded to
+  checkout v7.0.1, setup-python v7.1.0, upload-artifact v7.0.2 and
+  download-artifact v8.0.2, removing the Node 20 warnings seen during the
+  v0.4.0 release.
 - **E1 portable packaging** added with a Windows-only PyInstaller onedir build;
   the release gate now requires the portable zip alongside wheel, sdist and
   `SHA256SUMS`.
@@ -35,7 +39,7 @@ new E1 portable package.  This is not a new feature stage.
 | Portable `.exe` installer / code signing not shipped | Deferred | E1 ships an unsigned portable zip; installer not faked. |
 | Shared `%TEMP%` residue can flake one baseline test | Operational | Run the suite with an isolated `TEMP/TMP/TMPDIR` (see below). |
 | Release action SHA values need manual review | Accepted | Static test enforces pinning shape; SHAs are reviewed on bump. |
-| Actions emit Node.js 20 deprecation warnings | Accepted | v0.4.0 release passed; bump pinned action SHAs to Node.js 24 releases post-release. |
+| Actions emit Node.js 20 deprecation warnings | Fixed | Bumped to Node.js 24 action releases; verify on the next CI run. |
 
 ## Verification
 

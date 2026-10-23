@@ -329,8 +329,8 @@ Potential directions / 潜在方向：
 2. Close the remaining v0.3-E platform gates (G0.4/P4, G0.5/P6, G1, G2) and decide whether recovery adoption may be enabled; `adopt_completed_turn` stays disabled until then.
 3. Complete independent acceptance for v0.2-A/B/C, and close the v0.2-C E2E when Codex quota returns.
 4. Address v0.4 hardening residuals: pause/session switching, persistent active
-   project, prompt-marker durability, portable reproducibility/SBOM, Node 20
-   action bumps and an optional signed installer.
+   project, prompt-marker durability, portable reproducibility/SBOM and an
+   optional signed installer.  (Node.js 24 action bumps are done.)
 
 ## Long-term product goal / 长期产品目标
 
