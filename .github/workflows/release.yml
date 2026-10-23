@@ -18,7 +18,7 @@
 # Rerun semantics: the version is looked up on PyPI before anything is built.
 # When it is already there, the build, checksum, twine, asset-upload and PyPI
 # steps are all skipped and only the final step runs - which still requires all
-# four release assets to be present before it publishes the Release. A rerun
+# five release assets to be present before it publishes the Release. A rerun
 # after a partial failure therefore never rebuilds a version PyPI already has,
 # and never publishes a Release whose assets are missing.
 #
@@ -306,11 +306,13 @@ jobs:
               if not any(n.endswith("devrelay/profiles/default.yaml") for n in names):
                   sys.exit(f"{label} is missing devrelay/profiles/default.yaml")
           portable = pathlib.Path("windows-assets/DevRelay-Portable-Windows-x64.zip")
-          if not portable.is_file():
-              sys.exit(f"Windows portable artifact is missing: {portable}")
+          sbom = pathlib.Path("windows-assets/DevRelay-SBOM.cdx.json")
+          for required in (portable, sbom):
+              if not required.is_file():
+                  sys.exit(f"Windows artifact is missing: {required}")
           digests = {
               p.name: hashlib.sha256(p.read_bytes()).hexdigest()
-              for p in wheels + sdists + [portable]
+              for p in wheels + sdists + [portable, sbom]
           }
           for name, digest in digests.items():
               print(f"{digest}  {name}")
@@ -318,7 +320,7 @@ jobs:
               "".join(f"{digest}  {name}" + chr(10) for name, digest in digests.items()),
               encoding="utf-8",
           )
-          print("artifact verification OK: one wheel, one sdist, portable zip, profiles/default.yaml packaged")
+          print("artifact verification OK: one wheel, one sdist, portable zip, SBOM, profiles/default.yaml packaged")
           '
           python -c "$PYCODE"
 
@@ -335,7 +337,7 @@ jobs:
           TAG: ${{ inputs.tag }}
         run: |
           set -euo pipefail
-          gh release upload "$TAG" dist/*.whl dist/*.tar.gz release-assets/SHA256SUMS windows-assets/DevRelay-Portable-Windows-x64.zip --clobber --repo "$GITHUB_REPOSITORY"
+          gh release upload "$TAG" dist/*.whl dist/*.tar.gz release-assets/SHA256SUMS windows-assets/DevRelay-Portable-Windows-x64.zip windows-assets/DevRelay-SBOM.cdx.json --clobber --repo "$GITHUB_REPOSITORY"
 
       - name: Publish to PyPI (Trusted Publishing / OIDC)
         if: steps.pypi.outputs.exists != 'true'
@@ -354,7 +356,7 @@ jobs:
           set -euo pipefail
           present=$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name')
           missing=()
-          for asset in "devrelay-${VERSION}-py3-none-any.whl" "devrelay-${VERSION}.tar.gz" "SHA256SUMS" "DevRelay-Portable-Windows-x64.zip"; do
+          for asset in "devrelay-${VERSION}-py3-none-any.whl" "devrelay-${VERSION}.tar.gz" "SHA256SUMS" "DevRelay-Portable-Windows-x64.zip" "DevRelay-SBOM.cdx.json"; do
             if ! printf '%s\n' "$present" | grep -Fxq "$asset"; then
               echo "::error::draft release $TAG has no asset named $asset; refusing to publish it."
               missing+=("$asset")

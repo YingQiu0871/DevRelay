@@ -287,19 +287,20 @@ Artifacts / 产物：
 
 ```text
 DevRelay-Portable-Windows-x64.zip
+DevRelay-SBOM.cdx.json          (next release)
 devrelay-<version>-py3-none-any.whl
 devrelay-<version>.tar.gz
 SHA256SUMS
 ```
 
-The release workflow builds the wheel/sdist and the portable zip from the tag,
-checks all four assets, and only then publishes the GitHub Release and PyPI
-artifacts.  The portable build is unsigned; verify `SHA256SUMS`.  The `.exe`
-installer, code signing and package-manager manifests remain future work.
+v0.4.0 shipped the wheel, sdist, portable zip and `SHA256SUMS`.  The next
+release adds the CycloneDX SBOM and requires five assets before publication.
+The portable build is unsigned; verify `SHA256SUMS`.  The `.exe` installer,
+code signing and package-manager manifests remain future work.
 
-发布工作流从 tag 构建 wheel/sdist 与 portable zip，校验四个资产后才发布
-GitHub Release 与 PyPI 产物。portable 构建未签名，请校验 `SHA256SUMS`；
-`.exe` 安装包、代码签名与包管理器清单仍为后续工作。
+v0.4.0 发布了 wheel、sdist、portable zip 与 `SHA256SUMS`。下一个版本增加
+CycloneDX SBOM，并在发布前校验五个资产。portable 构建未签名，请校验
+`SHA256SUMS`；`.exe` 安装包、代码签名与包管理器清单仍为后续工作。
 
 ## License / 许可证
 

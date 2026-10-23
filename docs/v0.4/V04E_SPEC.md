@@ -27,10 +27,17 @@ The existing tag-driven `release.yml` flow now:
 
 1. builds the portable zip in a separate `windows-portable` job from the tag;
 2. makes `publish` depend on that job;
-3. downloads the zip into the release job;
-4. includes the portable zip in `SHA256SUMS`;
-5. attaches wheel, sdist, `SHA256SUMS` and the portable zip to the draft;
-6. refuses to publish unless all four assets are present.
+3. downloads the zip and SBOM into the release job;
+4. includes the portable zip and SBOM in `SHA256SUMS`;
+5. attaches wheel, sdist, `SHA256SUMS`, the portable zip and the CycloneDX SBOM
+   to the draft;
+6. refuses to publish unless all five assets are present.
+
+Post-release hardening (2026-10-23): `scripts/build_sbom.py` generates a
+CycloneDX 1.5 SBOM for the portable runtime dependency closure.  The portable
+zip contains `SBOM.cdx.json`; a standalone `DevRelay-SBOM.cdx.json` is produced
+for release assets.  This applies to the next release; v0.4.0 itself did not
+carry an SBOM.
 
 The PyPI upload remains the same Trusted Publishing/OIDC flow.  A rerun after
 PyPI already has the version still skips rebuilds by design; the final asset
@@ -60,15 +67,16 @@ check reports how to restore missing draft assets.
   attached and required by the final gate.
 - `scripts/build_portable.py` is a Windows-only build helper; verification runs
   `devrelay.exe version` before zipping.
-- Full suite: **1,345 collected** (1,343 pass + 2 environment skips; E1 adds
-  static release-window/provenance and portable-builder tests).
+- Full suite after post-release SBOM hardening: **1,348 collected** (1,346 pass
+  + 2 environment skips; E1/SBOM adds static release-window/provenance,
+  portable-builder and CycloneDX tests).
 
 ## Acceptance IDs
 
 | ID | Criterion |
 | --- | --- |
 | E1-1 | A Windows portable zip is built from the release tag |
-| E1-2 | The zip is included in SHA256SUMS and attached to the draft |
-| E1-3 | Publication is refused unless wheel, sdist, SHA256SUMS and portable zip are present |
+| E1-2 | The zip and SBOM are included in SHA256SUMS and attached to the draft |
+| E1-3 | Publication is refused unless wheel, sdist, SHA256SUMS, portable zip and SBOM are present |
 | E1-4 | Existing tag/PyPI/draft safety gates remain intact |
 | E1-5 | Installer `.exe` is explicitly deferred, not faked |

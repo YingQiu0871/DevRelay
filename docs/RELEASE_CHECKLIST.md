@@ -67,6 +67,8 @@ here and the release is public.
   installer remain deferred.
 - Post-release: actions were bumped to Node.js 24 releases after v0.4.0; the
   next CI run verifies the new pins.
+- Post-release: a CycloneDX SBOM generator and a five-asset release gate were
+  added for the next release.  v0.4.0 itself has no SBOM asset.
 
 ## v0.3.0 (2026-10-21)
 

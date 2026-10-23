@@ -1,7 +1,7 @@
 # DevRelay v0.4 hardening pass
 
-Date: 2026-10-22.  Scope: accepted A/B/C/D surface, release pipeline and the
-new E1 portable package.  This is not a new feature stage.
+Date: 2026-10-22/23.  Scope: accepted A/B/C/D surface, release pipeline and the
+E1 portable package.  This is not a new feature stage.
 
 ## Completed in this pass
 
@@ -13,8 +13,13 @@ new E1 portable package.  This is not a new feature stage.
   download-artifact v8.0.2, removing the Node 20 warnings seen during the
   v0.4.0 release.
 - **E1 portable packaging** added with a Windows-only PyInstaller onedir build;
-  the release gate now requires the portable zip alongside wheel, sdist and
-  `SHA256SUMS`.
+  the release gate requires the portable zip and CycloneDX SBOM alongside wheel,
+  sdist and `SHA256SUMS`.
+- **CycloneDX SBOM** (2026-10-23): `scripts/build_sbom.py` resolves the portable
+  runtime dependency closure (base + `web` extra, markers evaluated) and emits
+  CycloneDX 1.5 JSON.  The portable zip contains `SBOM.cdx.json`; a standalone
+  `DevRelay-SBOM.cdx.json` is attached to the next Release.  This is not a
+  byte-reproducible build or a lock file.
 - **Prior review P1/P2 fixes retained**:
   - D1 activation no longer awaits while holding a thread lock;
   - C2c provider I/O is offloaded from the event loop and pending manual
@@ -22,9 +27,9 @@ new E1 portable package.  This is not a new feature stage.
   - C2b state conflicts map to 409 and interrupt requires a matching in-flight
     role turn;
   - C2a task diff is a read-only `git diff --stat` with no raw path leak.
-- **Release tests** cover the portable asset, checksum membership, attachment
-  order and final four-asset gate in addition to the existing tag/PyPI/draft
-  safety checks.
+- **Release tests** cover the portable/SBOM assets, checksum membership,
+  attachment order and final five-asset gate in addition to the existing
+  tag/PyPI/draft safety checks.
 - **Idempotent reruns no longer block on the Windows build**: the Windows job
   now checks PyPI before building, and the publish job tolerates the absent
   artifact while still requiring the already-attached portable asset.  A rerun
@@ -42,6 +47,7 @@ new E1 portable package.  This is not a new feature stage.
 | Project root replaced at the same path | Accepted | Same-user registry trust; activation rejects non-absolute roots. |
 | Provider call can occupy one worker for bridge timeout | Accepted | `run_in_threadpool` keeps the event loop responsive; bridge timeout bounds it. |
 | Portable `.exe` installer / code signing not shipped | Deferred | E1 ships an unsigned portable zip; installer not faked. |
+| Portable build is not byte-reproducible | Accepted | SBOM records resolved versions; no lock/SBOM reproducibility guarantee yet. |
 | Shared `%TEMP%` residue can flake one baseline test | Operational | Run the suite with an isolated `TEMP/TMP/TMPDIR` (see below). |
 | Release action SHA values need manual review | Accepted | Static test enforces pinning shape; SHAs are reviewed on bump. |
 | Actions emit Node.js 20 deprecation warnings | Fixed | Bumped to Node.js 24 action releases; verify on the next CI run. |
@@ -56,8 +62,14 @@ python -m pytest -q
 python -m pytest -q tests/test_release_workflow.py
 ```
 
-Expected: full suite **1,345 collected — 1,343 pass + 2 environment skips**;
-release workflow tests green.
+Expected: full suite **1,348 collected — 1,346 pass + 2 environment skips**;
+release workflow and SBOM tests green.
+
+SBOM generation:
+
+```powershell
+python scripts/build_sbom.py --version 0.4.0 --output DevRelay-SBOM.cdx.json
+```
 
 Portable build (Windows, with PyInstaller installed):
 

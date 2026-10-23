@@ -1,8 +1,9 @@
-"""Build the Windows x64 portable folder and zip from a built wheel."""
+"""Build the Windows x64 portable folder/zip from the checked-out source."""
 
 from __future__ import annotations
 
 import argparse
+import json
 import shutil
 import subprocess
 import sys
@@ -10,6 +11,8 @@ import tempfile
 import zipfile
 from importlib.metadata import PackageNotFoundError, version as installed_version
 from pathlib import Path
+
+from build_sbom import build as build_sbom
 
 README = """DevRelay portable {version} (Windows x64)
 
@@ -26,6 +29,9 @@ Start Menu shortcuts.  Extract the whole archive and keep devrelay.exe next to
 the _internal directory.
 
 The build is unsigned.  Verify SHA256SUMS before running it.
+
+SBOM.cdx.json describes the bundled runtime dependency versions in CycloneDX
+1.5 JSON.
 """
 
 
@@ -119,11 +125,19 @@ def build(dist: Path, output: Path, version: str) -> Path:
         ):
             if not (portable / relative).is_file():
                 raise SystemExit(f"portable payload is missing {relative}")
+        sbom = build_sbom(version)
+        (portable / "SBOM.cdx.json").write_text(
+            json.dumps(sbom, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+        )
+        (output / "DevRelay-SBOM.cdx.json").write_text(
+            json.dumps(sbom, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+        )
         archive = output / "DevRelay-Portable-Windows-x64.zip"
         expected_entries = {
             "DevRelay/devrelay.exe",
             "DevRelay/README-PORTABLE.txt",
             "DevRelay/LICENSE",
+            "DevRelay/SBOM.cdx.json",
         }
         with zipfile.ZipFile(archive, "w", compression=zipfile.ZIP_DEFLATED) as handle:
             for item in sorted(portable.rglob("*")):

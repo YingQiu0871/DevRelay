@@ -378,6 +378,7 @@ def test_assets_are_attached_to_the_draft_before_the_pypi_upload():
     assert "dist/*.whl" in run and "dist/*.tar.gz" in run
     assert "release-assets/SHA256SUMS" in run
     assert "windows-assets/DevRelay-Portable-Windows-x64.zip" in run
+    assert "windows-assets/DevRelay-SBOM.cdx.json" in run
     assert "--clobber" in run
     assert steps[publish_index]["with"]["packages-dir"] == "dist/"
     # `--clobber` belongs to the asset upload only. The final step may mention
@@ -466,6 +467,7 @@ def test_the_final_step_publishes_the_release_only_after_checking_its_assets():
     assert "devrelay-${VERSION}.tar.gz" in run
     assert "SHA256SUMS" in run
     assert "DevRelay-Portable-Windows-x64.zip" in run
+    assert "DevRelay-SBOM.cdx.json" in run
     assert "exit 1" in run
     assert run.index("--json assets") < run.index("gh release edit")
     assert "--draft=false" in run
@@ -618,3 +620,5 @@ def test_portable_builder_checks_zip_layout_metadata_and_payload():
     assert "_internal/devrelay/profiles/default.yaml" in script
     assert "_internal/devrelay/web/static/index.html" in script
     assert "installed_version" in script
+    assert "build_sbom(version)" in script
+    assert "DevRelay/SBOM.cdx.json" in script

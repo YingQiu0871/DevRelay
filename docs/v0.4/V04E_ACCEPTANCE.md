@@ -38,7 +38,9 @@ auto-update are explicitly deferred; no fake installer is shipped.**
   the published assets/checksums were verified.  See
   [RELEASE_CHECKLIST.md](../RELEASE_CHECKLIST.md).
 - The portable build is unsigned and not byte-reproducible; `.[web]` is resolved
-  at release time and no SBOM/lock is bundled.
+  at release time.  Post-acceptance (2026-10-23) a CycloneDX SBOM generator and
+  five-asset gate were added for the next release; v0.4.0 itself has no SBOM
+  asset and no lock file.
 - The final gate checks asset names and checksum membership, but a skip-rebuild
   rerun cannot re-download assets by design; missing/wrong assets require manual
   restoration.
