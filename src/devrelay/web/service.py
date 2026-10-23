@@ -21,6 +21,7 @@ from devrelay.web.config import ConfigWriter
 from devrelay.web.errors import WebApiError
 from devrelay.web.models import MAX_LIST_LIMIT
 from devrelay.web.prompt_markers import PromptMarkerError, PromptMarkerStore
+from devrelay.web.run_holds import RunHoldError, RunHoldStore
 
 MAX_RUN_SCAN = 500
 MAX_TASK_SCAN = 200
@@ -62,6 +63,7 @@ class WebReadService:
         self._prompt_lock = threading.RLock()
         self._prompt_markers = PromptMarkerStore(self.devrelay_dir)
         self._prompt_pending_fallback: set[str] = set()
+        self._run_holds = RunHoldStore(self.devrelay_dir)
         # The process keeps the wiring it loaded at startup.  Comparing the
         # current file digest against this marker tells the UI that a restart is
         # required after a successful A2 write.
@@ -137,11 +139,54 @@ class WebReadService:
                 "run id must be DR-<32 lowercase hex characters>",
             )
         try:
-            return self.surface.orchestration.get_run(run_id).summary()
+            summary = self.surface.orchestration.get_run(run_id).summary()
         except OrchestrationError as exc:
             code = getattr(exc, "code", "orchestration_error")
             status = 404 if code == "orchestration_run_not_found" else 503
             raise WebApiError(code, redact_text(str(exc))[:300], status_code=status) from exc
+        try:
+            summary["hold"] = self._run_holds.get(run_id)
+        except RunHoldError:
+            summary["hold"] = None
+            summary["hold_error"] = "unavailable"
+        return summary
+
+    def hold_run(
+        self, run_id: str, expected_updated_at: str, reason: str
+    ) -> dict[str, Any]:
+        current = self.run(run_id)
+        if current.get("terminal"):
+            raise WebApiError("run_terminal", "the run is already terminal", status_code=409)
+        if str(current.get("updated_at", "")) != expected_updated_at:
+            raise WebApiError(
+                "run_changed",
+                "the run changed since it was loaded; reload and retry",
+                status_code=409,
+            )
+        try:
+            entry = self._run_holds.hold(
+                run_id, reason=self._bounded(redact_text(reason), 500)
+            )
+        except RunHoldError as exc:
+            raise WebApiError(
+                "run_hold_unavailable",
+                "the advisory hold store cannot be written safely",
+                status_code=503,
+            ) from exc
+        return {"run_id": run_id, "held": True, "hold": entry}
+
+    def release_hold(self, run_id: str) -> dict[str, Any]:
+        if not valid_run_id(run_id):
+            raise WebApiError("invalid_run_id", "run_id is invalid", status_code=400)
+        try:
+            cleared = self._run_holds.release(run_id)
+        except RunHoldError as exc:
+            raise WebApiError(
+                "run_hold_unavailable",
+                "the advisory hold store cannot be read safely",
+                status_code=503,
+            ) from exc
+        return {"run_id": run_id, "held": False, "cleared": cleared}
 
     def decide_run(
         self,
@@ -214,6 +259,20 @@ class WebReadService:
                 raise WebApiError(
                     "manual_prompt_pending",
                     "a previous manual prompt may still be in flight; resolve it before sending another",
+                    status_code=409,
+                )
+            try:
+                hold = self._run_holds.get(run_id)
+            except RunHoldError as exc:
+                raise WebApiError(
+                    "run_hold_unavailable",
+                    "the advisory hold store cannot be read safely; refusing to send",
+                    status_code=503,
+                ) from exc
+            if hold is not None:
+                raise WebApiError(
+                    "run_held",
+                    "an advisory hold is active; release it before a new manual prompt",
                     status_code=409,
                 )
             current = self.run(run_id)

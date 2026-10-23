@@ -33,6 +33,8 @@ from devrelay.web.models import (
     ConfigWriteRequest,
     ProjectActivateRequest,
     RunDecisionRequest,
+    RunHoldReleaseRequest,
+    RunHoldRequest,
     RunInterruptRequest,
     RunPromptRecoverRequest,
     RunPromptRequest,
@@ -456,6 +458,51 @@ class LocalControlApi:
             success(data, request_id=str(request.state.request_id)),
         )
 
+    async def run_hold(self, request: Request) -> Response:
+        if request.headers.get("x-devrelay-confirm") != "apply":
+            raise WebApiError(
+                "confirmation_required",
+                "X-DevRelay-Confirm: apply is required",
+                status_code=403,
+            )
+        payload: RunHoldRequest = await _read_json(request, RunHoldRequest)
+        if payload.confirm != "apply":
+            raise WebApiError(
+                "confirmation_required", "confirm must be apply", status_code=403
+            )
+        run_id = str(request.path_params.get("run_id", ""))
+        data = await run_in_threadpool(
+            self.service.hold_run,
+            run_id,
+            payload.expected_updated_at,
+            payload.reason,
+        )
+        return _json(
+            request,
+            success(data, request_id=str(request.state.request_id)),
+        )
+
+    async def run_hold_release(self, request: Request) -> Response:
+        if request.headers.get("x-devrelay-confirm") != "apply":
+            raise WebApiError(
+                "confirmation_required",
+                "X-DevRelay-Confirm: apply is required",
+                status_code=403,
+            )
+        payload: RunHoldReleaseRequest = await _read_json(
+            request, RunHoldReleaseRequest
+        )
+        if payload.confirm != "apply":
+            raise WebApiError(
+                "confirmation_required", "confirm must be apply", status_code=403
+            )
+        run_id = str(request.path_params.get("run_id", ""))
+        data = await run_in_threadpool(self.service.release_hold, run_id)
+        return _json(
+            request,
+            success(data, request_id=str(request.state.request_id)),
+        )
+
     async def run_prompt_recover(self, request: Request) -> Response:
         if request.headers.get("x-devrelay-confirm") != "apply":
             raise WebApiError(
@@ -698,6 +745,12 @@ def create_app(
             Route(
                 "/api/runs/{run_id}/prompt/recover",
                 api.run_prompt_recover,
+                methods=["POST"],
+            ),
+            Route("/api/runs/{run_id}/hold", api.run_hold, methods=["POST"]),
+            Route(
+                "/api/runs/{run_id}/hold/release",
+                api.run_hold_release,
                 methods=["POST"],
             ),
             Route("/api/runs/{run_id}/messages", api.run_messages, methods=["GET"]),

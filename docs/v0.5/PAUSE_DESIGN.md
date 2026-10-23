@@ -1,7 +1,9 @@
 # DevRelay v0.5 — Pause design review (proposal)
 
-Status: **DESIGN PROPOSAL — NOT IMPLEMENTED.**  No pause endpoint, run state or
-UI control is exposed today.  Interrupt remains an abort request, not a pause.
+Status: **ADVISORY HOLD IMPLEMENTED (WEB-ONLY), 2026-10-23.**  The hold is a
+durable web control-plane flag, not a pause state and not a provider pause.  The
+CLI does **not** consult it yet, so the guarantee is explicitly web-only.  True
+`PAUSED` state remains unimplemented; interrupt remains an abort request.
 
 ## Problem
 
@@ -9,10 +11,22 @@ The accepted orchestration state machine has no pause state.  A pause is useful
 only if it has explicit semantics for an already-running provider turn; silently
 blocking the next request is not a pause and must not be described as one.
 
-## Candidate A — advisory hold (recommended first increment)
+## Candidate A — advisory hold (implemented web-only)
 
 A durable, run-scoped hold flag (outside the run state machine) checked before
 starting the next model-bearing action.
+
+Implemented endpoints:
+
+- `POST /api/runs/{run_id}/hold`
+- `POST /api/runs/{run_id}/hold/release`
+- run detail exposes `hold` (and `hold_error` if the store is unreadable)
+- the WebUI has Hold/Release controls and displays the reason
+
+The store is `.devrelay/web/run_holds.json`; a held run's manual prompt is
+rejected with `409 run_held`.  A corrupt hold store causes manual prompt/hold to
+fail closed with `503 run_hold_unavailable`.  The CLI does not consult the store
+yet; that is the remaining P6 gap.
 
 ### Contract
 

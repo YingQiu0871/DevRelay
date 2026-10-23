@@ -67,8 +67,8 @@ python -m pytest -q
 python -m pytest -q tests/test_release_workflow.py
 ```
 
-Expected: full suite **1,349 collected — 1,347 pass + 2 environment skips**;
-release workflow, SBOM and marker tests green.
+Expected: full suite **1,356 collected — 1,354 pass + 2 environment skips**;
+release workflow, SBOM, marker, hold and lease tests green.
 
 SBOM generation:
 

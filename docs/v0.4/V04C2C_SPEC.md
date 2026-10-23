@@ -97,7 +97,7 @@ Run detail gains:
 - UI: prompt/polling markers, no pause control.
 - Marker: file persistence across a new service instance, no prompt text,
   corruption fail-closed, confirmed recovery.
-- Full suite after marker hardening: **1,349 collected** (1,347 pass + 2
+- Full suite after marker/hold hardening: **1,356 collected** (1,354 pass + 2
   environment skips on this Windows host).
 
 ## Acceptance IDs

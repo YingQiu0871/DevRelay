@@ -12,8 +12,14 @@ artifacts.
   asset + five-asset release gate.
 - Durable manual-prompt pending markers and confirmed recovery
   (`.devrelay/web/manual_prompts.json`, metadata only).
+- Advisory hold (web-only) with durable `.devrelay/web/run_holds.json`,
+  confirmation-gated hold/release and manual-prompt blocking.
+- Session lease store foundation (`.devrelay/web/session_leases.json`), tested
+  but not wired and with no switch endpoint.
+- Reproducibility comparison helper (`scripts/compare_builds.py`) — harness only;
+  no reproducibility claim.
 
-## Pause — design only, not implemented
+## Pause — advisory hold implemented, true pause still design-only
 
 Detailed proposal: [v0.5/PAUSE_DESIGN.md](v0.5/PAUSE_DESIGN.md).
 
@@ -46,7 +52,8 @@ It does **not** switch a run to another OpenCode session.
 
 Requirements before any switch endpoint:
 
-- a durable session ownership/lease record (not just a string on a run);
+- a durable session ownership/lease record (store foundation now exists, but it
+  is not wired to any product path);
 - proof that the target session belongs to the same workspace and is not used by
   another in-flight run;
 - an explicit turn-boundary operation, not an arbitrary session-id parameter;
@@ -55,7 +62,7 @@ Requirements before any switch endpoint:
 Until those exist, the only session operations remain the run's own manual
 prompt/read/interrupt.  A `session_id` request field is not accepted.
 
-## Reproducible build / lock file — not implemented
+## Reproducible build / lock file — harness only, not proven
 
 Detailed plan: [REPRODUCIBILITY_PLAN.md](REPRODUCIBILITY_PLAN.md).
 

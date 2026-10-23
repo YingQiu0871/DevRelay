@@ -460,6 +460,14 @@
     $("run-decide").disabled = detail.state !== "AWAITING_DECISION" || Boolean(detail.in_flight);
     $("run-interrupt").disabled = !detail.in_flight;
     $("run-prompt-send").disabled = Boolean(detail.terminal || detail.in_flight);
+    const hold = detail.hold || null;
+    $("run-hold").disabled = Boolean(detail.terminal || hold);
+    $("run-hold-release").disabled = !hold;
+    $("run-hold-status").textContent = hold
+      ? `Held: ${hold.reason || "(no reason)"}`
+      : detail.hold_error
+        ? "Hold store unavailable."
+        : "No advisory hold.";
     const metrics = $("run-detail-metrics");
     metrics.replaceChildren();
     appendDetailRow(metrics, "State", detail.state);
@@ -958,6 +966,65 @@
     }
   }
 
+  async function holdRun() {
+    const detail = state.runDetail;
+    if (!detail) return;
+    const reason = window.prompt("Reason for the advisory hold (does not pause a provider turn):");
+    if (!reason || !reason.trim()) return;
+    if (!window.confirm(`Place an advisory hold on ${detail.run_id}? This blocks new web prompts, not an in-flight turn.`)) {
+      return;
+    }
+    try {
+      const data = await api(`/api/runs/${encodeURIComponent(detail.run_id)}/hold`, {
+        method: "POST",
+        headers: { "X-DevRelay-Confirm": "apply" },
+        body: {
+          expected_updated_at: detail.updated_at,
+          reason: reason.trim(),
+          confirm: "apply",
+        },
+      });
+      await loadRunDetail(detail.run_id);
+      $("run-action-result").textContent = data.held
+        ? "Advisory hold recorded."
+        : "Advisory hold was not recorded.";
+    } catch (error) {
+      if (error.status === 401) {
+        clearSession();
+        showLogin("Session expired. Enter the token again.");
+      } else {
+        $("run-action-result").textContent = `${error.code ? `${error.code}: ` : ""}${error.message}`;
+      }
+    }
+  }
+
+  async function releaseHold() {
+    const detail = state.runDetail;
+    if (!detail) return;
+    if (!window.confirm(`Release the advisory hold on ${detail.run_id}?`)) return;
+    try {
+      const data = await api(
+        `/api/runs/${encodeURIComponent(detail.run_id)}/hold/release`,
+        {
+          method: "POST",
+          headers: { "X-DevRelay-Confirm": "apply" },
+          body: { confirm: "apply" },
+        },
+      );
+      await loadRunDetail(detail.run_id);
+      $("run-action-result").textContent = data.cleared
+        ? "Advisory hold released."
+        : "No advisory hold was active.";
+    } catch (error) {
+      if (error.status === 401) {
+        clearSession();
+        showLogin("Session expired. Enter the token again.");
+      } else {
+        $("run-action-result").textContent = `${error.code ? `${error.code}: ` : ""}${error.message}`;
+      }
+    }
+  }
+
   async function activateProject() {
     const select = $("project-select");
     const projectId = select.value;
@@ -1424,6 +1491,8 @@
   $("project-activate").addEventListener("click", activateProject);
   $("run-decide").addEventListener("click", decideRun);
   $("run-interrupt").addEventListener("click", interruptRun);
+  $("run-hold").addEventListener("click", holdRun);
+  $("run-hold-release").addEventListener("click", releaseHold);
   $("run-prompt-send").addEventListener("click", sendManualPrompt);
   $("run-prompt-recover").addEventListener("click", recoverPromptMarker);
   $("messages-refresh").addEventListener("click", () => loadMessages(true));

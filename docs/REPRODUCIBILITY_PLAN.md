@@ -48,6 +48,13 @@ A release may claim reproducibility only when:
 
 Until then, docs say **SBOM, not reproducible**.
 
+## Proof helper
+
+`scripts/compare_builds.py` compares two artifact directories by exact SHA-256
+and fails on missing/extra/changed files.  It is only the comparison harness;
+it is not evidence until two clean, locked builds are produced and the result is
+recorded.
+
 ## Commands (illustrative; not yet wired)
 
 ```powershell
@@ -59,6 +66,7 @@ python scripts/build_portable.py --version 0.4.0 --dist dist --output build-a
 # repeat in a clean directory/image -> build-b
 Get-FileHash build-a/DevRelay-Portable-Windows-x64.zip
 Get-FileHash build-b/DevRelay-Portable-Windows-x64.zip
+python scripts/compare_builds.py build-a build-b
 ```
 
 ## Acceptance criteria

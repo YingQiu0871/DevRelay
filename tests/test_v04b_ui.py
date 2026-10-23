@@ -806,6 +806,114 @@ def test_manual_prompt_marker_corruption_fails_closed(
     assert called["value"] is False
 
 
+def test_advisory_hold_is_durable_and_blocks_manual_prompt(
+    client: TestClient, workspace: Path, monkeypatch
+):
+    from devrelay.mcp.models import ok_envelope
+    from devrelay.mcp.tools import McpToolSurface
+    from devrelay.orchestration.store import OrchestrationStore
+    from v03d_helpers import honest_run
+    from devrelay.web.service import WebReadService
+
+    called = {"value": False}
+
+    def fake_prompt(self, session_id=None, prompt=None, agent=None, model=None):
+        called["value"] = True
+        return ok_envelope(
+            "opencode_send_prompt",
+            {
+                "session_id": session_id,
+                "state": "COMPLETED",
+                "messages": [],
+                "reply_pending": False,
+                "submission_uncertain": False,
+            },
+        )
+
+    monkeypatch.setattr(McpToolSurface, "opencode_send_prompt", fake_prompt)
+    auth = _auth(client)
+    store = OrchestrationStore(workspace / ".devrelay")
+    run = honest_run(workspace=str(workspace.resolve()))
+    store.create(run)
+    detail = client.get(f"/api/runs/{run.run_id}", headers=auth).json()["data"]
+    headers = {**auth, "X-DevRelay-Confirm": "apply"}
+    body = {
+        "expected_updated_at": detail["updated_at"],
+        "reason": "operator review",
+        "confirm": "apply",
+    }
+    assert client.post(f"/api/runs/{run.run_id}/hold", json=body, headers=auth).status_code == 403
+    held = client.post(f"/api/runs/{run.run_id}/hold", json=body, headers=headers)
+    assert held.status_code == 200, held.text
+    assert held.json()["data"]["held"] is True
+    assert held.json()["data"]["hold"]["reason"] == "operator review"
+    detail = client.get(f"/api/runs/{run.run_id}", headers=auth).json()["data"]
+    assert detail["hold"]["reason"] == "operator review"
+    assert detail["state"] == run.state.value
+
+    api = client.app.app.state.api
+    fresh = WebReadService(
+        workspace_root=api.service.workspace_root,
+        wiring=api.service.wiring,
+        devrelay_dir=api.service.devrelay_dir,
+    )
+    assert fresh.run(run.run_id)["hold"]["reason"] == "operator review"
+
+    blocked = client.post(
+        f"/api/runs/{run.run_id}/prompt",
+        json={"role": "implementer", "prompt": "blocked", "confirm": "apply"},
+        headers=headers,
+    )
+    assert blocked.status_code == 409
+    assert blocked.json()["error"]["code"] == "run_held"
+    assert called["value"] is False
+
+    released = client.post(
+        f"/api/runs/{run.run_id}/hold/release",
+        json={"confirm": "apply"},
+        headers=headers,
+    )
+    assert released.status_code == 200
+    assert released.json()["data"]["cleared"] is True
+    allowed = client.post(
+        f"/api/runs/{run.run_id}/prompt",
+        json={"role": "implementer", "prompt": "allowed", "confirm": "apply"},
+        headers=headers,
+    )
+    assert allowed.status_code == 200
+
+
+def test_advisory_hold_store_corruption_fails_closed(
+    client: TestClient, workspace: Path, monkeypatch
+):
+    from devrelay.mcp.tools import McpToolSurface
+    from devrelay.orchestration.store import OrchestrationStore
+    from v03d_helpers import honest_run
+
+    hold_path = workspace / ".devrelay" / "web" / "run_holds.json"
+    hold_path.parent.mkdir(parents=True, exist_ok=True)
+    hold_path.write_text("not-json", encoding="utf-8")
+    called = {"value": False}
+
+    def fake_prompt(self, session_id=None, prompt=None, agent=None, model=None):
+        called["value"] = True
+        raise AssertionError("provider must not be called")
+
+    monkeypatch.setattr(McpToolSurface, "opencode_send_prompt", fake_prompt)
+    auth = _auth(client)
+    store = OrchestrationStore(workspace / ".devrelay")
+    run = honest_run(workspace=str(workspace.resolve()))
+    store.create(run)
+    response = client.post(
+        f"/api/runs/{run.run_id}/prompt",
+        json={"role": "implementer", "prompt": "x", "confirm": "apply"},
+        headers={**auth, "X-DevRelay-Confirm": "apply"},
+    )
+    assert response.status_code == 503
+    assert response.json()["error"]["code"] == "run_hold_unavailable"
+    assert called["value"] is False
+
+
 def test_c2c_ui_has_manual_prompt_and_polling(client: TestClient):
     html = client.get("/").text
     script = client.get("/assets/app.js").text
@@ -818,6 +926,10 @@ def test_c2c_ui_has_manual_prompt_and_polling(client: TestClient):
         assert marker in html
     assert "sendManualPrompt" in script
     assert "recoverPromptMarker" in script
+    assert "holdRun" in script
+    assert "releaseHold" in script
+    assert 'id="run-hold"' in html
+    assert 'id="run-hold-release"' in html
     assert "loadMessages" in script
     assert "/api/runs/" in script
     assert 'id="run-pause"' not in html

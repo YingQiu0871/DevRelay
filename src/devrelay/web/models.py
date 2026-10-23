@@ -58,6 +58,28 @@ class RunInterruptRequest(BaseModel):
     confirm: Literal["apply"]
 
 
+class RunHoldRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    expected_updated_at: str
+    reason: str = Field(min_length=1, max_length=500)
+    confirm: Literal["apply"]
+
+    @field_validator("reason")
+    @classmethod
+    def _reason_not_blank(cls, value: str) -> str:
+        text = value.strip()
+        if not text:
+            raise ValueError("reason must not be blank")
+        return text
+
+
+class RunHoldReleaseRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    confirm: Literal["apply"]
+
+
 class RunPromptRecoverRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
