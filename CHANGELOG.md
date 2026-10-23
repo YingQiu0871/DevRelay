@@ -4,6 +4,24 @@ All notable changes to DevRelay are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## Unreleased
+
+### Added
+
+- CycloneDX 1.5 SBOM generation for the portable runtime dependency closure;
+  the portable zip contains `SBOM.cdx.json` and next releases attach a
+  standalone `DevRelay-SBOM.cdx.json`.
+- Durable manual-prompt pending markers under
+  `.devrelay/web/manual_prompts.json` (metadata only, no prompt text) and a
+  confirmed `POST /api/runs/{run_id}/prompt/recover` endpoint/UI action.
+
+### Changed
+
+- Release actions pinned to Node.js 24 releases.
+- Published-version reruns skip the Windows portable rebuild.
+- The release gate now requires five assets (wheel, sdist, SHA256SUMS, portable
+  zip, SBOM) for the next release.
+
 ## 0.4.0 - 2026-10-22
 
 Published 2026-10-22.  Evidence: tag `v0.4.0` (peeled `c3a5416`), PyPI and

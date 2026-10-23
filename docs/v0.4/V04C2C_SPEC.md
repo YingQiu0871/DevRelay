@@ -33,6 +33,13 @@ does not fake a pause by blocking a request or mutating a run into a new state.
   `completed: false` and its evidence fields, not hidden.
 - Returns bounded normalized message text plus call/status evidence; no raw
   provider body, tool arguments, prompt echo or credential.
+- A pending/uncertain prompt records a durable marker under
+  `.devrelay/web/manual_prompts.json` containing only run id, role session,
+  evidence code and timestamps — never prompt/reply text.  Further web prompts
+  for that run return `409 manual_prompt_pending` across process restarts.
+- `POST /api/runs/{run_id}/prompt/recover` (header+body confirmation) clears
+  the marker without sending, aborting or resubmitting anything.  Operators must
+  verify the session first; the UI exposes the same explicit action.
 
 ### Message polling
 
@@ -66,6 +73,8 @@ Run detail gains:
   and passed only to the accepted message reader.
 - No client-supplied session ID, provider URL, tool argument, filesystem path
   or raw output is accepted/returned.
+- The durable marker is metadata-only and assumes one web writer process (the
+  accepted bridge boundary); recovery requires explicit confirmation.
 - Prompt text is not logged; it is sent once to the selected run session.
 - Message text is sanitized by the accepted bridge and redacted again by the
   web adapter; output is bounded.
@@ -86,8 +95,10 @@ Run detail gains:
 - Messages: role scoping, cursor pass-through, bounded normalized message,
   invalid role and auth.
 - UI: prompt/polling markers, no pause control.
-- Full suite: **1,337 collected** (1,335 pass + 2 environment skips on this
-  Windows host).
+- Marker: file persistence across a new service instance, no prompt text,
+  corruption fail-closed, confirmed recovery.
+- Full suite after marker hardening: **1,349 collected** (1,347 pass + 2
+  environment skips on this Windows host).
 
 ## Acceptance IDs
 
@@ -98,4 +109,6 @@ Run detail gains:
 | C2c-3 | Message polling is role/cursor scoped and bounded/redacted |
 | C2c-4 | No pause, stream, arbitrary session, path or raw output is exposed |
 | C2c-5 | UI confirms prompt, polls only on request/opt-in, and has no pause control |
+| C2c-7 | Pending marker survives a process restart without storing prompt text |
+| C2c-8 | Confirmed recovery clears the marker without provider side effects |
 | C2c-6 | Existing C1/C2a/C2b/A/B tests remain green |

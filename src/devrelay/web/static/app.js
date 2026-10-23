@@ -924,6 +924,40 @@
     }
   }
 
+  async function recoverPromptMarker() {
+    const detail = state.runDetail;
+    if (!detail) return;
+    if (!window.confirm(
+      "Clear the durable pending manual-prompt marker? Verify the session has no unresolved reply first; this does not interrupt or resend anything.",
+    )) {
+      return;
+    }
+    const button = $("run-prompt-recover");
+    button.disabled = true;
+    try {
+      const data = await api(
+        `/api/runs/${encodeURIComponent(detail.run_id)}/prompt/recover`,
+        {
+          method: "POST",
+          headers: { "X-DevRelay-Confirm": "apply" },
+          body: { confirm: "apply" },
+        },
+      );
+      $("run-action-result").textContent = data.cleared
+        ? "Pending manual-prompt marker cleared."
+        : "No pending manual-prompt marker was recorded.";
+    } catch (error) {
+      if (error.status === 401) {
+        clearSession();
+        showLogin("Session expired. Enter the token again.");
+      } else {
+        $("run-action-result").textContent = `${error.code ? `${error.code}: ` : ""}${error.message}`;
+      }
+    } finally {
+      button.disabled = false;
+    }
+  }
+
   async function activateProject() {
     const select = $("project-select");
     const projectId = select.value;
@@ -1391,6 +1425,7 @@
   $("run-decide").addEventListener("click", decideRun);
   $("run-interrupt").addEventListener("click", interruptRun);
   $("run-prompt-send").addEventListener("click", sendManualPrompt);
+  $("run-prompt-recover").addEventListener("click", recoverPromptMarker);
   $("messages-refresh").addEventListener("click", () => loadMessages(true));
   $("messages-auto").addEventListener("change", (event) => {
     setMessagesAuto(event.target.checked);

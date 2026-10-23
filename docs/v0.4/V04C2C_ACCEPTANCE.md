@@ -32,10 +32,14 @@ has no pause state; interrupt is an abort, not a pause.
 
 ## Limitations carried forward
 
-- The manual-prompt pending marker is process-local; a web process restart loses
-  it and the CLI can still start an orchestration turn.
-- A pending manual reply cannot be proven settled from the web surface; further
-  web prompts are blocked until restart or explicit operational recovery.
+- **Post-acceptance (2026-10-23):** the pending marker is now durable under
+  `.devrelay/web/manual_prompts.json` and survives a web process restart; a
+  confirmed `POST /api/runs/{run_id}/prompt/recover` clears it without provider
+  side effects.  The marker still does not store prompt/reply text.
+- The CLI can still start an orchestration turn outside the web surface; the
+  durable marker only blocks further web prompts for that run.
+- A pending manual reply cannot be proven settled from the web surface; the
+  operator must verify before clearing the marker.
 - Pause remains unsupported; C2c does not fake it.
 - Message polling is not a WebSocket/SSE stream.
 - Provider I/O is offloaded, but a slow/hung provider can still hold one worker
@@ -43,4 +47,5 @@ has no pause state; interrupt is an abort, not a pause.
 
 ## Immutability
 
-`v0.3.0` remains the published release.  C2c is unreleased `main` work.
+C2c shipped in v0.4.0 (released 2026-10-22); the durable marker/recovery work is
+post-release `main` hardening, not part of the 0.4.0 artifact.

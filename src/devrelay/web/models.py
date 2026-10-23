@@ -58,6 +58,12 @@ class RunInterruptRequest(BaseModel):
     confirm: Literal["apply"]
 
 
+class RunPromptRecoverRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    confirm: Literal["apply"]
+
+
 class ProjectActivateRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 

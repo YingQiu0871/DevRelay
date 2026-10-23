@@ -9,7 +9,7 @@ implied.  See [V04C2C_ACCEPTANCE.md](V04C2C_ACCEPTANCE.md).
 | ID | Severity | Finding | Disposition |
 | --- | --- | --- | --- |
 | C2c-R1 | P2 | Prompt/message provider I/O ran synchronously on the uvicorn event loop; a slow bridge could stall health and polling. | All four run-control routes now run their service call through `run_in_threadpool`; the event loop remains responsive and a slow fake can be exercised without freezing the server. |
-| C2c-R2 | P2 | Manual prompt bypassed the orchestration turn lifecycle; two queued prompts could pass the `in_flight` check, and a pending manual reply could be attributed to the next turn. | Added a per-process prompt lock and a `manual_prompt_pending` marker: concurrent prompts are serialized, and a reply-pending/uncertain result blocks further web prompts with `409`.  The marker is not durable across process restart and the CLI can still start a turn; this residual is documented. |
+| C2c-R2 | P2 | Manual prompt bypassed the orchestration turn lifecycle; two queued prompts could pass the `in_flight` check, and a pending manual reply could be attributed to the next turn. | Added a prompt lock and a `manual_prompt_pending` marker: concurrent prompts are serialized, and a reply-pending/uncertain result blocks further web prompts with `409`.  Post-acceptance (2026-10-23) the marker is durable under `.devrelay/web/manual_prompts.json` (metadata only, no prompt text), survives restart, and has a confirmed recovery endpoint.  The CLI can still start a turn; that residual remains. |
 | C2c-R3 | P2 | Tests did not cover in-flight/terminal/blank prompts, pending `completed:false`, cursor bounds, message truncation, raw-secret redaction or the new UI. | Added terminal/in-flight/blank 409/422 tests, a pending/redaction test, cursor >512, 50/4,000/16,384 truncation and prompt/polling UI markers. |
 | C2c-R4 | P3 | `session_id` was echoed despite the "no arbitrary session exposed" criterion. | Removed from C2c responses; the run's session IDs remain part of the accepted run summary, not a new C2c field. |
 | C2c-R5 | P3 | `_data` re-raised upstream error text unredacted/unbounded; whitespace-only prompts reached the tool and returned 503. | `_data` redacts/bounds messages; the prompt model rejects blank/whitespace-only prompts with 422. |
@@ -30,6 +30,7 @@ implied.  See [V04C2C_ACCEPTANCE.md](V04C2C_ACCEPTANCE.md).
 
 ## Remaining gate
 
-C2c is implemented and reviewed with findings; owner acceptance is pending.
-The manual-prompt marker is process-local; a restart loses it, and the CLI can
-still start orchestration turns.  Pause remains unsupported.
+C2c is implemented, reviewed and accepted; it shipped in v0.4.0.  The durable
+manual-prompt marker and recovery endpoint are post-release hardening (next
+artifact).  The CLI can still start orchestration turns; pause remains
+unsupported.

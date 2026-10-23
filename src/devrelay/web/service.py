@@ -20,6 +20,7 @@ from devrelay.workspace.runner import CommandRunner
 from devrelay.web.config import ConfigWriter
 from devrelay.web.errors import WebApiError
 from devrelay.web.models import MAX_LIST_LIMIT
+from devrelay.web.prompt_markers import PromptMarkerError, PromptMarkerStore
 
 MAX_RUN_SCAN = 500
 MAX_TASK_SCAN = 200
@@ -59,7 +60,8 @@ class WebReadService:
         )
         self.config_writer = ConfigWriter(self.workspace_root, self.devrelay_dir)
         self._prompt_lock = threading.RLock()
-        self._manual_prompt_pending: set[str] = set()
+        self._prompt_markers = PromptMarkerStore(self.devrelay_dir)
+        self._prompt_pending_fallback: set[str] = set()
         # The process keeps the wiring it loaded at startup.  Comparing the
         # current file digest against this marker tells the UI that a restart is
         # required after a successful A2 write.
@@ -200,7 +202,15 @@ class WebReadService:
 
     def prompt_run(self, run_id: str, role: str, prompt: str) -> dict[str, Any]:
         with self._prompt_lock:
-            if run_id in self._manual_prompt_pending:
+            try:
+                pending = self._prompt_markers.pending(run_id)
+            except PromptMarkerError as exc:
+                raise WebApiError(
+                    "manual_prompt_marker_unavailable",
+                    "the manual prompt marker cannot be read safely; refusing to send",
+                    status_code=503,
+                ) from exc
+            if pending is not None or run_id in self._prompt_pending_fallback:
                 raise WebApiError(
                     "manual_prompt_pending",
                     "a previous manual prompt may still be in flight; resolve it before sending another",
@@ -248,8 +258,40 @@ class WebReadService:
                     status_code=503,
                 )
             if result["reply_pending"] or result["submission_uncertain"]:
-                self._manual_prompt_pending.add(run_id)
+                try:
+                    self._prompt_markers.mark(
+                        run_id,
+                        session_id=session_id,
+                        code=str(result["code"] or "submission_not_confirmed"),
+                        reply_pending=bool(result["reply_pending"]),
+                        submission_uncertain=bool(result["submission_uncertain"]),
+                    )
+                    result["marker_persisted"] = True
+                except PromptMarkerError:
+                    # The provider may already have accepted the prompt; keep a
+                    # process-local fallback so a failed write cannot permit a
+                    # duplicate prompt, but never claim durability.
+                    self._prompt_pending_fallback.add(run_id)
+                    result["marker_persisted"] = False
             return result
+
+    def recover_prompt(self, run_id: str) -> dict[str, Any]:
+        if not valid_run_id(run_id):
+            raise WebApiError("invalid_run_id", "run_id is invalid", status_code=400)
+        with self._prompt_lock:
+            try:
+                previous = self._prompt_markers.pending(run_id)
+                self._prompt_pending_fallback.discard(run_id)
+                if previous is None:
+                    return {"cleared": False, "run_id": run_id}
+                self._prompt_markers.clear(run_id)
+            except PromptMarkerError as exc:
+                raise WebApiError(
+                    "manual_prompt_marker_unavailable",
+                    "the manual prompt marker cannot be recovered safely",
+                    status_code=503,
+                ) from exc
+        return {"cleared": True, "run_id": run_id, "previous": previous}
 
     def run_messages(
         self, run_id: str, role: str, cursor: str | None = None

@@ -34,6 +34,7 @@ from devrelay.web.models import (
     ProjectActivateRequest,
     RunDecisionRequest,
     RunInterruptRequest,
+    RunPromptRecoverRequest,
     RunPromptRequest,
     SessionRequest,
     WiringWriteRequest,
@@ -455,6 +456,27 @@ class LocalControlApi:
             success(data, request_id=str(request.state.request_id)),
         )
 
+    async def run_prompt_recover(self, request: Request) -> Response:
+        if request.headers.get("x-devrelay-confirm") != "apply":
+            raise WebApiError(
+                "confirmation_required",
+                "X-DevRelay-Confirm: apply is required",
+                status_code=403,
+            )
+        payload: RunPromptRecoverRequest = await _read_json(
+            request, RunPromptRecoverRequest
+        )
+        if payload.confirm != "apply":
+            raise WebApiError(
+                "confirmation_required", "confirm must be apply", status_code=403
+            )
+        run_id = str(request.path_params.get("run_id", ""))
+        data = await run_in_threadpool(self.service.recover_prompt, run_id)
+        return _json(
+            request,
+            success(data, request_id=str(request.state.request_id)),
+        )
+
     async def run_messages(self, request: Request) -> Response:
         role = request.query_params.get("role", "")
         if role not in ("implementer", "reviewer"):
@@ -673,6 +695,11 @@ def create_app(
             Route("/api/runs/{run_id}/decide", api.run_decide, methods=["POST"]),
             Route("/api/runs/{run_id}/interrupt", api.run_interrupt, methods=["POST"]),
             Route("/api/runs/{run_id}/prompt", api.run_prompt, methods=["POST"]),
+            Route(
+                "/api/runs/{run_id}/prompt/recover",
+                api.run_prompt_recover,
+                methods=["POST"],
+            ),
             Route("/api/runs/{run_id}/messages", api.run_messages, methods=["GET"]),
             Route("/api/tasks", api.tasks, methods=["GET"]),
             Route("/api/tasks/{task_id}", api.task, methods=["GET"]),

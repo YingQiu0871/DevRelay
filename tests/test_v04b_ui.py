@@ -724,7 +724,7 @@ def test_manual_prompt_pending_and_redaction(client: TestClient, workspace: Path
     headers = {**auth, "X-DevRelay-Confirm": "apply"}
     first = client.post(
         f"/api/runs/{run.run_id}/prompt",
-        json={"role": "implementer", "prompt": "x", "confirm": "apply"},
+        json={"role": "implementer", "prompt": "manual-check-unique", "confirm": "apply"},
         headers=headers,
     )
     assert first.status_code == 200
@@ -740,13 +740,84 @@ def test_manual_prompt_pending_and_redaction(client: TestClient, workspace: Path
     assert second.status_code == 409
     assert second.json()["error"]["code"] == "manual_prompt_pending"
 
+    marker = workspace / ".devrelay" / "web" / "manual_prompts.json"
+    assert marker.is_file()
+    marker_text = marker.read_text(encoding="utf-8")
+    assert "manual-check-unique" not in marker_text
+    assert "secret-token" not in marker_text
+
+    from devrelay.web.errors import WebApiError
+    from devrelay.web.service import WebReadService
+
+    api = client.app.app.state.api
+    fresh = WebReadService(
+        workspace_root=api.service.workspace_root,
+        wiring=api.service.wiring,
+        devrelay_dir=api.service.devrelay_dir,
+    )
+    with pytest.raises(WebApiError) as exc:
+        fresh.prompt_run(run.run_id, "implementer", "after restart")
+    assert exc.value.code == "manual_prompt_pending"
+
+    recovered = client.post(
+        f"/api/runs/{run.run_id}/prompt/recover",
+        json={"confirm": "apply"},
+        headers=headers,
+    )
+    assert recovered.status_code == 200, recovered.text
+    assert recovered.json()["data"]["cleared"] is True
+    assert run.run_id not in marker.read_text(encoding="utf-8")
+    after = client.post(
+        f"/api/runs/{run.run_id}/prompt",
+        json={"role": "implementer", "prompt": "after recovery", "confirm": "apply"},
+        headers=headers,
+    )
+    assert after.status_code == 200
+
+
+def test_manual_prompt_marker_corruption_fails_closed(
+    client: TestClient, workspace: Path, monkeypatch
+):
+    from devrelay.mcp.tools import McpToolSurface
+    from devrelay.orchestration.store import OrchestrationStore
+    from v03d_helpers import honest_run
+
+    marker = workspace / ".devrelay" / "web" / "manual_prompts.json"
+    marker.parent.mkdir(parents=True, exist_ok=True)
+    marker.write_text("not-json", encoding="utf-8")
+    called = {"value": False}
+
+    def fake_prompt(self, session_id=None, prompt=None, agent=None, model=None):
+        called["value"] = True
+        raise AssertionError("provider must not be called when the marker is corrupt")
+
+    monkeypatch.setattr(McpToolSurface, "opencode_send_prompt", fake_prompt)
+    auth = _auth(client)
+    store = OrchestrationStore(workspace / ".devrelay")
+    run = honest_run(workspace=str(workspace.resolve()))
+    store.create(run)
+    response = client.post(
+        f"/api/runs/{run.run_id}/prompt",
+        json={"role": "implementer", "prompt": "x", "confirm": "apply"},
+        headers={**auth, "X-DevRelay-Confirm": "apply"},
+    )
+    assert response.status_code == 503
+    assert response.json()["error"]["code"] == "manual_prompt_marker_unavailable"
+    assert called["value"] is False
+
 
 def test_c2c_ui_has_manual_prompt_and_polling(client: TestClient):
     html = client.get("/").text
     script = client.get("/assets/app.js").text
-    for marker in ("run-prompt", "messages-view", "Live normalized messages"):
+    for marker in (
+        "run-prompt",
+        "run-prompt-recover",
+        "messages-view",
+        "Live normalized messages",
+    ):
         assert marker in html
     assert "sendManualPrompt" in script
+    assert "recoverPromptMarker" in script
     assert "loadMessages" in script
     assert "/api/runs/" in script
     assert 'id="run-pause"' not in html

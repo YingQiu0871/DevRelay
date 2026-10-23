@@ -35,13 +35,18 @@ E1 portable package.  This is not a new feature stage.
   artifact while still requiring the already-attached portable asset.  A rerun
   after PyPI publication cannot spend 45 minutes rebuilding a discarded zip or
   fail merely because the Windows runner is unavailable.
+- **Durable manual-prompt marker** (2026-10-23): pending/uncertain manual
+  prompts now write a metadata-only marker under
+  `.devrelay/web/manual_prompts.json`; the marker survives a web restart and is
+  cleared only by the confirmed `POST /api/runs/{run_id}/prompt/recover`
+  endpoint.  No prompt/reply text is stored.
 
 ## Residual risks (explicitly not solved)
 
 | Risk | State | Mitigation |
 | --- | --- | --- |
 | Pause not implemented | Accepted | No fake pause; interrupt is an abort. |
-| Manual-prompt pending marker is process-local | Accepted | Restart clears it; CLI can still start turns. |
+| Manual-prompt marker can be cleared only by explicit recovery | Accepted | Durable metadata-only marker; confirmed recovery; CLI can still start turns. |
 | Run-recorded session is not exclusive ownership | Accepted | Role + matching in-flight turn required; bridge verifies workspace only. |
 | Active project selection is in-memory | Accepted | Restart returns to the CLI workspace; documented. |
 | Project root replaced at the same path | Accepted | Same-user registry trust; activation rejects non-absolute roots. |
@@ -62,8 +67,8 @@ python -m pytest -q
 python -m pytest -q tests/test_release_workflow.py
 ```
 
-Expected: full suite **1,348 collected — 1,346 pass + 2 environment skips**;
-release workflow and SBOM tests green.
+Expected: full suite **1,349 collected — 1,347 pass + 2 environment skips**;
+release workflow, SBOM and marker tests green.
 
 SBOM generation:
 

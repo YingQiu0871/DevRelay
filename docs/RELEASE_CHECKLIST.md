@@ -69,6 +69,9 @@ here and the release is public.
   next CI run verifies the new pins.
 - Post-release: a CycloneDX SBOM generator and a five-asset release gate were
   added for the next release.  v0.4.0 itself has no SBOM asset.
+- Post-release: pending manual-prompt markers are now durable under
+  `.devrelay/web/manual_prompts.json` with a confirmed recovery endpoint; v0.4.0
+  still has the earlier process-local behavior.
 
 ## v0.3.0 (2026-10-21)
 
