@@ -119,9 +119,12 @@ Before anything is built, step 6 asks PyPI for
 `urls[].filename` - not from the HTTP status alone:
 
 - **404** - the version is not on PyPI: build, attach and upload normally.
-- **200, one wheel and one sdist** - the version is already published: steps
-  7-11 are skipped by design and only step 12 runs. A rerun can therefore never
-  rebuild or re-upload a version PyPI already has.
+- **200, one wheel and one sdist** - the version is already published: the
+  Windows build, checksum, attach and PyPI steps are skipped by design and only
+  the final asset gate runs.  The Windows job checks PyPI first, so a rerun no
+  longer spends 45 minutes rebuilding an artifact that will be discarded; the
+  publish job tolerates the missing artifact and still requires the portable zip
+  already attached to the draft.
 - **200, partial upload** (wheel without sdist, sdist without wheel, or
   duplicates) - the run **fails** and reports which file names are missing, to be
   uploaded by hand. PyPI files are immutable: the workflow never rebuilds and

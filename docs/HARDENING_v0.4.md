@@ -25,6 +25,11 @@ new E1 portable package.  This is not a new feature stage.
 - **Release tests** cover the portable asset, checksum membership, attachment
   order and final four-asset gate in addition to the existing tag/PyPI/draft
   safety checks.
+- **Idempotent reruns no longer block on the Windows build**: the Windows job
+  now checks PyPI before building, and the publish job tolerates the absent
+  artifact while still requiring the already-attached portable asset.  A rerun
+  after PyPI publication cannot spend 45 minutes rebuilding a discarded zip or
+  fail merely because the Windows runner is unavailable.
 
 ## Residual risks (explicitly not solved)
 

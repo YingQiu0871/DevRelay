@@ -586,11 +586,28 @@ def test_windows_portable_is_built_from_the_tag_and_gated_before_publish():
     )
     assert upload["with"]["name"] == "windows-portable"
     assert upload["with"]["path"] == "windows-assets/"
+    build = next(
+        step for step in windows["steps"] if step.get("name") == "Build portable zip"
+    )
+    assert build["if"] == "steps.pypi.outputs.exists != 'true'"
+    assert any(
+        step.get("name") == "Check whether this version is already on PyPI"
+        for step in windows["steps"]
+    )
     publish_text = "\n".join(step.get("run", "") for step in publish["steps"])
     assert "windows-assets/COMMIT_SHA.txt" in publish_text
-    assert "actions/download-artifact" in str(
-        [step.get("uses", "") for step in publish["steps"]]
+    download = next(
+        step
+        for step in publish["steps"]
+        if "actions/download-artifact" in str(step.get("uses", ""))
     )
+    assert download.get("continue-on-error") is True
+    provenance = next(
+        step
+        for step in publish["steps"]
+        if step.get("name") == "Verify the Windows artifact came from this commit"
+    )
+    assert "hashFiles('windows-assets/COMMIT_SHA.txt')" in provenance["if"]
 
 
 def test_portable_builder_checks_zip_layout_metadata_and_payload():
