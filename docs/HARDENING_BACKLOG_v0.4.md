@@ -15,6 +15,8 @@ artifacts.
 
 ## Pause — design only, not implemented
 
+Detailed proposal: [v0.5/PAUSE_DESIGN.md](v0.5/PAUSE_DESIGN.md).
+
 The accepted orchestration state machine has no pause state.  Adding one is not
 a rename of `interrupt`: interrupt is an abort request, not a pause.
 
@@ -36,6 +38,9 @@ gate.  No endpoint is exposed today.
 
 ## OpenCode session switching — design only, not implemented
 
+Detailed proposal:
+[v0.5/SESSION_OWNERSHIP_DESIGN.md](v0.5/SESSION_OWNERSHIP_DESIGN.md).
+
 Current D1 behavior is project activation plus run-recorded session inventory.
 It does **not** switch a run to another OpenCode session.
 
@@ -52,6 +57,8 @@ prompt/read/interrupt.  A `session_id` request field is not accepted.
 
 ## Reproducible build / lock file — not implemented
 
+Detailed plan: [REPRODUCIBILITY_PLAN.md](REPRODUCIBILITY_PLAN.md).
+
 The SBOM records resolved versions but the build is not byte-reproducible:
 `pip install ".[web]"` resolves open ranges at release time, PyInstaller embeds
 non-deterministic metadata, and no lock/SBOM hash chain is enforced.
@@ -66,6 +73,8 @@ A future pass should:
 No lock file is being invented from the current dev environment.
 
 ## v0.3-E platform gates — external evidence still open
+
+Preparation checklist: [v0.3/V03E_GATE_PREP.md](v0.3/V03E_GATE_PREP.md).
 
 The mandatory fail-closed core is shipped, but the platform gates are not
 complete and cannot be closed by editing this repository:
