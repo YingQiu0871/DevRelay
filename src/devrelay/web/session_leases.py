@@ -41,6 +41,10 @@ class SessionLeaseStore:
         with self._lock:
             return self._read()["leases"].get(session_id)
 
+    def all(self) -> dict[str, dict[str, Any]]:
+        with self._lock:
+            return dict(self._read()["leases"])
+
     def active_for(self, run_id: str, role: str) -> list[dict[str, Any]]:
         with self._lock:
             return [

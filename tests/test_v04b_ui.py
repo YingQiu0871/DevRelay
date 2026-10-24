@@ -1074,18 +1074,40 @@ def test_sessions_inventory_is_run_recorded(client: TestClient, workspace: Path)
     store = OrchestrationStore(workspace / ".devrelay")
     run = honest_run(workspace=str(workspace.resolve()))
     store.create(run)
+    from devrelay.web.session_leases import SessionLeaseStore
+
+    SessionLeaseStore(workspace / ".devrelay").acquire(
+        run.implementer_session_id,
+        workspace=str(workspace.resolve()),
+        run_id=run.run_id,
+        role="implementer",
+    )
     response = client.get("/api/sessions", headers=auth)
     assert response.status_code == 200
     data = response.json()["data"]
     ids = {item["session_id"] for item in data["sessions"]}
     assert run.implementer_session_id in ids
     assert run.reviewer_session_id in ids
+    leased = next(
+        item for item in data["sessions"] if item["session_id"] == run.implementer_session_id
+    )
+    assert leased["lease"]["run_id"] == run.run_id
+    assert leased["lease"]["state"] == "active"
+    assert data["lease_error"] == ""
     for item in data["sessions"]:
         assert "parts" not in item
         assert "prompt" not in item
     assert client.get("/api/sessions").status_code == 401
     assert (
         client.get(f"/api/sessions/{run.implementer_session_id}", headers=auth).status_code
+        == 404
+    )
+    assert (
+        client.post(
+            f"/api/runs/{run.run_id}/session/switch",
+            json={"role": "implementer", "target_session_id": "other", "confirm": "apply"},
+            headers={**auth, "X-DevRelay-Confirm": "apply"},
+        ).status_code
         == 404
     )
 

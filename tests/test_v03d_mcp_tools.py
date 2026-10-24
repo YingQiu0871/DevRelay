@@ -36,6 +36,17 @@ ORCHESTRATION_TOOLS = [
 RECOVERY_TOOLS = ["devrelay_reconcile_run", "devrelay_resolve_recovery"]
 
 
+def test_advisory_hold_blocks_mcp_model_actions(tmp_path):
+    harness = build(tmp_path)
+    run_id = run_id_of(harness.server)
+    harness.surface.run_holds.hold(run_id, reason="operator review")
+    blocked = phase(harness.server, "devrelay_run_implementer", run_id)
+    assert blocked["ok"] is False
+    assert blocked["error"]["type"] == "run_held"
+    assert harness.posts == []
+    assert harness.surface.run_holds.release(run_id) is True
+
+
 def tools_of(server) -> dict:
     return {tool.name: tool for tool in asyncio.run(server.list_tools())}
 

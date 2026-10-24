@@ -1,8 +1,10 @@
 # DevRelay portable reproducibility & lock plan
 
-Status: **PLAN — NOT PROVEN.**  The portable build is not byte-reproducible and
-no lock file is shipped today.  The CycloneDX SBOM records resolved versions but
-does not make a build deterministic.
+Status: **PARTIALLY PROVEN — same-environment double build PASS; no release
+lock/universal claim.**  A proof-only Windows/Python 3.14 constraints file and
+the comparison harness produced identical artifacts across two builds.  The
+review/release build is Python 3.13, so this is not yet a release reproducibility
+claim or a lock for the published portable.
 
 ## Current gaps
 
@@ -27,8 +29,9 @@ does not make a build deterministic.
 ## Proposed deterministic build
 
 - Use a fixed `SOURCE_DATE_EPOCH` and a fixed build root.
-- Normalize zip entry order, timestamps and permissions (currently only POSIX
-  separators are normalized).
+- Normalize zip entry order, timestamps and permissions.  The portable builder
+  now sorts entries and writes fixed timestamps/permissions; PyInstaller payload
+  timestamps remain part of the double-build comparison.
 - Disable PyInstaller timestamp/version resources or pin them.
 - Generate the SBOM with the fixed epoch and a deterministic serial.
 - Build twice from the same tag + lock in the same image; compare SHA-256 of

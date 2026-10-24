@@ -1,9 +1,10 @@
 # DevRelay v0.5 — Pause design review (proposal)
 
-Status: **ADVISORY HOLD IMPLEMENTED (WEB-ONLY), 2026-10-23.**  The hold is a
-durable web control-plane flag, not a pause state and not a provider pause.  The
-CLI does **not** consult it yet, so the guarantee is explicitly web-only.  True
-`PAUSED` state remains unimplemented; interrupt remains an abort request.
+Status: **ADVISORY HOLD IMPLEMENTED (WEB + MCP ACTION PATH), 2026-10-24.**  The
+hold is a durable control-plane flag, not a pause state and not a provider pause.
+The accepted MCP action path consults it; there is no standalone CLI orchestration
+command in this tree.  True `PAUSED` state remains unimplemented; interrupt
+remains an abort request.
 
 ## Problem
 
@@ -25,8 +26,10 @@ Implemented endpoints:
 
 The store is `.devrelay/web/run_holds.json`; a held run's manual prompt is
 rejected with `409 run_held`.  A corrupt hold store causes manual prompt/hold to
-fail closed with `503 run_hold_unavailable`.  The CLI does not consult the store
-yet; that is the remaining P6 gap.
+fail closed with `503 run_hold_unavailable`.  The accepted MCP action path
+(`devrelay_run_implementer` / `devrelay_run_reviewer`) also checks the store and
+returns `run_held` without provider I/O.  Any future standalone CLI orchestration
+command must use the same store.
 
 ### Contract
 

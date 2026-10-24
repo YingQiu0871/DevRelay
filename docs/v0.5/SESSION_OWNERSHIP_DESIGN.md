@@ -1,10 +1,10 @@
 # DevRelay v0.5 — OpenCode session ownership & switching design
 
-Status: **LEASE STORE IMPLEMENTED, NOT WIRED / NO SWITCH ENDPOINT
-(2026-10-23).**  `src/devrelay/web/session_leases.py` implements the durable
-lease foundation and tests, but D1 still ships project activation + run-recorded
-session inventory only.  There is no session-switch endpoint, no `session_id`
-request field, and no product path acquires a lease yet.
+Status: **LEASE STORE + READ-ONLY INVENTORY INTEGRATION, NO SWITCH ENDPOINT
+(2026-10-24).**  `src/devrelay/web/session_leases.py` implements the durable
+lease foundation and tests; `GET /api/sessions` now reports each session's lease
+metadata (or `lease_error`), but no product path acquires/releases leases and
+there is no session-switch endpoint or `session_id` request field.
 
 ## Current facts
 

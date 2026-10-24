@@ -44,11 +44,31 @@ def _wheel(dist: Path, version: str) -> Path:
     return matches[0]
 
 
-def build(dist: Path, output: Path, version: str) -> Path:
+def _check_lock(path: Path) -> None:
+    for raw in path.read_text(encoding="utf-8").splitlines():
+        line = raw.strip()
+        if not line or line.startswith("#"):
+            continue
+        if "==" not in line:
+            raise SystemExit(f"invalid lock line: {raw!r}")
+        name, expected = (part.strip() for part in line.split("==", 1))
+        try:
+            actual = installed_version(name)
+        except PackageNotFoundError as exc:
+            raise SystemExit(f"locked package is not installed: {name}") from exc
+        if actual != expected:
+            raise SystemExit(f"lock mismatch for {name}: {actual} != {expected}")
+
+
+def build(
+    dist: Path, output: Path, version: str, lock: Path | None = None
+) -> Path:
     if sys.platform != "win32":
         raise SystemExit("the portable build must run on Windows")
     root = Path(__file__).resolve().parents[1]
     wheel = _wheel(dist, version)
+    if lock is not None:
+        _check_lock(lock)
     try:
         installed = installed_version("devrelay")
     except PackageNotFoundError as exc:
@@ -100,6 +120,21 @@ def build(dist: Path, output: Path, version: str) -> Path:
         exe = portable / "devrelay.exe"
         if not exe.is_file():
             raise SystemExit(f"PyInstaller did not produce {exe}")
+        # PyInstaller writes base_library.zip in a nondeterministic order while
+        # keeping identical members.  Normalize it so a same-environment
+        # double-build comparison is meaningful; order is not semantic.
+        base_library = portable / "_internal" / "base_library.zip"
+        if base_library.is_file():
+            with zipfile.ZipFile(base_library) as source:
+                members = {
+                    name: source.read(name) for name in source.namelist()
+                }
+            with zipfile.ZipFile(base_library, "w") as target:
+                for name in sorted(members):
+                    info = zipfile.ZipInfo(name, date_time=(1980, 1, 1, 0, 0, 0))
+                    info.compress_type = zipfile.ZIP_DEFLATED
+                    info.external_attr = 0o644 << 16
+                    target.writestr(info, members[name])
         (portable / "README-PORTABLE.txt").write_text(
             README.replace("{version}", version), encoding="utf-8"
         )
@@ -139,11 +174,15 @@ def build(dist: Path, output: Path, version: str) -> Path:
             "DevRelay/LICENSE",
             "DevRelay/SBOM.cdx.json",
         }
-        with zipfile.ZipFile(archive, "w", compression=zipfile.ZIP_DEFLATED) as handle:
+        with zipfile.ZipFile(archive, "w") as handle:
             for item in sorted(portable.rglob("*")):
-                if item.is_file():
-                    arcname = f"DevRelay/{item.relative_to(portable).as_posix()}"
-                    handle.write(item, arcname)
+                if not item.is_file():
+                    continue
+                arcname = f"DevRelay/{item.relative_to(portable).as_posix()}"
+                info = zipfile.ZipInfo(arcname, date_time=(1980, 1, 1, 0, 0, 0))
+                info.compress_type = zipfile.ZIP_DEFLATED
+                info.external_attr = (0o755 if item.suffix == ".exe" else 0o644) << 16
+                handle.writestr(info, item.read_bytes())
         with zipfile.ZipFile(archive) as handle:
             names = set(handle.namelist())
             missing = expected_entries - names
@@ -161,8 +200,9 @@ def main() -> None:
     parser.add_argument("--version", required=True)
     parser.add_argument("--dist", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--lock", type=Path)
     args = parser.parse_args()
-    build(args.dist, args.output, args.version)
+    build(args.dist, args.output, args.version, lock=args.lock)
 
 
 if __name__ == "__main__":

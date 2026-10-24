@@ -12,12 +12,15 @@ artifacts.
   asset + five-asset release gate.
 - Durable manual-prompt pending markers and confirmed recovery
   (`.devrelay/web/manual_prompts.json`, metadata only).
-- Advisory hold (web-only) with durable `.devrelay/web/run_holds.json`,
-  confirmation-gated hold/release and manual-prompt blocking.
-- Session lease store foundation (`.devrelay/web/session_leases.json`), tested
-  but not wired and with no switch endpoint.
-- Reproducibility comparison helper (`scripts/compare_builds.py`) — harness only;
-  no reproducibility claim.
+- Advisory hold with durable `.devrelay/web/run_holds.json`,
+  confirmation-gated hold/release, manual-prompt blocking and MCP model-action
+  enforcement; no standalone CLI orchestration command exists.
+- Session lease store foundation (`.devrelay/web/session_leases.json`) plus
+  read-only lease metadata in `GET /api/sessions`; no acquisition wiring or
+  switch endpoint.
+- Reproducibility comparison helper (`scripts/compare_builds.py`) and a
+  proof-only Windows/Python 3.14 lock; same-environment double build PASS (not a
+  release/universal claim).
 
 ## Pause — advisory hold implemented, true pause still design-only
 

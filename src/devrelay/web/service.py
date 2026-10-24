@@ -22,6 +22,7 @@ from devrelay.web.errors import WebApiError
 from devrelay.web.models import MAX_LIST_LIMIT
 from devrelay.web.prompt_markers import PromptMarkerError, PromptMarkerStore
 from devrelay.web.run_holds import RunHoldError, RunHoldStore
+from devrelay.web.session_leases import SessionLeaseError, SessionLeaseStore
 
 MAX_RUN_SCAN = 500
 MAX_TASK_SCAN = 200
@@ -64,6 +65,7 @@ class WebReadService:
         self._prompt_markers = PromptMarkerStore(self.devrelay_dir)
         self._prompt_pending_fallback: set[str] = set()
         self._run_holds = RunHoldStore(self.devrelay_dir)
+        self._session_leases = SessionLeaseStore(self.devrelay_dir)
         # The process keeps the wiring it loaded at startup.  Comparing the
         # current file digest against this marker tells the UI that a restart is
         # required after a successful A2 write.
@@ -727,6 +729,14 @@ class WebReadService:
                     entry["updated_at"] = run.updated_at
                     entry["latest_run_id"] = run_id
                     entry["latest_state"] = run.state.value
+        try:
+            leases = self._session_leases.all()
+            lease_error = ""
+        except SessionLeaseError:
+            leases = {}
+            lease_error = "unavailable"
+        for entry in by_session.values():
+            entry["lease"] = leases.get(entry["session_id"])
         sessions = sorted(
             by_session.values(),
             key=lambda item: str(item.get("updated_at", "")),
@@ -734,6 +744,7 @@ class WebReadService:
         )
         return {
             "sessions": sessions[:100],
+            "lease_error": lease_error,
             "returned": min(len(sessions), 100),
             "total": len(sessions),
             "truncated": len(sessions) > 100,

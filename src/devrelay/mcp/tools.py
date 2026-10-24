@@ -44,6 +44,7 @@ from urllib.parse import urlsplit
 
 from devrelay.errors import DevRelayError, OrchestrationError, RoleRoutingError
 from devrelay.mcp.ledger import read_records_strict, sequence_state
+from devrelay.web.run_holds import RunHoldError, RunHoldStore
 from devrelay.mcp.models import (
     MCP_DEFAULT_CALL_LIMIT,
     MCP_MAX_CALL_LIMIT,
@@ -149,6 +150,7 @@ class McpToolSurface:
             devrelay_dir=self.devrelay_dir,
             workspace_root=self.workspace_root,
         )
+        self.run_holds = RunHoldStore(self.devrelay_dir)
         self._diagnostics = diagnostics
 
     # ------------------------------------------------------------------
@@ -430,6 +432,30 @@ class McpToolSurface:
             )
         return resolution
 
+    def _hold_failure(
+        self, tool: str, run_id: str, code: str, message: str
+    ) -> McpEnvelope:
+        return error_envelope(tool, code, message, {"run_id": run_id})
+
+    def _check_hold(self, tool: str, run_id: str) -> McpEnvelope | None:
+        try:
+            hold = self.run_holds.get(run_id)
+        except RunHoldError:
+            return self._hold_failure(
+                tool,
+                run_id,
+                "run_hold_unavailable",
+                "advisory hold store is unavailable; refusing the model-bearing action",
+            )
+        if hold is not None:
+            return self._hold_failure(
+                tool,
+                run_id,
+                "run_held",
+                "an advisory hold is active; release it before a model-bearing action",
+            )
+        return None
+
     def _orchestration_failure(
         self, tool: str, exc: OrchestrationError, run_id: object
     ) -> McpEnvelope:
@@ -508,6 +534,9 @@ class McpToolSurface:
                 text = self._require_prompt(prompt)
             except McpArgumentError as exc:
                 return self._orchestration_failure("devrelay_run_implementer", exc, rid)
+            blocked = self._check_hold("devrelay_run_implementer", rid)
+            if blocked is not None:
+                return blocked
             try:
                 outcome = self.orchestration.run_implementer(rid, text)
             except OrchestrationError as exc:
@@ -525,6 +554,9 @@ class McpToolSurface:
                 text = self._require_prompt(prompt)
             except McpArgumentError as exc:
                 return self._orchestration_failure("devrelay_run_reviewer", exc, rid)
+            blocked = self._check_hold("devrelay_run_reviewer", rid)
+            if blocked is not None:
+                return blocked
             try:
                 outcome = self.orchestration.run_reviewer(rid, text)
             except OrchestrationError as exc:
