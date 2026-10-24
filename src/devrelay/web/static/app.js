@@ -360,7 +360,8 @@
       left.textContent = session.session_id;
       const right = document.createElement("span");
       right.className = "muted";
-      right.textContent = `${(session.roles || []).join("/")} · ${session.latest_state || "?"} · ${(session.run_ids || []).length} run(s)`;
+      const lease = session.lease ? ` · lease:${session.lease.state}` : "";
+      right.textContent = `${(session.roles || []).join("/")} · ${session.latest_state || "?"} · ${(session.run_ids || []).length} run(s)${lease}`;
       item.append(left, right);
       target.append(item);
     }

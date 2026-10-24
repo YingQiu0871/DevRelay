@@ -2,9 +2,10 @@
 
 Status: **PARTIALLY PROVEN — same-environment double build PASS; no release
 lock/universal claim.**  A proof-only Windows/Python 3.14 constraints file and
-the comparison harness produced identical artifacts across two builds.  The
-review/release build is Python 3.13, so this is not yet a release reproducibility
-claim or a lock for the published portable.
+the comparison harness produced identical artifacts across two builds; evidence
+is in [REPRODUCIBILITY_PROOF_2026-10-24.md](REPRODUCIBILITY_PROOF_2026-10-24.md).
+The review/release build is Python 3.13, so this is not yet a release
+reproducibility claim or a lock for the published portable.
 
 ## Current gaps
 
