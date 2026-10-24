@@ -86,6 +86,13 @@ class RunPromptRecoverRequest(BaseModel):
     confirm: Literal["apply"]
 
 
+class SessionLeaseRecoverRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    confirm: Literal["apply"]
+    expected_state: Literal["active", "uncertain"] | None = None
+
+
 class ProjectActivateRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 

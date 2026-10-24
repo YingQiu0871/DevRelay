@@ -1097,6 +1097,26 @@ def test_sessions_inventory_is_run_recorded(client: TestClient, workspace: Path)
     for item in data["sessions"]:
         assert "parts" not in item
         assert "prompt" not in item
+    SessionLeaseStore(workspace / ".devrelay").mark_uncertain(
+        run.implementer_session_id
+    )
+    headers = {**auth, "X-DevRelay-Confirm": "apply"}
+    assert (
+        client.post(
+            f"/api/sessions/{run.implementer_session_id}/lease/recover",
+            json={"confirm": "apply", "expected_state": "uncertain"},
+            headers=auth,
+        ).status_code
+        == 403
+    )
+    recovered = client.post(
+        f"/api/sessions/{run.implementer_session_id}/lease/recover",
+        json={"confirm": "apply", "expected_state": "uncertain"},
+        headers=headers,
+    )
+    assert recovered.status_code == 200, recovered.text
+    assert recovered.json()["data"]["previous_state"] == "uncertain"
+    assert recovered.json()["data"]["state"] == "released"
     assert client.get("/api/sessions").status_code == 401
     assert (
         client.get(f"/api/sessions/{run.implementer_session_id}", headers=auth).status_code

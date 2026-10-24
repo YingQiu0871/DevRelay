@@ -19,8 +19,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   actions, not an in-flight provider turn, and does not change run state.
 - Durable session leases acquired at MCP `devrelay_start_run` before run
   creation and released on terminal outcomes; `GET /api/sessions` reports lease
-  metadata.  No switch endpoint is added.  A crash between acquisition and run
-  creation can leave a fail-closed active lease.
+  metadata.  A crash between acquisition and run creation can leave a fail-closed
+  active lease.
+- Confirmed `POST /api/sessions/{session_id}/lease/recover` explicitly releases
+  an active/uncertain lease without provider I/O; switch remains design-only in
+  `docs/v0.5/SWITCH_ENDPOINT_DESIGN.md`.
 - `scripts/compare_builds.py` reproducibility comparison harness; a
   same-environment locked double build passed for Windows/Python 3.14.
 - `requirements/portable-win-py313.lock` wired into the Windows release job;

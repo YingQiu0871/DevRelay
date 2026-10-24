@@ -38,6 +38,7 @@ from devrelay.web.models import (
     RunInterruptRequest,
     RunPromptRecoverRequest,
     RunPromptRequest,
+    SessionLeaseRecoverRequest,
     SessionRequest,
     WiringWriteRequest,
     failure,
@@ -398,6 +399,31 @@ class LocalControlApi:
             ),
         )
 
+    async def recover_session_lease(self, request: Request) -> Response:
+        if request.headers.get("x-devrelay-confirm") != "apply":
+            raise WebApiError(
+                "confirmation_required",
+                "X-DevRelay-Confirm: apply is required",
+                status_code=403,
+            )
+        payload: SessionLeaseRecoverRequest = await _read_json(
+            request, SessionLeaseRecoverRequest
+        )
+        if payload.confirm != "apply":
+            raise WebApiError(
+                "confirmation_required", "confirm must be apply", status_code=403
+            )
+        session_id = str(request.path_params.get("session_id", ""))
+        data = await run_in_threadpool(
+            self.service.recover_session_lease,
+            session_id,
+            payload.expected_state,
+        )
+        return _json(
+            request,
+            success(data, request_id=str(request.state.request_id)),
+        )
+
     async def runs(self, request: Request) -> Response:
         raw = request.query_params.get("limit", "20")
         try:
@@ -737,6 +763,11 @@ def create_app(
                 methods=["POST"],
             ),
             Route("/api/sessions", api.sessions, methods=["GET"]),
+            Route(
+                "/api/sessions/{session_id}/lease/recover",
+                api.recover_session_lease,
+                methods=["POST"],
+            ),
             Route("/api/runs", api.runs, methods=["GET"]),
             Route("/api/runs/{run_id}", api.run, methods=["GET"]),
             Route("/api/runs/{run_id}/decide", api.run_decide, methods=["POST"]),

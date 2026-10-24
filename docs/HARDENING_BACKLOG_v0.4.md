@@ -15,9 +15,10 @@ artifacts.
 - Advisory hold with durable `.devrelay/web/run_holds.json`,
   confirmation-gated hold/release, manual-prompt blocking and MCP model-action
   enforcement; no standalone CLI orchestration command exists.
-- Session lease store with acquisition at MCP start + terminal release, and
-  read-only lease metadata in `GET /api/sessions`; no switch endpoint.  A crash
-  between acquisition and run creation can leave an active lease (fail closed).
+- Session lease store with acquisition at MCP start + terminal release, read-only
+  inventory, and confirmed explicit recovery
+  (`POST /api/sessions/{session_id}/lease/recover`); no switch endpoint.  A crash
+  between acquisition and run creation can leave an active lease until recovered.
 - Reproducibility comparison helper (`scripts/compare_builds.py`), a
   proof-only Windows/Python 3.14 lock with same-environment double build PASS,
   and a Windows/Python 3.13 release lock double-built in GitHub Actions
@@ -49,9 +50,13 @@ gate.  No endpoint is exposed today.
 
 ## OpenCode session switching — design only, not implemented
 
+Endpoint design: [v0.5/SWITCH_ENDPOINT_DESIGN.md](v0.5/SWITCH_ENDPOINT_DESIGN.md).
+No switch route or request field is exposed.
+
 Detailed proposal:
-[v0.5/SESSION_OWNERSHIP_DESIGN.md](v0.5/SESSION_OWNERSHIP_DESIGN.md) and
-[v0.5/LEASE_ACQUISITION_DESIGN.md](v0.5/LEASE_ACQUISITION_DESIGN.md).
+[v0.5/SESSION_OWNERSHIP_DESIGN.md](v0.5/SESSION_OWNERSHIP_DESIGN.md),
+[v0.5/LEASE_ACQUISITION_DESIGN.md](v0.5/LEASE_ACQUISITION_DESIGN.md) and
+[v0.5/SWITCH_ENDPOINT_DESIGN.md](v0.5/SWITCH_ENDPOINT_DESIGN.md).
 
 Current D1 behavior is project activation plus run-recorded session inventory.
 It does **not** switch a run to another OpenCode session.

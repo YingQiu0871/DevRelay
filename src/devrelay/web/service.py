@@ -22,7 +22,11 @@ from devrelay.web.errors import WebApiError
 from devrelay.web.models import MAX_LIST_LIMIT
 from devrelay.web.prompt_markers import PromptMarkerError, PromptMarkerStore
 from devrelay.web.run_holds import RunHoldError, RunHoldStore
-from devrelay.web.session_leases import SessionLeaseError, SessionLeaseStore
+from devrelay.web.session_leases import (
+    SessionLeaseConflict,
+    SessionLeaseError,
+    SessionLeaseStore,
+)
 
 MAX_RUN_SCAN = 500
 MAX_TASK_SCAN = 200
@@ -682,6 +686,36 @@ class WebReadService:
             "limit": bound,
             "truncated": len(ids) > bound,
             "current_task": current if isinstance(current, str) else None,
+        }
+
+    def recover_session_lease(
+        self, session_id: str, expected_state: str | None = None
+    ) -> dict[str, Any]:
+        if not session_id or len(session_id) > 200:
+            raise WebApiError("invalid_session_id", "session_id is invalid", status_code=400)
+        try:
+            entry = self._session_leases.recover(
+                session_id, expected_state=expected_state
+            )
+        except SessionLeaseConflict as exc:
+            raise WebApiError("lease_changed", str(exc), status_code=409) from exc
+        except SessionLeaseError as exc:
+            raise WebApiError(
+                "session_lease_unavailable",
+                "the session lease store cannot be recovered safely",
+                status_code=503,
+            ) from exc
+        if entry is None:
+            raise WebApiError(
+                "lease_not_found",
+                "no active or uncertain lease exists for this session",
+                status_code=404,
+            )
+        return {
+            "session_id": session_id,
+            "recovered": True,
+            "previous_state": entry.get("previous_state", ""),
+            "state": entry.get("state", ""),
         }
 
     def sessions(self) -> dict[str, Any]:

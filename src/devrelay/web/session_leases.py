@@ -136,6 +136,35 @@ class SessionLeaseStore:
             self._write(data)
             return True
 
+    def recover(
+        self, session_id: str, *, expected_state: str | None = None
+    ) -> dict[str, Any] | None:
+        """Explicitly release a stale active/uncertain lease.
+
+        This is a local recovery action: it does not contact the provider, does
+        not abort a turn and does not switch any run.  The caller must have
+        verified the session out of band.
+        """
+        with self._lock:
+            data = self._read()
+            entry = data["leases"].get(session_id)
+            if entry is None:
+                return None
+            state = entry.get("state")
+            if state not in ("active", "uncertain"):
+                return None
+            if expected_state is not None and state != expected_state:
+                raise SessionLeaseConflict(
+                    f"lease state is {state!r}, expected {expected_state!r}"
+                )
+            entry["previous_state"] = state
+            entry["state"] = "released"
+            entry["released_at"] = datetime.now(timezone.utc).isoformat(timespec="seconds")
+            entry["recovered_at"] = entry["released_at"]
+            entry["recovery"] = "explicit"
+            self._write(data)
+            return entry
+
     def _read(self) -> dict[str, Any]:
         if not self.path.exists():
             return {"schema_version": SCHEMA_VERSION, "leases": {}}

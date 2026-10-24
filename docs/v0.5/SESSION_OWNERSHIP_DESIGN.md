@@ -69,10 +69,10 @@ A safe switch would need:
 6. Explicit recovery if acquisition succeeds but provider binding fails.
 7. Confirmation header/body, audit evidence, and no automatic retry.
 
-A future API shape might be `POST /api/runs/{run_id}/session/switch` with
-`{"role":"...","target_session_id":"...","expected_updated_at":"...","confirm":"apply"}`,
-but **this endpoint is not implemented and must not be added without the lease
-prerequisite and a separate review.**
+A future API shape is detailed in
+[SWITCH_ENDPOINT_DESIGN.md](SWITCH_ENDPOINT_DESIGN.md); **no endpoint is
+implemented and none may be added without the lease/schema/review conditions
+listed there.**
 
 ## Threat model
 

@@ -4,7 +4,8 @@ Status: **IMPLEMENTED (MCP START + TERMINAL RELEASE), 2026-10-25.**  The lease
 store is acquired inside `devrelay_start_run` before run creation, released on
 terminal outcomes, and remains read-only in `GET /api/sessions`.  There is still
 no switch endpoint.  A crash between acquisition and run creation can leave an
-active lease; it fails closed and requires explicit recovery (residual).
+active lease; it fails closed and can be explicitly released through
+`POST /api/sessions/{session_id}/lease/recover` after out-of-band verification.
 
 ## Goal
 
