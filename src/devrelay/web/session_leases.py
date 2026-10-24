@@ -100,6 +100,21 @@ class SessionLeaseStore:
             self._write(data)
             return record
 
+    def release_run(self, run_id: str) -> int:
+        with self._lock:
+            data = self._read()
+            released = 0
+            for entry in data["leases"].values():
+                if entry.get("run_id") == run_id and entry.get("state") == "active":
+                    entry["state"] = "released"
+                    entry["released_at"] = datetime.now(timezone.utc).isoformat(
+                        timespec="seconds"
+                    )
+                    released += 1
+            if released:
+                self._write(data)
+            return released
+
     def release(self, session_id: str) -> bool:
         with self._lock:
             data = self._read()

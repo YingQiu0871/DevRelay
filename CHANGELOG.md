@@ -17,8 +17,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Advisory run hold with `POST /api/runs/{run_id}/hold` and `/hold/release`
   plus UI controls; it blocks new web prompts and MCP implementer/reviewer
   actions, not an in-flight provider turn, and does not change run state.
-- Durable session lease store foundation with read-only lease metadata in
-  `GET /api/sessions` (no acquisition wiring or switch endpoint).
+- Durable session leases acquired at MCP `devrelay_start_run` before run
+  creation and released on terminal outcomes; `GET /api/sessions` reports lease
+  metadata.  No switch endpoint is added.  A crash between acquisition and run
+  creation can leave a fail-closed active lease.
 - `scripts/compare_builds.py` reproducibility comparison harness; a
   same-environment locked double build passed for Windows/Python 3.14.
 - `requirements/portable-win-py313.lock` wired into the Windows release job;

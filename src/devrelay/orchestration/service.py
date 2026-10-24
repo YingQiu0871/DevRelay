@@ -28,6 +28,7 @@ from devrelay.errors import (
     OrchestrationRecoveryUnsupportedError,
     OrchestrationRouteChangedError,
     OrchestrationSessionConflictError,
+    OrchestrationStateCorruptError,
 )
 from devrelay.models import utcnow_iso
 from devrelay.opencode.models import prompt_digest
@@ -50,7 +51,7 @@ from devrelay.orchestration.models import (
     TurnOutcomeState,
     TurnRecord,
 )
-from devrelay.orchestration.store import OrchestrationStore
+from devrelay.orchestration.store import OrchestrationStore, valid_run_id
 
 #: Audit-source labels.
 SOURCE_EXTERNAL = DECISION_SOURCE
@@ -292,6 +293,7 @@ class OrchestrationService:
         implementer_session_id: str,
         reviewer_session_id: str,
         max_cycles: int = DEFAULT_MAX_CYCLES,
+        run_id: str | None = None,
     ) -> OrchestrationRun:
         """Create bounded orchestration state.  Never performs a model call."""
         if not isinstance(max_cycles, int) or isinstance(max_cycles, bool):
@@ -326,7 +328,17 @@ class OrchestrationService:
         self._verify_session(implementer_session_id)
         self._verify_session(reviewer_session_id)
 
-        run_id = self.store.new_run_id()
+        if run_id is None:
+            run_id = self.store.new_run_id()
+        else:
+            if not valid_run_id(run_id):
+                raise OrchestrationStateCorruptError(
+                    "the caller-supplied orchestration id is invalid"
+                )
+            if self.store.exists(run_id):
+                raise OrchestrationStateCorruptError(
+                    "the caller-supplied orchestration id already exists"
+                )
         transition = policy.start_transition()
         run = OrchestrationRun(
             schema_version=ORCHESTRATION_SCHEMA_VERSION,

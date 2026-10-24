@@ -45,6 +45,11 @@ from urllib.parse import urlsplit
 from devrelay.errors import DevRelayError, OrchestrationError, RoleRoutingError
 from devrelay.mcp.ledger import read_records_strict, sequence_state
 from devrelay.web.run_holds import RunHoldError, RunHoldStore
+from devrelay.web.session_leases import (
+    SessionLeaseConflict,
+    SessionLeaseError,
+    SessionLeaseStore,
+)
 from devrelay.mcp.models import (
     MCP_DEFAULT_CALL_LIMIT,
     MCP_MAX_CALL_LIMIT,
@@ -151,6 +156,7 @@ class McpToolSurface:
             workspace_root=self.workspace_root,
         )
         self.run_holds = RunHoldStore(self.devrelay_dir)
+        self.session_leases = SessionLeaseStore(self.devrelay_dir)
         self._diagnostics = diagnostics
 
     # ------------------------------------------------------------------
@@ -474,10 +480,21 @@ class McpToolSurface:
             data,
         )
 
-    @staticmethod
-    def _orchestration_outcome(tool: str, outcome: object) -> McpEnvelope:
+    def _release_terminal_leases(self, summary: dict[str, Any]) -> None:
+        if summary.get("state") not in {"COMPLETED", "STOPPED", "BLOCKED", "LIMIT_REACHED"}:
+            return
+        run_id = summary.get("run_id")
+        if not isinstance(run_id, str):
+            return
+        try:
+            self.session_leases.release_run(run_id)
+        except SessionLeaseError:
+            summary["lease_error"] = "unavailable"
+
+    def _orchestration_outcome(self, tool: str, outcome: object) -> McpEnvelope:
         """Shape one orchestration action: state is visible either way."""
         summary = outcome.summary  # type: ignore[attr-defined]
+        self._release_terminal_leases(summary)
         if getattr(outcome, "ok", False):
             return ok_envelope(tool, summary)
         return error_envelope(
@@ -500,11 +517,65 @@ class McpToolSurface:
             impl_sid = self._require_session_id(implementer_session_id)
             rev_sid = self._require_session_id(reviewer_session_id)
             cycles = self._require_max_cycles(max_cycles)
-            run = self.orchestration.start_run(
-                implementer_session_id=impl_sid,
-                reviewer_session_id=rev_sid,
-                max_cycles=cycles,
-            )
+            if impl_sid == rev_sid:
+                return error_envelope(
+                    "devrelay_start_run",
+                    "orchestration_session_conflict",
+                    "the implementer and reviewer sessions must be different",
+                    {"run_id": None},
+                )
+            try:
+                run_id = self.orchestration.store.new_run_id()
+            except OrchestrationError as exc:
+                return error_envelope(
+                    "devrelay_start_run",
+                    getattr(exc, "code", "orchestration_error"),
+                    exc,
+                    {},
+                )
+            try:
+                for role, sid in (("implementer", impl_sid), ("reviewer", rev_sid)):
+                    self.session_leases.acquire(
+                        sid,
+                        workspace=str(self.workspace_root),
+                        run_id=run_id,
+                        role=role,
+                    )
+            except SessionLeaseConflict as exc:
+                try:
+                    self.session_leases.release_run(run_id)
+                except SessionLeaseError:
+                    pass
+                return error_envelope(
+                    "devrelay_start_run",
+                    "session_leased",
+                    exc,
+                    {"run_id": run_id},
+                )
+            except SessionLeaseError as exc:
+                try:
+                    self.session_leases.release_run(run_id)
+                except SessionLeaseError:
+                    pass
+                return error_envelope(
+                    "devrelay_start_run",
+                    "session_lease_unavailable",
+                    exc,
+                    {"run_id": run_id},
+                )
+            try:
+                run = self.orchestration.start_run(
+                    implementer_session_id=impl_sid,
+                    reviewer_session_id=rev_sid,
+                    max_cycles=cycles,
+                    run_id=run_id,
+                )
+            except OrchestrationError as exc:
+                try:
+                    self.session_leases.release_run(run_id)
+                except SessionLeaseError:
+                    pass
+                return self._orchestration_failure("devrelay_start_run", exc, None)
             return ok_envelope("devrelay_start_run", run.summary())
 
         return self._execute("devrelay_start_run", call)

@@ -15,9 +15,9 @@ artifacts.
 - Advisory hold with durable `.devrelay/web/run_holds.json`,
   confirmation-gated hold/release, manual-prompt blocking and MCP model-action
   enforcement; no standalone CLI orchestration command exists.
-- Session lease store foundation (`.devrelay/web/session_leases.json`) plus
-  read-only lease metadata in `GET /api/sessions`; no acquisition wiring or
-  switch endpoint.
+- Session lease store with acquisition at MCP start + terminal release, and
+  read-only lease metadata in `GET /api/sessions`; no switch endpoint.  A crash
+  between acquisition and run creation can leave an active lease (fail closed).
 - Reproducibility comparison helper (`scripts/compare_builds.py`), a
   proof-only Windows/Python 3.14 lock with same-environment double build PASS,
   and a Windows/Python 3.13 release lock double-built in GitHub Actions

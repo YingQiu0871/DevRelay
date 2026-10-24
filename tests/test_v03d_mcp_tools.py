@@ -36,6 +36,22 @@ ORCHESTRATION_TOOLS = [
 RECOVERY_TOOLS = ["devrelay_reconcile_run", "devrelay_resolve_recovery"]
 
 
+def test_start_acquires_leases_and_releases_on_terminal(tmp_path):
+    harness = build(tmp_path)
+    run_id = run_id_of(harness.server)
+    second = start(harness.server)
+    assert second["ok"] is False
+    assert second["error"]["type"] == "session_leased"
+
+    assert phase(harness.server, "devrelay_run_implementer", run_id)["ok"] is True
+    assert phase(harness.server, "devrelay_run_reviewer", run_id)["ok"] is True
+    assert decide(harness.server, run_id, "stop")["ok"] is True
+    released = harness.surface.session_leases.active_for(run_id, "implementer")
+    assert released == []
+    third = start(harness.server)
+    assert third["ok"] is True, third
+
+
 def test_advisory_hold_blocks_mcp_model_actions(tmp_path):
     harness = build(tmp_path)
     run_id = run_id_of(harness.server)

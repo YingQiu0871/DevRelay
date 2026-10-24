@@ -1,8 +1,10 @@
 # DevRelay v0.5 — session lease acquisition design
 
-Status: **DESIGN ONLY — NO ACQUISITION WIRING.**  The lease store exists and is
-read-only in `GET /api/sessions`; `start_run` does not acquire leases and there is
-no switch endpoint.
+Status: **IMPLEMENTED (MCP START + TERMINAL RELEASE), 2026-10-25.**  The lease
+store is acquired inside `devrelay_start_run` before run creation, released on
+terminal outcomes, and remains read-only in `GET /api/sessions`.  There is still
+no switch endpoint.  A crash between acquisition and run creation can leave an
+active lease; it fails closed and requires explicit recovery (residual).
 
 ## Goal
 
@@ -15,20 +17,21 @@ that the provider session is exclusive or alive.
 Preferred: inside the MCP `_execute` critical section at `devrelay_start_run`,
 because that lock serializes all tool bodies in the one supported surface.
 
-Proposed sequence:
+Implemented sequence:
 
-1. Validate both session ids and the run budget.
-2. Preflight `SessionLeaseStore` conflicts for implementer/reviewer sessions.
-3. Start the orchestration run (existing behavior).
-4. Acquire both leases using the new run id under the same `_execute` lock.
-5. If acquisition fails after the run exists, do **not** report success; mark the
-   run/store `uncertain` for explicit recovery.  The store remains the source of
-   truth; no automatic retry.
+1. Validate both session ids and the run budget; reject identical sessions before
+   acquiring.
+2. Generate the run id once and acquire both leases (all-or-nothing rollback).
+3. Start the orchestration run with that run id under the same `_execute` lock.
+4. If start fails, release the acquired leases and report the original error; no
+   successful run is returned.
+5. If acquisition fails, report `session_leased` / `session_lease_unavailable`;
+   no run is created.
 6. On any action whose resulting summary is terminal, release both leases.
 7. On `interrupt`, do not release automatically (abort may not be verified).
-8. On manual prompt, acquire-if-missing is **not** allowed; the run must already
-   hold leases.  Legacy runs without leases fail closed for acquisition-required
-   operations until explicitly migrated/recovered.
+8. Legacy run documents without leases remain readable; acquisition is only for
+   new runs.  A crash between acquisition and run creation can leave an active
+   lease that blocks reuse until explicit recovery.
 
 ## Required store additions
 

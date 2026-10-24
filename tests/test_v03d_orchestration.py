@@ -131,14 +131,16 @@ def test_mcp_sdk_normalizes_max_cycles_before_the_tool_body(tmp_path):
     v0.3-D ceiling, a fractional number is refused at the SDK boundary, and
     ``false`` normalizes to 0, which the tool body rejects.
     """
-    harness = build(tmp_path, run_id_factory=fixed_run_ids(RUN_ID))
     accepted = {
         True: 1,
         "2": 2,
         2.0: 2,
         "3": 3,
     }
-    for raw, expected in accepted.items():
+    for index, (raw, expected) in enumerate(accepted.items()):
+        harness = build(
+            tmp_path / f"accepted-{index}", run_id_factory=fixed_run_ids(RUN_ID)
+        )
         envelope = start(harness.server, max_cycles=raw)
         assert envelope["ok"] is True, (raw, envelope)
         assert envelope["data"]["max_cycles"] == expected
@@ -149,15 +151,18 @@ def test_mcp_sdk_normalizes_max_cycles_before_the_tool_body(tmp_path):
         "4": "mcp_invalid_argument",  # above the hard ceiling
         4.5: None,  # refused by the SDK itself
     }
+    reject_harness = build(
+        tmp_path / "rejected", run_id_factory=fixed_run_ids(RUN_ID)
+    )
     for raw, expected_type in rejected.items():
         if expected_type is None:
             with pytest.raises(Exception):
-                start(harness.server, max_cycles=raw)
+                start(reject_harness.server, max_cycles=raw)
         else:
-            envelope = start(harness.server, max_cycles=raw)
+            envelope = start(reject_harness.server, max_cycles=raw)
             assert envelope["ok"] is False, (raw, envelope)
             assert envelope["error"]["type"] == expected_type
-    assert both_posts(harness) == [], "starting a run never calls a model"
+    assert both_posts(reject_harness) == [], "starting a run never calls a model"
 
 
 def test_the_service_also_refuses_a_boolean_max_cycles(tmp_path):
