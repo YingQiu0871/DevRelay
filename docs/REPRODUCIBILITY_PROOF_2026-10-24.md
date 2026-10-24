@@ -56,3 +56,8 @@ Normalization added for this proof:
 Therefore the project still says **"SBOM, not reproducibly built"** for released
 artifacts.  Turning this into a release claim requires a Python 3.13 build
 environment, hash-pinned wheelhouse and a second clean build in CI/release.
+
+A Windows/Python 3.13 release constraint file now exists
+(`requirements/portable-win-py313.lock`) and is wired into the release job, but
+it has not yet been used for a Python 3.13 double build.  It is a version lock,
+not a hash lock.

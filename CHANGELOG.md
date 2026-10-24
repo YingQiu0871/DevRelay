@@ -14,12 +14,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Durable manual-prompt pending markers under
   `.devrelay/web/manual_prompts.json` (metadata only, no prompt text) and a
   confirmed `POST /api/runs/{run_id}/prompt/recover` endpoint/UI action.
-- Advisory web-only run hold with `POST /api/runs/{run_id}/hold` and
-  `/hold/release` plus UI controls; it blocks new web prompts, not an in-flight
-  provider turn, and does not change run state.
-- Durable session lease store foundation (not wired, no switch endpoint).
-- `scripts/compare_builds.py` reproducibility comparison harness (not a
-  reproducibility claim).
+- Advisory run hold with `POST /api/runs/{run_id}/hold` and `/hold/release`
+  plus UI controls; it blocks new web prompts and MCP implementer/reviewer
+  actions, not an in-flight provider turn, and does not change run state.
+- Durable session lease store foundation with read-only lease metadata in
+  `GET /api/sessions` (no acquisition wiring or switch endpoint).
+- `scripts/compare_builds.py` reproducibility comparison harness; a
+  same-environment locked double build passed for Windows/Python 3.14.
+- `requirements/portable-win-py313.lock` wired into the Windows release job
+  (release double-build not yet executed).
 
 ### Changed
 

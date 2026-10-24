@@ -18,9 +18,11 @@ artifacts.
 - Session lease store foundation (`.devrelay/web/session_leases.json`) plus
   read-only lease metadata in `GET /api/sessions`; no acquisition wiring or
   switch endpoint.
-- Reproducibility comparison helper (`scripts/compare_builds.py`) and a
-  proof-only Windows/Python 3.14 lock; same-environment double build PASS
-  ([evidence](REPRODUCIBILITY_PROOF_2026-10-24.md)), not a release/universal claim.
+- Reproducibility comparison helper (`scripts/compare_builds.py`), a
+  proof-only Windows/Python 3.14 lock with same-environment double build PASS
+  ([evidence](REPRODUCIBILITY_PROOF_2026-10-24.md)), and a Windows/Python 3.13
+  release lock wired into the build job.  The release lock has not yet been
+  double-built, so no release/universal claim.
 
 ## Pause — advisory hold implemented, true pause still design-only
 
@@ -48,7 +50,8 @@ gate.  No endpoint is exposed today.
 ## OpenCode session switching — design only, not implemented
 
 Detailed proposal:
-[v0.5/SESSION_OWNERSHIP_DESIGN.md](v0.5/SESSION_OWNERSHIP_DESIGN.md).
+[v0.5/SESSION_OWNERSHIP_DESIGN.md](v0.5/SESSION_OWNERSHIP_DESIGN.md) and
+[v0.5/LEASE_ACQUISITION_DESIGN.md](v0.5/LEASE_ACQUISITION_DESIGN.md).
 
 Current D1 behavior is project activation plus run-recorded session inventory.
 It does **not** switch a run to another OpenCode session.

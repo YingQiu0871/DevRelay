@@ -1,11 +1,12 @@
 # DevRelay portable reproducibility & lock plan
 
-Status: **PARTIALLY PROVEN — same-environment double build PASS; no release
-lock/universal claim.**  A proof-only Windows/Python 3.14 constraints file and
-the comparison harness produced identical artifacts across two builds; evidence
-is in [REPRODUCIBILITY_PROOF_2026-10-24.md](REPRODUCIBILITY_PROOF_2026-10-24.md).
-The review/release build is Python 3.13, so this is not yet a release
-reproducibility claim or a lock for the published portable.
+Status: **PARTIALLY PROVEN — same-environment double build PASS; release lock
+wired but not yet double-built.**  A proof-only Windows/Python 3.14 constraints
+file and the comparison harness produced identical artifacts across two builds;
+evidence is in [REPRODUCIBILITY_PROOF_2026-10-24.md](REPRODUCIBILITY_PROOF_2026-10-24.md).
+`requirements/portable-win-py313.lock` is now wired into the Windows release
+job and checked by `build_portable.py --lock`, but no Python 3.13 double build
+has been executed yet.  The published v0.4.0 portable remains outside this claim.
 
 ## Current gaps
 

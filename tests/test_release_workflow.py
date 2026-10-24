@@ -592,6 +592,8 @@ def test_windows_portable_is_built_from_the_tag_and_gated_before_publish():
         step for step in windows["steps"] if step.get("name") == "Build portable zip"
     )
     assert build["if"] == "steps.pypi.outputs.exists != 'true'"
+    assert "--constraint requirements/portable-win-py313.lock" in build["run"]
+    assert "--lock requirements/portable-win-py313.lock" in build["run"]
     assert any(
         step.get("name") == "Check whether this version is already on PyPI"
         for step in windows["steps"]
@@ -610,6 +612,14 @@ def test_windows_portable_is_built_from_the_tag_and_gated_before_publish():
         if step.get("name") == "Verify the Windows artifact came from this commit"
     )
     assert "hashFiles('windows-assets/COMMIT_SHA.txt')" in provenance["if"]
+
+
+def test_release_windows_build_has_a_py313_lock():
+    lock = ROOT / "requirements" / "portable-win-py313.lock"
+    text = lock.read_text(encoding="utf-8")
+    assert "pyinstaller==6.15.0" in text
+    assert "pydantic==" in text and "uvicorn==" in text
+    assert "portable-win-py313.lock" in _text()
 
 
 def test_portable_builder_checks_zip_layout_metadata_and_payload():

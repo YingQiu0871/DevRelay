@@ -109,9 +109,9 @@ jobs:
         env:
           VERSION: ${{ steps.version.outputs.version }}
         run: |
-          python -m pip install --quiet "build==1.6.1" "pyinstaller==6.15.0" ".[web]"
+          python -m pip install --quiet --constraint requirements/portable-win-py313.lock "build==1.6.1" "pyinstaller==6.15.0" ".[web]"
           python -m build --wheel --outdir dist
-          python scripts/build_portable.py --version "$env:VERSION" --dist dist --output windows-assets
+          python scripts/build_portable.py --version "$env:VERSION" --dist dist --output windows-assets --lock requirements/portable-win-py313.lock
       - name: Upload Windows portable artifact
         if: steps.pypi.outputs.exists != 'true'
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
