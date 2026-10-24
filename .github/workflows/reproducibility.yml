@@ -1,0 +1,66 @@
+# Manual Windows/Python 3.13 double-build proof for the portable lock.
+# This workflow is evidence-only: it does not publish, tag or upload to PyPI.
+
+name: reproducibility
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  portable-double-build:
+    name: Windows py3.13 locked double build
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Python 3.13
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.13"
+
+      - name: Install locked build environment
+        shell: pwsh
+        run: |
+          python -m pip install --quiet --constraint requirements/portable-win-py313.lock "build==1.6.1" "pyinstaller==6.15.0" ".[web]"
+          python -m build --wheel --outdir dist
+
+      - name: Build A
+        shell: pwsh
+        env:
+          SOURCE_DATE_EPOCH: "1792713600"
+        run: |
+          $version = python -c "import pathlib,tomllib; print(tomllib.loads(pathlib.Path('pyproject.toml').read_text(encoding='utf-8'))['project']['version'])"
+          python scripts/build_portable.py --version "$version" --dist dist --output build-a --lock requirements/portable-win-py313.lock
+
+      - name: Build B
+        shell: pwsh
+        env:
+          SOURCE_DATE_EPOCH: "1792713600"
+        run: |
+          $version = python -c "import pathlib,tomllib; print(tomllib.loads(pathlib.Path('pyproject.toml').read_text(encoding='utf-8'))['project']['version'])"
+          python scripts/build_portable.py --version "$version" --dist dist --output build-b --lock requirements/portable-win-py313.lock
+
+      - name: Compare builds
+        shell: pwsh
+        run: |
+          python scripts/compare_builds.py build-a build-b | Tee-Object -FilePath compare.log
+          Get-ChildItem build-a -File | Get-FileHash -Algorithm SHA256 |
+            ForEach-Object { "{0}  {1}" -f $_.Hash.ToLower(), (Split-Path $_.Path -Leaf) } |
+            Tee-Object -FilePath compare.log -Append
+
+      - name: Upload proof
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: py313-repro-proof
+          path: |
+            build-a/DevRelay-Portable-Windows-x64.zip
+            build-a/DevRelay-SBOM.cdx.json
+            build-b/DevRelay-Portable-Windows-x64.zip
+            build-b/DevRelay-SBOM.cdx.json
+            compare.log
+          if-no-files-found: error
