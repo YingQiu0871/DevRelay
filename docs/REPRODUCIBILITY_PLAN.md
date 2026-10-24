@@ -1,20 +1,21 @@
 # DevRelay portable reproducibility & lock plan
 
-Status: **PARTIALLY PROVEN — same-environment double build PASS; release lock
-wired but not yet double-built.**  A proof-only Windows/Python 3.14 constraints
-file and the comparison harness produced identical artifacts across two builds;
-evidence is in [REPRODUCIBILITY_PROOF_2026-10-24.md](REPRODUCIBILITY_PROOF_2026-10-24.md).
-`requirements/portable-win-py313.lock` is now wired into the Windows release
-job and checked by `build_portable.py --lock`, but no Python 3.13 double build
-has been executed yet.  The published v0.4.0 portable remains outside this claim.
+Status: **RELEASE-LOCK DOUBLE BUILD PASS on GitHub Windows/Python 3.13.16; no
+hash-pinned wheelhouse or cross-runner claim.**  The release lock is wired into
+the Windows release job and checked by `build_portable.py --lock`; a
+`workflow_dispatch` proof produced identical artifacts across two builds.  A
+local Windows/Python 3.14 proof also passes.  Evidence is in
+[REPRODUCIBILITY_PROOF_2026-10-24.md](REPRODUCIBILITY_PROOF_2026-10-24.md).  The
+published v0.4.0 portable predates these normalizations and is not claimed
+reproducible.
 
 ## Current gaps
 
 1. `pip install ".[web]"` resolves open ranges at release time.
 2. PyInstaller embeds build-path/timestamp metadata and collects an environment-
    dependent module set.
-3. Zip entries use filesystem mtimes and platform separators (separators are now
-   normalized, mtimes are not).
+3. Zip separators/timestamps/permissions and PyInstaller `base_library.zip` order
+   are now normalized; a changed runner image or toolchain remains a gap.
 4. SBOM metadata timestamp and dependency set depend on the build environment.
 5. No second-build digest comparison or lock hash chain in the release gate.
 

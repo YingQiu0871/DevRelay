@@ -21,8 +21,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `GET /api/sessions` (no acquisition wiring or switch endpoint).
 - `scripts/compare_builds.py` reproducibility comparison harness; a
   same-environment locked double build passed for Windows/Python 3.14.
-- `requirements/portable-win-py313.lock` wired into the Windows release job
-  (release double-build not yet executed).
+- `requirements/portable-win-py313.lock` wired into the Windows release job;
+  a GitHub Actions Windows/Python 3.13 double build passed with identical
+  portable zip and SBOM hashes.
 
 ### Changed
 

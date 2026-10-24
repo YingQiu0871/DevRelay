@@ -19,10 +19,10 @@ artifacts.
   read-only lease metadata in `GET /api/sessions`; no acquisition wiring or
   switch endpoint.
 - Reproducibility comparison helper (`scripts/compare_builds.py`), a
-  proof-only Windows/Python 3.14 lock with same-environment double build PASS
-  ([evidence](REPRODUCIBILITY_PROOF_2026-10-24.md)), and a Windows/Python 3.13
-  release lock wired into the build job.  The release lock has not yet been
-  double-built, so no release/universal claim.
+  proof-only Windows/Python 3.14 lock with same-environment double build PASS,
+  and a Windows/Python 3.13 release lock double-built in GitHub Actions
+  ([evidence](REPRODUCIBILITY_PROOF_2026-10-24.md)).  No hash-pinned wheelhouse or
+  cross-runner guarantee yet.
 
 ## Pause — advisory hold implemented, true pause still design-only
 

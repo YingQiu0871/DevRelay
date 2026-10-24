@@ -1,9 +1,38 @@
-# Reproducibility proof — 2026-10-24 (same-environment)
+# Reproducibility proof — 2026-10-24
 
-Status: **SAME-ENVIRONMENT DOUBLE BUILD PASS.**  This is narrower than a release
-reproducibility claim: the release job uses Windows/Python 3.13, while this proof
-uses the locally available Windows/Python 3.14.6 environment and a proof-only
-lock file.
+Status: **RELEASE-LOCK DOUBLE BUILD PASS (GitHub Windows / Python 3.13.16), plus a
+local 3.14 same-environment check.**  The release lock is exact-version but not
+hash-pinned and the proof is one runner image; this is not a cross-runner or
+universal claim.
+
+## GitHub Windows / Python 3.13 release lock
+
+| Item | Value |
+| --- | --- |
+| Workflow | [reproducibility.yml](../.github/workflows/reproducibility.yml) |
+| Run | [40134991611](https://github.com/YingQiu0871/DevRelay/actions/runs/40134991611) |
+| Commit | `4c25e21250bc9d164b707f1a17f7ce5cfca7131d` |
+| Runner | `windows-latest`, CPython 3.13.16 |
+| Lock | `requirements/portable-win-py313.lock` |
+| `SOURCE_DATE_EPOCH` | `1792713600` |
+| Result | `REPRODUCIBILITY PASS: 2 artifacts match` |
+
+| Artifact | SHA-256 (both builds) |
+| --- | --- |
+| `DevRelay-Portable-Windows-x64.zip` | `af8858fd2e909d077706b123a476b1d4b6902a4490ba022c629178aa3ab1d1ce` |
+| `DevRelay-SBOM.cdx.json` | `0c4eee19cd63d7897e64d98612965a54b1710535eea8023924483a33bf3a4385` |
+
+The downloaded Python 3.13 portable was extracted and `devrelay.exe version`
+reported `devrelay 0.4.0`.
+
+The release workflow uses the same lock and `--lock` preflight; this run proves
+the lock is installable and deterministic on that GitHub runner image.  It does
+not yet pin wheel hashes, and a changed runner image remains a residual.
+
+## Local Windows / Python 3.14 same-environment check
+
+The local proof uses a proof-only lock and the locally available Python 3.14.6;
+its purpose is to exercise the normalization code outside CI.
 
 ## Environment
 
