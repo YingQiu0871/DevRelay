@@ -24,6 +24,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Confirmed `POST /api/sessions/{session_id}/lease/recover` explicitly releases
   an active/uncertain lease without provider I/O; switch remains design-only in
   `docs/v0.5/SWITCH_ENDPOINT_DESIGN.md`.
+- Switch schema direction approved with conditions
+  (`docs/v0.5/SWITCH_SCHEMA_REVIEW.md`); tests-first fault scenarios document the
+  missing pending-switch lease primitive.  No switch endpoint is added.
+- Real-platform gate runbook added (`docs/v0.3/V03E_GATE_RUNBOOK.md`); no gate
+  was executed and `adopt_completed_turn` remains disabled.
 - `scripts/compare_builds.py` reproducibility comparison harness; a
   same-environment locked double build passed for Windows/Python 3.14.
 - `requirements/portable-win-py313.lock` wired into the Windows release job;

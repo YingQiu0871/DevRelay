@@ -92,7 +92,8 @@ No lock file is being invented from the current dev environment.
 
 ## v0.3-E platform gates — external evidence still open
 
-Preparation checklist: [v0.3/V03E_GATE_PREP.md](v0.3/V03E_GATE_PREP.md).
+Preparation checklist: [v0.3/V03E_GATE_PREP.md](v0.3/V03E_GATE_PREP.md) and
+[runbook](v0.3/V03E_GATE_RUNBOOK.md).
 
 The mandatory fail-closed core is shipped, but the platform gates are not
 complete and cannot be closed by editing this repository:

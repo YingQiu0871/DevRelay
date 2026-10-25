@@ -2,7 +2,7 @@
 
 Status: **PREPARATION ONLY — GATES NOT CLOSED.**  `adopt_completed_turn` remains
 disabled.  This document does not authorize a proof run, a code change or a
-release.
+release.  Executable checklist: [V03E_GATE_RUNBOOK.md](V03E_GATE_RUNBOOK.md).
 
 ## Current gate state
 

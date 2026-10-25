@@ -1,8 +1,10 @@
 # DevRelay v0.5 — session switch endpoint design
 
-Status: **DESIGN ONLY — NOT IMPLEMENTED.**  No switch route, request field or
-mutation exists.  Lease acquisition and explicit uncertain-lease recovery are
-implemented; those are preconditions, not a switch.
+Status: **DESIGN ONLY — SCHEMA APPROVED WITH CONDITIONS; ENDPOINT NOT
+IMPLEMENTED.**  No switch route, request field or mutation exists.  Lease
+acquisition, explicit uncertain-lease recovery and the v3 schema review are
+preconditions, not a switch.  See
+[SWITCH_SCHEMA_REVIEW.md](SWITCH_SCHEMA_REVIEW.md).
 
 ## Why this is not a small endpoint
 
@@ -82,7 +84,12 @@ No prompt/reply text or tokens.
 ## What remains before implementation
 
 - Lease acquisition tests are in place; recovery endpoint is implemented.
-- Need a run schema version/evidence design and migration decision.
+- Schema/evidence direction approved with conditions in
+  [SWITCH_SCHEMA_REVIEW.md](SWITCH_SCHEMA_REVIEW.md); implementation pending.
+- Need a migration decision for v1/v2 runs and tests-first fault coverage.
+- Need a pending-switch lease primitive: source active + target pending for the
+  same run/role; the current one-active-lease store rejects it.  Endpoint fault
+  tests are committed as skipped scenarios in `tests/test_v05_switch_faults.py`.
 - Need a provider target-resolution path that cannot be confused with a
   client-chosen session.
 - Need crash/fault tests for target-acquired-but-not-committed.
