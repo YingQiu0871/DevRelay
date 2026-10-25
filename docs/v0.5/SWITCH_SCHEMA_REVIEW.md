@@ -1,6 +1,7 @@
 # Switch schema design review — 2026-10-25
 
-Status: **APPROVED WITH CONDITIONS — SCHEMA ONLY, ENDPOINT NOT IMPLEMENTED.**
+Status: **APPROVED WITH CONDITIONS — v3 SCHEMA/EVIDENCE IMPLEMENTED; ENDPOINT
+NOT IMPLEMENTED.**
 
 Scope: the proposed run-schema/evidence change needed before a session switch
 endpoint.  This review does not authorize an endpoint, migration of existing
@@ -60,8 +61,20 @@ Schema boundary:
 ## Decision
 
 **APPROVE the schema/evidence direction with the conditions above.**  This is
-not approval of a switch endpoint implementation, and no code/API is added by
-this review.
+not approval of a switch endpoint implementation.  The v3 model field and
+validated `SessionSwitchRecord` were subsequently implemented; the endpoint is
+still absent.
+
+### Implemented schema (2026-10-25)
+
+- `ORCHESTRATION_SCHEMA_VERSION = 3`; `SUPPORTED_SCHEMA_VERSIONS = (1, 2, 3)`.
+- `OrchestrationRun.session_switch_history` (append-only records, empty on v1/v2).
+- `SessionSwitchRecord` validates switch id, role, source/target separation,
+  timestamps and target-lease evidence.
+- Run invariants reject history on v1/v2, duplicate/continuing-wrong records and
+  a current session that does not match the last target.
+- `summary()` exposes bounded switch records.
+- No endpoint, no run mutation path, no migration of existing docs.
 
 ## Open items before implementation
 

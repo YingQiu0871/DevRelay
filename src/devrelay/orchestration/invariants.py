@@ -83,6 +83,9 @@ _EXPECTED_IN_FLIGHT_STATE = {
 #: A persisted prompt digest is always a lowercase sha256 hex digest.
 _PROMPT_DIGEST_RE = re.compile(r"^[0-9a-f]{64}$")
 
+#: v3 switch evidence id.
+_SWITCH_ID_RE = re.compile(r"^SW-[0-9a-f]{32}$")
+
 #: The state machine edges a *last* transition may describe, per current state:
 #: ``(action, previous_state, role)``.  ``None`` for the role means "any role the
 #: action legitimately carries".  Cycle relations are checked next to the table.
@@ -162,6 +165,46 @@ def validate_run_semantics(run: Any) -> None:
             )
         if run.state is RunState.RECOVERY_REQUIRED:
             bad("a v1 (frozen v0.3-D) document can never be in RECOVERY_REQUIRED")
+
+    # -- §3b v3 switch evidence --------------------------------------
+    history = run.session_switch_history
+    if run.schema_version < 3 and history:
+        bad("a v1/v2 document must not carry session switch history")
+    if run.schema_version >= 3:
+        seen_switches: set[str] = set()
+        last_by_role: dict[str, str] = {}
+        for record in history:
+            if not _SWITCH_ID_RE.fullmatch(record.switch_id):
+                bad(f"invalid session switch id {record.switch_id!r}")
+            if record.switch_id in seen_switches:
+                bad(f"duplicate session switch id {record.switch_id!r}")
+            seen_switches.add(record.switch_id)
+            if record.role not in SUPPORTED_RUN_ROLES:
+                bad(f"session switch has unsupported role {record.role!r}")
+            if not record.source_session_id.strip() or not record.target_session_id.strip():
+                bad("session switch has a blank source/target session id")
+            if record.source_session_id == record.target_session_id:
+                bad("session switch source and target are identical")
+            if not record.switched_at or not record.source_revision:
+                bad("session switch lacks timestamp/revision evidence")
+            if not record.target_lease_acquired_at:
+                bad("session switch lacks target lease evidence")
+            previous = last_by_role.get(record.role)
+            if previous is not None and record.source_session_id != previous:
+                bad(
+                    f"{record.role} session switch does not continue from the "
+                    "previous target"
+                )
+            last_by_role[record.role] = record.target_session_id
+        for role, session_id in (
+            ("implementer", run.implementer_session_id),
+            ("reviewer", run.reviewer_session_id),
+        ):
+            if role in last_by_role and last_by_role[role] != session_id:
+                bad(
+                    f"current {role}_session_id does not match the last switch "
+                    "target"
+                )
 
     # -- §4/§5 hard cycle bound and budget ----------------------------
     if not isinstance(run.max_cycles, int) or isinstance(run.max_cycles, bool):

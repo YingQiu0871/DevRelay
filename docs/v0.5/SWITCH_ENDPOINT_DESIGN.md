@@ -1,6 +1,6 @@
 # DevRelay v0.5 — session switch endpoint design
 
-Status: **DESIGN ONLY — SCHEMA APPROVED WITH CONDITIONS; ENDPOINT NOT
+Status: **DESIGN ONLY — v3 SCHEMA/EVIDENCE IMPLEMENTED; ENDPOINT NOT
 IMPLEMENTED.**  No switch route, request field or mutation exists.  Lease
 acquisition, explicit uncertain-lease recovery and the v3 schema review are
 preconditions, not a switch.  See

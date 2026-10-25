@@ -20,6 +20,9 @@ artifacts.
   (source active + target pending, atomic commit/abort/uncertain); no switch
   endpoint.  A crash between acquisition and run creation can leave an active
   lease until recovered.
+- v3 run schema with validated append-only `session_switch_history` evidence;
+  v1/v2 documents remain readable and cannot carry switch history.  No switch
+  mutation/endpoint is added.
 - Reproducibility comparison helper (`scripts/compare_builds.py`), a
   proof-only Windows/Python 3.14 lock with same-environment double build PASS,
   and a Windows/Python 3.13 release lock double-built in GitHub Actions

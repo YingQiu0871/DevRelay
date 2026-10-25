@@ -15,15 +15,16 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from enum import Enum
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, StrictInt, model_validator
 
 from devrelay.models import utcnow_iso
 
-#: Persisted run-document schema version written for **new** runs (v0.3-E).
-ORCHESTRATION_SCHEMA_VERSION = 2
+#: Persisted run-document schema version written for **new** runs (v0.5).
+ORCHESTRATION_SCHEMA_VERSION = 3
 
 #: The frozen v0.3-D document version.  v1 documents are read with exactly the
 #: v0.3-D rules, are never rewritten and never enter ``RECOVERY_REQUIRED``.
@@ -31,8 +32,11 @@ LEGACY_SCHEMA_VERSION = 1
 
 #: Every document version this build can read.  A document claiming any other
 #: version is corrupt, never migrated.
+#: v2 (v0.3-E/v0.4) remains readable but cannot carry switch evidence; v3 is
+#: required before the pending-switch path may commit.
 SUPPORTED_SCHEMA_VERSIONS: tuple[int, ...] = (
     LEGACY_SCHEMA_VERSION,
+    2,
     ORCHESTRATION_SCHEMA_VERSION,
 )
 
@@ -441,6 +445,39 @@ class TransitionRecord(BaseModel):
     note: str = ""
 
 
+_SWITCH_ID_RE = re.compile(r"^SW-[0-9a-f]{32}$")
+
+
+class SessionSwitchRecord(BaseModel):
+    """Append-only evidence for one explicit session switch (v3)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    switch_id: str
+    role: Literal["implementer", "reviewer"]
+    source_session_id: str
+    target_session_id: str
+    switched_at: str
+    source_revision: str
+    target_lease_acquired_at: str
+    operator: Literal["local-http"] = "local-http"
+    result: Literal["committed"] = "committed"
+
+    @model_validator(mode="after")
+    def _switch_invariants(self) -> "SessionSwitchRecord":
+        if not _SWITCH_ID_RE.fullmatch(self.switch_id):
+            raise ValueError("switch_id must be SW-<32 lowercase hex>")
+        if not self.source_session_id.strip() or not self.target_session_id.strip():
+            raise ValueError("source/target session ids must not be blank")
+        if self.source_session_id == self.target_session_id:
+            raise ValueError("source and target session ids must differ")
+        if not self.switched_at or not self.source_revision:
+            raise ValueError("switch timestamp/revision evidence is required")
+        if not self.target_lease_acquired_at:
+            raise ValueError("target lease evidence is required")
+        return self
+
+
 class OrchestrationRun(BaseModel):
     """The durable, validated orchestration run."""
 
@@ -486,6 +523,8 @@ class OrchestrationRun(BaseModel):
     implementer_turns: list[TurnRecord] = Field(default_factory=list)
     reviewer_turns: list[TurnRecord] = Field(default_factory=list)
     decision_history: list[DecisionRecord] = Field(default_factory=list)
+    #: v3: append-only switch evidence; empty on v1/v2 documents.
+    session_switch_history: list[SessionSwitchRecord] = Field(default_factory=list)
 
     #: Set while a model-bearing phase is in flight.  A persisted in-flight turn
     #: is never replayed: the next mutating operation fails the run closed.
@@ -558,6 +597,10 @@ class OrchestrationRun(BaseModel):
             "decision_history": [
                 record.model_dump(mode="json") for record in self.decision_history
             ],
+            "session_switch_history": [
+                record.model_dump(mode="json")
+                for record in self.session_switch_history
+            ],
             "recovery": self.recovery.public() if self.recovery is not None else None,
             # While a model-bearing turn is in flight no model-bearing action is
             # legal: on a v2 document the only legal act is the explicit
@@ -613,6 +656,7 @@ __all__ = [
     "RecoveryResolution",
     "RoleRouteSnapshot",
     "RunState",
+    "SessionSwitchRecord",
     "TransitionRecord",
     "TurnOutcomeState",
     "TurnRecord",

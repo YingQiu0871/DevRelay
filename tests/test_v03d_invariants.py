@@ -196,10 +196,10 @@ def _reject(harness: Harness, run_id: str, needle: str, posts_before: int) -> No
 #: ``(case id, honest base, tamper, expected invariant message)``
 TAMPER_MATRIX: list[tuple[str, str, Callable[[dict[str, Any]], None], str]] = [
     (
-        "T01_schema_version_3",
+        "T01_schema_version_4",
         "fresh",
-        lambda p: p.update(schema_version=3),
-        "schema_version 3 is not one of the supported",
+        lambda p: p.update(schema_version=4),
+        "schema_version 4 is not one of the supported",
     ),
     (
         "T02_max_cycles_99_budget_198",

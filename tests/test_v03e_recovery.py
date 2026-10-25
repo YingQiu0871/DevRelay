@@ -120,12 +120,12 @@ def test_a_live_v2_intent_refuses_every_mutating_phase_action(tmp_path: Path) ->
     )
 
 
-def test_get_run_reports_the_frozen_v2_intent(tmp_path: Path) -> None:
+def test_get_run_reports_the_current_schema_intent(tmp_path: Path) -> None:
     harness, run_id = crashed_run(tmp_path)
     envelope = get_run(harness.server, run_id)
     assert envelope["ok"] is True
     data = envelope["data"]
-    assert data["schema_version"] == ORCHESTRATION_SCHEMA_VERSION == 2
+    assert data["schema_version"] == ORCHESTRATION_SCHEMA_VERSION == 3
     assert data["in_flight"] is True
     assert data["state"] == "READY_IMPLEMENTER"
     assert data["legal_next_actions"] == ["devrelay_resolve_recovery"]
@@ -194,7 +194,7 @@ def test_reconcile_is_read_only_and_reports_the_honest_evidence(
 
     # what the durable document says is what the report says
     persisted = raw_payload(harness.ws, run_id)
-    assert persisted["schema_version"] == 2
+    assert persisted["schema_version"] == ORCHESTRATION_SCHEMA_VERSION
     assert persisted["in_flight_turn"]["role"] == "implementer"
     assert persisted["in_flight_turn"]["prompt_sha256"] == data["attempt"]["prompt_sha256"]
 
