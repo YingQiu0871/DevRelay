@@ -25,8 +25,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   an active/uncertain lease without provider I/O; switch remains design-only in
   `docs/v0.5/SWITCH_ENDPOINT_DESIGN.md`.
 - Switch schema direction approved with conditions
-  (`docs/v0.5/SWITCH_SCHEMA_REVIEW.md`); tests-first fault scenarios document the
-  missing pending-switch lease primitive.  No switch endpoint is added.
+  (`docs/v0.5/SWITCH_SCHEMA_REVIEW.md`); pending-switch lease primitive now
+  holds source active + target pending, with atomic commit/abort/uncertain and
+  explicit recovery tests.  No switch endpoint or v3 run schema is added.
 - Real-platform gate runbook added (`docs/v0.3/V03E_GATE_RUNBOOK.md`); no gate
   was executed and `adopt_completed_turn` remains disabled.
 - `scripts/compare_builds.py` reproducibility comparison harness; a

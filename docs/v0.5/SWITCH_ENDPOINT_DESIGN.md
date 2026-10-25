@@ -87,9 +87,10 @@ No prompt/reply text or tokens.
 - Schema/evidence direction approved with conditions in
   [SWITCH_SCHEMA_REVIEW.md](SWITCH_SCHEMA_REVIEW.md); implementation pending.
 - Need a migration decision for v1/v2 runs and tests-first fault coverage.
-- Need a pending-switch lease primitive: source active + target pending for the
-  same run/role; the current one-active-lease store rejects it.  Endpoint fault
-  tests are committed as skipped scenarios in `tests/test_v05_switch_faults.py`.
+- Pending-switch lease primitive is implemented and tested (source active +
+  target `pending_switch`, atomic commit/abort/uncertain, explicit recovery).
+  The HTTP endpoint and v3 run-schema implementation remain blocked on this
+  review's remaining conditions; one endpoint fault scenario is still skipped.
 - Need a provider target-resolution path that cannot be confused with a
   client-chosen session.
 - Need crash/fault tests for target-acquired-but-not-committed.

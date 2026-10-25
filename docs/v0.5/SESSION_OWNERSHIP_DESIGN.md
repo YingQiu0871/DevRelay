@@ -1,10 +1,12 @@
 # DevRelay v0.5 — OpenCode session ownership & switching design
 
-Status: **LEASE ACQUISITION WIRED, NO SWITCH ENDPOINT (2026-10-25).**
-`src/devrelay/web/session_leases.py` implements the durable store;
-`devrelay_start_run` acquires both role leases before run creation and terminal
-outcomes release them; `GET /api/sessions` reports lease metadata.  There is
-still no session-switch endpoint or `session_id` request field.
+Status: **LEASE ACQUISITION + PENDING-SWITCH PRIMITIVE, NO ENDPOINT
+(2026-10-25).**  `src/devrelay/web/session_leases.py` implements the durable
+store, including source-active + target-pending switch leases with atomic
+commit/abort/uncertain; `devrelay_start_run` acquires both role leases before run
+creation and terminal outcomes release them; `GET /api/sessions` reports lease
+metadata.  There is still no session-switch endpoint or `session_id` request
+field.
 
 ## Current facts
 

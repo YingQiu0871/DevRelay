@@ -45,10 +45,9 @@ Schema boundary:
 
 1. Implement crash/fault tests first (target acquired but run not updated;
    run updated but source not released; corrupt store; in-flight/pending).
-   The runnable tests currently show a blocker: the lease store can hold only
-   one active lease per run/role, so a pending target lease primitive (or an
-   atomic swap operation) must be designed before the endpoint.
-   Endpoint fault tests are committed as skipped scenarios, not as proof.
+   The pending-switch lease primitive is now implemented and covered by runnable
+   tests; the HTTP endpoint/v3 schema remains unimplemented, and one endpoint
+   scenario is still skipped.
 2. No endpoint until schema v3 read/write/migration tests pass and an
    independent review accepts the implementation.
 3. Target session must be verified by the accepted bridge workspace check; a
@@ -66,10 +65,9 @@ this review.
 
 ## Open items before implementation
 
-- **Pending-switch lease primitive**: allow source active + target pending for
-  the same run/role without weakening the one-active-lease invariant; commit
-  atomically, abort cleanly, recover uncertain targets.  The current store
-  rejects this (covered by `tests/test_v05_switch_faults.py`).
+- **Pending-switch lease primitive**: implemented as source active + target
+  `pending_switch`; commit is one atomic write, abort/uncertain are explicit,
+  and stale targets are recoverable.  Covered by runnable tests.
 - Exact schema migration/read-only behavior for v2 runs.
 - Summary/audit redaction bounds for session ids.
 - Fault-injection hook design (no production behavior toggle).

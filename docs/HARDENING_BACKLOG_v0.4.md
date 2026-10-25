@@ -16,9 +16,10 @@ artifacts.
   confirmation-gated hold/release, manual-prompt blocking and MCP model-action
   enforcement; no standalone CLI orchestration command exists.
 - Session lease store with acquisition at MCP start + terminal release, read-only
-  inventory, and confirmed explicit recovery
-  (`POST /api/sessions/{session_id}/lease/recover`); no switch endpoint.  A crash
-  between acquisition and run creation can leave an active lease until recovered.
+  inventory, confirmed explicit recovery, and a pending-switch primitive
+  (source active + target pending, atomic commit/abort/uncertain); no switch
+  endpoint.  A crash between acquisition and run creation can leave an active
+  lease until recovered.
 - Reproducibility comparison helper (`scripts/compare_builds.py`), a
   proof-only Windows/Python 3.14 lock with same-environment double build PASS,
   and a Windows/Python 3.13 release lock double-built in GitHub Actions
