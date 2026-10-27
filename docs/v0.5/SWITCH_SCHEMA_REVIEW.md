@@ -1,7 +1,7 @@
 # Switch schema design review — 2026-10-25
 
-Status: **APPROVED WITH CONDITIONS — v3 SCHEMA/EVIDENCE IMPLEMENTED; ENDPOINT
-NOT IMPLEMENTED.**
+Status: **APPROVED WITH CONDITIONS — v3 SCHEMA/EVIDENCE AND SWITCH ENDPOINT
+IMPLEMENTED (2026-10-25).**
 
 Scope: the proposed run-schema/evidence change needed before a session switch
 endpoint.  This review does not authorize an endpoint, migration of existing

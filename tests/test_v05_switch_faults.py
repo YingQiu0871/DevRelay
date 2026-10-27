@@ -1,8 +1,7 @@
-"""Lease-level switch fault tests plus future endpoint contract.
+"""Lease-level switch fault tests.
 
-The pending-switch lease primitive is implemented; the HTTP endpoint and v3 run
-schema are not.  Endpoint-specific contracts remain skipped so they cannot be
-mistaken for implemented behavior.
+The pending-switch lease primitive, v3 run schema and HTTP switch endpoint are
+implemented; endpoint-level fault tests live beside the WebUI API tests.
 """
 
 from __future__ import annotations
@@ -137,11 +136,3 @@ def test_corrupt_switch_lease_store_fails_closed(tmp_path: Path):
             role="implementer",
             source_session_id=SOURCE,
         )
-
-
-@pytest.mark.skip(
-    reason="switch endpoint and v3 run schema not implemented; schema approved "
-    "with conditions"
-)
-def test_in_flight_or_pending_reply_blocks_http_switch(tmp_path: Path) -> None:
-    assert False

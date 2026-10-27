@@ -1,17 +1,39 @@
 # DevRelay v0.5 — session switch endpoint design
 
-Status: **DESIGN ONLY — v3 SCHEMA/EVIDENCE IMPLEMENTED; ENDPOINT NOT
-IMPLEMENTED.**  No switch route, request field or mutation exists.  Lease
-acquisition, explicit uncertain-lease recovery and the v3 schema review are
-preconditions, not a switch.  See
+Status: **IMPLEMENTED (2026-10-25).**  `POST /api/runs/{run_id}/session/switch`
+is live with v3 evidence, target workspace verification, pending lease and
+atomic lease commit.  A lease-commit failure after the run write returns
+`503 switch_lease_uncertain` and requires explicit recovery.  See
 [SWITCH_SCHEMA_REVIEW.md](SWITCH_SCHEMA_REVIEW.md).
 
 ## Why this is not a small endpoint
 
 A run's implementer/reviewer session ids are part of its durable evidence.  A
-switch would change who executes the next turn while preserving the audit trail;
-it is not a rename of a prompt.  The current run schema has no switch event, and
-there is no proof that an arbitrary target session is safe to adopt.
+switch changes who executes the next turn while preserving the audit trail; it
+is not a rename of a prompt.  The v3 run schema now carries validated switch
+evidence, and the endpoint verifies the target through the accepted bridge.
+
+## Implemented endpoint
+
+`POST /api/runs/{run_id}/session/switch`
+
+Body: `role`, `target_session_id`, `expected_updated_at`,
+`expected_source_session_id`, `confirm: "apply"`; header
+`X-DevRelay-Confirm: apply`.
+
+Happy path:
+
+1. validate auth/confirmation/revision/role/source session;
+2. reject terminal, in-flight, pending manual prompt or existing pending switch;
+3. verify target workspace ownership through the bridge;
+4. acquire target `pending_switch` lease;
+5. append v3 evidence and update the run role session;
+6. atomically commit the lease (target active, source released).
+
+Failure after the run write but before lease commit returns
+`503 switch_lease_uncertain`; the target lease is marked uncertain and manual
+prompts are blocked by `switch_pending` until explicit recovery.  No UI control
+is added.
 
 ## Preconditions (all required)
 

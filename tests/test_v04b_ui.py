@@ -937,6 +937,190 @@ def test_c2c_ui_has_manual_prompt_and_polling(client: TestClient):
     assert "loadMessages(false)" in script
 
 
+def test_switch_session_updates_v3_evidence_and_leases(
+    client: TestClient, workspace: Path, monkeypatch
+):
+    from devrelay.orchestration.store import OrchestrationStore
+    from devrelay.web.session_leases import SessionLeaseStore
+    from v03d_helpers import honest_run
+
+    auth = _auth(client)
+    store = OrchestrationStore(workspace / ".devrelay")
+    run = honest_run(workspace=str(workspace.resolve()))
+    store.create(run)
+    leases = SessionLeaseStore(workspace / ".devrelay")
+    leases.acquire(
+        run.implementer_session_id,
+        workspace=str(workspace.resolve()),
+        run_id=run.run_id,
+        role="implementer",
+    )
+    api = client.app.app.state.api
+    monkeypatch.setattr(
+        api.service.surface.orchestration, "verify_session", lambda sid: None
+    )
+    detail = client.get(f"/api/runs/{run.run_id}", headers=auth).json()["data"]
+    body = {
+        "role": "implementer",
+        "target_session_id": "ses_target",
+        "expected_updated_at": detail["updated_at"],
+        "expected_source_session_id": run.implementer_session_id,
+        "confirm": "apply",
+    }
+    headers = {**auth, "X-DevRelay-Confirm": "apply"}
+    assert (
+        client.post(
+            f"/api/runs/{run.run_id}/session/switch", json=body, headers=auth
+        ).status_code
+        == 403
+    )
+    response = client.post(
+        f"/api/runs/{run.run_id}/session/switch", json=body, headers=headers
+    )
+    assert response.status_code == 200, response.text
+    data = response.json()["data"]
+    assert data["implementer_session_id"] == "ses_target"
+    assert data["session_switch_history"][-1]["target_session_id"] == "ses_target"
+    assert leases.get(run.implementer_session_id)["state"] == "released"
+    assert leases.get("ses_target")["state"] == "active"
+    assert leases.pending_for_run(run.run_id) == []
+
+
+def test_switch_lease_commit_failure_is_fail_closed_and_recoverable(
+    client: TestClient, workspace: Path, monkeypatch
+):
+    from devrelay.orchestration.store import OrchestrationStore
+    from devrelay.web.session_leases import SessionLeaseError, SessionLeaseStore
+    from v03d_helpers import honest_run
+
+    auth = _auth(client)
+    store = OrchestrationStore(workspace / ".devrelay")
+    run = honest_run(workspace=str(workspace.resolve()))
+    store.create(run)
+    leases = SessionLeaseStore(workspace / ".devrelay")
+    leases.acquire(
+        run.implementer_session_id,
+        workspace=str(workspace.resolve()),
+        run_id=run.run_id,
+        role="implementer",
+    )
+    api = client.app.app.state.api
+    monkeypatch.setattr(
+        api.service.surface.orchestration, "verify_session", lambda sid: None
+    )
+    monkeypatch.setattr(
+        api.service._session_leases,
+        "commit_switch",
+        lambda switch_id: (_ for _ in ()).throw(SessionLeaseError("boom")),
+    )
+    detail = client.get(f"/api/runs/{run.run_id}", headers=auth).json()["data"]
+    headers = {**auth, "X-DevRelay-Confirm": "apply"}
+    response = client.post(
+        f"/api/runs/{run.run_id}/session/switch",
+        json={
+            "role": "implementer",
+            "target_session_id": "ses_target",
+            "expected_updated_at": detail["updated_at"],
+            "expected_source_session_id": run.implementer_session_id,
+            "confirm": "apply",
+        },
+        headers=headers,
+    )
+    assert response.status_code == 503
+    assert response.json()["error"]["code"] == "switch_lease_uncertain"
+    assert leases.get("ses_target")["state"] == "uncertain"
+    assert leases.get(run.implementer_session_id)["state"] == "active"
+    after = client.get(f"/api/runs/{run.run_id}", headers=auth).json()["data"]
+    assert after["implementer_session_id"] == "ses_target"
+    blocked_prompt = client.post(
+        f"/api/runs/{run.run_id}/prompt",
+        json={"role": "implementer", "prompt": "must not send", "confirm": "apply"},
+        headers=headers,
+    )
+    assert blocked_prompt.status_code == 409
+    assert blocked_prompt.json()["error"]["code"] == "switch_pending"
+    recovered = client.post(
+        "/api/sessions/ses_target/lease/recover",
+        json={"confirm": "apply", "expected_state": "uncertain"},
+        headers=headers,
+    )
+    assert recovered.status_code == 200
+
+
+def test_switch_session_rejects_stale_in_flight_and_terminal(
+    client: TestClient, workspace: Path, monkeypatch
+):
+    from devrelay.orchestration.models import RunState
+    from devrelay.orchestration.store import OrchestrationStore
+    from devrelay.web.session_leases import SessionLeaseStore
+    from v03d_helpers import honest_run, with_in_flight
+
+    auth = _auth(client)
+    store = OrchestrationStore(workspace / ".devrelay")
+    run = honest_run(workspace=str(workspace.resolve()))
+    store.create(run)
+    SessionLeaseStore(workspace / ".devrelay").acquire(
+        run.implementer_session_id,
+        workspace=str(workspace.resolve()),
+        run_id=run.run_id,
+        role="implementer",
+    )
+    api = client.app.app.state.api
+    monkeypatch.setattr(
+        api.service.surface.orchestration, "verify_session", lambda sid: None
+    )
+    detail = client.get(f"/api/runs/{run.run_id}", headers=auth).json()["data"]
+    headers = {**auth, "X-DevRelay-Confirm": "apply"}
+    body = {
+        "role": "implementer",
+        "target_session_id": "ses_target",
+        "expected_updated_at": detail["updated_at"],
+        "expected_source_session_id": run.implementer_session_id,
+        "confirm": "apply",
+    }
+    stale = client.post(
+        f"/api/runs/{run.run_id}/session/switch",
+        json={**body, "expected_updated_at": "stale"},
+        headers=headers,
+    )
+    assert stale.status_code == 409
+
+    in_flight = with_in_flight(
+        honest_run(
+            workspace=str(workspace.resolve()), run_id="DR-" + "f" * 32
+        ),
+        "implementer",
+    )
+    store.create(in_flight)
+    in_flight_response = client.post(
+        f"/api/runs/{in_flight.run_id}/session/switch",
+        json={
+            **body,
+            "expected_updated_at": in_flight.updated_at,
+            "expected_source_session_id": in_flight.implementer_session_id,
+        },
+        headers=headers,
+    )
+    assert in_flight_response.status_code == 409
+
+    terminal = honest_run(
+        RunState.COMPLETED,
+        workspace=str(workspace.resolve()),
+        run_id="DR-" + "1" * 32,
+    )
+    store.create(terminal)
+    terminal_response = client.post(
+        f"/api/runs/{terminal.run_id}/session/switch",
+        json={
+            **body,
+            "expected_updated_at": terminal.updated_at,
+            "expected_source_session_id": terminal.implementer_session_id,
+        },
+        headers=headers,
+    )
+    assert terminal_response.status_code == 409
+
+
 def test_c2b_ui_has_only_bounded_controls(client: TestClient):
     html = client.get("/").text
     script = client.get("/assets/app.js").text
@@ -1122,14 +1306,7 @@ def test_sessions_inventory_is_run_recorded(client: TestClient, workspace: Path)
         client.get(f"/api/sessions/{run.implementer_session_id}", headers=auth).status_code
         == 404
     )
-    assert (
-        client.post(
-            f"/api/runs/{run.run_id}/session/switch",
-            json={"role": "implementer", "target_session_id": "other", "confirm": "apply"},
-            headers={**auth, "X-DevRelay-Confirm": "apply"},
-        ).status_code
-        == 404
-    )
+
 
 
 def test_d_ui_has_project_and_session_controls(client: TestClient):

@@ -93,6 +93,16 @@ class SessionLeaseRecoverRequest(BaseModel):
     expected_state: Literal["active", "uncertain"] | None = None
 
 
+class RunSessionSwitchRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    role: Literal["implementer", "reviewer"]
+    target_session_id: str = Field(min_length=1, max_length=200)
+    expected_updated_at: str
+    expected_source_session_id: str = Field(min_length=1, max_length=200)
+    confirm: Literal["apply"]
+
+
 class ProjectActivateRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 

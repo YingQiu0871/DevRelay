@@ -21,8 +21,10 @@ artifacts.
   endpoint.  A crash between acquisition and run creation can leave an active
   lease until recovered.
 - v3 run schema with validated append-only `session_switch_history` evidence;
-  v1/v2 documents remain readable and cannot carry switch history.  No switch
-  mutation/endpoint is added.
+  v1/v2 documents remain readable and cannot carry switch history.
+- HTTP session switch endpoint with target workspace verification, pending
+  lease, v3 evidence and atomic lease commit; lease-commit-after-run-write
+  failure is explicit `503 switch_lease_uncertain` and recoverable.
 - Reproducibility comparison helper (`scripts/compare_builds.py`), a
   proof-only Windows/Python 3.14 lock with same-environment double build PASS,
   and a Windows/Python 3.13 release lock double-built in GitHub Actions

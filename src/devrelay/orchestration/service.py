@@ -48,6 +48,7 @@ from devrelay.orchestration.models import (
     RecoveryResolution,
     RoleRouteSnapshot,
     RunState,
+    SessionSwitchRecord,
     TurnOutcomeState,
     TurnRecord,
 )
@@ -148,6 +149,63 @@ class OrchestrationService:
                 "orchestration run requires two existing, owned sessions "
                 "(no session is created, reused or substituted)"
             )
+
+    def verify_session(self, session_id: str) -> None:
+        """Public read-only bridge verification used by the web switch gate."""
+        self._verify_session(session_id)
+
+    def apply_session_switch(
+        self,
+        run_id: str,
+        *,
+        role: str,
+        source_session_id: str,
+        target_session_id: str,
+        expected_updated_at: str,
+        switch_id: str,
+        target_lease_acquired_at: str,
+    ) -> dict[str, Any]:
+        """Append v3 switch evidence and update one role session.
+
+        This is the durable run mutation only.  The caller owns the lease
+        transaction and must fail closed if this write fails.
+        """
+        if role not in ("implementer", "reviewer"):
+            raise OrchestrationInvalidTransitionError("unknown switch role")
+        run = self.store.load(run_id)
+        if run.schema_version < 3:
+            raise OrchestrationInvalidTransitionError(
+                "session switch requires a v3 run document"
+            )
+        if run.terminal:
+            raise OrchestrationInvalidTransitionError("terminal run cannot switch sessions")
+        if run.in_flight_turn is not None:
+            raise OrchestrationInvalidTransitionError(
+                "session switch is illegal while a turn is in flight"
+            )
+        if str(run.updated_at) != expected_updated_at:
+            raise OrchestrationInvalidTransitionError("run changed since it was loaded")
+        if getattr(run, f"{role}_session_id") != source_session_id:
+            raise OrchestrationSessionConflictError(
+                "source session no longer matches the run"
+            )
+        if source_session_id == target_session_id:
+            raise OrchestrationSessionConflictError("source and target sessions are identical")
+        run.session_switch_history.append(
+            SessionSwitchRecord(
+                switch_id=switch_id,
+                role=role,
+                source_session_id=source_session_id,
+                target_session_id=target_session_id,
+                switched_at=utcnow_iso(),
+                source_revision=expected_updated_at,
+                target_lease_acquired_at=target_lease_acquired_at or utcnow_iso(),
+            )
+        )
+        setattr(run, f"{role}_session_id", target_session_id)
+        run.updated_at = utcnow_iso()
+        self.store.save(run)
+        return run.summary()
 
     def _current_routes(self) -> dict[str, RoleRouteSnapshot]:
         return {

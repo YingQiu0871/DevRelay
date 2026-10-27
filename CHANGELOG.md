@@ -22,15 +22,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   metadata.  A crash between acquisition and run creation can leave a fail-closed
   active lease.
 - Confirmed `POST /api/sessions/{session_id}/lease/recover` explicitly releases
-  an active/uncertain lease without provider I/O; switch remains design-only in
-  `docs/v0.5/SWITCH_ENDPOINT_DESIGN.md`.
+  an active/uncertain lease without provider I/O.
 - Switch schema direction approved with conditions
-  (`docs/v0.5/SWITCH_SCHEMA_REVIEW.md`); pending-switch lease primitive now
-  holds source active + target pending, with atomic commit/abort/uncertain and
-  explicit recovery tests.
+  (`docs/v0.5/SWITCH_SCHEMA_REVIEW.md`); pending-switch lease primitive holds
+  source active + target pending with atomic commit/abort/uncertain.
 - v3 run schema adds validated append-only `session_switch_history`
-  (`SessionSwitchRecord`); v1/v2 remain readable and cannot carry it.  No switch
-  mutation/endpoint is added.
+  (`SessionSwitchRecord`); v1/v2 remain readable and cannot carry it.
+- `POST /api/runs/{run_id}/session/switch` verifies the target workspace,
+  acquires a pending target lease, appends v3 evidence and atomically commits the
+  lease.  A lease-commit failure after the run write returns `503
+  switch_lease_uncertain` and is recoverable; no UI control is added.
 - Real-platform gate runbook added (`docs/v0.3/V03E_GATE_RUNBOOK.md`); no gate
   was executed and `adopt_completed_turn` remains disabled.
 - `scripts/compare_builds.py` reproducibility comparison harness; a

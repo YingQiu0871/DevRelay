@@ -38,6 +38,7 @@ from devrelay.web.models import (
     RunInterruptRequest,
     RunPromptRecoverRequest,
     RunPromptRequest,
+    RunSessionSwitchRequest,
     SessionLeaseRecoverRequest,
     SessionRequest,
     WiringWriteRequest,
@@ -484,6 +485,34 @@ class LocalControlApi:
             success(data, request_id=str(request.state.request_id)),
         )
 
+    async def run_switch_session(self, request: Request) -> Response:
+        if request.headers.get("x-devrelay-confirm") != "apply":
+            raise WebApiError(
+                "confirmation_required",
+                "X-DevRelay-Confirm: apply is required",
+                status_code=403,
+            )
+        payload: RunSessionSwitchRequest = await _read_json(
+            request, RunSessionSwitchRequest
+        )
+        if payload.confirm != "apply":
+            raise WebApiError(
+                "confirmation_required", "confirm must be apply", status_code=403
+            )
+        run_id = str(request.path_params.get("run_id", ""))
+        data = await run_in_threadpool(
+            self.service.switch_session,
+            run_id,
+            payload.role,
+            payload.target_session_id,
+            payload.expected_updated_at,
+            payload.expected_source_session_id,
+        )
+        return _json(
+            request,
+            success(data, request_id=str(request.state.request_id)),
+        )
+
     async def run_hold(self, request: Request) -> Response:
         if request.headers.get("x-devrelay-confirm") != "apply":
             raise WebApiError(
@@ -776,6 +805,11 @@ def create_app(
             Route(
                 "/api/runs/{run_id}/prompt/recover",
                 api.run_prompt_recover,
+                methods=["POST"],
+            ),
+            Route(
+                "/api/runs/{run_id}/session/switch",
+                api.run_switch_session,
                 methods=["POST"],
             ),
             Route("/api/runs/{run_id}/hold", api.run_hold, methods=["POST"]),

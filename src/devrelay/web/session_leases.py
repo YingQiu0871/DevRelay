@@ -179,6 +179,24 @@ class SessionLeaseStore:
             self._write(data)
             return record
 
+    def pending_for_run(self, run_id: str) -> list[dict[str, Any]]:
+        with self._lock:
+            return [
+                entry
+                for entry in self._read()["leases"].values()
+                if entry.get("run_id") == run_id
+                and entry.get("state") == "pending_switch"
+            ]
+
+    def blocking_for_run(self, run_id: str) -> list[dict[str, Any]]:
+        with self._lock:
+            return [
+                entry
+                for entry in self._read()["leases"].values()
+                if entry.get("run_id") == run_id
+                and entry.get("state") in ("pending_switch", "uncertain")
+            ]
+
     def pending_switch(self, switch_id: str) -> dict[str, Any] | None:
         if not valid_switch_id(switch_id):
             return None

@@ -10,9 +10,15 @@ from typing import Any
 
 from devrelay import __version__
 from devrelay.artifacts.store import ArtifactStore
-from devrelay.errors import DevRelayError, OrchestrationError, TaskNotFoundError
+from devrelay.errors import (
+    DevRelayError,
+    OrchestrationError,
+    OrchestrationSessionConflictError,
+    TaskNotFoundError,
+)
 from devrelay.mcp.models import McpEnvelope
 from devrelay.mcp.tools import McpToolSurface
+from devrelay.opencode.models import valid_session_id
 from devrelay.orchestration.store import valid_run_id
 from devrelay.pipeline.budget import ProviderBudget
 from devrelay.redact import redact_text
@@ -267,6 +273,19 @@ class WebReadService:
                     "a previous manual prompt may still be in flight; resolve it before sending another",
                     status_code=409,
                 )
+            try:
+                if self._session_leases.blocking_for_run(run_id):
+                    raise WebApiError(
+                        "switch_pending",
+                        "a session switch is pending or uncertain; resolve it before prompting",
+                        status_code=409,
+                    )
+            except SessionLeaseError as exc:
+                raise WebApiError(
+                    "session_lease_unavailable",
+                    "the session lease store cannot be read safely; refusing to prompt",
+                    status_code=503,
+                ) from exc
             try:
                 hold = self._run_holds.get(run_id)
             except RunHoldError as exc:
@@ -717,6 +736,134 @@ class WebReadService:
             "previous_state": entry.get("previous_state", ""),
             "state": entry.get("state", ""),
         }
+
+    def switch_session(
+        self,
+        run_id: str,
+        role: str,
+        target_session_id: str,
+        expected_updated_at: str,
+        expected_source_session_id: str,
+    ) -> dict[str, Any]:
+        current = self.run(run_id)
+        if int(current.get("schema_version", 0)) < 3:
+            raise WebApiError(
+                "schema_v3_required",
+                "session switch requires a v3 run document",
+                status_code=409,
+            )
+        if current.get("terminal"):
+            raise WebApiError("run_terminal", "the run is already terminal", status_code=409)
+        if current.get("in_flight"):
+            raise WebApiError(
+                "run_in_flight",
+                "session switch is illegal while a turn is in flight",
+                status_code=409,
+            )
+        source = current.get(f"{role}_session_id")
+        if source != expected_source_session_id:
+            raise WebApiError(
+                "run_changed",
+                "the run's role session changed since it was loaded",
+                status_code=409,
+            )
+        if str(current.get("updated_at", "")) != expected_updated_at:
+            raise WebApiError(
+                "run_changed",
+                "the run changed since it was loaded; reload and retry",
+                status_code=409,
+            )
+        if not valid_session_id(target_session_id) or target_session_id == source:
+            raise WebApiError(
+                "invalid_target_session",
+                "target_session_id must be an explicit, different session id",
+                status_code=400,
+            )
+        try:
+            if (
+                self._prompt_markers.pending(run_id) is not None
+                or run_id in self._prompt_pending_fallback
+            ):
+                raise WebApiError(
+                    "manual_prompt_pending",
+                    "a manual prompt may still be in flight",
+                    status_code=409,
+                )
+        except PromptMarkerError as exc:
+            raise WebApiError(
+                "manual_prompt_marker_unavailable",
+                "the manual prompt marker cannot be read safely",
+                status_code=503,
+            ) from exc
+        try:
+            if self._session_leases.blocking_for_run(run_id):
+                raise WebApiError(
+                    "switch_pending",
+                    "a session switch is pending or uncertain for this run",
+                    status_code=409,
+                )
+            self.surface.orchestration.verify_session(target_session_id)
+            pending = self._session_leases.acquire_pending_switch(
+                target_session_id,
+                workspace=str(self.workspace_root),
+                run_id=run_id,
+                role=role,
+                source_session_id=source,
+            )
+        except OrchestrationSessionConflictError as exc:
+            raise WebApiError(
+                "session_target_invalid",
+                "the target session is not owned by this workspace",
+                status_code=409,
+            ) from exc
+        except SessionLeaseConflict as exc:
+            raise WebApiError("session_leased", str(exc), status_code=409) from exc
+        except SessionLeaseError as exc:
+            raise WebApiError(
+                "session_lease_unavailable",
+                "the session lease store cannot be used safely",
+                status_code=503,
+            ) from exc
+        except DevRelayError as exc:
+            raise WebApiError(
+                getattr(exc, "code", "orchestration_error"),
+                "the target session could not be verified",
+                status_code=503,
+            ) from exc
+        try:
+            summary = self.surface.orchestration.apply_session_switch(
+                run_id,
+                role=role,
+                source_session_id=source,
+                target_session_id=target_session_id,
+                expected_updated_at=expected_updated_at,
+                switch_id=pending["switch_id"],
+                target_lease_acquired_at=pending.get("acquired_at", ""),
+            )
+        except DevRelayError as exc:
+            try:
+                self._session_leases.abort_switch(pending["switch_id"])
+            except SessionLeaseError:
+                pass
+            code = getattr(exc, "code", "orchestration_error")
+            status = 409 if code in {
+                "orchestration_invalid_transition",
+                "orchestration_session_conflict",
+            } else 503
+            raise WebApiError(code, redact_text(str(exc))[:300], status_code=status) from exc
+        try:
+            self._session_leases.commit_switch(pending["switch_id"])
+        except SessionLeaseError as exc:
+            try:
+                self._session_leases.mark_switch_uncertain(pending["switch_id"])
+            except SessionLeaseError:
+                pass
+            raise WebApiError(
+                "switch_lease_uncertain",
+                "the run switched but the lease commit failed; explicit recovery is required",
+                status_code=503,
+            ) from exc
+        return summary
 
     def sessions(self) -> dict[str, Any]:
         ids = self.surface.orchestration.list_run_ids()
