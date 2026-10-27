@@ -1,7 +1,8 @@
 # v0.3-E real-platform gate runbook
 
-Status: **PREPARED — NOT EXECUTED.**  `adopt_completed_turn` remains disabled.
-This runbook must not be treated as an authorization or as evidence.
+Status: **PREPARED / BLOCKED — NOT EXECUTED.**  `adopt_completed_turn` remains
+disabled.  This runbook must not be treated as an authorization or as evidence.
+Current readiness: [V03E_GATE_READINESS_2026-10-27.md](V03E_GATE_READINESS_2026-10-27.md).
 
 ## 0. Current state
 
