@@ -1,11 +1,11 @@
 # DevRelay 交接文档
 
-最后更新：2026-10-28  
-仓库：`D:\DevRelay`  
-当前分支：`main`  
-当前 HEAD：`afad11a36d2fed5985ac44d3f6528346d2a74282`  
-当前公开版本：**v0.4.0**（2026-10-22）  
-最新 CI：https://github.com/YingQiu0871/DevRelay/actions/runs/40596216885 （8/8 success）  
+最后更新：2026-10-28
+仓库：`D:\DevRelay`
+当前分支：`main`
+当前 HEAD：`afad11a36d2fed5985ac44d3f6528346d2a74282`
+当前公开版本：**v0.4.0**（2026-10-22）
+最新 CI：https://github.com/YingQiu0871/DevRelay/actions/runs/40596216885 （8/8 success）
 测试基线：**1,373 collected — 1,371 passed + 2 environment skips**
 
 ---
@@ -38,7 +38,7 @@ ChatGPT/MCP 工具面 + v0.4 Web 控制面。
 
 ## 2. 已发布内容（v0.4.0）
 
-Release commit：`c3a54162547cb810e454c498ee05f8eac33c99ae`  
+Release commit：`c3a54162547cb810e454c498ee05f8eac33c99ae`
 Tag：`v0.4.0`（annotated；peeled `c3a5416`）
 
 | 资产 | 说明 |
