@@ -3,9 +3,10 @@
 最后更新：2026-10-28
 仓库：`D:\DevRelay`
 当前分支：`main`
-当前 HEAD：`afad11a36d2fed5985ac44d3f6528346d2a74282`
+审计快照 HEAD：`afad11a36d2fed5985ac44d3f6528346d2a74282`
+（实际当前 HEAD 以 `git log -1` 为准；本文件提交后可能前进）
 当前公开版本：**v0.4.0**（2026-10-22）
-最新 CI：https://github.com/YingQiu0871/DevRelay/actions/runs/40596216885 （8/8 success）
+文档提交时 CI：https://github.com/YingQiu0871/DevRelay/actions/runs/40783416572 （8/8 success）
 测试基线：**1,373 collected — 1,371 passed + 2 environment skips**
 
 ---
