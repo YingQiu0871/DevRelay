@@ -1,13 +1,15 @@
 # DevRelay 交接文档
 
-最后更新：2026-10-28
+最后更新：2026-10-29（接手复核）
 仓库：`D:\DevRelay`
 当前分支：`main`
 审计快照 HEAD：`afad11a36d2fed5985ac44d3f6528346d2a74282`
-（实际当前 HEAD 以 `git log -1` 为准；本文件提交后可能前进）
+（之后的提交只改 `docs/HANDOVER.md`；实际当前 HEAD 以 `git log -1` 为准）
 当前公开版本：**v0.4.0**（2026-10-22）
-文档提交时 CI：https://github.com/YingQiu0871/DevRelay/actions/runs/40783416572 （8/8 success）
+审计快照 CI：https://github.com/YingQiu0871/DevRelay/actions/runs/40596216885 （`afad11a`，8/8 success）
 测试基线：**1,373 collected — 1,371 passed + 2 environment skips**
+接手复核（2026-10-29，HEAD `f69f33f`）：本地 Windows / Python 3.14.6 全量
+1,371 passed + 2 skipped；CI https://github.com/YingQiu0871/DevRelay/actions/runs/40784486176 （8/8 success）
 
 ---
 
@@ -282,4 +284,14 @@ Tests:       1,373 collected / 1,371 passed / 2 environment skips
 CI:          40596216885 (8/8 success)
 Adoption:    disabled
 Gate:        blocked
+```
+
+接手复核（2026-10-29）：
+
+```text
+HEAD:        f69f33f6ce52dec0eac7a47b6244cbb4727242f2 (= main = origin/main; 自 afad11a 起仅 docs)
+Tests:       1,371 passed / 2 skipped (fsync 目录、symlink 权限；Windows 本地)
+CI:          40784486176 (8/8 success)
+Release:     gh release v0.4.0 = 4 assets, non-draft, tag peeled c3a5416
+MCP tools:   19 (src/devrelay/mcp/server.py)
 ```
