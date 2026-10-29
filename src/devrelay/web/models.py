@@ -103,6 +103,13 @@ class RunSessionSwitchRequest(BaseModel):
     confirm: Literal["apply"]
 
 
+class RunSwitchRecoverRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    switch_id: str = Field(min_length=1, max_length=64)
+    confirm: Literal["apply"]
+
+
 class ProjectActivateRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 

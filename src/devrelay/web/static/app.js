@@ -363,9 +363,15 @@
       const lease = session.lease ? ` · lease:${session.lease.state}` : "";
       right.textContent = `${(session.roles || []).join("/")} · ${session.latest_state || "?"} · ${(session.run_ids || []).length} run(s)${lease}`;
       item.append(left, right);
-      // Only an uncertain lease (e.g. after switch_lease_uncertain) gets a
-      // UI recovery control; active leases stay CLI/API-only.
-      if (session.lease && session.lease.state === "uncertain") {
+      // Only an uncertain lease gets a UI recovery control; active leases stay
+      // API-only, and a switch lease is resolved from its run (Resolve pending
+      // switch) so the source lease is not orphaned.
+      if (session.lease && session.lease.switch_id && ["pending_switch", "uncertain"].includes(session.lease.state)) {
+        const hint = document.createElement("span");
+        hint.className = "muted";
+        hint.textContent = "resolve from run detail";
+        item.append(hint);
+      } else if (session.lease && session.lease.state === "uncertain") {
         const recover = document.createElement("button");
         recover.type = "button";
         recover.className = "button button-quiet lease-recover";
@@ -515,14 +521,22 @@
         ? "Hold store unavailable."
         : "No advisory hold.";
     const schemaVersion = Number(detail.schema_version || 0);
-    $("run-switch").disabled = schemaVersion < 3 || Boolean(detail.terminal || detail.in_flight);
-    $("run-switch-status").textContent = schemaVersion < 3
-      ? "Switch requires a v3 run document."
-      : detail.terminal
-        ? "Run is terminal."
-        : detail.in_flight
-          ? "A turn is in flight."
-          : "";
+    const pendingSwitch = detail.pending_switch || null;
+    $("run-switch").disabled = schemaVersion < 3
+      || Boolean(detail.terminal || detail.in_flight || pendingSwitch || detail.pending_switch_error);
+    $("run-switch-resolve").hidden = !pendingSwitch;
+    $("run-switch-resolve").disabled = !pendingSwitch;
+    $("run-switch-status").textContent = pendingSwitch
+      ? `Unresolved ${pendingSwitch.role} switch (${pendingSwitch.state}): ${pendingSwitch.source_session_id} → ${pendingSwitch.target_session_id}`
+      : detail.pending_switch_error
+        ? "Session lease store unavailable."
+        : schemaVersion < 3
+          ? "Switch requires a v3 run document."
+          : detail.terminal
+            ? "Run is terminal."
+            : detail.in_flight
+              ? "A turn is in flight."
+              : "";
     const metrics = $("run-detail-metrics");
     metrics.replaceChildren();
     appendDetailRow(metrics, "State", detail.state);
@@ -1152,13 +1166,55 @@
         $("run-action-result").textContent = "The run changed; reloaded. Review the current session and retry.";
       } else if (error.code === "switch_lease_uncertain") {
         // The run already records the target; only the lease commit failed.
+        $("run-switch-target").value = "";
         await loadRunDetail(detail.run_id);
         await refreshSessions().catch(() => {});
         $("run-action-result").textContent = "The run now records the target session, but the lease commit failed. "
-          + "Prompts stay blocked until the target lease is recovered under Sessions. Do not retry the switch.";
+          + "Prompts stay blocked until you use Resolve pending switch. Do not retry the switch.";
       } else {
         $("run-action-result").textContent = `${error.code ? `${error.code}: ` : ""}${error.message}`;
       }
+    } finally {
+      if (state.runDetail && state.selectedRunId === detail.run_id) renderRunDetail(state.runDetail);
+    }
+  }
+
+  async function resolveSwitch() {
+    const detail = state.runDetail;
+    const pending = detail && detail.pending_switch;
+    if (!pending) return;
+    if (!window.confirm(
+      `Resolve the unresolved ${pending.role} switch on ${detail.run_id}?\n\n`
+      + `${pending.source_session_id} → ${pending.target_session_id} (${pending.state})\n\n`
+      + "The run document decides: if it records the switch, the target lease becomes active and the source is released; "
+      + "otherwise the target lease is released. No provider I/O and no run write.",
+    )) {
+      return;
+    }
+    const button = $("run-switch-resolve");
+    button.disabled = true;
+    try {
+      const data = await api(
+        `/api/runs/${encodeURIComponent(detail.run_id)}/session/switch/recover`,
+        {
+          method: "POST",
+          headers: { "X-DevRelay-Confirm": "apply" },
+          body: { switch_id: pending.switch_id, confirm: "apply" },
+        },
+      );
+      await loadRunDetail(detail.run_id);
+      await refreshSessions().catch(() => {});
+      $("run-action-result").textContent = data.result === "committed"
+        ? `Switch completed: the ${data.role} session ${data.session_id} now holds the lease.`
+        : `Switch aborted: the ${data.role} session stays ${data.session_id}.`;
+    } catch (error) {
+      if (error.status === 401) {
+        clearSession();
+        showLogin("Session expired. Enter the token again.");
+        return;
+      }
+      await loadRunDetail(detail.run_id);
+      $("run-action-result").textContent = `${error.code ? `${error.code}: ` : ""}${error.message}`;
     } finally {
       if (state.runDetail && state.selectedRunId === detail.run_id) renderRunDetail(state.runDetail);
     }
@@ -1633,6 +1689,7 @@
   $("run-hold").addEventListener("click", holdRun);
   $("run-hold-release").addEventListener("click", releaseHold);
   $("run-switch").addEventListener("click", switchSession);
+  $("run-switch-resolve").addEventListener("click", resolveSwitch);
   $("run-prompt-send").addEventListener("click", sendManualPrompt);
   $("run-prompt-recover").addEventListener("click", recoverPromptMarker);
   $("messages-refresh").addEventListener("click", () => loadMessages(true));

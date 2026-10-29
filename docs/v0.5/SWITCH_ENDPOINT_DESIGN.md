@@ -41,22 +41,40 @@ id, a `window.confirm` naming source → target, and a request built from the
 loaded run's `updated_at` and role session id.  No automatic retry.
 `run_changed` reloads the run; `switch_lease_uncertain` reloads the run and
 sessions and tells the operator not to retry.  The Sessions list offers a
-confirmed **Recover lease** button only for `uncertain` leases, sending
-`expected_state: "uncertain"`; `active` lease recovery stays API-only.
+confirmed **Recover lease** button only for non-switch `uncertain` leases,
+sending `expected_state: "uncertain"`; `active` lease recovery stays API-only.
+Switch leases show "resolve from run detail" instead.
 
-### Known gap: post-uncertain recovery leaves the run unswitchable
+## Switch resolution (2026-10-29)
 
-After `switch_lease_uncertain`, the run already records the target while the
-source lease is still `active`.  Recovering the target lease (the documented
-path) releases the target, but the source lease stays `active` and orphaned:
-no run records that session any more, so it is not shown in the Sessions list.
-Any later switch on the run fails with `409 session_leased` ("source session has
-no matching active lease"), and the target session runs with no lease.  The
-orphaned source lease can only be released with
-`POST /api/sessions/{source}/lease/recover` (`expected_state: "active"`); that
-does not make the run switchable again.  Closing this needs a
-run+lease reconciliation design (re-attach the run's current session lease or
-release the source as part of recovery).
+Generic lease recovery after `switch_lease_uncertain` used to release only the
+target: the source lease stayed `active` and orphaned (no run records it, so the
+Sessions list hid it), the target ran with no lease, and every later switch on
+the run failed with `409 session_leased`.
+
+`POST /api/runs/{run_id}/session/switch/recover` with body
+`{"switch_id": "...", "confirm": "apply"}` and header
+`X-DevRelay-Confirm: apply` resolves the run's one unresolved switch
+(`pending_switch` or `uncertain` target lease) from the durable run document:
+
+| Run document | Lease result |
+| --- | --- |
+| records `switch_id` and the role points at the target | target `active`, source `released` (finishes the failed commit) |
+| does not record it and the role still points at the source | target `released` (the abort that never ran) |
+| anything else | `409 switch_state_inconsistent`, nothing written |
+
+Other rejections: unknown/stale `switch_id` → `409 switch_not_pending`; lease
+mismatch (e.g. source re-leased elsewhere) → `409 lease_changed`; unreadable
+store → `503 session_lease_unavailable`.  A source lease already released by
+generic recovery is tolerated on the commit side.  No provider I/O and no run
+write.  `GET /api/runs/{run_id}` reports `pending_switch` (id, role, state,
+source, target); the WebUI disables **Switch session** and shows **Resolve
+pending switch** while one exists.
+
+Residual: a run whose target lease was already released through generic
+`/lease/recover` before this endpoint existed has no unresolved switch left to
+resolve; its current session has no lease and a later switch still fails with
+`session_leased`.  Re-attaching a lease to such a run remains manual.
 
 ## Preconditions (all required)
 

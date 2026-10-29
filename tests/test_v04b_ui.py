@@ -1157,9 +1157,15 @@ def test_switch_ui_is_explicit_and_fail_closed(client: TestClient):
     # A lease-commit failure is surfaced, never retried.
     assert "switch_lease_uncertain" in script
     assert "Do not retry the switch" in script
-    # UI recovery is offered only for uncertain leases and pins that state.
+    # Generic UI lease recovery is offered only for uncertain leases and pins
+    # that state; switch leases are resolved from their run instead.
     assert 'session.lease.state === "uncertain"' in script
     assert 'expected_state: "uncertain"' in script
+    assert "resolve from run detail" in script
+    assert 'id="run-switch-resolve"' in html
+    assert "resolveSwitch" in script
+    assert "/session/switch/recover" in script
+    assert "switch_id: pending.switch_id" in script
 
 
 def test_project_activation_switches_active_workspace(

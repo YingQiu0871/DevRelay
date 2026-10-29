@@ -161,6 +161,24 @@ class WebReadService:
         except RunHoldError:
             summary["hold"] = None
             summary["hold_error"] = "unavailable"
+        try:
+            pending = self._session_leases.switch_for_run(run_id)
+        except SessionLeaseError:
+            summary["pending_switch"] = None
+            summary["pending_switch_error"] = "unavailable"
+        else:
+            summary["pending_switch"] = (
+                {
+                    "switch_id": pending.get("switch_id", ""),
+                    "role": pending.get("role", ""),
+                    "state": pending.get("state", ""),
+                    "source_session_id": pending.get("source_session_id", ""),
+                    "target_session_id": pending.get("session_id", ""),
+                    "acquired_at": pending.get("acquired_at", ""),
+                }
+                if pending is not None
+                else None
+            )
         return summary
 
     def hold_run(
@@ -864,6 +882,65 @@ class WebReadService:
                 status_code=503,
             ) from exc
         return summary
+
+    def resolve_switch(self, run_id: str, switch_id: str) -> dict[str, Any]:
+        """Finish an unresolved switch from the durable run document.
+
+        The run is authoritative: if it records ``switch_id`` and points at the
+        target, the lease commit is completed; if it does not record the switch
+        and still points at the source, the target lease is released.  Anything
+        else fails closed without writing.
+        """
+        current = self.run(run_id)
+        if current.get("pending_switch_error"):
+            raise WebApiError(
+                "session_lease_unavailable",
+                "the session lease store cannot be read safely",
+                status_code=503,
+            )
+        pending = current.get("pending_switch")
+        if not pending or pending.get("switch_id") != switch_id:
+            raise WebApiError(
+                "switch_not_pending",
+                "no unresolved switch with this id exists for the run",
+                status_code=409,
+            )
+        role = pending["role"]
+        run_session = current.get(f"{role}_session_id")
+        recorded = any(
+            record.get("switch_id") == switch_id
+            for record in current.get("session_switch_history") or []
+        )
+        if recorded and run_session == pending["target_session_id"]:
+            committed = True
+        elif not recorded and run_session == pending["source_session_id"]:
+            committed = False
+        else:
+            raise WebApiError(
+                "switch_state_inconsistent",
+                "the run document does not match the pending switch; refusing to resolve",
+                status_code=409,
+            )
+        try:
+            result = self._session_leases.resolve_switch(
+                switch_id, run_committed=committed
+            )
+        except SessionLeaseConflict as exc:
+            raise WebApiError("lease_changed", str(exc), status_code=409) from exc
+        except SessionLeaseError as exc:
+            raise WebApiError(
+                "session_lease_unavailable",
+                "the session lease store cannot be used safely",
+                status_code=503,
+            ) from exc
+        return {
+            "run_id": run_id,
+            "switch_id": switch_id,
+            "role": role,
+            "result": result["result"],
+            "previous_state": result["previous_state"],
+            "session_id": run_session,
+        }
 
     def sessions(self) -> dict[str, Any]:
         ids = self.surface.orchestration.list_run_ids()

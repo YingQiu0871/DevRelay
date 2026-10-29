@@ -264,6 +264,79 @@ class SessionLeaseStore:
             self._write(data)
             return {"source": source, "target": target}
 
+    def switch_for_run(self, run_id: str) -> dict[str, Any] | None:
+        """The one pending/uncertain switch target held for ``run_id``, if any."""
+        blocking = [
+            entry
+            for entry in self.blocking_for_run(run_id)
+            if valid_switch_id(entry.get("switch_id"))
+        ]
+        if len(blocking) > 1:
+            raise SessionLeaseConflict("more than one unresolved switch exists for this run")
+        return blocking[0] if blocking else None
+
+    def resolve_switch(self, switch_id: str, *, run_committed: bool) -> dict[str, Any]:
+        """Explicitly finish a pending/uncertain switch after a crash or failed commit.
+
+        The caller decides ``run_committed`` from the durable run document, which
+        is authoritative: a committed run gets target active + source released
+        (the commit that failed); an uncommitted run gets the target released (the
+        abort that never ran).  No provider I/O and no run write happen here.
+        """
+        if not valid_switch_id(switch_id):
+            raise SessionLeaseConflict("switch id is invalid")
+        with self._lock:
+            data = self._read()
+            target = next(
+                (
+                    entry
+                    for entry in data["leases"].values()
+                    if entry.get("switch_id") == switch_id
+                    and entry.get("state") in ("pending_switch", "uncertain")
+                ),
+                None,
+            )
+            if target is None:
+                raise SessionLeaseConflict("no pending or uncertain switch with this id")
+            now = datetime.now(timezone.utc).isoformat(timespec="seconds")
+            previous_state = target.get("state", "")
+            if not run_committed:
+                target["state"] = "released"
+                target["released_at"] = now
+                target["switch_result"] = "aborted_by_recovery"
+                target["recovered_at"] = now
+                target["recovery"] = "explicit"
+                self._write(data)
+                return {"result": "aborted", "previous_state": previous_state, "target": target}
+            source = data["leases"].get(str(target.get("source_session_id", "")))
+            if source is not None and source.get("state") == "active":
+                if (
+                    source.get("run_id") != target.get("run_id")
+                    or source.get("role") != target.get("role")
+                    or source.get("workspace") != target.get("workspace")
+                ):
+                    raise SessionLeaseConflict("source lease does not match the switch")
+                source["state"] = "released"
+                source["released_at"] = now
+                source["switched_to"] = target.get("session_id", "")
+            elif source is not None and source.get("state") != "released":
+                raise SessionLeaseConflict(
+                    f"source lease state is {source.get('state')!r}; refusing to resolve"
+                )
+            target["state"] = "active"
+            target["released_at"] = ""
+            target["switch_result"] = "committed_by_recovery"
+            target["switched_from"] = target.get("source_session_id", "")
+            target["recovered_at"] = now
+            target["recovery"] = "explicit"
+            self._write(data)
+            return {
+                "result": "committed",
+                "previous_state": previous_state,
+                "source": source,
+                "target": target,
+            }
+
     def release_run(self, run_id: str) -> int:
         with self._lock:
             data = self._read()

@@ -37,10 +37,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   evidence taken from the loaded run, and no automatic retry.  The run detail
   shows current role sessions and `session_switch_history`.
   `switch_lease_uncertain` is surfaced with a do-not-retry instruction, and the
-  Sessions list offers a confirmed **Recover lease** action for `uncertain`
-  leases only (`expected_state: "uncertain"`).  Known gap: after that recovery
-  the source lease stays `active` and the run cannot switch again
-  (`session_leased`); see `docs/v0.5/SWITCH_ENDPOINT_DESIGN.md`.
+  Sessions list offers a confirmed **Recover lease** action for non-switch
+  `uncertain` leases only (`expected_state: "uncertain"`).
+- Confirmed `POST /api/runs/{run_id}/session/switch/recover` (`switch_id`,
+  `confirm`) resolves an unresolved (`pending_switch`/`uncertain`) switch from
+  the durable run document: a run that records the switch gets target active +
+  source released; a run still on the source gets the target released; any
+  mismatch fails closed with `409 switch_state_inconsistent`.  No provider I/O
+  and no run write.  `GET /api/runs/{run_id}` reports `pending_switch`, and the
+  run detail shows a **Resolve pending switch** button.  This closes the gap
+  where generic lease recovery after `switch_lease_uncertain` left the source
+  lease orphaned and the run unable to switch again.
 - Real-platform gate runbook added (`docs/v0.3/V03E_GATE_RUNBOOK.md`); no gate
   was executed and `adopt_completed_turn` remains disabled.
 - `scripts/compare_builds.py` reproducibility comparison harness; a

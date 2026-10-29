@@ -7,7 +7,7 @@
 （之后的提交只改 `docs/HANDOVER.md`；实际当前 HEAD 以 `git log -1` 为准）
 当前公开版本：**v0.4.0**（2026-10-22）
 审计快照 CI：https://github.com/YingQiu0871/DevRelay/actions/runs/40596216885 （`afad11a`，8/8 success）
-测试基线：**1,374 collected — 1,372 passed + 2 environment skips**（含 switch UI）
+测试基线：**1,381 collected — 1,379 passed + 2 environment skips**（含 switch UI + resolve）
 接手复核（2026-10-29，HEAD `f69f33f`）：本地 Windows / Python 3.14.6 全量
 1,371 passed + 2 skipped；CI https://github.com/YingQiu0871/DevRelay/actions/runs/40784486176 （8/8 success）
 
@@ -91,6 +91,7 @@ Tag：`v0.4.0`（annotated；peeled `c3a5416`）
 | v3 run schema + switch evidence | 完成 | `orchestration/models.py`, `invariants.py` |
 | switch endpoint | 完成（API only） | `POST /api/runs/{id}/session/switch` |
 | switch UI | 完成（run detail 面板 + uncertain lease recover） | `web/static/app.js`, `index.html` |
+| switch resolve | 完成（API + UI） | `POST /api/runs/{id}/session/switch/recover`, `session_leases.py` |
 | `.exe` installer / signing | **未实现** | — |
 | v0.3-E platform gates | **blocked** | `docs/v0.3/V03E_GATE_READINESS_2026-10-27.md` |
 
@@ -172,7 +173,7 @@ $env:TEMP = $tempRoot; $env:TMP = $tempRoot; $env:TMPDIR = $tempRoot
 python -m pytest -q
 ```
 
-期望：**1,374 collected — 1,372 passed + 2 environment skips**。
+期望：**1,381 collected — 1,379 passed + 2 environment skips**。
 
 Web：
 
@@ -197,13 +198,18 @@ devrelay web serve --workspace <initialized workspace>
 2. **Switch lease commit 不是跨存储事务**：
    - 顺序是 v3 run 写入 → lease commit。
    - lease commit 失败时返回 `503 switch_lease_uncertain`，target 变 uncertain，
-     source 仍 active；prompt 被 `switch_pending` 阻止，需要显式 lease recovery。
+     source 仍 active；prompt 被 `switch_pending` 阻止。
    - 进程在两步之间崩溃也会留下 pending/uncertain。
-   - **已知缺口**：按文档恢复 target lease 后，source lease 仍是 `active` 且成为孤儿
-     （Sessions 列表不再显示），该 run 之后任何 switch 都会 `409 session_leased`。
-     详见 `docs/v0.5/SWITCH_ENDPOINT_DESIGN.md` § Known gap。
-3. **Switch UI 已有（2026-10-29，未发布）**：run detail 面板 + Sessions 中仅对
-   `uncertain` lease 提供 Recover。`active` lease 恢复仍只走 API。
+   - **恢复入口（2026-10-29，未发布）**：`POST /api/runs/{id}/session/switch/recover`
+     以 run 文档为准：run 已记录该 switch → 补完 commit（target active、source
+     released）；run 仍指向 source → 释放 target；不一致 → `409
+     switch_state_inconsistent`，不写任何东西。WebUI 有 “Resolve pending switch”。
+   - 残留：在此端点之前已用通用 `/lease/recover` 释放过 target 的 run，已无
+     unresolved switch 可解；其当前 session 无 lease，再 switch 仍 `session_leased`，
+     需手工处理。详见 `docs/v0.5/SWITCH_ENDPOINT_DESIGN.md` § Switch resolution。
+3. **Switch UI 已有（2026-10-29，未发布）**：run detail 面板 + Resolve pending
+   switch；Sessions 中仅对非 switch 的 `uncertain` lease 提供 Recover。`active`
+   lease 恢复仍只走 API。
 
 ### 已知限制
 
@@ -223,8 +229,8 @@ devrelay web serve --workspace <initialized workspace>
 ### A. 如果要继续产品能力
 
 1. ~~给 switch endpoint 加 WebUI 确认面板。~~ 已完成（2026-10-29）。
-2. 设计/实现 switch 的跨存储恢复（run+lease）或明确 manual runbook；
-   优先修 uncertain 恢复后 source lease 孤儿、run 不可再 switch 的缺口。
+2. ~~switch 的跨存储恢复（run+lease）~~ 已完成（run 级 resolve，2026-10-29）。
+   剩余：给“无 lease 的当前 session”提供显式 re-attach（见 § 6 残留）。
 3. 视需要实现 installer/signing。
 
 ### B. 如果要发布下一版

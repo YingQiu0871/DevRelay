@@ -39,6 +39,7 @@ from devrelay.web.models import (
     RunPromptRecoverRequest,
     RunPromptRequest,
     RunSessionSwitchRequest,
+    RunSwitchRecoverRequest,
     SessionLeaseRecoverRequest,
     SessionRequest,
     WiringWriteRequest,
@@ -513,6 +514,29 @@ class LocalControlApi:
             success(data, request_id=str(request.state.request_id)),
         )
 
+    async def run_switch_recover(self, request: Request) -> Response:
+        if request.headers.get("x-devrelay-confirm") != "apply":
+            raise WebApiError(
+                "confirmation_required",
+                "X-DevRelay-Confirm: apply is required",
+                status_code=403,
+            )
+        payload: RunSwitchRecoverRequest = await _read_json(
+            request, RunSwitchRecoverRequest
+        )
+        if payload.confirm != "apply":
+            raise WebApiError(
+                "confirmation_required", "confirm must be apply", status_code=403
+            )
+        run_id = str(request.path_params.get("run_id", ""))
+        data = await run_in_threadpool(
+            self.service.resolve_switch, run_id, payload.switch_id
+        )
+        return _json(
+            request,
+            success(data, request_id=str(request.state.request_id)),
+        )
+
     async def run_hold(self, request: Request) -> Response:
         if request.headers.get("x-devrelay-confirm") != "apply":
             raise WebApiError(
@@ -810,6 +834,11 @@ def create_app(
             Route(
                 "/api/runs/{run_id}/session/switch",
                 api.run_switch_session,
+                methods=["POST"],
+            ),
+            Route(
+                "/api/runs/{run_id}/session/switch/recover",
+                api.run_switch_recover,
                 methods=["POST"],
             ),
             Route("/api/runs/{run_id}/hold", api.run_hold, methods=["POST"]),
