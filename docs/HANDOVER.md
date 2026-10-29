@@ -1,112 +1,78 @@
 # DevRelay 交接文档
 
-最后更新：2026-10-29（接手复核）
+最后更新：2026-10-29（v0.5.0 发布 + G0.4 重跑）
 仓库：`D:\DevRelay`
 当前分支：`main`
-审计快照 HEAD：`afad11a36d2fed5985ac44d3f6528346d2a74282`
-（之后的提交只改 `docs/HANDOVER.md`；实际当前 HEAD 以 `git log -1` 为准）
-当前公开版本：**v0.4.0**（2026-10-22）
-审计快照 CI：https://github.com/YingQiu0871/DevRelay/actions/runs/40596216885 （`afad11a`，8/8 success）
-测试基线：**1,381 collected — 1,379 passed + 2 environment skips**（含 switch UI + resolve）
-接手复核（2026-10-29，HEAD `f69f33f`）：本地 Windows / Python 3.14.6 全量
-1,371 passed + 2 skipped；CI https://github.com/YingQiu0871/DevRelay/actions/runs/40784486176 （8/8 success）
+当前公开版本：**v0.5.0**（2026-10-29；tag 剥离到 `36af6af`）
+发布证据：`docs/RELEASE_CHECKLIST.md` § v0.5.0（test.yml 40798227385、release.yml 40799180664）
+测试基线：**1,381 collected — 1,379 passed + 2 environment skips**
+（实际当前 HEAD 以 `git log -1` 为准）
 
 ---
 
 ## 1. 一页结论
 
 DevRelay 是本地、可审计的多模型编排层：CLI 任务状态机 + OpenCode-first 执行 +
-ChatGPT/MCP 工具面 + v0.4 Web 控制面。
+ChatGPT/MCP 工具面 + v0.4 Web 控制面 + v0.5 hardening。
 
 当前状态：
 
-- **v0.4.0 已发布**：PyPI、GitHub Release、wheel/sdist、portable Windows zip。
-- `main` 上有**未发布**的 post-v0.4 hardening：
-  - Node.js 24 action pins
-  - 已发布版本 rerun 跳过 Windows 重建
-  - CycloneDX SBOM + 五资产 release gate
-  - Windows/Python 3.13 release-lock 双构建 PASS
-  - manual prompt marker 持久化
-  - advisory hold（Web + MCP）
-  - session lease acquisition / pending-switch / explicit recovery
-  - v3 run schema + switch evidence
-  - `POST /api/runs/{run_id}/session/switch` endpoint + WebUI 面板
-- **v0.3-E 平台 gate 仍 blocked**：
-  - G0.4/P4：authoritative FAIL / UNPROVEN
-  - G0.5/P6、G1、G2：NOT RUN
-  - `adopt_completed_turn` 保持 disabled
-- 未发布改动**不要**描述成 v0.4.0 已发布能力；没有新 tag。
+- **v0.5.0 已发布（2026-10-29）**：PyPI、GitHub Release 五资产（wheel、sdist、
+  portable zip、CycloneDX SBOM、SHA256SUMS）。包含 SBOM/五资产 gate、持久 prompt
+  marker、advisory hold、session lease、v3 session switch（API + WebUI + run 级 resolve）。
+- **v0.3-E 平台 gate**：
+  - G0.4/P4：**authoritative FAIL / P4 UNPROVEN**。2026-10-29 用独立评审过的
+    revision 4 composite 重跑一次：目标绑定成功、1 次 `GET /doc`，结论
+    `EVIDENCE_INSUFFICIENT`（v1 messageID + parentID 语义未定义）。见
+    `docs/v0.3/V03E_G0_4_RERUN_PROOF_2026-10-29.md` 与 `..._REVIEW_2026-10-29.md`。
+  - G0.5/P6、G1、G2：NOT RUN（G1/G2 尚无 oracle）。
+  - `adopt_completed_turn` 保持 disabled。
+- gate 证据原件在仓库外：`D:\DevRelay-gate\G0.4-2026-10-29\`。
 
 ---
 
-## 2. 已发布内容（v0.4.0）
+## 2. 已发布内容（v0.5.0）
 
-Release commit：`c3a54162547cb810e454c498ee05f8eac33c99ae`
-Tag：`v0.4.0`（annotated；peeled `c3a5416`）
+Release commit：`36af6afdb1fb48d1376873aa5605d2f925bb2384`
+Tag：`v0.5.0`（annotated `c3c306d`；peeled `36af6af`）
 
 | 资产 | 说明 |
 | --- | --- |
-| `devrelay-0.4.0-py3-none-any.whl` | PyPI / GitHub Release |
-| `devrelay-0.4.0.tar.gz` | PyPI / GitHub Release |
+| `devrelay-0.5.0-py3-none-any.whl` | PyPI / GitHub Release |
+| `devrelay-0.5.0.tar.gz` | PyPI / GitHub Release |
 | `DevRelay-Portable-Windows-x64.zip` | 未签名 portable，Windows x64 |
-| `SHA256SUMS` | 四资产 checksums；v0.4.0 当时尚无 SBOM |
+| `DevRelay-SBOM.cdx.json` | CycloneDX 1.5 runtime SBOM（23 components） |
+| `SHA256SUMS` | 四个文件的 checksums |
 
-关键能力：
+v0.5.0 在 v0.4.0（A/B/C/D1/E1 Web 控制面）之上新增：
 
-- v0.3 编排核心、OpenCode bridge、MCP 工具面、角色路由、有界编排、
-  fail-closed recovery core（adoption disabled）。
-- v0.4-A：loopback HTTP API、header session、Host/Origin、配置写保护。
-- v0.4-B：静态 WebUI、配置/wiring 视图。
-- v0.4-C1/C2a：run/task 只读 dashboard。
-- v0.4-C2b：decision + role-scoped interrupt。
-- v0.4-C2c：bounded manual prompt + normalized message polling。
-- v0.4-D1：注册项目切换（进程内）+ run-recorded session inventory。
-- v0.4-E1：portable Windows 构建 + release workflow。
+| 领域 | 关键文件 |
+| --- | --- |
+| Actions Node 24 + SHA pins；已发布版本 rerun 跳过重建 | `.github/workflows/*.yml` |
+| CycloneDX SBOM + 五资产 release gate | `scripts/build_sbom.py`, `release.yml` |
+| py3.13 release lock 双构建 proof | `requirements/portable-win-py313.lock`, `reproducibility.yml` |
+| manual prompt marker 持久化 + recover | `web/prompt_markers.py` |
+| advisory hold（Web + MCP） | `web/run_holds.py`, `mcp/tools.py` |
+| session lease acquisition / explicit recovery | `web/session_leases.py`, `POST /api/sessions/{id}/lease/recover` |
+| v3 run schema + switch evidence | `orchestration/models.py`, `invariants.py` |
+| switch endpoint + WebUI 面板 | `POST /api/runs/{id}/session/switch`, `web/static/app.js` |
+| switch run 级 resolve（API + UI） | `POST /api/runs/{id}/session/switch/recover` |
 
-证据：
-
-- `docs/RELEASE_CHECKLIST.md` § v0.4.0
-- `docs/v0.4/RELEASE_NOTES_v0.4.0.md`
-- `docs/v0.4/V04E_ACCEPTANCE.md`
-- https://pypi.org/project/devrelay/0.4.0/
-- https://github.com/YingQiu0871/DevRelay/releases/tag/v0.4.0
+证据：`docs/RELEASE_CHECKLIST.md` § v0.5.0、`docs/v0.5/RELEASE_NOTES_v0.5.0.md`、
+https://pypi.org/project/devrelay/0.5.0/ 、
+https://github.com/YingQiu0871/DevRelay/releases/tag/v0.5.0 。
 
 ---
 
-## 3. `main` 上未发布改动（post-v0.4）
+## 3. `main` 上 v0.5.0 之后的改动
 
-这些改动已合并/测试，但**不在 v0.4.0 资产中**：
+只有 docs：G0.4 重跑的 provisioning addendum、harness、proof 与 review 记录，以及发布后
+状态文档更新。没有未发布的代码改动。
 
-| 领域 | 状态 | 关键文件 |
-| --- | --- | --- |
-| Actions Node 24 + SHA pins | 完成 | `.github/workflows/test.yml`, `release.yml` |
-| published-version rerun 跳过重建 | 完成 | `.github/workflows/release.yml` |
-| CycloneDX SBOM | 完成 | `scripts/build_sbom.py`, portable zip |
-| py3.13 release lock 双构建 proof | 完成 | `requirements/portable-win-py313.lock`, `reproducibility.yml` |
-| manual prompt marker 持久化 | 完成 | `src/devrelay/web/prompt_markers.py` |
-| advisory hold | 完成（Web+MCP） | `run_holds.py`, `mcp/tools.py` |
-| session lease acquisition | 完成 | `session_leases.py`, `mcp/tools.py` |
-| pending-switch lease primitive | 完成 | `session_leases.py` |
-| explicit lease recovery | 完成 | `POST /api/sessions/{id}/lease/recover` |
-| v3 run schema + switch evidence | 完成 | `orchestration/models.py`, `invariants.py` |
-| switch endpoint | 完成（API only） | `POST /api/runs/{id}/session/switch` |
-| switch UI | 完成（run detail 面板 + uncertain lease recover） | `web/static/app.js`, `index.html` |
-| switch resolve | 完成（API + UI） | `POST /api/runs/{id}/session/switch/recover`, `session_leases.py` |
-| `.exe` installer / signing | **未实现** | — |
-| v0.3-E platform gates | **blocked** | `docs/v0.3/V03E_GATE_READINESS_2026-10-27.md` |
-
-### 最近提交
-
-```text
-afad11a docs: record v03e gate readiness as blocked
-2602f14 feat(web): add session switch endpoint with v3 evidence
-d8f7d7f feat(orchestration): add v3 run schema and switch evidence
-0da624c feat(leases): add pending switch lease primitive
-3e74091 docs: approve switch schema conditions and add gate runbook
-0e35327 feat(web): add explicit session lease recovery
-fb505eb feat(orchestration): acquire session leases on start
-45b15a4 docs: record py313 release-lock double-build proof
-```
+| 领域 | 状态 |
+| --- | --- |
+| `.exe` installer / signing | **未实现** |
+| v0.3-E platform gates | G0.4 = authoritative FAIL（已重跑确认）；G0.5/G1/G2 NOT RUN |
 
 ---
 
@@ -200,14 +166,14 @@ devrelay web serve --workspace <initialized workspace>
    - lease commit 失败时返回 `503 switch_lease_uncertain`，target 变 uncertain，
      source 仍 active；prompt 被 `switch_pending` 阻止。
    - 进程在两步之间崩溃也会留下 pending/uncertain。
-   - **恢复入口（2026-10-29，未发布）**：`POST /api/runs/{id}/session/switch/recover`
+   - **恢复入口（v0.5.0）**：`POST /api/runs/{id}/session/switch/recover`
      以 run 文档为准：run 已记录该 switch → 补完 commit（target active、source
      released）；run 仍指向 source → 释放 target；不一致 → `409
      switch_state_inconsistent`，不写任何东西。WebUI 有 “Resolve pending switch”。
    - 残留：在此端点之前已用通用 `/lease/recover` 释放过 target 的 run，已无
      unresolved switch 可解；其当前 session 无 lease，再 switch 仍 `session_leased`，
      需手工处理。详见 `docs/v0.5/SWITCH_ENDPOINT_DESIGN.md` § Switch resolution。
-3. **Switch UI 已有（2026-10-29，未发布）**：run detail 面板 + Resolve pending
+3. **Switch UI（v0.5.0）**：run detail 面板 + Resolve pending
    switch；Sessions 中仅对非 switch 的 `uncertain` lease 提供 Recover。`active`
    lease 恢复仍只走 API。
 
@@ -220,7 +186,7 @@ devrelay web serve --workspace <initialized workspace>
 - Active project 选择仅进程内，重启回 CLI workspace。
 - Manual prompt marker 是 metadata-only；CLI 仍可启动 turn。
 - Advisory hold 不是 provider pause；interrupt 仍是 abort。
-- v0.4.0 已发布资产**不包含** post-v0.4 的 SBOM/lease/switch 改动。
+- v0.4.0 资产不含 SBOM/lease/switch；这些从 v0.5.0 起才有。
 
 ---
 
@@ -235,21 +201,22 @@ devrelay web serve --workspace <initialized workspace>
 
 ### B. 如果要发布下一版
 
-1. 决定版本号（如 0.4.1/0.5.0）并更新 `pyproject.toml`、fallback、测试。
-2. 更新 CHANGELOG/release notes/README。
-3. 全量测试 + release workflow 静态检查。
-4. 构建、双构建 proof、tag、draft、dispatch。
-5. 检查五资产 gate（wheel/sdist/SHA256SUMS/portable/SBOM）。
+按 `docs/RELEASE_CHECKLIST.md` § v0.5.0 的步骤：改版本号（`pyproject.toml`、
+`__init__.py` fallback、`tests/test_version.py`、`release.yml` 默认 tag 与其测试）→
+CHANGELOG/release notes → 全量测试 + 构建 + `twine check` → 合入 main 等 CI →
+annotated tag → draft Release → dispatch `release.yml`（`confirm=PUBLISH`）→ 核验五资产、
+PyPI、全新 venv → 记录证据并把 README/状态改为已发布。需要 owner 明确授权。
 
-### C. 如果要关闭 v0.3-E gates
+### C. 如果要继续 v0.3-E gates
 
-先读：
-
-- `docs/v0.3/V03E_GATE_PREP.md`
-- `docs/v0.3/V03E_GATE_RUNBOOK.md`
-- `docs/v0.3/V03E_GATE_READINESS_2026-10-27.md`
-
-需要 owner 提供真实 endpoint/authorization/reviewer；不要用离线测试替代。
+- G0.4：已重跑，结论 `EVIDENCE_INSUFFICIENT`。若要再试，必须先有一份新的、经独立
+  评审的定义来解决 v1 `messageID`/`parentID` 语义问题（或评估 v2 durable admission），
+  不能复用已花掉的授权。
+- G0.5/P6：先读 `V03E_G0_5_PRE_SESSION_INCARNATION_FINDING.md`；历史结论是可能
+  `NO SOUND PROVENANCE ANCHOR`。
+- G1/G2：目前没有 oracle，需先起草并独立评审。
+- 流程模板：`V03E_G0_4_RERUN_PROVISIONING_ADDENDUM.md` + `V03E_G0_4_RERUN_HARNESS.ps1`
+  （冻结定义 → owner 授权 → 执行一次 → 独立评审 proof）。不要用离线测试替代。
 
 ---
 
@@ -270,6 +237,8 @@ devrelay web serve --workspace <initialized workspace>
 | `docs/v0.5/SWITCH_ENDPOINT_DESIGN.md` | switch endpoint |
 | `docs/v0.5/SWITCH_SCHEMA_REVIEW.md` | v3 schema review |
 | `docs/v0.3/V03E_GATE_RUNBOOK.md` | platform gate runbook |
+| `docs/v0.3/V03E_G0_4_RERUN_*` | G0.4 重跑：addendum、harness、proof、review |
+| `docs/v0.5/RELEASE_NOTES_v0.5.0.md` | v0.5.0 release notes |
 | `docs/REPRODUCIBILITY_PROOF_2026-10-24.md` | py3.13 double-build evidence |
 
 ---
@@ -288,16 +257,16 @@ devrelay web serve --workspace <initialized workspace>
 ## 10. 当前验证快照
 
 ```text
-HEAD:        afad11a36d2fed5985ac44d3f6528346d2a74282
-Version:     0.4.0
-Release:     v0.4.0 (published 2026-10-22)
-Tests:       1,373 collected / 1,371 passed / 2 environment skips
-CI:          40596216885 (8/8 success)
+Version:     0.5.0 (published 2026-10-29; tag v0.5.0 -> 36af6af)
+Tests:       1,381 collected / 1,379 passed / 2 environment skips
+CI:          40798227385 (8/8 success, release commit)
+Release run: 40799180664 (portable + PyPI OIDC success)
 Adoption:    disabled
-Gate:        blocked
+G0.4/P4:     authoritative FAIL / P4 UNPROVEN (rerun 2026-10-29, EVIDENCE_INSUFFICIENT)
+G0.5/G1/G2:  NOT RUN
 ```
 
-接手复核（2026-10-29）：
+更早的接手复核（2026-10-29，v0.4.0 时）：
 
 ```text
 HEAD:        f69f33f6ce52dec0eac7a47b6244cbb4727242f2 (= main = origin/main; 自 afad11a 起仅 docs)

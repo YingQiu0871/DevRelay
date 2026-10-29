@@ -6,9 +6,13 @@ This document is the status ledger for DevRelay. It intentionally distinguishes 
 
 ## Current public release / 当前公开版本
 
-**v0.4.0** on `main` (2026-10-22), published to
-[PyPI](https://pypi.org/project/devrelay/0.4.0/) and
-[GitHub Releases](https://github.com/YingQiu0871/DevRelay/releases/tag/v0.4.0).
+**v0.5.0** on `main` (2026-10-29), published to
+[PyPI](https://pypi.org/project/devrelay/0.5.0/) and
+[GitHub Releases](https://github.com/YingQiu0871/DevRelay/releases/tag/v0.5.0).
+v0.5.0 adds the post-v0.4 hardening line: CycloneDX SBOM and five-asset release
+gate, durable manual-prompt markers, advisory hold, durable session leases and the
+v3 session switch (API, WebUI and run-level resolve).  `adopt_completed_turn`
+remains disabled.
 
 The public repository supports the v0.4 orchestration line: the v0.1 CLI workflow, the v0.3 OpenCode-first orchestration surface, and the v0.4 local Web control plane. Publication evidence is recorded in [RELEASE_CHECKLIST.md](RELEASE_CHECKLIST.md).
 
@@ -168,10 +172,8 @@ v0.3.0 meets that bar through the annotated `v0.3.0` tag and the publication rec
 
 ## Next gates / 下一步门槛
 
-1. Prepare the **v0.4.0 release**: bump the version, freeze release docs, run
-   the full suite and release-workflow checks, then the owner tags/publishes.
-   E1 is accepted; the portable zip will be built for the first time on the
-   real release tag.
+1. **v0.5.0 published (2026-10-29)**; evidence in
+   [RELEASE_CHECKLIST.md](RELEASE_CHECKLIST.md).
 2. The **hardening pass** is recorded in
    [HARDENING_v0.4.md](HARDENING_v0.4.md); remaining items are explicit
    residuals, not hidden assumptions.

@@ -11,7 +11,7 @@ release.  Executable checklist: [V03E_GATE_RUNBOOK.md](V03E_GATE_RUNBOOK.md).
 | G0.1 / P7 | PASS | `V03E_G0_1_P7_PROOF.md` |
 | G0.2 | PASS | corrected clean rerun + independent approval |
 | G0.3 / P5 | PASS | corrected clean rerun + independent approval |
-| G0.4 / P4 | **AUTHORITATIVE FAIL / P4 UNPROVEN** | no OpenCode base endpoint; 0 `GET /doc` issued (`V03E_G0_4_API_INSPECTION_PROOF.md`) |
+| G0.4 / P4 | **AUTHORITATIVE FAIL / P4 UNPROVEN** | first round: no endpoint, 0 `GET /doc` (`V03E_G0_4_API_INSPECTION_PROOF.md`); 2026-10-29 rerun: bound target, 1 `GET /doc`, `EVIDENCE_INSUFFICIENT` — candidate identifier semantics unresolved (`V03E_G0_4_RERUN_PROOF_2026-10-29.md`) |
 | G0.5 / P6 | **NOT RUN / P6 UNPROVEN** | local reachability gap; session-incarnation finding |
 | G1 | **NOT RUN** | remote/platform enabling proof |
 | G2 | **NOT RUN** | remote/platform enabling proof |

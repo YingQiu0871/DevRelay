@@ -1,8 +1,8 @@
 # DevRelay v0.5.0 — release notes
 
-Status: **RELEASE CANDIDATE (2026-10-29).**  Not published until the tag,
-draft Release, `release.yml` run and PyPI upload are recorded in
-[RELEASE_CHECKLIST.md](../RELEASE_CHECKLIST.md) § v0.5.0.
+Status: **PUBLISHED 2026-10-29.**  Tag `v0.5.0` peels to
+`36af6afdb1fb48d1376873aa5605d2f925bb2384`; PyPI and the GitHub Release are
+public.  Evidence is recorded in [RELEASE_CHECKLIST.md](../RELEASE_CHECKLIST.md).
 
 ## Highlights
 

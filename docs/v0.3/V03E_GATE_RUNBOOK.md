@@ -11,7 +11,7 @@ Current readiness: [V03E_GATE_READINESS_2026-10-27.md](V03E_GATE_READINESS_2026-
 | G0.1/P7 | PASS |
 | G0.2 | PASS |
 | G0.3/P5 | PASS |
-| G0.4/P4 | authoritative FAIL / P4 UNPROVEN |
+| G0.4/P4 | authoritative FAIL / P4 UNPROVEN — confirmed by the 2026-10-29 rerun (`EVIDENCE_INSUFFICIENT`; `V03E_G0_4_RERUN_PROOF_2026-10-29.md`, review `V03E_G0_4_RERUN_REVIEW_2026-10-29.md`) |
 | G0.5/P6 | NOT RUN / P6 UNPROVEN |
 | G1 | NOT RUN |
 | G2 | NOT RUN |

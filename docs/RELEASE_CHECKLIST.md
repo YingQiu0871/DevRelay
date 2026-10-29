@@ -6,7 +6,7 @@ The publication flow is the tag-driven workflow in
 the publisher completed the steps below on 2026-10-21; the evidence is recorded
 here and the release is public.
 
-## v0.5.0 (release candidate 2026-10-29)
+## v0.5.0 (published 2026-10-29)
 
 ### Verified in this tree
 
@@ -20,15 +20,48 @@ here and the release is public.
   both; the wheel contains `devrelay/profiles/default.yaml` and the WebUI assets.
 - [x] Release notes: [v0.5/RELEASE_NOTES_v0.5.0.md](v0.5/RELEASE_NOTES_v0.5.0.md).
 
-### Publisher steps
+### Publisher steps (completed 2026-10-29, owner-authorized in session)
 
-1. [ ] Release-preparation commit on `main`; `test.yml` green.
-2. [ ] Annotated tag `v0.5.0` on that commit, pushed.
-3. [ ] **Draft** GitHub Release for `v0.5.0`.
-4. [ ] `release.yml` dispatched with `tag=v0.5.0`, `confirm=PUBLISH`.
-5. [ ] Five assets attached, Release no longer a draft, PyPI serves 0.5.0, a
+1. [x] Release-preparation commit `36af6af` on `main`; `test.yml` green.
+2. [x] Annotated tag `v0.5.0` on `36af6af`, pushed.
+3. [x] **Draft** GitHub Release for `v0.5.0`.
+4. [x] `release.yml` dispatched with `tag=v0.5.0`, `confirm=PUBLISH`.
+5. [x] Five assets attached, Release no longer a draft, PyPI serves 0.5.0, a
    fresh venv installs it.
-6. [ ] Evidence recorded here; README/project-status flipped to published.
+6. [x] Evidence recorded here; README/project-status flipped to published.
+
+### Release evidence
+
+- Release commit: `36af6afdb1fb48d1376873aa5605d2f925bb2384`
+- Tag: `v0.5.0` (annotated tag object `c3c306d599cf2fcbc8c47fd6b3a994ecec9f590f`,
+  peeled commit `36af6af`)
+- `test.yml` run: https://github.com/YingQiu0871/DevRelay/actions/runs/40798227385 (8/8)
+- `release.yml` run: https://github.com/YingQiu0871/DevRelay/actions/runs/40799180664
+  (Build Windows portable: success; Publish to PyPI (OIDC): success)
+- PyPI page: https://pypi.org/project/devrelay/0.5.0/
+- GitHub Release: https://github.com/YingQiu0871/DevRelay/releases/tag/v0.5.0
+- Published at: `2026-10-29T01:16:18Z`; `isDraft=false`, `isPrerelease=false`
+- Assets:
+  - `devrelay-0.5.0-py3-none-any.whl` (330,684 bytes)
+    `sha256:8880df1a858737e092ef2d56e7d3d1cf38c2060006dfe2805143f613d2048491`
+  - `devrelay-0.5.0.tar.gz` (1,414,995 bytes)
+    `sha256:dfe0b668ef017396f1a320a86403706b058d73d1282e5241815abb667818168a`
+  - `DevRelay-Portable-Windows-x64.zip` (19,715,605 bytes)
+    `sha256:204c30fd34c80997203e09a7955a48be340680885a0cd0c83ae58d5da122febc`
+  - `DevRelay-SBOM.cdx.json` (8,501 bytes)
+    `sha256:b689ffd0bd27cb8e867e80520aa12d23d0d9129a079cdbd749dd5f01739b805c`
+  - `SHA256SUMS` (375 bytes)
+    `sha256:baa60a5be314b8af1c3df9155b692a7dfefa6ba5703e3513db24603084904da7`
+- PyPI wheel and sdist digests equal the Release assets.
+- Downloaded-asset verification: `SHA256SUMS` matched all four files; extracted
+  `devrelay.exe version` reported `devrelay 0.5.0`; a fresh venv installed
+  `devrelay==0.5.0` from PyPI and reported `0.5.0`; the SBOM is CycloneDX 1.5 for
+  `devrelay 0.5.0` with 23 components.
+
+### Disclosed caveats
+
+- The portable zip is unsigned; no `.exe` installer.
+- `adopt_completed_turn` remains disabled; v0.3-E platform gates are not closed.
 
 ## v0.4.0 (published 2026-10-22)
 
