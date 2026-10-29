@@ -141,7 +141,7 @@ def test_only_manual_dispatch_can_trigger_the_workflow():
     _, triggers = _load()
     assert set(triggers) == {"workflow_dispatch"}
     inputs = triggers["workflow_dispatch"]["inputs"]
-    assert inputs["tag"]["default"] == "v0.4.0"
+    assert inputs["tag"]["default"] == "v0.5.0"
     assert inputs["tag"]["required"] is True
     assert inputs["confirm"]["required"] is True
     assert inputs["confirm"]["default"] == ""

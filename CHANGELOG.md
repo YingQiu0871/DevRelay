@@ -6,6 +6,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## 0.5.0 - 2026-10-29
+
+Release candidate for the post-v0.4 hardening line: SBOM and five-asset
+release gate, durable prompt markers, advisory hold, session leases and the
+v3 session switch (API + WebUI + run-level resolve).  `adopt_completed_turn`
+remains disabled and the v0.3-E platform gates are not closed.  Publication
+evidence is recorded in `docs/RELEASE_CHECKLIST.md` § v0.5.0.
+
 ### Added
 
 - CycloneDX 1.5 SBOM generation for the portable runtime dependency closure;

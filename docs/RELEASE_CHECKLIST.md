@@ -6,6 +6,30 @@ The publication flow is the tag-driven workflow in
 the publisher completed the steps below on 2026-10-21; the evidence is recorded
 here and the release is public.
 
+## v0.5.0 (release candidate 2026-10-29)
+
+### Verified in this tree
+
+- [x] Version single-sourced at **0.5.0** in `pyproject.toml`, the
+  `src/devrelay/__init__.py` fallback and `tests/test_version.py`; the
+  `release.yml` dispatch default is `v0.5.0`; editable reinstall reports 0.5.0.
+- [x] Full offline suite: **1,381 collected — 1,379 pass + 2 environment skips**
+  on this Windows host (Python 3.14.6).
+- [x] `python -m build` produced `devrelay-0.5.0-py3-none-any.whl` (330,392
+  bytes) and `devrelay-0.5.0.tar.gz` (1,415,512 bytes); `twine check` passed
+  both; the wheel contains `devrelay/profiles/default.yaml` and the WebUI assets.
+- [x] Release notes: [v0.5/RELEASE_NOTES_v0.5.0.md](v0.5/RELEASE_NOTES_v0.5.0.md).
+
+### Publisher steps
+
+1. [ ] Release-preparation commit on `main`; `test.yml` green.
+2. [ ] Annotated tag `v0.5.0` on that commit, pushed.
+3. [ ] **Draft** GitHub Release for `v0.5.0`.
+4. [ ] `release.yml` dispatched with `tag=v0.5.0`, `confirm=PUBLISH`.
+5. [ ] Five assets attached, Release no longer a draft, PyPI serves 0.5.0, a
+   fresh venv installs it.
+6. [ ] Evidence recorded here; README/project-status flipped to published.
+
 ## v0.4.0 (published 2026-10-22)
 
 ### Verified in this tree
