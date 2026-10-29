@@ -537,6 +537,13 @@
             : detail.in_flight
               ? "A turn is in flight."
               : "";
+    const roleLeases = detail.role_leases || null;
+    $("run-lease-status").textContent = roleLeases
+      ? `Leases: implementer ${roleLeases.implementer} · reviewer ${roleLeases.reviewer}`
+      : "Session lease store unavailable.";
+    const leaseRole = $("run-lease-role").value;
+    $("run-lease-reattach").disabled = !roleLeases || Boolean(detail.terminal || pendingSwitch)
+      || ["active", "no_session"].includes(roleLeases[leaseRole]);
     const metrics = $("run-detail-metrics");
     metrics.replaceChildren();
     appendDetailRow(metrics, "State", detail.state);
@@ -1179,6 +1186,47 @@
     }
   }
 
+  async function reattachLease() {
+    const detail = state.runDetail;
+    if (!detail) return;
+    const role = $("run-lease-role").value;
+    const sessionId = detail[`${role}_session_id`] || "";
+    if (!window.confirm(
+      `Re-attach the ${role} lease of ${detail.run_id} to ${sessionId}?\n\n`
+      + "The run document decides which session gets the lease. Any other active lease left for this run/role "
+      + "is released in the same write. No provider I/O and no run write.",
+    )) {
+      return;
+    }
+    const button = $("run-lease-reattach");
+    button.disabled = true;
+    try {
+      const data = await api(
+        `/api/runs/${encodeURIComponent(detail.run_id)}/session/lease/reattach`,
+        {
+          method: "POST",
+          headers: { "X-DevRelay-Confirm": "apply" },
+          body: { role, expected_updated_at: detail.updated_at, confirm: "apply" },
+        },
+      );
+      await loadRunDetail(detail.run_id);
+      await refreshSessions().catch(() => {});
+      const orphans = (data.released_orphans || []).length;
+      $("run-action-result").textContent = `Lease re-attached to ${data.session_id}`
+        + (orphans ? `; released ${orphans} orphaned lease(s).` : ".");
+    } catch (error) {
+      if (error.status === 401) {
+        clearSession();
+        showLogin("Session expired. Enter the token again.");
+        return;
+      }
+      if (error.code === "run_changed") await loadRunDetail(detail.run_id);
+      $("run-action-result").textContent = `${error.code ? `${error.code}: ` : ""}${error.message}`;
+    } finally {
+      if (state.runDetail && state.selectedRunId === detail.run_id) renderRunDetail(state.runDetail);
+    }
+  }
+
   async function resolveSwitch() {
     const detail = state.runDetail;
     const pending = detail && detail.pending_switch;
@@ -1690,6 +1738,10 @@
   $("run-hold-release").addEventListener("click", releaseHold);
   $("run-switch").addEventListener("click", switchSession);
   $("run-switch-resolve").addEventListener("click", resolveSwitch);
+  $("run-lease-reattach").addEventListener("click", reattachLease);
+  $("run-lease-role").addEventListener("change", () => {
+    if (state.runDetail) renderRunDetail(state.runDetail);
+  });
   $("run-prompt-send").addEventListener("click", sendManualPrompt);
   $("run-prompt-recover").addEventListener("click", recoverPromptMarker);
   $("messages-refresh").addEventListener("click", () => loadMessages(true));

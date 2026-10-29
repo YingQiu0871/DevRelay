@@ -179,7 +179,25 @@ class WebReadService:
                 if pending is not None
                 else None
             )
+        try:
+            summary["role_leases"] = {
+                role: self._role_lease_state(run_id, role, summary.get(f"{role}_session_id"))
+                for role in ("implementer", "reviewer")
+            }
+        except SessionLeaseError:
+            summary["role_leases"] = None
         return summary
+
+    def _role_lease_state(self, run_id: str, role: str, session_id: object) -> str:
+        """The lease state the run's current role session holds for this run/role."""
+        if not isinstance(session_id, str) or not session_id:
+            return "no_session"
+        entry = self._session_leases.get(session_id)
+        if entry is None:
+            return "missing"
+        if entry.get("run_id") != run_id or entry.get("role") != role:
+            return "held_elsewhere" if entry.get("state") in ("active", "pending_switch", "uncertain") else "missing"
+        return str(entry.get("state", "missing"))
 
     def hold_run(
         self, run_id: str, expected_updated_at: str, reason: str
@@ -882,6 +900,65 @@ class WebReadService:
                 status_code=503,
             ) from exc
         return summary
+
+    def reattach_lease(
+        self, run_id: str, role: str, expected_updated_at: str
+    ) -> dict[str, Any]:
+        """Re-attach a lease to the run's current role session (run document is authority)."""
+        current = self.run(run_id)
+        if current.get("terminal"):
+            raise WebApiError("run_terminal", "the run is already terminal", status_code=409)
+        if str(current.get("updated_at", "")) != expected_updated_at:
+            raise WebApiError(
+                "run_changed",
+                "the run changed since it was loaded; reload and retry",
+                status_code=409,
+            )
+        if current.get("pending_switch_error") or current.get("role_leases") is None:
+            raise WebApiError(
+                "session_lease_unavailable",
+                "the session lease store cannot be read safely",
+                status_code=503,
+            )
+        if current.get("pending_switch"):
+            raise WebApiError(
+                "switch_pending",
+                "resolve the pending switch before re-attaching a lease",
+                status_code=409,
+            )
+        session_id = current.get(f"{role}_session_id")
+        if not isinstance(session_id, str) or not session_id:
+            raise WebApiError(
+                "no_role_session", "the run records no session for this role", status_code=409
+            )
+        if current["role_leases"].get(role) == "active":
+            raise WebApiError(
+                "lease_already_active",
+                "the run's current session already holds this run/role lease",
+                status_code=409,
+            )
+        try:
+            result = self._session_leases.reattach(
+                session_id,
+                workspace=str(self.workspace_root),
+                run_id=run_id,
+                role=role,
+            )
+        except SessionLeaseConflict as exc:
+            raise WebApiError("session_leased", str(exc), status_code=409) from exc
+        except SessionLeaseError as exc:
+            raise WebApiError(
+                "session_lease_unavailable",
+                "the session lease store cannot be used safely",
+                status_code=503,
+            ) from exc
+        return {
+            "run_id": run_id,
+            "role": role,
+            "session_id": session_id,
+            "reattached": True,
+            "released_orphans": result["released_orphans"],
+        }
 
     def resolve_switch(self, run_id: str, switch_id: str) -> dict[str, Any]:
         """Finish an unresolved switch from the durable run document.

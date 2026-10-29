@@ -103,6 +103,14 @@ class RunSessionSwitchRequest(BaseModel):
     confirm: Literal["apply"]
 
 
+class RunLeaseReattachRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    role: Literal["implementer", "reviewer"]
+    expected_updated_at: str
+    confirm: Literal["apply"]
+
+
 class RunSwitchRecoverRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 

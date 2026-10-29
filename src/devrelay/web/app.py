@@ -38,6 +38,7 @@ from devrelay.web.models import (
     RunInterruptRequest,
     RunPromptRecoverRequest,
     RunPromptRequest,
+    RunLeaseReattachRequest,
     RunSessionSwitchRequest,
     RunSwitchRecoverRequest,
     SessionLeaseRecoverRequest,
@@ -514,6 +515,32 @@ class LocalControlApi:
             success(data, request_id=str(request.state.request_id)),
         )
 
+    async def run_lease_reattach(self, request: Request) -> Response:
+        if request.headers.get("x-devrelay-confirm") != "apply":
+            raise WebApiError(
+                "confirmation_required",
+                "X-DevRelay-Confirm: apply is required",
+                status_code=403,
+            )
+        payload: RunLeaseReattachRequest = await _read_json(
+            request, RunLeaseReattachRequest
+        )
+        if payload.confirm != "apply":
+            raise WebApiError(
+                "confirmation_required", "confirm must be apply", status_code=403
+            )
+        run_id = str(request.path_params.get("run_id", ""))
+        data = await run_in_threadpool(
+            self.service.reattach_lease,
+            run_id,
+            payload.role,
+            payload.expected_updated_at,
+        )
+        return _json(
+            request,
+            success(data, request_id=str(request.state.request_id)),
+        )
+
     async def run_switch_recover(self, request: Request) -> Response:
         if request.headers.get("x-devrelay-confirm") != "apply":
             raise WebApiError(
@@ -839,6 +866,11 @@ def create_app(
             Route(
                 "/api/runs/{run_id}/session/switch/recover",
                 api.run_switch_recover,
+                methods=["POST"],
+            ),
+            Route(
+                "/api/runs/{run_id}/session/lease/reattach",
+                api.run_lease_reattach,
                 methods=["POST"],
             ),
             Route("/api/runs/{run_id}/hold", api.run_hold, methods=["POST"]),

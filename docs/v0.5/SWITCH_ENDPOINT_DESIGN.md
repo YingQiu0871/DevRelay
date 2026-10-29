@@ -71,10 +71,12 @@ write.  `GET /api/runs/{run_id}` reports `pending_switch` (id, role, state,
 source, target); the WebUI disables **Switch session** and shows **Resolve
 pending switch** while one exists.
 
-Residual: a run whose target lease was already released through generic
-`/lease/recover` before this endpoint existed has no unresolved switch left to
-resolve; its current session has no lease and a later switch still fails with
-`session_leased`.  Re-attaching a lease to such a run remains manual.
+Residual (closed after 0.5.0): a run whose target lease was already released
+through generic `/lease/recover` has no unresolved switch left to resolve; its
+current session has no lease and a later switch fails with `session_leased`.
+`POST /api/runs/{run_id}/session/lease/reattach` re-attaches a lease to the run's
+current role session and releases the orphaned source lease in the same write;
+the run can then switch again.
 
 ## Preconditions (all required)
 

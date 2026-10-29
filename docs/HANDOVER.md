@@ -5,7 +5,7 @@
 当前分支：`main`
 当前公开版本：**v0.5.0**（2026-10-29；tag 剥离到 `36af6af`）
 发布证据：`docs/RELEASE_CHECKLIST.md` § v0.5.0（test.yml 40798227385、release.yml 40799180664）
-测试基线：**1,381 collected — 1,379 passed + 2 environment skips**
+测试基线：**1,387 collected — 1,385 passed + 2 environment skips**（main，含 lease re-attach；v0.5.0 发布时为 1,381）
 （实际当前 HEAD 以 `git log -1` 为准）
 
 ---
@@ -66,8 +66,9 @@ https://github.com/YingQiu0871/DevRelay/releases/tag/v0.5.0 。
 
 ## 3. `main` 上 v0.5.0 之后的改动
 
-只有 docs：G0.4 重跑的 provisioning addendum、harness、proof 与 review 记录，以及发布后
-状态文档更新。没有未发布的代码改动。
+- docs：G0.4 重跑的 provisioning addendum、harness、proof 与 review 记录，发布后状态更新。
+- **未发布代码**：lease re-attach（`POST /api/runs/{id}/session/lease/reattach` + WebUI），
+  见 CHANGELOG `Unreleased`。
 
 | 领域 | 状态 |
 | --- | --- |
@@ -139,7 +140,7 @@ $env:TEMP = $tempRoot; $env:TMP = $tempRoot; $env:TMPDIR = $tempRoot
 python -m pytest -q
 ```
 
-期望：**1,381 collected — 1,379 passed + 2 environment skips**。
+期望：**1,387 collected — 1,385 passed + 2 environment skips**。
 
 Web：
 
@@ -170,9 +171,9 @@ devrelay web serve --workspace <initialized workspace>
      以 run 文档为准：run 已记录该 switch → 补完 commit（target active、source
      released）；run 仍指向 source → 释放 target；不一致 → `409
      switch_state_inconsistent`，不写任何东西。WebUI 有 “Resolve pending switch”。
-   - 残留：在此端点之前已用通用 `/lease/recover` 释放过 target 的 run，已无
-     unresolved switch 可解；其当前 session 无 lease，再 switch 仍 `session_leased`，
-     需手工处理。详见 `docs/v0.5/SWITCH_ENDPOINT_DESIGN.md` § Switch resolution。
+   - 残留已修（v0.5.0 之后，未发布）：通用 `/lease/recover` 释放过 target 的 run，
+     用 `POST /api/runs/{id}/session/lease/reattach`（WebUI “Re-attach lease”）给当前
+     session 重新挂 lease，同时释放孤儿 source lease，之后可以再 switch。
 3. **Switch UI（v0.5.0）**：run detail 面板 + Resolve pending
    switch；Sessions 中仅对非 switch 的 `uncertain` lease 提供 Recover。`active`
    lease 恢复仍只走 API。
@@ -195,8 +196,7 @@ devrelay web serve --workspace <initialized workspace>
 ### A. 如果要继续产品能力
 
 1. ~~给 switch endpoint 加 WebUI 确认面板。~~ 已完成（2026-10-29）。
-2. ~~switch 的跨存储恢复（run+lease）~~ 已完成（run 级 resolve，2026-10-29）。
-   剩余：给“无 lease 的当前 session”提供显式 re-attach（见 § 6 残留）。
+2. ~~switch 的跨存储恢复（run+lease）~~ 已完成（run 级 resolve + lease re-attach）。
 3. 视需要实现 installer/signing。
 
 ### B. 如果要发布下一版

@@ -6,6 +6,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+### Added
+
+- Confirmed `POST /api/runs/{run_id}/session/lease/reattach` (`role`,
+  `expected_updated_at`, `confirm`) gives the run's current role session an active
+  lease again; any other active lease left for the same run/role is orphaned and
+  released in the same write.  Refused for terminal runs, a stale revision, an
+  unresolved switch, a session already holding the lease, or a session leased by
+  another run.  No provider I/O and no run write.  `GET /api/runs/{run_id}` reports
+  `role_leases`, and the run detail shows a **Re-attach lease** control.  This closes
+  the residual where a run whose switch target lease had been released through
+  generic lease recovery could not switch again.
+
 ## 0.5.0 - 2026-10-29
 
 Published 2026-10-29 (tag `v0.5.0`, peeled `36af6af`).  Post-v0.4 hardening line: SBOM and five-asset

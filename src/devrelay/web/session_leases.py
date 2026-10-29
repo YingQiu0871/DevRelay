@@ -337,6 +337,70 @@ class SessionLeaseStore:
                 "target": target,
             }
 
+    def reattach(
+        self,
+        session_id: str,
+        *,
+        workspace: str,
+        run_id: str,
+        role: str,
+    ) -> dict[str, Any]:
+        """Re-attach an active lease to the session a run currently records.
+
+        The caller passes the run document's current role session.  Any other
+        active lease held for the same workspace/run/role is therefore orphaned
+        and is released in the same write.  No provider I/O and no run write.
+        """
+        workspace = _canonical_workspace(workspace)
+        with self._lock:
+            data = self._read()
+            for entry in data["leases"].values():
+                if entry.get("run_id") == run_id and entry.get("state") in (
+                    "pending_switch",
+                    "uncertain",
+                ):
+                    raise SessionLeaseConflict(
+                        "the run has an unresolved switch or uncertain lease; resolve it first"
+                    )
+            existing = data["leases"].get(session_id)
+            if existing is not None and existing.get("state") == "active":
+                if (
+                    existing.get("workspace") == workspace
+                    and existing.get("run_id") == run_id
+                    and existing.get("role") == role
+                ):
+                    raise SessionLeaseConflict("the session already holds this run's lease")
+                raise SessionLeaseConflict("session is leased by another run or role")
+            now = datetime.now(timezone.utc).isoformat(timespec="seconds")
+            orphans: list[str] = []
+            for other_id, entry in data["leases"].items():
+                if (
+                    other_id != session_id
+                    and entry.get("state") == "active"
+                    and entry.get("workspace") == workspace
+                    and entry.get("run_id") == run_id
+                    and entry.get("role") == role
+                ):
+                    entry["state"] = "released"
+                    entry["released_at"] = now
+                    entry["released_by"] = "reattach"
+                    entry["superseded_by"] = session_id
+                    orphans.append(other_id)
+            record = {
+                "session_id": session_id,
+                "workspace": workspace,
+                "run_id": run_id,
+                "role": role,
+                "state": "active",
+                "acquired_at": now,
+                "released_at": "",
+                "evidence": "local",
+                "recovery": "reattach",
+            }
+            data["leases"][session_id] = record
+            self._write(data)
+            return {"lease": record, "released_orphans": orphans}
+
     def release_run(self, run_id: str) -> int:
         with self._lock:
             data = self._read()
