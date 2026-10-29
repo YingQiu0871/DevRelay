@@ -11,8 +11,8 @@ DevRelay 是一个本地运行、可审计的多模型软件开发编排层。�
 
 | Item / 项目 | Status / 状态 |
 | --- | --- |
-| Public release / 当前公开版本 | **v0.5.0** (2026-10-29) |
-| `main` branch / 主分支 | v0.5.0 release line / v0.5.0 发布线 |
+| Public release / 当前公开版本 | **v0.5.1** (2026-10-29) |
+| `main` branch / 主分支 | v0.5.1 release line / v0.5.1 发布线 |
 | v0.2-A / v0.2-B / v0.2-C | Included in 0.3.0; independent acceptance not complete; offline / fake-provider evidence only / 已随 0.3.0 发布；独立验收尚未完成，仅有离线/假 provider 证据 |
 | v0.3-A OpenCode Session Bridge | Accepted / closed / shipped in 0.3.0 / 已验收、关闭并随 0.3.0 发布 |
 | v0.3-B ChatGPT/MCP Tool Surface | Accepted / closed / shipped in 0.3.0 / 已验收、关闭并随 0.3.0 发布 |
@@ -24,9 +24,9 @@ DevRelay 是一个本地运行、可审计的多模型软件开发编排层。�
 | localhost WebUI | Accepted / closed; shipped in 0.4.0 / 已验收、关闭并随 0.4.0 发布 |
 | v0.4-A/B/C/D1/E1 | Accepted / closed; shipped in 0.4.0 / 已验收、关闭并随 0.4.0 发布 |
 | v0.4 portable Windows zip | E1 accepted; shipped unsigned / E1 已验收；已发布，未签名 |
-| v0.5.0 hardening line | SBOM + five-asset gate, durable prompt markers, advisory hold, session leases, v3 session switch (API + WebUI + resolve); shipped in 0.5.0 / SBOM 与五资产门、持久 prompt 标记、advisory hold、session lease、v3 session switch（API + WebUI + resolve）；已随 0.5.0 发布 |
+| v0.5.0 hardening line | SBOM + five-asset gate, durable prompt markers, advisory hold, session leases, v3 session switch (API + WebUI + resolve); shipped in 0.5.0; lease re-attach in 0.5.1 / SBOM 与五资产门、持久 prompt 标记、advisory hold、session lease、v3 session switch（API + WebUI + resolve）；已随 0.5.0 发布；lease re-attach 随 0.5.1 发布 |
 
-**Release status / 发布状态：** `v0.5.0` supersedes `v0.4.0` and is published on [PyPI](https://pypi.org/project/devrelay/0.5.0/) and [GitHub Releases](https://github.com/YingQiu0871/DevRelay/releases/tag/v0.5.0); the tag-driven workflow and recorded evidence are in [docs/RELEASE_CHECKLIST.md](docs/RELEASE_CHECKLIST.md). v0.2-A/B/C ship inside 0.3.0/0.4.0/0.5.0 but are not separately released v0.2 stages; their independent acceptance is not complete. / `v0.5.0` 取代 `v0.4.0`，已发布至 [PyPI](https://pypi.org/project/devrelay/0.5.0/) 与 [GitHub Release](https://github.com/YingQiu0871/DevRelay/releases/tag/v0.5.0)；tag 驱动流程与记录见 [docs/RELEASE_CHECKLIST.md](docs/RELEASE_CHECKLIST.md)。v0.2-A/B/C 随 0.3.0/0.4.0 一起交付，但不是单独的 v0.2 发布阶段；它们的独立验收尚未完成。
+**Release status / 发布状态：** `v0.5.1` (patch on `v0.5.0`) is published on [PyPI](https://pypi.org/project/devrelay/0.5.1/) and [GitHub Releases](https://github.com/YingQiu0871/DevRelay/releases/tag/v0.5.1); the tag-driven workflow and recorded evidence are in [docs/RELEASE_CHECKLIST.md](docs/RELEASE_CHECKLIST.md). v0.2-A/B/C ship inside 0.3.0 and later but are not separately released v0.2 stages; their independent acceptance is not complete. / `v0.5.1`（`v0.5.0` 的补丁版）已发布至 [PyPI](https://pypi.org/project/devrelay/0.5.1/) 与 [GitHub Release](https://github.com/YingQiu0871/DevRelay/releases/tag/v0.5.1)；tag 驱动流程与记录见 [docs/RELEASE_CHECKLIST.md](docs/RELEASE_CHECKLIST.md)。v0.2-A/B/C 随 0.3.0/0.4.0 一起交付，但不是单独的 v0.2 发布阶段；它们的独立验收尚未完成。
 
 ## Vision / 产品愿景
 
@@ -207,7 +207,7 @@ Secrets such as API keys should not be stored in ordinary project configuration 
 
 API Key 等敏感凭据不应以明文形式写入普通项目配置。计划中的 WebUI 应尽可能使用操作系统凭据存储，并只在 DevRelay 配置中保存凭据引用。
 
-## Quick start — v0.5.0 / 快速开始 — v0.5.0
+## Quick start — v0.5.1 / 快速开始 — v0.5.1
 
 Requirements / 要求：Python >= 3.11, Git, and a repository with at least one commit.
 
@@ -219,7 +219,7 @@ python -m pip install .
 pipx install .
 
 # from PyPI (published; evidence in docs/RELEASE_CHECKLIST.md)
-python -m pip install devrelay==0.5.0
+python -m pip install devrelay==0.5.1
 ```
 
 In your project / 在项目目录中：
@@ -278,10 +278,10 @@ Core principles / 核心原则：
 
 ## Distribution goal / 分发目标
 
-v0.5.0 ships a PyPI wheel/sdist, a GitHub Release, an unsigned portable
+v0.5.1 ships a PyPI wheel/sdist, a GitHub Release, an unsigned portable
 Windows zip and a CycloneDX SBOM.  A signed `.exe` installer remains deferred.
 
-v0.5.0 已提供 PyPI wheel/sdist、GitHub Release、**未签名**的 Windows portable
+v0.5.1 已提供 PyPI wheel/sdist、GitHub Release、**未签名**的 Windows portable
 zip 与 CycloneDX SBOM；带签名的 `.exe` 安装包仍延后。
 
 Artifacts / 产物：
@@ -294,12 +294,12 @@ devrelay-<version>.tar.gz
 SHA256SUMS
 ```
 
-v0.5.0 shipped all five assets (wheel, sdist, portable zip, SBOM,
+v0.5.0 and v0.5.1 shipped all five assets (wheel, sdist, portable zip, SBOM,
 `SHA256SUMS`); the release gate requires all five before publication.
 The portable build is unsigned; verify `SHA256SUMS`.  The `.exe` installer,
 code signing and package-manager manifests remain future work.
 
-v0.5.0 发布了全部五个资产（wheel、sdist、portable zip、SBOM、`SHA256SUMS`），
+v0.5.0 与 v0.5.1 发布了全部五个资产（wheel、sdist、portable zip、SBOM、`SHA256SUMS`），
 发布前会校验五个资产齐全。portable 构建未签名，请校验
 `SHA256SUMS`；`.exe` 安装包、代码签名与包管理器清单仍为后续工作。
 

@@ -1,11 +1,11 @@
 # DevRelay 交接文档
 
-最后更新：2026-10-29（v0.5.0 发布 + G0.4 重跑）
+最后更新：2026-10-29（v0.5.1 发布；同日 v0.5.0 发布 + G0.4 重跑）
 仓库：`D:\DevRelay`
 当前分支：`main`
-当前公开版本：**v0.5.0**（2026-10-29；tag 剥离到 `36af6af`）
-发布证据：`docs/RELEASE_CHECKLIST.md` § v0.5.0（test.yml 40798227385、release.yml 40799180664）
-测试基线：**1,387 collected — 1,385 passed + 2 environment skips**（main，含 lease re-attach；v0.5.0 发布时为 1,381）
+当前公开版本：**v0.5.1**（2026-10-29；tag 剥离到 `9135150`；v0.5.0 剥离到 `36af6af`）
+发布证据：`docs/RELEASE_CHECKLIST.md` § v0.5.1（test.yml 40940219210、release.yml 40942050732）与 § v0.5.0
+测试基线：**1,387 collected — 1,385 passed + 2 environment skips**（v0.5.1 发布时；v0.5.0 发布时为 1,381）
 （实际当前 HEAD 以 `git log -1` 为准）
 
 ---
@@ -17,6 +17,7 @@ ChatGPT/MCP 工具面 + v0.4 Web 控制面 + v0.5 hardening。
 
 当前状态：
 
+- **v0.5.1 已发布（2026-10-29）**：v0.5.0 的补丁版，新增 lease re-attach。
 - **v0.5.0 已发布（2026-10-29）**：PyPI、GitHub Release 五资产（wheel、sdist、
   portable zip、CycloneDX SBOM、SHA256SUMS）。包含 SBOM/五资产 gate、持久 prompt
   marker、advisory hold、session lease、v3 session switch（API + WebUI + run 级 resolve）。
@@ -31,7 +32,7 @@ ChatGPT/MCP 工具面 + v0.4 Web 控制面 + v0.5 hardening。
 
 ---
 
-## 2. 已发布内容（v0.5.0）
+## 2. 已发布内容（v0.5.0；v0.5.1 仅增 lease re-attach）
 
 Release commit：`36af6afdb1fb48d1376873aa5605d2f925bb2384`
 Tag：`v0.5.0`（annotated `c3c306d`；peeled `36af6af`）
@@ -67,10 +68,8 @@ https://github.com/YingQiu0871/DevRelay/releases/tag/v0.5.0 。
 ## 3. `main` 上 v0.5.0 之后的改动
 
 - docs：G0.4 重跑的 provisioning addendum、harness、proof 与 review 记录，发布后状态更新。
-- lease re-attach（`POST /api/runs/{id}/session/lease/reattach` + WebUI），
-  已作为 **0.5.1** 准备发布（版本号已改，CHANGELOG § 0.5.1，
-  `docs/v0.5/RELEASE_NOTES_v0.5.1.md`，`RELEASE_CHECKLIST.md` § v0.5.1）；
-  tag/发布需 owner 授权。
+- lease re-attach（`POST /api/runs/{id}/session/lease/reattach` + WebUI）
+  已随 **v0.5.1** 发布（2026-10-29），见 `docs/v0.5/RELEASE_NOTES_v0.5.1.md`。
 
 | 领域 | 状态 |
 | --- | --- |
@@ -173,7 +172,7 @@ devrelay web serve --workspace <initialized workspace>
      以 run 文档为准：run 已记录该 switch → 补完 commit（target active、source
      released）；run 仍指向 source → 释放 target；不一致 → `409
      switch_state_inconsistent`，不写任何东西。WebUI 有 “Resolve pending switch”。
-   - 残留已修（v0.5.0 之后，未发布）：通用 `/lease/recover` 释放过 target 的 run，
+   - 残留已修（v0.5.1）：通用 `/lease/recover` 释放过 target 的 run，
      用 `POST /api/runs/{id}/session/lease/reattach`（WebUI “Re-attach lease”）给当前
      session 重新挂 lease，同时释放孤儿 source lease，之后可以再 switch。
 3. **Switch UI（v0.5.0）**：run detail 面板 + Resolve pending
@@ -259,10 +258,10 @@ PyPI、全新 venv → 记录证据并把 README/状态改为已发布。需要 
 ## 10. 当前验证快照
 
 ```text
-Version:     0.5.0 (published 2026-10-29; tag v0.5.0 -> 36af6af)
-Tests:       1,381 collected / 1,379 passed / 2 environment skips
-CI:          40798227385 (8/8 success, release commit)
-Release run: 40799180664 (portable + PyPI OIDC success)
+Version:     0.5.1 (published 2026-10-29; tag v0.5.1 -> 9135150)
+Tests:       1,387 collected / 1,385 passed / 2 environment skips
+CI:          40940219210 (8/8 success, release commit)
+Release run: 40942050732 (portable + PyPI OIDC success)
 Adoption:    disabled
 G0.4/P4:     authoritative FAIL / P4 UNPROVEN (rerun 2026-10-29, EVIDENCE_INSUFFICIENT)
 G0.5/G1/G2:  NOT RUN

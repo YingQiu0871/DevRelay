@@ -8,7 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## 0.5.1 - 2026-10-29
 
-Patch release on top of 0.5.0: explicit session lease re-attachment for a run whose
+Published 2026-10-29 (tag `v0.5.1`, peeled `9135150`).  Patch release on top of 0.5.0: explicit session lease re-attachment for a run whose
 switch target lease was released by generic lease recovery.  `adopt_completed_turn`
 remains disabled and the v0.3-E platform gates are not closed.  Publication evidence
 is recorded in `docs/RELEASE_CHECKLIST.md` § v0.5.1.

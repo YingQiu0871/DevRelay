@@ -324,7 +324,7 @@ Potential directions / 潜在方向：
 
 ## Immediate next steps / 当前最近步骤
 
-1. **v0.5.0 published (2026-10-29)** — tag/PyPI/GitHub Release, the portable
+1. **v0.5.1 published (2026-10-29)**, patch on v0.5.0 (lease re-attach). **v0.5.0 published (2026-10-29)** — tag/PyPI/GitHub Release, the portable
    asset and the SBOM are verified; evidence is in [RELEASE_CHECKLIST.md](RELEASE_CHECKLIST.md).
    v0.4.0 was published 2026-10-22.
 2. Close the remaining v0.3-E platform gates (G0.4/P4, G0.5/P6, G1, G2) and decide whether recovery adoption may be enabled; `adopt_completed_turn` stays disabled until then.
