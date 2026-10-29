@@ -67,8 +67,10 @@ https://github.com/YingQiu0871/DevRelay/releases/tag/v0.5.0 。
 ## 3. `main` 上 v0.5.0 之后的改动
 
 - docs：G0.4 重跑的 provisioning addendum、harness、proof 与 review 记录，发布后状态更新。
-- **未发布代码**：lease re-attach（`POST /api/runs/{id}/session/lease/reattach` + WebUI），
-  见 CHANGELOG `Unreleased`。
+- lease re-attach（`POST /api/runs/{id}/session/lease/reattach` + WebUI），
+  已作为 **0.5.1** 准备发布（版本号已改，CHANGELOG § 0.5.1，
+  `docs/v0.5/RELEASE_NOTES_v0.5.1.md`，`RELEASE_CHECKLIST.md` § v0.5.1）；
+  tag/发布需 owner 授权。
 
 | 领域 | 状态 |
 | --- | --- |

@@ -14,4 +14,4 @@ from importlib.metadata import version as _distribution_version
 try:
     __version__ = _distribution_version("devrelay")
 except PackageNotFoundError:  # pragma: no cover - source checkout only
-    __version__ = "0.5.0"
+    __version__ = "0.5.1"
