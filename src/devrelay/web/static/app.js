@@ -363,7 +363,52 @@
       const lease = session.lease ? ` · lease:${session.lease.state}` : "";
       right.textContent = `${(session.roles || []).join("/")} · ${session.latest_state || "?"} · ${(session.run_ids || []).length} run(s)${lease}`;
       item.append(left, right);
+      // Only an uncertain lease (e.g. after switch_lease_uncertain) gets a
+      // UI recovery control; active leases stay CLI/API-only.
+      if (session.lease && session.lease.state === "uncertain") {
+        const recover = document.createElement("button");
+        recover.type = "button";
+        recover.className = "button button-quiet lease-recover";
+        recover.textContent = "Recover lease";
+        recover.addEventListener("click", () => recoverSessionLease(session.session_id, recover));
+        item.append(recover);
+      }
       target.append(item);
+    }
+  }
+
+  async function refreshSessions() {
+    const epoch = state.workspaceEpoch;
+    const sessions = await api("/api/sessions");
+    if (epoch !== state.workspaceEpoch) return;
+    state.sessions = sessions;
+    renderSessions();
+  }
+
+  async function recoverSessionLease(sessionId, button) {
+    if (!window.confirm(
+      `Release the uncertain lease on ${sessionId}?\n\nVerify the session out of band first. This does not contact the provider, interrupt a turn or switch any run.`,
+    )) {
+      return;
+    }
+    button.disabled = true;
+    try {
+      await api(`/api/sessions/${encodeURIComponent(sessionId)}/lease/recover`, {
+        method: "POST",
+        headers: { "X-DevRelay-Confirm": "apply" },
+        body: { confirm: "apply", expected_state: "uncertain" },
+      });
+      await refreshSessions();
+      if (state.selectedRunId) await loadRunDetail(state.selectedRunId);
+      showAlert(`Lease on ${sessionId} released by explicit recovery.`);
+    } catch (error) {
+      if (error.status === 401) {
+        clearSession();
+        showLogin("Session expired. Enter the token again.");
+      } else {
+        button.disabled = false;
+        showAlert(`${error.code ? `${error.code}: ` : ""}${error.message}`);
+      }
     }
   }
 
@@ -469,6 +514,15 @@
       : detail.hold_error
         ? "Hold store unavailable."
         : "No advisory hold.";
+    const schemaVersion = Number(detail.schema_version || 0);
+    $("run-switch").disabled = schemaVersion < 3 || Boolean(detail.terminal || detail.in_flight);
+    $("run-switch-status").textContent = schemaVersion < 3
+      ? "Switch requires a v3 run document."
+      : detail.terminal
+        ? "Run is terminal."
+        : detail.in_flight
+          ? "A turn is in flight."
+          : "";
     const metrics = $("run-detail-metrics");
     metrics.replaceChildren();
     appendDetailRow(metrics, "State", detail.state);
@@ -489,6 +543,9 @@
       "Reviewer route",
       routes.reviewer ? `${routes.reviewer.model || "-"} / ${routes.reviewer.agent || "-"}` : "-",
     );
+    appendDetailRow(metrics, "Implementer session", detail.implementer_session_id);
+    appendDetailRow(metrics, "Reviewer session", detail.reviewer_session_id);
+    appendDetailRow(metrics, "Run schema", detail.schema_version);
     renderTurns($("run-impl-turns"), detail.implementer_turns);
     renderTurns($("run-rev-turns"), detail.reviewer_turns);
 
@@ -509,6 +566,26 @@
         right.textContent = `${decision.previous_state || "-"} → ${decision.next_state || "-"}`;
         item.append(left, right);
         decisions.append(item);
+      }
+    }
+    const switches = $("run-switches");
+    switches.replaceChildren();
+    const switchHistory = detail.session_switch_history || [];
+    if (!switchHistory.length) {
+      const empty = document.createElement("li");
+      empty.textContent = "No session switches recorded.";
+      switches.append(empty);
+    } else {
+      for (const record of switchHistory) {
+        const item = document.createElement("li");
+        const left = document.createElement("span");
+        left.className = "mono";
+        left.textContent = `${record.role || "-"} · ${record.source_session_id || "-"} → ${record.target_session_id || "-"}`;
+        const right = document.createElement("span");
+        right.className = "muted";
+        right.textContent = `${record.result || "-"} · ${record.switched_at || "-"}`;
+        item.append(left, right);
+        switches.append(item);
       }
     }
     const reasons = [];
@@ -1026,6 +1103,67 @@
     }
   }
 
+  async function switchSession() {
+    const detail = state.runDetail;
+    if (!detail) return;
+    const role = $("run-switch-role").value;
+    const target = $("run-switch-target").value.trim();
+    const source = detail[`${role}_session_id`] || "";
+    if (!target) {
+      $("run-action-result").textContent = "Enter a target session id first.";
+      return;
+    }
+    if (target === source) {
+      $("run-action-result").textContent = `${target} is already the ${role} session.`;
+      return;
+    }
+    if (!window.confirm(
+      `Switch the ${role} session of ${detail.run_id}?\n\nFrom: ${source || "-"}\nTo: ${target}\n\n`
+      + "The bridge must verify the target belongs to this workspace. The switch is recorded as run evidence and is never retried automatically.",
+    )) {
+      return;
+    }
+    const button = $("run-switch");
+    button.disabled = true;
+    try {
+      await api(`/api/runs/${encodeURIComponent(detail.run_id)}/session/switch`, {
+        method: "POST",
+        headers: { "X-DevRelay-Confirm": "apply" },
+        body: {
+          role,
+          target_session_id: target,
+          expected_updated_at: detail.updated_at,
+          expected_source_session_id: source,
+          confirm: "apply",
+        },
+      });
+      $("run-switch-target").value = "";
+      await loadRunDetail(detail.run_id);
+      await refreshSessions().catch(() => {});
+      $("run-action-result").textContent = `The ${role} session is now ${target}.`;
+    } catch (error) {
+      if (error.status === 401) {
+        clearSession();
+        showLogin("Session expired. Enter the token again.");
+        return;
+      }
+      if (error.code === "run_changed") {
+        await loadRunDetail(detail.run_id);
+        $("run-action-result").textContent = "The run changed; reloaded. Review the current session and retry.";
+      } else if (error.code === "switch_lease_uncertain") {
+        // The run already records the target; only the lease commit failed.
+        await loadRunDetail(detail.run_id);
+        await refreshSessions().catch(() => {});
+        $("run-action-result").textContent = "The run now records the target session, but the lease commit failed. "
+          + "Prompts stay blocked until the target lease is recovered under Sessions. Do not retry the switch.";
+      } else {
+        $("run-action-result").textContent = `${error.code ? `${error.code}: ` : ""}${error.message}`;
+      }
+    } finally {
+      if (state.runDetail && state.selectedRunId === detail.run_id) renderRunDetail(state.runDetail);
+    }
+  }
+
   async function activateProject() {
     const select = $("project-select");
     const projectId = select.value;
@@ -1494,6 +1632,7 @@
   $("run-interrupt").addEventListener("click", interruptRun);
   $("run-hold").addEventListener("click", holdRun);
   $("run-hold-release").addEventListener("click", releaseHold);
+  $("run-switch").addEventListener("click", switchSession);
   $("run-prompt-send").addEventListener("click", sendManualPrompt);
   $("run-prompt-recover").addEventListener("click", recoverPromptMarker);
   $("messages-refresh").addEventListener("click", () => loadMessages(true));

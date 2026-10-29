@@ -1137,6 +1137,31 @@ def test_c2b_ui_has_only_bounded_controls(client: TestClient):
         assert endpoint not in script
 
 
+def test_switch_ui_is_explicit_and_fail_closed(client: TestClient):
+    html = client.get("/").text
+    script = client.get("/assets/app.js").text
+    for marker in (
+        'id="run-switch"',
+        'id="run-switch-role"',
+        'id="run-switch-target"',
+        'id="run-switches"',
+        "Session switch history",
+    ):
+        assert marker in html
+    assert "switchSession" in script
+    assert "/session/switch" in script
+    # Revision and source-session evidence come from the loaded run detail.
+    assert "expected_updated_at: detail.updated_at" in script
+    assert "expected_source_session_id: source" in script
+    assert "schemaVersion < 3" in script
+    # A lease-commit failure is surfaced, never retried.
+    assert "switch_lease_uncertain" in script
+    assert "Do not retry the switch" in script
+    # UI recovery is offered only for uncertain leases and pins that state.
+    assert 'session.lease.state === "uncertain"' in script
+    assert 'expected_state: "uncertain"' in script
+
+
 def test_project_activation_switches_active_workspace(
     client: TestClient, workspace: Path, tmp_path: Path
 ):

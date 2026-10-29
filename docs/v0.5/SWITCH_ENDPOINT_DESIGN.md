@@ -32,8 +32,31 @@ Happy path:
 
 Failure after the run write but before lease commit returns
 `503 switch_lease_uncertain`; the target lease is marked uncertain and manual
-prompts are blocked by `switch_pending` until explicit recovery.  No UI control
-is added.
+prompts are blocked by `switch_pending` until explicit recovery.
+
+## WebUI (2026-10-29)
+
+The run detail panel exposes the switch: role select, explicit target session
+id, a `window.confirm` naming source → target, and a request built from the
+loaded run's `updated_at` and role session id.  No automatic retry.
+`run_changed` reloads the run; `switch_lease_uncertain` reloads the run and
+sessions and tells the operator not to retry.  The Sessions list offers a
+confirmed **Recover lease** button only for `uncertain` leases, sending
+`expected_state: "uncertain"`; `active` lease recovery stays API-only.
+
+### Known gap: post-uncertain recovery leaves the run unswitchable
+
+After `switch_lease_uncertain`, the run already records the target while the
+source lease is still `active`.  Recovering the target lease (the documented
+path) releases the target, but the source lease stays `active` and orphaned:
+no run records that session any more, so it is not shown in the Sessions list.
+Any later switch on the run fails with `409 session_leased` ("source session has
+no matching active lease"), and the target session runs with no lease.  The
+orphaned source lease can only be released with
+`POST /api/sessions/{source}/lease/recover` (`expected_state: "active"`); that
+does not make the run switchable again.  Closing this needs a
+run+lease reconciliation design (re-attach the run's current session lease or
+release the source as part of recovery).
 
 ## Preconditions (all required)
 

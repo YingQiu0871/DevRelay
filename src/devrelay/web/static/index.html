@@ -368,6 +368,8 @@
           </div>
           <h3>Decision history</h3>
           <ul id="run-decisions" class="runs"></ul>
+          <h3>Session switch history</h3>
+          <ul id="run-switches" class="runs"></ul>
           <p id="run-reasons" class="muted"></p>
           <div class="control-row">
             <label class="field">
@@ -392,6 +394,23 @@
             <button id="run-hold" class="button button-quiet" type="button">Advisory hold</button>
             <button id="run-hold-release" class="button button-quiet" type="button">Release hold</button>
             <span id="run-hold-status" class="muted"></span>
+          </div>
+          <div class="control-row">
+            <label class="field">
+              <span>Switch role session</span>
+              <select id="run-switch-role">
+                <option value="implementer">implementer</option>
+                <option value="reviewer">reviewer</option>
+              </select>
+            </label>
+            <label class="field switch-field">
+              <span>Target session id</span>
+              <input id="run-switch-target" type="text" autocomplete="off"
+                     spellcheck="false" maxlength="200"
+                     placeholder="verified against this workspace by the bridge">
+            </label>
+            <button id="run-switch" class="button button-quiet" type="button">Switch session</button>
+            <span id="run-switch-status" class="muted"></span>
           </div>
           <p id="run-action-result" class="result"></p>
           <div class="control-row prompt-row">

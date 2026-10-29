@@ -31,7 +31,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `POST /api/runs/{run_id}/session/switch` verifies the target workspace,
   acquires a pending target lease, appends v3 evidence and atomically commits the
   lease.  A lease-commit failure after the run write returns `503
-  switch_lease_uncertain` and is recoverable; no UI control is added.
+  switch_lease_uncertain` and requires explicit lease recovery.
+- WebUI run-detail session switch panel: role + explicit target session id,
+  a confirmation dialog naming source → target, revision and source-session
+  evidence taken from the loaded run, and no automatic retry.  The run detail
+  shows current role sessions and `session_switch_history`.
+  `switch_lease_uncertain` is surfaced with a do-not-retry instruction, and the
+  Sessions list offers a confirmed **Recover lease** action for `uncertain`
+  leases only (`expected_state: "uncertain"`).  Known gap: after that recovery
+  the source lease stays `active` and the run cannot switch again
+  (`session_leased`); see `docs/v0.5/SWITCH_ENDPOINT_DESIGN.md`.
 - Real-platform gate runbook added (`docs/v0.3/V03E_GATE_RUNBOOK.md`); no gate
   was executed and `adopt_completed_turn` remains disabled.
 - `scripts/compare_builds.py` reproducibility comparison harness; a
