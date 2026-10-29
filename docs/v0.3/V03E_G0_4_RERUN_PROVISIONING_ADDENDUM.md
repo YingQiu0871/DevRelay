@@ -83,7 +83,8 @@ hidden, and it does not convert into a proof request.
 
 PREFLIGHT → STEP 1 statics → STEP 2 configured endpoint → PROVISION → STEP 3
 pre-snapshot + `TARGET_BOUND` → STEP 4 one `GET /doc` iff bound → STEP 5 post-snapshot
-(always, once the GET was attempted) → TEARDOWN → STEP 6 offline cases C–H.
+(always, once the GET was attempted) → STEP 6 mechanical schema inventory (offline, no
+HTTP) → TEARDOWN → STEP 6 C–H case analysis in the proof document.
 
 * **PREFLIGHT** (not a proof action): evidence directory must not exist;
   `-AuthorizedAtUtc` must be ISO-8601 ending in `Z` (Kind = UTC); port ≠ 45278; repository
@@ -105,8 +106,12 @@ pre-snapshot + `TARGET_BOUND` → STEP 4 one `GET /doc` iff bound → STEP 5 pos
 * **STEP 6** — the harness produces the mechanical schema inventory (path/route/schema
   counts, operation ids, candidate identifier field names).  The C–H classification is
   then written in the proof document under revision 3 §9–§13 and reviewed independently;
-  `result.json` therefore carries `final_verdict = EVIDENCE_INSUFFICIENT` on any failure,
-  or `awaiting = STEP6_CASE_ANALYSIS_C_TO_H` otherwise.
+  `result.json` therefore carries `final_verdict = EVIDENCE_INSUFFICIENT` on a semantic
+  failure, `awaiting = HARNESS_DEFECT_REVIEW` on a `HARNESS_DEFECT` (the independent
+  reviewer decides), or `awaiting = STEP6_CASE_ANALYSIS_C_TO_H` otherwise.  STEP 4
+  failures record the exception type, message and inner type; evidence writes after the
+  GET are guarded so STEP 5 always runs.  The harness pins
+  `$PSNativeCommandUseErrorActionPreference = $false`.
 
 ### 4.1 Reason mapping (all under `EVIDENCE_INSUFFICIENT`, revision 3 §10 / §17.1)
 

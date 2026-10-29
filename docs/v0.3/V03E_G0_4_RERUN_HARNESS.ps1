@@ -16,6 +16,8 @@ param(
 )
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
+# Native exit codes are checked explicitly; a host profile must not turn them into exceptions.
+$PSNativeCommandUseErrorActionPreference = $false
 
 $ExpectedSha = "578d7eb3fff2c807fc0dedaab5e5d9177713a9560fa4304db6a0161111e9cc35"
 $ExpectedSize = 174182280
@@ -291,15 +293,20 @@ try {
             }
         } finally { $client.Dispose() }
     } catch {
+        $inner = if ($_.Exception.InnerException) { $_.Exception.InnerException.GetType().Name } else { "" }
         $get.outcome = "GET_FAILED: " + $_.Exception.GetType().Name
-    }
-    if ($null -ne $body) {
-        [IO.File]::WriteAllBytes((Join-Path $EvidenceDir "doc.json"), [byte[]]$body)
-        $get.body_bytes = $body.Length
-        $get.body_sha256 = (Get-FileHash -Algorithm SHA256 -LiteralPath (Join-Path $EvidenceDir "doc.json")).Hash.ToLowerInvariant()
+        $get.error_message = "$($_.Exception.Message)"; $get.error_inner_type = $inner
     }
     if (-not $get.outcome) { $get.outcome = "RECEIVED" }
-    Save "get.json" $get
+    # Evidence writes are guarded so a local I/O error cannot skip the STEP 5 snapshot.
+    try {
+        if ($null -ne $body) {
+            $get.body_bytes = $body.Length
+            $get.body_sha256 = ([Security.Cryptography.SHA256]::HashData([byte[]]$body) | ForEach-Object { $_.ToString("x2") }) -join ""
+            [IO.File]::WriteAllBytes((Join-Path $EvidenceDir "doc.json"), [byte[]]$body)
+        }
+        Save "get.json" $get
+    } catch { $get.evidence_write_error = "$($_.Exception.Message)" }
 
     # ---- STEP 5: post-snapshot, always after the GET ---------------------
     $post = Snapshot "post"
@@ -362,7 +369,7 @@ finally {
     # ---- TEARDOWN (each action guarded) ----------------------------------
     $td = [ordered]@{ stopped_pid = $null; descendants_before_stop = @(); stop_error = $null; port_free_after = $null; isolated_home_files = $null }
     if ($Started) {
-        try { $td.descendants_before_stop = @(ProcessTree $Started.Id | Where-Object { $_ -ne $Started.Id }) } catch { $td.stop_error = "tree: " + $_.Exception.Message }
+        try { $td.descendants_before_stop = @((ProcessTree $Started.Id) -ne $Started.Id) } catch { $td.stop_error = "tree: " + $_.Exception.Message }
         try { if (-not $Started.HasExited) { Stop-Process -Id $Started.Id -Force; $td.stopped_pid = $Started.Id; Start-Sleep -Seconds 1 } }
         catch { $td.stop_error = "stop: " + $_.Exception.Message }
     }
@@ -370,7 +377,8 @@ finally {
     try { $td.isolated_home_files = @(Get-ChildItem -Recurse -File -ErrorAction SilentlyContinue (Join-Path $EvidenceDir "opencode-home")).Count } catch {}
     try { Save "teardown.json" $td } catch {}
     try {
-        if ($State.reason) { $State.final_verdict = "EVIDENCE_INSUFFICIENT" }
+        if ("$($State.reason)" -like "HARNESS_DEFECT*") { $State.awaiting = "HARNESS_DEFECT_REVIEW" }
+        elseif ($State.reason) { $State.final_verdict = "EVIDENCE_INSUFFICIENT" }
         else { $State.awaiting = "STEP6_CASE_ANALYSIS_C_TO_H" }
         Save "result.json" ([ordered]@{
             counters = $Counters; state = $State; observed_external_connections = @($Observed)
